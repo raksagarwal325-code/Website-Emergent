@@ -1,0 +1,26 @@
+{
+  "summary": "Frontend-only verification for About page, homepage Collage + Reasons sections, nav updates, and enlarged Catalogue PDF. All requested data-testids resolve on live URL. PDF downloads at 1.63MB with correct filename pattern.",
+  "tested_scope": ["frontend", "integration"],
+  "passed": [
+    "Home: [data-testid=collage-section] visible with '1000+' badge, Explore Catalog btn ([data-testid=collage-explore-btn]) and Our Story button both render",
+    "Home: [data-testid=reasons-section] renders all 8 cards ([data-testid=reason-0..7])",
+    "/about route loads: [data-testid=page-about] present, hero H1 contains 'About Samrat Glass Emporium'",
+    "About stats: all 4 [data-testid=stat-0..3] visible with values 1981, 40+, 1000+, Pan-India",
+    "About page also renders [data-testid=reasons-section]",
+    "Header nav: [data-testid=nav-about] visible, click navigates to /about",
+    "Mobile hamburger menu contains About link (href=/about) that navigates to /about at 390px",
+    "Footer Explore column includes 'About Us' link routing to /about",
+    "/catalogue page renders inline About section (contains 'About Samrat Glass' + 1981) and 'Reasons We Are Better' heading before 'The Collection'",
+    "PDF download from [data-testid=catalogue-print-btn] on /catalogue: filename 'Samrat-Glass-Emporium-Catalogue-2026-07-02.pdf', size 1,626,836 bytes (~1.63MB, >500KB), no console errors",
+    "Mobile 390px: About stats become 2-column (stat-0 and stat-1 share same y=1955), homepage collage section stacks correctly (screenshot verified)"
+  ],
+  "failed": [],
+  "notes": [
+    "On /catalogue the inline reasons block uses the heading 'Reasons We Are Better' (not the exact 'Reasons Why We Are Better' used by the ReasonsSection component elsewhere), and it does not use the [data-testid=reasons-section] wrapper. Content and intent are still present; this is only a minor observation, not a failure per the review criteria.",
+    "PDF size grew from prior iteration (~confirmed larger via 1.63MB), consistent with newly added About + Reasons pages preceding The Collection."
+  ],
+  "action_items": [],
+  "success_rate": {"backend": "not tested (frontend-only request)", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}

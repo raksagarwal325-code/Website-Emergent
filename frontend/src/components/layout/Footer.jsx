@@ -26,6 +26,7 @@ export default function Footer() {
           <div className="eyebrow mb-4">Explore</div>
           <ul className="space-y-2 text-sm">
             <li><Link to="/catalog" className="link-underline">Catalog</Link></li>
+            <li><Link to="/about" className="link-underline">About Us</Link></li>
             <li><Link to="/favorites" className="link-underline">Wishlist</Link></li>
             <li><Link to="/cart" className="link-underline">Inquiry Basket</Link></li>
             <li><a href="/catalogue?print=1" target="_blank" rel="noreferrer" data-testid="footer-download-catalogue" className="link-underline text-[#D4AF37]">Download Catalogue PDF</a></li>

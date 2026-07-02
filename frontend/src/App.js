@@ -14,6 +14,7 @@ import Cart from "@/pages/Cart";
 import Contact from "@/pages/Contact";
 import Admin from "@/pages/Admin";
 import Catalogue from "@/pages/Catalogue";
+import About from "@/pages/About";
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/catalog" element={<Catalog />} />
+              <Route path="/about" element={<About />} />
               <Route path="/product/:id" element={<ProductDetail />} />
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/cart" element={<Cart />} />

@@ -142,7 +142,39 @@ export default function Catalogue() {
         </section>
 
         {/* Products */}
-        <section className="mt-10">
+        <section className="mt-10 cat-page">
+          <div className="border cat-hairline p-8 mb-8" style={{background:"linear-gradient(180deg, rgba(163,99,80,0.10), transparent), #1e0d1a"}}>
+            <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mb-3">About Us</div>
+            <h2 className="font-serif text-3xl mb-4 brand-gradient-text">Since 1981 · Firozabad</h2>
+            <div className="space-y-3 text-white/75 text-[13px] leading-relaxed">
+              <p>Established in 1981 in Firozabad, the City of Glass, Samrat Glass Emporium is a trusted manufacturer of handcrafted decorative lighting. We create a wide range of hanging chandeliers, hanging lights, wall lights, table lamps, floor lamps, sconces, and customized decorative lighting solutions.</p>
+              <p>Light does more than illuminate a space — it shapes mood, personality, and atmosphere. With this vision, Samrat Glass Emporium was founded to bring elegant, handcrafted lighting into Indian homes, hotels, showrooms, restaurants, and luxury interiors.</p>
+              <p>Under the guidance of our founder, <span className="text-[#D4AF37]">Mr. Sunil Kumar Agarwal</span>, our craftsmen combine traditional glass-making techniques with modern design sensibilities. With more than 40 years of experience, we continue to create decorative lighting that blends artistry, quality, and sophistication.</p>
+              <p>Our aim is to provide Indian consumers with designer lighting products that help them transform ordinary spaces into beautiful, memorable interiors.</p>
+            </div>
+            <div className="mt-6 grid grid-cols-4 gap-3 pt-6 border-t cat-hairline">
+              {[["1981","Founded"],["40+","Years"],["1000+","Designs"],["Pan-India","Delivery"]].map(([v,l]) => (
+                <div key={l} className="text-center">
+                  <div className="font-serif text-2xl text-[#D4AF37]">{v}</div>
+                  <div className="text-[9px] uppercase tracking-[0.22em] text-white/50 mt-1">{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="border cat-hairline p-8 mb-10" style={{background:"linear-gradient(180deg, rgba(163,99,80,0.10), transparent), #1e0d1a"}}>
+            <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mb-3">Why Choose Us</div>
+            <h2 className="font-serif text-3xl mb-6 brand-gradient-text">Reasons We Are Better</h2>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+              {["More than 40 years of experience","Skilled team of experienced craftsmen and professionals","Handcrafted decorative lighting made with traditional techniques","Wide range — chandeliers, wall lights, table lamps, hanging lights, sconces, floor lamps","Custom lighting designs made as per client requirement","Trusted by thousands of customers across India","Strong focus on quality, finishing, and timely production","Based in Firozabad, India's famous glass manufacturing city"].map((r,i) => (
+                <div key={i} className="flex gap-3 text-[12px] text-white/80 leading-relaxed">
+                  <span className="text-[#D4AF37] flex-shrink-0">◆</span>
+                  <span>{r}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="flex items-baseline justify-between mb-6">
             <h2 className="font-serif text-3xl">The Collection</h2>
             <div className="text-xs uppercase tracking-[0.24em] text-white/50">{products.length} pieces</div>

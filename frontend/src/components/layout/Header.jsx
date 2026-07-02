@@ -41,6 +41,7 @@ export default function Header() {
         <nav className="hidden md:flex items-center gap-10">
           <NavLink to="/" end className={linkClass} data-testid="nav-home">Home</NavLink>
           <NavLink to="/catalog" className={linkClass} data-testid="nav-catalog">Catalog</NavLink>
+          <NavLink to="/about" className={linkClass} data-testid="nav-about">About</NavLink>
           <NavLink to="/contact" className={linkClass} data-testid="nav-contact">Contact</NavLink>
           <NavLink to="/admin" className={linkClass} data-testid="nav-admin">Admin</NavLink>
         </nav>
@@ -83,7 +84,7 @@ export default function Header() {
       </div>
       {open && (
         <div className="md:hidden border-t border-[#BF9972]/20 px-6 py-6 flex flex-col gap-4 bg-[#16070f]">
-          {[["/", "Home"],["/catalog", "Catalog"],["/contact", "Contact"],["/admin", "Admin"]].map(([to, label]) => (
+          {[["/", "Home"],["/catalog", "Catalog"],["/about", "About"],["/contact", "Contact"],["/admin", "Admin"]].map(([to, label]) => (
             <NavLink key={to} to={to} end={to === "/"} onClick={() => setOpen(false)} className={linkClass}>{label}</NavLink>
           ))}
         </div>

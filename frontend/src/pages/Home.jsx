@@ -4,6 +4,8 @@ import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
 import { api, formatPrice } from "../lib/api";
 import ProductCard from "../components/ProductCard";
 import GoogleReviews from "../components/GoogleReviews";
+import CollageSection from "../components/CollageSection";
+import ReasonsSection from "../components/ReasonsSection";
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
@@ -66,6 +68,9 @@ export default function Home() {
         </div>
       </section>
 
+      {/* 1000+ Light Options Collage */}
+      <CollageSection />
+
       {/* Value strip */}
       <section className="border-y border-white/10">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-white/10">
@@ -108,6 +113,9 @@ export default function Home() {
       <section className="max-w-7xl mx-auto px-6 pb-8">
         <GoogleReviews />
       </section>
+
+      {/* Reasons Why We Are Better */}
+      <ReasonsSection />
 
       {/* Editorial banner */}
       <section className="max-w-7xl mx-auto px-6 py-24">
