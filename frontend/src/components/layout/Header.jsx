@@ -56,7 +56,7 @@ export default function Header() {
             rel="noreferrer"
             data-testid="header-download-catalogue"
             title="Download Catalogue PDF"
-            className="hidden sm:inline-flex items-center gap-1.5 border border-[#D4AF37]/40 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/80 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em]"
+            className="hidden lg:inline-flex items-center gap-1.5 border border-[#D4AF37]/40 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/80 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em]"
           >
             <Download size={12} /> Catalogue
           </a>

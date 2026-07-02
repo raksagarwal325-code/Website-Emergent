@@ -1,0 +1,20 @@
+{
+  "summary": "Re-verified header overflow fix with hard reload (cache-busting query param) across 4 viewports. Fix confirmed applied and working: [data-testid=header-download-catalogue] uses `hidden lg:inline-flex` in /app/frontend/src/components/layout/Header.jsx line 59. Button correctly hidden below 1024px and visible at 1024px+. No horizontal overflow at any tested viewport. Regression checks for footer catalog link, catalog page PDF button, and admin dashboard PDF card all pass.",
+  "tested_scope": ["frontend"],
+  "passed": [
+    "Source verified: Header.jsx line 59 contains 'hidden lg:inline-flex'",
+    "768x900: scrollWidth == clientWidth (768 == 768), button display=none (hidden)",
+    "1024x900: button display=flex, visible (width=116.36px)",
+    "1440x900: scrollWidth == clientWidth (1440 == 1440), button visible",
+    "390x800 (mobile): scrollWidth == clientWidth (390 == 390), button hidden",
+    "Regression: Footer 'Catalog' link visible",
+    "Regression: Catalog page 'Catalogue PDF' button visible",
+    "Regression: Admin dashboard PDF card visible (Generate PDF button)"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "Previous iteration_6 finding was stale — likely due to browser/preview caching before frontend restart. With cache-busting nocache query param on page.goto + networkidle wait, the fix is confirmed live in production preview URL."
+}
