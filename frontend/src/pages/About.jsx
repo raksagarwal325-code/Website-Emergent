@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, Award, Sparkles, Package, Truck } from "lucide-react";
 import ReasonsSection from "../components/ReasonsSection";
+import SEO from "../components/SEO";
 import { useSettings } from "../context/SettingsContext";
 
 const STAT_ICONS = [Award, Sparkles, Package, Truck];
@@ -15,6 +16,11 @@ export default function About() {
 
   return (
     <div data-testid="page-about">
+      <SEO
+        title="About · Samrat Glass Emporium · Firozabad since 1981"
+        description="Since 1981, our craftsmen in Firozabad have shaped glass into decorative lighting for homes, hotels and luxury interiors across India."
+        path="/about"
+      />
       {/* Hero */}
       <section className="relative overflow-hidden grain">
         <div className="absolute inset-0 opacity-25">

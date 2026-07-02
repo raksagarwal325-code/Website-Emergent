@@ -79,6 +79,7 @@ function BreakableEmail({ address }) {
 const EXPLORE_LINKS = [
   { label: "Catalog", href: "/catalog" },
   { label: "The Craft", href: "/craft" },
+  { label: "Project Gallery", href: "/gallery" },
   { label: "About Us", href: "/about" },
   { label: "Custom Lighting / Bulk Orders", href: "/contact?type=bulk" },
   { label: "Architects & Interior Designers", href: "/contact?type=trade" },

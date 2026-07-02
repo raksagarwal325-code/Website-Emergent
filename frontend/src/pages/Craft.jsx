@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowUpRight, Flame, Sparkles, Scissors, Wrench, Award } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
+import SEO from "../components/SEO";
 
 // Icon rotates through this fixed list by step index — user cannot pick icons via CMS
 const STEP_ICONS = [Sparkles, Flame, Scissors, Wrench, Award];
@@ -14,6 +15,11 @@ export default function Craft() {
 
   return (
     <div data-testid="page-craft">
+      <SEO
+        title="The Craft · How Samrat Glass Emporium Makes Every Piece"
+        description="Design → furnace → cutting → assembly → finish. A single chandelier goes through five slow, deliberate acts by hand in our Firozabad atelier."
+        path="/craft"
+      />
       {/* Hero */}
       <section className="relative overflow-hidden grain">
         <div className="absolute inset-0 opacity-30">

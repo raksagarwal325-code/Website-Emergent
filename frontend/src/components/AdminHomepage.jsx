@@ -14,6 +14,7 @@ const SECTIONS = [
   { key: "manual_reviews", label: "Manual Reviews / Testimonials" },
   { key: "about", label: "About Page" },
   { key: "craft", label: "The Craft Page" },
+  { key: "gallery", label: "Project Gallery" },
   { key: "faq", label: "FAQ Page" },
   { key: "reasons", label: "Reasons Why We Are Better" },
   { key: "atelier", label: "The Atelier Section" },
@@ -36,6 +37,51 @@ const TextArea = ({ label, value, onChange, rows = 4, "data-testid": tid }) => (
       className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-sm text-white resize-none" />
   </label>
 );
+
+const MultiImagePicker = ({ label, value, onChange, "data-testid": tid }) => {
+  const [busy, setBusy] = useState(false);
+  const list = Array.isArray(value) ? value : [];
+  const upload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      const { url } = await api.upload(file);
+      onChange([...list, url]);
+      toast.success("Uploaded");
+    } catch { toast.error("Upload failed"); }
+    finally { setBusy(false); e.target.value = ""; }
+  };
+  const removeAt = (i) => onChange(list.filter((_, j) => j !== i));
+  const moveLeft = (i) => {
+    if (i <= 0) return;
+    const next = [...list]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; onChange(next);
+  };
+  return (
+    <div data-testid={tid}>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+      <div className="flex flex-wrap gap-2">
+        {list.map((u, i) => (
+          <div key={i} className="relative w-20 h-20 border border-white/10 bg-black group">
+            <img src={api.resolveImage(u)} alt="" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-black/60 flex items-center justify-center gap-1 transition-opacity">
+              {i > 0 && (
+                <button type="button" onClick={() => moveLeft(i)} className="text-white/80 text-[9px] uppercase tracking-widest">←</button>
+              )}
+              <button type="button" onClick={() => removeAt(i)} className="text-red-300 text-[9px] uppercase tracking-widest">×</button>
+            </div>
+            {i === 0 && <span className="absolute top-0 left-0 text-[8px] uppercase tracking-widest bg-[#D4AF37] text-black px-1">Cover</span>}
+          </div>
+        ))}
+        <label className="w-20 h-20 border border-dashed border-white/20 hover:border-[#D4AF37] text-white/60 hover:text-[#D4AF37] flex flex-col items-center justify-center gap-1 cursor-pointer text-[9px] uppercase tracking-widest">
+          <Upload size={13} />
+          {busy ? "…" : "Add"}
+          <input type="file" accept="image/*" onChange={upload} className="hidden" />
+        </label>
+      </div>
+    </div>
+  );
+};
 
 const ImagePicker = ({ label, value, onChange, "data-testid": tid }) => {
   const [busy, setBusy] = useState(false);
@@ -90,6 +136,8 @@ function ListEditor({ items, onChange, fields, defaultItem, testId }) {
           {fields.map((f) => (
             f.type === "image" ? (
               <ImagePicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
+            ) : f.type === "gallery" ? (
+              <MultiImagePicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
             ) : f.type === "textarea" ? (
               <TextArea key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
             ) : (

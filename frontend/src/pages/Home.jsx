@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
+import SEO from "../components/SEO";
 import { api } from "../lib/api";
 import ProductCard from "../components/ProductCard";
 import GoogleReviews from "../components/GoogleReviews";
@@ -32,6 +33,12 @@ export default function Home() {
 
   return (
     <div data-testid="page-home">
+      <SEO
+        title="Samrat Glass Emporium · Handcrafted Chandeliers & Decorative Lighting · Firozabad"
+        description="1000+ designs of hand-blown chandeliers, crystal hurricanes, pendants and glass lamps — crafted in Firozabad since 1981. 4.9★ · 236+ Google reviews."
+        image={settings?.hero_image}
+        path="/"
+      />
       {/* Hero */}
       <section className="relative overflow-hidden grain">
         <motion.div

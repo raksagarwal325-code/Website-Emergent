@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, MessageCircle } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
+import SEO from "../components/SEO";
 
 function FAQItem({ q, a, defaultOpen = false, index }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -42,6 +43,11 @@ export default function FAQ() {
 
   return (
     <div data-testid="page-faq" className="relative min-h-screen">
+      <SEO
+        title="FAQ · Samrat Glass Emporium"
+        description="Answers to common questions — bespoke lead times, pan-India shipping, GST invoicing, custom sizes, trade pricing and more."
+        path="/faq"
+      />
       <div className="absolute inset-0 pointer-events-none opacity-[0.06]" style={{ background: "radial-gradient(ellipse at 50% 0%, #D4AF37 0%, transparent 55%)" }}></div>
 
       <div className="relative max-w-4xl mx-auto px-6 pt-16 md:pt-24 pb-24">

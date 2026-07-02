@@ -39,7 +39,7 @@ export default function FloatingActions() {
   const scrollTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
   return (
-    <div className="fixed right-5 md:right-6 bottom-5 md:bottom-6 z-40 flex flex-col items-end gap-3 no-print">
+    <div className="hidden md:flex fixed right-5 md:right-6 bottom-5 md:bottom-6 z-40 flex-col items-end gap-3 no-print">
       {/* Back to top */}
       <button
         type="button"

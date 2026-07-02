@@ -4,6 +4,8 @@ import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, 
 import { api, formatPrice } from "../lib/api";
 import { useCatalog } from "../context/CatalogContext";
 import { toast } from "sonner";
+import SEO from "../components/SEO";
+import SchemaLD from "../components/SchemaLD";
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -53,8 +55,46 @@ export default function ProductDetail() {
     }
   };
 
+  const productSchema = product ? {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": product.name,
+    "sku": product.sku,
+    "description": product.short_description || product.description || "",
+    "image": (product.images || []).map((u) => api.resolveImage(u)).filter(Boolean),
+    "brand": { "@type": "Brand", "name": "Samrat Glass Emporium" },
+    "category": product.category,
+    ...(product.rating > 0 ? {
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": String(product.rating.toFixed(1)),
+        "reviewCount": String(product.review_count || 0),
+      },
+    } : {}),
+    "offers": {
+      "@type": "Offer",
+      "price": String(product.price || 0),
+      "priceCurrency": "INR",
+      "availability": product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/MadeToOrder",
+      "url": typeof window !== "undefined" ? window.location.href : "",
+      "seller": { "@type": "Organization", "name": "Samrat Glass Emporium" }
+    }
+  } : null;
+
   return (
     <div data-testid="page-product-detail" className="max-w-7xl mx-auto px-6 py-16">
+      {product && (
+        <>
+          <SEO
+            title={`${product.name} · Samrat Glass Emporium`}
+            description={(product.short_description || product.description || "").slice(0, 155) || `${product.name} — handcrafted in Firozabad by Samrat Glass Emporium.`}
+            image={api.resolveImage(product.images?.[0])}
+            path={`/product/${product.id}`}
+            type="product"
+          />
+          <SchemaLD id={`product-${product.id}`} data={productSchema} />
+        </>
+      )}
       <Link to="/catalog" className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.28em] text-white/60 hover:text-white mb-10 link-underline">
         <ArrowLeft size={14} /> Back to catalog
       </Link>

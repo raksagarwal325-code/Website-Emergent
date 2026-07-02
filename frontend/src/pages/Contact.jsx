@@ -3,6 +3,7 @@ import { MessageCircle, Mail, MapPin, Phone, FileText, Truck, CreditCard } from 
 import { api } from "../lib/api";
 import { toast } from "sonner";
 import GoogleReviews from "../components/GoogleReviews";
+import SEO from "../components/SEO";
 
 export default function Contact() {
   const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
@@ -34,6 +35,11 @@ export default function Contact() {
 
   return (
     <div data-testid="page-contact" className="max-w-7xl mx-auto px-6 py-16">
+      <SEO
+        title="Contact · Samrat Glass Emporium · Firozabad Chandeliers"
+        description="Speak to us on WhatsApp, call, email or visit our Firozabad showroom. Custom lighting for homes, hotels, weddings and luxury interiors."
+        path="/contact"
+      />
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
         <div className="lg:col-span-5">
           <div className="flex items-center gap-5 mb-6">

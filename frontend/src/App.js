@@ -18,8 +18,10 @@ import Catalogue from "@/pages/Catalogue";
 import About from "@/pages/About";
 import Craft from "@/pages/Craft";
 import FAQ from "@/pages/FAQ";
+import Gallery from "@/pages/Gallery";
 import LegalPage from "@/pages/LegalPage";
 import FloatingActions from "@/components/FloatingActions";
+import MobileReachStrip from "@/components/MobileReachStrip";
 
 function App() {
   React.useEffect(() => {
@@ -46,6 +48,7 @@ function App() {
               <Route path="/about" element={<About />} />
               <Route path="/craft" element={<Craft />} />
               <Route path="/faq" element={<FAQ />} />
+              <Route path="/gallery" element={<Gallery />} />
               <Route path="/product/:id" element={<ProductDetail />} />
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/cart" element={<Cart />} />
@@ -57,6 +60,7 @@ function App() {
           </main>
           <Footer />
           <FloatingActions />
+          <MobileReachStrip />
           <Toaster
             theme="dark"
             position="top-right"

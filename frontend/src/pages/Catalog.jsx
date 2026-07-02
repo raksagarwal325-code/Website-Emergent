@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Search, SlidersHorizontal, Download } from "lucide-react";
 import { api } from "../lib/api";
 import ProductCard from "../components/ProductCard";
+import SEO from "../components/SEO";
 import { Slider } from "../components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { toast } from "sonner";
@@ -50,6 +51,11 @@ export default function Catalog() {
 
   return (
     <div data-testid="page-catalog" className="max-w-7xl mx-auto px-6 py-16">
+      <SEO
+        title="Catalog · Chandeliers, Pendants & Decorative Lighting · Samrat Glass Emporium"
+        description="Browse 1000+ handcrafted chandeliers, crystal hurricanes, pendant lights, wall sconces and table lamps — made in Firozabad since 1981."
+        path="/catalog"
+      />
       {/* Title */}
       <div className="mb-12 fade-up">
         <div className="eyebrow mb-3">The Collection</div>

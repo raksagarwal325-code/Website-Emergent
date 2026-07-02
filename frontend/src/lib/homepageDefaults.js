@@ -105,6 +105,13 @@ export const HOMEPAGE_DEFAULTS = {
     cta_secondary_text: "Request a bespoke piece",
     cta_secondary_link: "/contact",
   },
+  gallery: {
+    eyebrow: "Installations",
+    title_pre: "Our Work",
+    title_highlight: "in the wild.",
+    tagline: "Homes, hotels, weddings, showrooms — spaces we've helped illuminate. Each piece here is custom-made in Firozabad.",
+    items: [],
+  },
   faq: {
     eyebrow: "Support · FAQ",
     title_pre: "Frequently",
