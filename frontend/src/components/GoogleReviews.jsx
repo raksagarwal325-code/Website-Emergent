@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Star, ExternalLink, PenLine, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
+import { useSettings } from "../context/SettingsContext";
 
 // Google "G" mark (SVG, brand-safe placement in dark UI)
 const GoogleMark = ({ size = 16 }) => (
@@ -20,8 +21,11 @@ const Stars = ({ value = 0 }) => (
   </span>
 );
 
+const AUTOPLAY_MS = 5000;
+
 export default function GoogleReviews({ variant = "full" }) {
   const [data, setData] = useState(null);
+  const { hp } = useSettings();
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
   const timerRef = useRef(null);
@@ -30,37 +34,55 @@ export default function GoogleReviews({ variant = "full" }) {
     api.googleReviews().then(setData).catch(() => setData({ enabled: false }));
   }, []);
 
-  // Only 4+ star reviews for a luxury brand
-  const qualityReviews = useMemo(() => {
-    const list = data?.reviews || [];
-    return list.filter((r) => (r?.rating ?? 0) >= 4);
-  }, [data]);
+  // Merge Google + manual reviews (both live in the same slider)
+  const allReviews = useMemo(() => {
+    const google = (data?.reviews || []).map((r) => ({
+      source: "google",
+      author_name: r.author_name || "Google User",
+      profile_photo_url: r.profile_photo_url || "",
+      rating: r.rating || 5,
+      relative_time_description: r.relative_time_description || "",
+      text: r.text || "",
+    }));
+    const manual = (hp?.manual_reviews?.items || [])
+      .filter((r) => (r?.text || "").trim() || (r?.author_name || "").trim())
+      .map((r) => ({
+        source: "manual",
+        author_name: (r.author_name || "").trim() || "Client",
+        profile_photo_url: "",
+        rating: Math.max(1, Math.min(5, Number(r.rating) || 5)),
+        relative_time_description: (r.relative_time_description || "").trim(),
+        text: (r.text || "").trim(),
+      }));
+    // Interleave — manual reviews first (curated), then Google (fresh & verified)
+    return [...manual, ...google];
+  }, [data, hp]);
 
-  // Auto-rotate every 6s (paused on hover)
+  // Autoplay 5s (loops continuously; pauses on hover)
   useEffect(() => {
-    if (paused || qualityReviews.length < 2) return;
+    if (paused || allReviews.length < 2) return;
     timerRef.current = setInterval(() => {
-      setIdx((i) => (i + 1) % qualityReviews.length);
-    }, 6000);
+      setIdx((i) => (i + 1) % allReviews.length);
+    }, AUTOPLAY_MS);
     return () => clearInterval(timerRef.current);
-  }, [paused, qualityReviews.length]);
+  }, [paused, allReviews.length]);
 
-  // Reset index if reviews array shrinks
+  // Keep idx in-bounds when list length changes
   useEffect(() => {
-    if (idx >= qualityReviews.length) setIdx(0);
-  }, [qualityReviews.length, idx]);
+    if (idx >= allReviews.length) setIdx(0);
+  }, [allReviews.length, idx]);
 
   if (!data) return null;
   const { enabled, rating, total_ratings, view_url, write_url, cid, place_id_set, api_key_set } = data;
   const canShowLinks = !!cid;
-  const hasReviews = enabled && qualityReviews.length > 0;
-  const current = hasReviews ? qualityReviews[idx] : null;
-  const prev = () => setIdx((i) => (i - 1 + qualityReviews.length) % qualityReviews.length);
-  const next = () => setIdx((i) => (i + 1) % qualityReviews.length);
+  const hasReviews = allReviews.length > 0;
+  const prev = () => setIdx((i) => (i - 1 + allReviews.length) % allReviews.length);
+  const next = () => setIdx((i) => (i + 1) % allReviews.length);
 
   return (
     <section data-testid="google-reviews-section" className="relative border border-white/10 bg-[#0a0a0a] p-8 md:p-12">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+        {/* Left: rating summary */}
         <div className="lg:col-span-5">
           <div className="flex items-center gap-3 mb-4">
             <GoogleMark size={22} />
@@ -105,7 +127,7 @@ export default function GoogleReviews({ variant = "full" }) {
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em] text-white/80 hover:text-white"
               >
-                <ExternalLink size={13} /> View on Google
+                <ExternalLink size={13} /> View all reviews on Google
               </a>
             </div>
           )}
@@ -117,6 +139,7 @@ export default function GoogleReviews({ variant = "full" }) {
           )}
         </div>
 
+        {/* Right: slider (Google + manual reviews) */}
         {hasReviews && (
           <div
             className="lg:col-span-7 relative"
@@ -124,14 +147,14 @@ export default function GoogleReviews({ variant = "full" }) {
             onMouseLeave={() => setPaused(false)}
             data-testid="gr-slideshow"
           >
-            {/* Slide stack (cross-fade) */}
-            <div className="relative min-h-[240px] md:min-h-[260px]">
-              {qualityReviews.map((r, i) => (
+            {/* Slide stack (cross-fade) with arrows floating on edges */}
+            <div className="relative min-h-[260px] md:min-h-[280px]">
+              {allReviews.map((r, i) => (
                 <div
                   key={i}
                   data-testid={`gr-review-${i}`}
                   aria-hidden={i !== idx}
-                  className={`absolute inset-0 border border-white/10 p-6 md:p-8 bg-black/40 flex flex-col transition-opacity duration-700 ${i === idx ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+                  className={`absolute inset-0 border border-white/10 p-6 md:p-8 pl-10 md:pl-14 pr-10 md:pr-14 bg-black/40 flex flex-col transition-opacity duration-700 ${i === idx ? "opacity-100" : "opacity-0 pointer-events-none"}`}
                 >
                   <div className="flex items-center gap-3 mb-4">
                     {r.profile_photo_url ? (
@@ -140,8 +163,17 @@ export default function GoogleReviews({ variant = "full" }) {
                       <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/70 text-sm font-serif">{(r.author_name || "?")[0]}</div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm md:text-base text-white truncate font-serif">{r.author_name}</div>
-                      <div className="text-[10px] text-white/40 uppercase tracking-widest mt-0.5">{r.relative_time_description}</div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm md:text-base text-white truncate font-serif">{r.author_name}</span>
+                        {r.source === "google" ? (
+                          <span title="Verified Google review" className="inline-flex flex-shrink-0"><GoogleMark size={12} /></span>
+                        ) : (
+                          <span title="Verified customer testimonial" className="text-[9px] uppercase tracking-[0.24em] text-[#BF9972] border border-[#BF9972]/40 px-1.5 py-0.5 flex-shrink-0">Client</span>
+                        )}
+                      </div>
+                      {r.relative_time_description && (
+                        <div className="text-[10px] text-white/40 uppercase tracking-widest mt-0.5">{r.relative_time_description}</div>
+                      )}
                     </div>
                     <Stars value={r.rating} />
                   </div>
@@ -151,36 +183,45 @@ export default function GoogleReviews({ variant = "full" }) {
                   </p>
                 </div>
               ))}
-            </div>
 
-            {/* Controls */}
-            {qualityReviews.length > 1 && (
-              <div className="mt-5 flex items-center justify-between">
-                <div className="flex items-center gap-2" data-testid="gr-dots">
-                  {qualityReviews.map((_, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setIdx(i)}
-                      aria-label={`Go to review ${i + 1}`}
-                      data-testid={`gr-dot-${i}`}
-                      className={`h-1.5 transition-all ${i === idx ? "w-8 bg-[#D4AF37]" : "w-4 bg-white/20 hover:bg-white/40"}`}
-                    />
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-[10px] uppercase tracking-widest text-white/40 mr-2 font-serif">
-                    {String(idx + 1).padStart(2, "0")} <span className="text-white/25">/</span> {String(qualityReviews.length).padStart(2, "0")}
-                  </div>
-                  <button type="button" onClick={prev} data-testid="gr-prev" aria-label="Previous review"
-                    className="w-9 h-9 border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/70 flex items-center justify-center transition-colors">
+              {/* Prev / next — floating on card edges */}
+              {allReviews.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={prev}
+                    data-testid="gr-prev"
+                    aria-label="Previous review"
+                    className="absolute left-1 md:left-2 top-1/2 -translate-y-1/2 w-8 h-8 md:w-9 md:h-9 border border-white/15 bg-black/60 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/70 flex items-center justify-center transition-colors z-10"
+                  >
                     <ChevronLeft size={16} />
                   </button>
-                  <button type="button" onClick={next} data-testid="gr-next" aria-label="Next review"
-                    className="w-9 h-9 border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/70 flex items-center justify-center transition-colors">
+                  <button
+                    type="button"
+                    onClick={next}
+                    data-testid="gr-next"
+                    aria-label="Next review"
+                    className="absolute right-1 md:right-2 top-1/2 -translate-y-1/2 w-8 h-8 md:w-9 md:h-9 border border-white/15 bg-black/60 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/70 flex items-center justify-center transition-colors z-10"
+                  >
                     <ChevronRight size={16} />
                   </button>
-                </div>
+                </>
+              )}
+            </div>
+
+            {/* Dots below the card */}
+            {allReviews.length > 1 && (
+              <div className="mt-5 flex items-center justify-center gap-2" data-testid="gr-dots">
+                {allReviews.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setIdx(i)}
+                    aria-label={`Go to review ${i + 1}`}
+                    data-testid={`gr-dot-${i}`}
+                    className={`h-1.5 rounded-none transition-all ${i === idx ? "w-8 bg-[#D4AF37]" : "w-3 bg-white/20 hover:bg-white/40"}`}
+                  />
+                ))}
               </div>
             )}
           </div>

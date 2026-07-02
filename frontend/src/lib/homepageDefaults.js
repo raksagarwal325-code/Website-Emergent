@@ -52,6 +52,9 @@ export const HOMEPAGE_DEFAULTS = {
     fallback_total: "",
     write_review_override: "",
   },
+  manual_reviews: {
+    items: [],
+  },
   reasons: {
     eyebrow: "Why choose us",
     heading: "Reasons Why We Are Better",

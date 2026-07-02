@@ -11,6 +11,7 @@ const SECTIONS = [
   { key: "collage", label: "1000+ Light Options" },
   { key: "featured", label: "Pieces of the Season" },
   { key: "google_reviews_fallback", label: "Google Reviews Fallback" },
+  { key: "manual_reviews", label: "Manual Reviews / Testimonials" },
   { key: "reasons", label: "Reasons Why We Are Better" },
   { key: "atelier", label: "The Atelier Section" },
   { key: "footer", label: "Footer Content" },
@@ -89,7 +90,8 @@ function ListEditor({ items, onChange, fields, defaultItem, testId }) {
             ) : f.type === "textarea" ? (
               <TextArea key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
             ) : (
-              <Text key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
+              <Text key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`}
+                type={f.type || "text"} min={f.min} max={f.max} />
             )
           ))}
         </div>
@@ -183,6 +185,29 @@ function SectionEditor({ sectionKey, data, patch }) {
             <Text label="Fallback review count" value={data.fallback_total} onChange={(v)=>set("fallback_total",v)} />
           </div>
           <Text label="Write-review URL override (optional)" value={data.write_review_override} onChange={(v)=>set("write_review_override",v)} />
+        </div>
+      );
+    case "manual_reviews":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">
+            Add hand-picked customer testimonials here. They appear in the same slider on the homepage alongside live Google reviews (your curated ones show first). Great for reviews you received on WhatsApp, email, or before Google reviews existed.
+          </p>
+          <div>
+            <div className="eyebrow mb-2 mt-2">Testimonials</div>
+            <ListEditor
+              items={data.items || []}
+              onChange={(v)=>set("items",v)}
+              defaultItem={{author_name:"", rating:5, text:"", relative_time_description:""}}
+              testId="hp-manual-review"
+              fields={[
+                {name:"author_name", label:"Customer name"},
+                {name:"rating", label:"Rating (1–5)", type:"number", min:1, max:5},
+                {name:"relative_time_description", label:"When (e.g. Last week, 2 months ago) — optional"},
+                {name:"text", label:"Review text", type:"textarea"},
+              ]}
+            />
+          </div>
         </div>
       );
     case "reasons":
