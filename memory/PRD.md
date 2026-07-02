@@ -52,6 +52,10 @@ chandeliers, glass lamps and decorative lighting catalog based in Firozabad.
 Wall Lights, Ceiling Lamps, Table Lamps, Floor Lamps, Decorative Lights.
 INR pricing with en-IN formatting.
 
+### Homepage CMS (Admin → Homepage Editor)
+- Fully editable sections: Hero, **Trusted-by strip (new · Feb 2026)**, 1000+ Light Options collage, Featured, Google Reviews fallback, Reasons Why We Are Better, The Atelier, Footer
+- Trusted-by strip: hidden until admin adds at least one client/venue; each item has name + optional logo upload; static row on desktop, auto-scrolling marquee on mobile
+
 ## Backlog / Next Actions
 ### P0 (before hard launch)
 - Real image uploads for all seeded products (replace stock photos with owner's inventory)

@@ -7,6 +7,7 @@ import GoogleReviews from "../components/GoogleReviews";
 import CollageSection from "../components/CollageSection";
 import ReasonsSection from "../components/ReasonsSection";
 import AtelierShowcase from "../components/AtelierShowcase";
+import TrustedBySection from "../components/TrustedBySection";
 import { useSettings } from "../context/SettingsContext";
 
 export default function Home() {
@@ -80,6 +81,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Trusted-by strip (hidden until admin adds at least one entry) */}
+      <TrustedBySection />
 
       {/* 1000+ Light Options Collage */}
       <CollageSection />

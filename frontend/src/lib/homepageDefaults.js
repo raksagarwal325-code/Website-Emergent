@@ -17,6 +17,11 @@ export const HOMEPAGE_DEFAULTS = {
       { value: "Pan-India", label: "Delivery" },
     ],
   },
+  trusted_by: {
+    eyebrow: "Trusted by",
+    tagline: "Homes, hotels & showrooms lit by Samrat.",
+    items: [],
+  },
   collage: {
     eyebrow: "The Full Range",
     title: "1000+ Light Options",
@@ -47,7 +52,7 @@ export const HOMEPAGE_DEFAULTS = {
     fallback_total: "",
     write_review_override: "",
   },
-  atelier: {
+  reasons: {
     eyebrow: "Why choose us",
     heading: "Reasons Why We Are Better",
     items: [

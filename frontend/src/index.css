@@ -172,6 +172,24 @@ button, input, select, textarea {
   opacity: 0.5;
 }
 
+/* Trusted-by mobile marquee */
+.trusted-marquee-mask {
+  mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+}
+.trusted-marquee-track {
+  width: max-content;
+  animation: trustedMarquee 28s linear infinite;
+}
+@keyframes trustedMarquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trusted-marquee-track { animation: none; }
+}
+
+
 /* Print styles for PDF export */
 @media print {
   body { background: white; color: black; }

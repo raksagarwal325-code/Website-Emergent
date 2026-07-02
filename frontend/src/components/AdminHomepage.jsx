@@ -7,6 +7,7 @@ import { useSettings } from "../context/SettingsContext";
 
 const SECTIONS = [
   { key: "hero", label: "Hero Section" },
+  { key: "trusted_by", label: "Trusted By Strip" },
   { key: "collage", label: "1000+ Light Options" },
   { key: "featured", label: "Pieces of the Season" },
   { key: "google_reviews_fallback", label: "Google Reviews Fallback" },
@@ -121,6 +122,21 @@ function SectionEditor({ sectionKey, data, patch }) {
             <div className="eyebrow mb-2 mt-2">Trust points</div>
             <ListEditor items={data.trust || []} onChange={(v)=>set("trust",v)} defaultItem={{value:"",label:""}}
               fields={[{name:"value",label:"Value"},{name:"label",label:"Label"}]} testId="hp-hero-trust" />
+          </div>
+        </div>
+      );
+    case "trusted_by":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">This strip sits directly below the hero. It stays completely hidden on the site until you add at least one client/venue below.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Eyebrow label" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-trusted-eyebrow" />
+            <Text label="Tagline (italic, optional)" value={data.tagline} onChange={(v)=>set("tagline",v)} data-testid="hp-trusted-tagline" />
+          </div>
+          <div>
+            <div className="eyebrow mb-2 mt-2">Clients &amp; venues</div>
+            <ListEditor items={data.items || []} onChange={(v)=>set("items",v)} defaultItem={{name:"",logo:""}}
+              fields={[{name:"name",label:"Client / venue name"},{name:"logo",label:"Logo (optional, transparent PNG best)",type:"image"}]} testId="hp-trusted-item" />
           </div>
         </div>
       );
