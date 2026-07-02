@@ -105,6 +105,22 @@ export const HOMEPAGE_DEFAULTS = {
     cta_secondary_text: "Request a bespoke piece",
     cta_secondary_link: "/contact",
   },
+  faq: {
+    eyebrow: "Support · FAQ",
+    title_pre: "Frequently",
+    title_highlight: "Asked.",
+    tagline: "Short answers to the questions we hear most often — from bespoke lead times to lighting for high ceilings.",
+    items: [
+      { q: "Do you make custom-sized chandeliers and lighting for large spaces?", a: "Yes. Bespoke commissions are a core part of what we do — banquet halls, hotel lobbies, temples, luxury residences. Share the space dimensions (or a photo with rough ceiling height) on WhatsApp and we'll suggest sizes, finishes and a quote." },
+      { q: "How long does a custom order take?", a: "Standard pieces typically ship in 7–10 business days. Bespoke commissions take 3–5 weeks depending on complexity — hand-cut crystal, brasswork and finishing all happen in-house in Firozabad." },
+      { q: "Do you ship pan-India? What about international?", a: "Yes, we ship across India with insured door delivery. For international shipping, please write to samratglassemp@gmail.com with your destination — we handle bespoke international orders on request." },
+      { q: "How are fragile glass pieces packaged?", a: "Every piece is inspected, wrapped in acid-free tissue, cushioned with foam moulds, and sent in double-wall corrugated crates. Larger chandeliers travel in custom-built wooden cases. Transit damage is rare, but replacement is guaranteed — share unboxing photos within 24–48 hours." },
+      { q: "Do prices on the website include installation?", a: "No. Prices are indicative for the fixture only. We recommend a qualified local electrician for installation. For premium projects in Delhi/NCR and select cities, we can arrange installation on request — final quotation on inquiry." },
+      { q: "Do you offer GST invoicing for corporate/hotel orders?", a: "Yes, GST invoices are available on all orders. Our GSTIN is 09ADCFS9258D1ZS. Share your business GSTIN when placing the inquiry and we'll issue the invoice accordingly." },
+      { q: "Can architects and interior designers order in bulk?", a: "Absolutely. We work directly with architects, interior designers and hospitality buyers on curated collections and multi-unit orders. Reach out on WhatsApp or email for trade pricing and lead times." },
+      { q: "What payment methods do you accept?", a: "Currently UPI and Net Banking. Custom orders typically require a partial advance before production begins. Full details are shared as part of the quotation." },
+    ],
+  },
   reasons: {
     eyebrow: "Why choose us",
     heading: "Reasons Why We Are Better",

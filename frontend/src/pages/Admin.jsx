@@ -313,9 +313,15 @@ function SettingsAdmin({ settings, onSave }) {
         ["gstin", "GSTIN"],
         ["delivery_info", "Delivery info"],
         ["payment_methods", "Payment methods"],
+        ["business_hours", "Business hours (footer)"],
+        ["google_maps_url", "Google Maps URL (Visit showroom link)"],
         ["google_cid", "Google Business CID"],
         ["google_place_id", "Google Place ID (for live reviews)"],
         ["google_maps_api_key", "Google Maps API Key (server-side, keep secret)"],
+        ["instagram_url", "Instagram URL (blank = hide icon)"],
+        ["facebook_url", "Facebook URL (blank = hide icon)"],
+        ["youtube_url", "YouTube URL (blank = hide icon)"],
+        ["pinterest_url", "Pinterest URL (blank = hide icon)"],
       ].map(([k, label]) => (
         <div key={k}>
           <label className="text-xs uppercase tracking-[0.2em] text-white/50 mb-1 block">{label}</label>

@@ -17,7 +17,9 @@ import Admin from "@/pages/Admin";
 import Catalogue from "@/pages/Catalogue";
 import About from "@/pages/About";
 import Craft from "@/pages/Craft";
+import FAQ from "@/pages/FAQ";
 import LegalPage from "@/pages/LegalPage";
+import FloatingActions from "@/components/FloatingActions";
 
 function App() {
   React.useEffect(() => {
@@ -43,6 +45,7 @@ function App() {
               <Route path="/catalog" element={<Catalog />} />
               <Route path="/about" element={<About />} />
               <Route path="/craft" element={<Craft />} />
+              <Route path="/faq" element={<FAQ />} />
               <Route path="/product/:id" element={<ProductDetail />} />
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/cart" element={<Cart />} />
@@ -53,6 +56,7 @@ function App() {
             </Routes>
           </main>
           <Footer />
+          <FloatingActions />
           <Toaster
             theme="dark"
             position="top-right"

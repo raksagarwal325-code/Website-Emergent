@@ -163,6 +163,12 @@ class Settings(BaseModel):
     google_place_id: str = ""
     google_maps_api_key: str = ""
     homepage_content: dict = Field(default_factory=dict)
+    instagram_url: str = ""
+    facebook_url: str = ""
+    youtube_url: str = ""
+    pinterest_url: str = ""
+    business_hours: str = "Mon – Sat · 10:30 AM – 8:00 PM · Sunday closed"
+    google_maps_url: str = "https://www.google.com/maps?cid=16850385744624001495"
 
 
 class SettingsUpdate(BaseModel):
@@ -180,6 +186,12 @@ class SettingsUpdate(BaseModel):
     google_place_id: Optional[str] = None
     google_maps_api_key: Optional[str] = None
     homepage_content: Optional[dict] = None
+    instagram_url: Optional[str] = None
+    facebook_url: Optional[str] = None
+    youtube_url: Optional[str] = None
+    pinterest_url: Optional[str] = None
+    business_hours: Optional[str] = None
+    google_maps_url: Optional[str] = None
 
 
 # --- Helpers ---

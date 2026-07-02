@@ -14,6 +14,7 @@ const SECTIONS = [
   { key: "manual_reviews", label: "Manual Reviews / Testimonials" },
   { key: "about", label: "About Page" },
   { key: "craft", label: "The Craft Page" },
+  { key: "faq", label: "FAQ Page" },
   { key: "reasons", label: "Reasons Why We Are Better" },
   { key: "atelier", label: "The Atelier Section" },
   { key: "footer", label: "Footer Content" },
@@ -294,6 +295,29 @@ function SectionEditor({ sectionKey, data, patch }) {
             <Text label="Secondary CTA text" value={data.cta_secondary_text} onChange={(v)=>set("cta_secondary_text",v)} data-testid="hp-craft-cta2" />
             <Text label="Secondary CTA link" value={data.cta_secondary_link} onChange={(v)=>set("cta_secondary_link",v)} data-testid="hp-craft-cta2-link" />
           </div>
+        </div>
+      );
+    case "faq":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">Controls the <span className="text-white/70">/faq</span> page. Add / remove / reorder questions freely — the page auto-hides sections that are empty.</p>
+
+          <div className="eyebrow mb-1 mt-4">Header</div>
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-faq-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Title (white)" value={data.title_pre} onChange={(v)=>set("title_pre",v)} data-testid="hp-faq-title-pre" />
+            <Text label="Title (gold italic)" value={data.title_highlight} onChange={(v)=>set("title_highlight",v)} data-testid="hp-faq-title-highlight" />
+          </div>
+          <TextArea label="Tagline (italic, under the title)" value={data.tagline} onChange={(v)=>set("tagline",v)} rows={2} data-testid="hp-faq-tagline" />
+
+          <div className="eyebrow mb-1 mt-6">Questions &amp; answers</div>
+          <ListEditor items={data.items || []} onChange={(v)=>set("items",v)}
+            defaultItem={{q:"", a:""}}
+            fields={[
+              {name:"q", label:"Question"},
+              {name:"a", label:"Answer", type:"textarea"},
+            ]}
+            testId="hp-faq-item" />
         </div>
       );
     case "reasons":
