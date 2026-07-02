@@ -230,8 +230,8 @@ export default function AdminHomepage() {
   const patchSection = (k) => (nextData) => setState({ ...state, [k]: nextData });
 
   const resetSection = (k) => {
-    if (!window.confirm(`Reset "${SECTIONS.find(s=>s.key===k)?.label}" to defaults?`)) return;
-    setState({ ...state, [k]: HOMEPAGE_DEFAULTS[k] });
+    setState({ ...state, [k]: JSON.parse(JSON.stringify(HOMEPAGE_DEFAULTS[k])) });
+    toast.success(`${SECTIONS.find(s=>s.key===k)?.label} reset — click Save to publish`);
   };
 
   const save = async () => {
