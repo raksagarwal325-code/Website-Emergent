@@ -34,7 +34,7 @@ export default function GoogleReviews({ variant = "full" }) {
     api.googleReviews().then(setData).catch(() => setData({ enabled: false }));
   }, []);
 
-  // Merge Google + manual reviews (both live in the same slider)
+  // Merge Google + manual reviews (both live in the same slider) — only 4★+ shown
   const allReviews = useMemo(() => {
     const google = (data?.reviews || []).map((r) => ({
       source: "google",
@@ -55,7 +55,8 @@ export default function GoogleReviews({ variant = "full" }) {
         text: (r.text || "").trim(),
       }));
     // Interleave — manual reviews first (curated), then Google (fresh & verified)
-    return [...manual, ...google];
+    // Only surface 4★ and above to keep the luxury tone tight.
+    return [...manual, ...google].filter((r) => (r.rating || 0) >= 4);
   }, [data, hp]);
 
   // Autoplay 5s (loops continuously; pauses on hover)
