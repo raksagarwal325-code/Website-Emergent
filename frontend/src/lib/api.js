@@ -35,10 +35,13 @@ export const api = {
   exportCsvUrl: () => `${API}/export/products.csv`,
   stats: () => client.get("/stats").then(r => r.data),
   googleReviews: () => client.get("/google/reviews").then(r => r.data),
-  resolveImage: (u) => {
+  resolveImage: (u, opts = {}) => {
     if (!u) return "";
-    if (u.startsWith("http")) return u;
     if (u.startsWith("/api/")) return `${BACKEND_URL}${u}`;
+    if (u.startsWith("http")) {
+      if (opts.proxy) return `${API}/proxy-image?url=${encodeURIComponent(u)}`;
+      return u;
+    }
     return u;
   },
 };

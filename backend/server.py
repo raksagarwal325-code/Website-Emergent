@@ -349,6 +349,18 @@ async def update_settings(payload: SettingsUpdate):
     return doc
 
 
+@api.get("/proxy-image")
+async def proxy_image(url: str):
+    try:
+        r = requests.get(url, timeout=15, stream=True)
+        r.raise_for_status()
+        ct = r.headers.get("Content-Type", "image/jpeg")
+        return Response(content=r.content, media_type=ct, headers={"Cache-Control": "public, max-age=86400"})
+    except Exception as e:
+        logger.error(f"Proxy image failed: {e}")
+        raise HTTPException(404, "Image not found")
+
+
 # --- Google Reviews ---
 @api.get("/google/reviews")
 async def google_reviews():

@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api, formatPrice } from "../lib/api";
+import html2pdf from "html2pdf.js";
 
 export default function Catalogue() {
   const [products, setProducts] = useState([]);
   const [settings, setSettings] = useState(null);
   const [ready, setReady] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const docRef = useRef(null);
 
   useEffect(() => {
     Promise.all([api.listProducts(), api.getSettings()]).then(([p, s]) => {
@@ -12,10 +15,52 @@ export default function Catalogue() {
     });
   }, []);
 
+  const waitImages = () =>
+    new Promise((resolve) => {
+      const imgs = docRef.current?.querySelectorAll("img") || [];
+      let pending = imgs.length;
+      if (!pending) return resolve();
+      imgs.forEach((img) => {
+        if (img.complete) { if (--pending === 0) resolve(); return; }
+        img.crossOrigin = "anonymous";
+        const done = () => { if (--pending === 0) resolve(); };
+        img.addEventListener("load", done, { once: true });
+        img.addEventListener("error", done, { once: true });
+      });
+      setTimeout(resolve, 8000);
+    });
+
+  const downloadPdf = async () => {
+    if (!docRef.current || generating) return;
+    setGenerating(true);
+    try {
+      await waitImages();
+      const filename = `Samrat-Glass-Emporium-Catalogue-${new Date().toISOString().slice(0,10)}.pdf`;
+      await html2pdf()
+        .set({
+          margin: 8,
+          filename,
+          image: { type: "jpeg", quality: 0.92 },
+          html2canvas: { scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#16070f" },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["css", "legacy"], avoid: ".cat-card" },
+        })
+        .from(docRef.current)
+        .save();
+    } catch (e) {
+      console.error(e);
+      alert("Could not generate PDF. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   useEffect(() => {
     if (!ready) return;
-    const auto = new URLSearchParams(window.location.search).get("print") === "1";
-    if (auto) setTimeout(() => window.print(), 900);
+    if (new URLSearchParams(window.location.search).get("print") === "1") {
+      setTimeout(downloadPdf, 600);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
   if (!ready) return <div className="p-16 text-white/50">Preparing catalogue…</div>;
@@ -43,13 +88,15 @@ export default function Catalogue() {
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="text-xs uppercase tracking-[0.28em] text-white/60">Print-ready catalogue</div>
           <div className="flex gap-3">
-            <button data-testid="catalogue-print-btn" onClick={() => window.print()} className="bg-[#D4AF37] text-black px-6 py-2 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]">Download PDF</button>
+            <button data-testid="catalogue-print-btn" disabled={generating} onClick={downloadPdf} className="bg-[#D4AF37] text-black px-6 py-2 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-60">
+              {generating ? "Generating…" : "Download PDF"}
+            </button>
             <button onClick={() => window.close()} className="border border-white/25 hover:border-[#D4AF37] px-6 py-2 uppercase text-xs tracking-[0.28em]">Close</button>
           </div>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-8 py-10">
+      <div className="max-w-5xl mx-auto px-8 py-10" ref={docRef}>
         {/* Cover */}
         <section className="cat-page min-h-[85vh] flex flex-col justify-between border cat-hairline p-10 relative overflow-hidden" style={{background: "radial-gradient(circle at 80% 20%, rgba(163,99,80,0.35), transparent 55%), #1e0d1a"}}>
           <div className="flex items-start justify-between">
@@ -104,7 +151,7 @@ export default function Catalogue() {
             {products.map((p) => (
               <article key={p.id} className="cat-card p-5 flex gap-5" data-testid={`catalogue-item-${p.id}`}>
                 <div className="w-32 h-40 flex-shrink-0 bg-[#0e0510] overflow-hidden border cat-hairline">
-                  {p.images?.[0] && <img src={api.resolveImage(p.images[0])} alt={p.name} className="w-full h-full object-cover" />}
+                  {p.images?.[0] && <img crossOrigin="anonymous" src={api.resolveImage(p.images[0], {proxy: true})} alt={p.name} className="w-full h-full object-cover" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-[10px] uppercase tracking-[0.22em] text-[#BF9972]">{p.category}</div>
