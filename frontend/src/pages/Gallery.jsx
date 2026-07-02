@@ -49,7 +49,6 @@ function ProjectCard({ project, index }) {
           )}
         </div>
         <div className="md:col-span-2 p-8 md:p-10 flex flex-col justify-center">
-          <div className="eyebrow mb-3">Project · {String(index + 1).padStart(2, "0")}</div>
           {project.location && (
             <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mb-4">
               <MapPin size={12} strokeWidth={1.5} /> {project.location}
