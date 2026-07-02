@@ -345,6 +345,31 @@ function SectionEditor({ sectionKey, data, patch }) {
           </div>
         </div>
       );
+    case "gallery":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">Controls the <span className="text-white/70">/gallery</span> page — real client installations (homes, hotels, weddings). Leaving items empty hides project cards and shows a &ldquo;coming soon&rdquo; message.</p>
+
+          <div className="eyebrow mb-1 mt-4">Header</div>
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-gallery-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Title (white)" value={data.title_pre} onChange={(v)=>set("title_pre",v)} data-testid="hp-gallery-title-pre" />
+            <Text label="Title (gold italic)" value={data.title_highlight} onChange={(v)=>set("title_highlight",v)} data-testid="hp-gallery-title-highlight" />
+          </div>
+          <TextArea label="Tagline" value={data.tagline} onChange={(v)=>set("tagline",v)} rows={2} data-testid="hp-gallery-tagline" />
+
+          <div className="eyebrow mb-1 mt-6">Projects</div>
+          <ListEditor items={data.items || []} onChange={(v)=>set("items",v)}
+            defaultItem={{title:"", location:"", note:"", images:[]}}
+            fields={[
+              {name:"title", label:"Project title (e.g. Wedding Banquet · The Leela Palace)"},
+              {name:"location", label:"Location (e.g. Jaipur, Rajasthan)"},
+              {name:"note", label:"Short story about the project", type:"textarea"},
+              {name:"images", label:"Project images (first is the cover; up to 4 more show as thumbnails)", type:"gallery"},
+            ]}
+            testId="hp-gallery-item" />
+        </div>
+      );
     case "faq":
       return (
         <div className="space-y-4">
