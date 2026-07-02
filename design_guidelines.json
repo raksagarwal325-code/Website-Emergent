@@ -1,0 +1,96 @@
+{
+  "theme": "dark",
+  "archetype": "5 (Luxury)",
+  "vibe": "Dark luxury, premium boutique, high-end fashion/watches",
+  "colors": {
+    "background": "#050505",
+    "surface": "#121212",
+    "surface_hover": "#1A1A1A",
+    "primary": "#D4AF37",
+    "primary_hover": "#B5952F",
+    "text_main": "#FFFFFF",
+    "text_muted": "#A1A1AA",
+    "border": "rgba(255, 255, 255, 0.08)",
+    "error": "#7F1D1D",
+    "success": "#14532D"
+  },
+  "typography": {
+    "heading_font": "Playfair Display",
+    "body_font": "Outfit",
+    "rules": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight font-normal",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-normal",
+      "h3": "text-xl sm:text-2xl tracking-tight font-normal",
+      "body": "text-base leading-relaxed tracking-wide font-light",
+      "labels": "text-xs uppercase tracking-[0.2em]"
+    }
+  },
+  "layout": {
+    "spacing_system": "Generous spacing. Use p-8, p-12, p-16 for sections. Avoid tight clusters.",
+    "container_max_width": "max-w-7xl mx-auto px-6",
+    "grid_patterns": {
+      "catalog": "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8",
+      "editorial_hero": "grid-cols-1 md:grid-cols-12 gap-8 (asymmetric: col-span-8 for main image, col-span-4 for text/cta)"
+    },
+    "radii": "rounded-none or rounded-sm (2px). Keep it sharp and editorial.",
+    "shadows": "Minimal. Rely on 1px subtle borders (border-white/10) instead of shadows for dark mode."
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#D4AF37] text-black font-medium hover:bg-[#B5952F] rounded-none px-8 py-4 transition-colors",
+      "secondary": "bg-transparent border border-white/20 text-white hover:border-white/60 rounded-none px-8 py-4 transition-colors",
+      "ghost": "text-[#A1A1AA] hover:text-white transition-colors"
+    },
+    "cards": {
+      "product_card": "bg-transparent border border-white/5 hover:border-white/20 transition-all duration-300 group. Image wrapper should have overflow-hidden. Image scales up slightly on hover.",
+      "detail_card": "bg-[#121212] border border-white/10 p-8"
+    },
+    "header": "Sticky top-0 z-50 bg-black/70 backdrop-blur-2xl border-b border-white/10 transition-all",
+    "inputs": "bg-[#0A0A0A] border-white/20 text-white focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] rounded-none",
+    "badges": "bg-white/10 text-white text-xs uppercase tracking-wider px-2 py-1 rounded-none border border-white/10"
+  },
+  "motion": {
+    "hover_states": "Subtle and sophisticated. Opacity fades (opacity-70 to opacity-100), image scale (scale-105 duration-700 ease-out).",
+    "page_transitions": "Fade in on load.",
+    "micro_interactions": "Underline reveal on text links. Button background fill on hover."
+  },
+  "icons": {
+    "library": "lucide-react",
+    "style": "Stroke width 1.5, elegant, un-filled."
+  },
+  "media": {
+    "hero_background": {
+      "url": "https://images.pexels.com/photos/4862863/pexels-photo-4862863.jpeg",
+      "description": "Dark silk texture for luxurious hero or section background."
+    },
+    "products": [
+      {
+        "url": "https://images.pexels.com/photos/12157290/pexels-photo-12157290.jpeg",
+        "description": "Elegant black leather watch with gears."
+      },
+      {
+        "url": "https://images.pexels.com/photos/15019856/pexels-photo-15019856.jpeg",
+        "description": "Elegant wristwatch inside a black box."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1633869699811-cd4f63049b36",
+        "description": "Close up of a watch on a black surface."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1633869701352-eb7af08a1bc4",
+        "description": "Couple of watches inside a case."
+      }
+    ]
+  },
+  "technical_rules": {
+    "testing": "All interactive elements MUST have data-testid attributes (e.g., data-testid='add-to-cart-btn').",
+    "accessibility": "Ensure text contrast on dark backgrounds. Use aria-labels for icon buttons.",
+    "components_library": "Use Shadcn UI for logic-heavy components (Tabs, Select, Dialog, Slider), but strip default Vercel-look and apply dark luxury theme overrides."
+  },
+  "specific_features": {
+    "whatsapp_integration": "Use standard wa.me/ links for inquiries with a dedicated WhatsApp icon button on product pages.",
+    "export_functionality": "Include a button to export the catalog view to CSV.",
+    "admin_dashboard": "Hidden route (/admin). Use a denser 'Swiss High-Contrast' variant of the dark theme for data tables (clear borders, high utility)."
+  },
+  "instructions_to_main_agent": "1. Initialize Tailwind with the specified colors and fonts. 2. Build the layout (Header, Footer, Main Content). 3. Create the Product Catalog Grid with filtering/sorting. 4. Build the Product Detail Page with WhatsApp inquiry. 5. Implement Cart/Favorites using React Context or Zustand. 6. Build the Admin Dashboard. 7. Use the provided product images as seed data for the catalog. 8. Ensure all data-testid are in place."
+}
