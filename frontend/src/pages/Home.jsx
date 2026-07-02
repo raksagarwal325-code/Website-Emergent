@@ -67,7 +67,7 @@ export default function Home() {
 
             {/* Trust points strip */}
             <div className="mt-14 pt-8 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
-              {[["1981","Established"],["1000+","Designs"],["Pan-India","Delivery"]].map(([v, l]) => (
+              {[["1981","Founded"],["1000+","Designs"],["Pan-India","Delivery"]].map(([v, l]) => (
                 <div key={l}>
                   <div className="font-serif text-xl md:text-2xl brand-gradient-text leading-none">{v}</div>
                   <div className="text-[10px] uppercase tracking-[0.22em] text-white/50 mt-2">{l}</div>

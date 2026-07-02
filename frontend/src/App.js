@@ -17,6 +17,17 @@ import Catalogue from "@/pages/Catalogue";
 import About from "@/pages/About";
 
 function App() {
+  React.useEffect(() => {
+    // Remove Emergent-injected badge on public site
+    const remove = () => {
+      const el = document.getElementById("emergent-badge");
+      if (el) el.remove();
+    };
+    remove();
+    const t = setInterval(remove, 500);
+    setTimeout(() => clearInterval(t), 5000);
+    return () => clearInterval(t);
+  }, []);
   return (
     <div className="App min-h-screen flex flex-col">
       <CatalogProvider>

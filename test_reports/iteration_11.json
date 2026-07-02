@@ -1,0 +1,29 @@
+{
+  "summary": "Post hard-restart re-verification with cache-bust query. All four checks pass: emergent-badge removed from DOM via useEffect, 'Founded' label rendered in trust-row under '1981' (source text 'Founded' in DOM textContent; innerText shows 'FOUNDED' due to CSS text-transform: uppercase), 'Made with Emergent' absent, no console errors.",
+  "tested_scope": ["frontend"],
+  "passed": [
+    "Homepage loads with cache-busting ?v=<random> query (HTTP 200, networkidle)",
+    "document.getElementById('emergent-badge') === null — badge fully removed from DOM after useEffect runs",
+    "Trust-row rendered: '1981 / FOUNDED', '1000+ / DESIGNS', 'Pan-India / DELIVERY' visible in screenshot",
+    "Source string 'Founded' present in document.body.textContent (visually 'FOUNDED' via Tailwind 'uppercase' class in Home.jsx line 73)",
+    "'Made with Emergent' string absent from body innerText/textContent",
+    "Zero console errors on page load"
+  ],
+  "failed": [],
+  "action_items": [
+    "None — all requested verifications succeed. Note for future tests: innerText applies CSS text-transform, so match against textContent (or case-insensitively) when the element uses the 'uppercase' class."
+  ],
+  "success_rate": {"backend": "n/a (not tested)", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "evidence": {
+    "url_loaded": "https://product-showcase-859.preview.emergentagent.com/?v=<random>",
+    "emergent_badge_outerHTML": "NULL (element not in DOM)",
+    "text_near_1981_innerText": "SINCE 1981 · HANDCRAFTED IN FIROZABAD ... 1981 FOUNDED 1000+ DESIGNS Pan-India DELIVERY",
+    "founded_in_textContent": true,
+    "founded_in_innerText": false,
+    "FOUNDED_uppercase_in_innerText": true,
+    "made_with_emergent_present": false,
+    "console_errors_count": 0
+  }
+}
