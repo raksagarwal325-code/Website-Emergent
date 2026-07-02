@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Star, ExternalLink, PenLine } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Star, ExternalLink, PenLine, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
 
 // Google "G" mark (SVG, brand-safe placement in dark UI)
@@ -22,15 +22,41 @@ const Stars = ({ value = 0 }) => (
 
 export default function GoogleReviews({ variant = "full" }) {
   const [data, setData] = useState(null);
+  const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const timerRef = useRef(null);
 
   useEffect(() => {
     api.googleReviews().then(setData).catch(() => setData({ enabled: false }));
   }, []);
 
-  if (!data) return null;
-  const { enabled, rating, total_ratings, reviews, view_url, write_url, cid, place_id_set, api_key_set } = data;
+  // Only 4+ star reviews for a luxury brand
+  const qualityReviews = useMemo(() => {
+    const list = data?.reviews || [];
+    return list.filter((r) => (r?.rating ?? 0) >= 4);
+  }, [data]);
 
+  // Auto-rotate every 6s (paused on hover)
+  useEffect(() => {
+    if (paused || qualityReviews.length < 2) return;
+    timerRef.current = setInterval(() => {
+      setIdx((i) => (i + 1) % qualityReviews.length);
+    }, 6000);
+    return () => clearInterval(timerRef.current);
+  }, [paused, qualityReviews.length]);
+
+  // Reset index if reviews array shrinks
+  useEffect(() => {
+    if (idx >= qualityReviews.length) setIdx(0);
+  }, [qualityReviews.length, idx]);
+
+  if (!data) return null;
+  const { enabled, rating, total_ratings, view_url, write_url, cid, place_id_set, api_key_set } = data;
   const canShowLinks = !!cid;
+  const hasReviews = enabled && qualityReviews.length > 0;
+  const current = hasReviews ? qualityReviews[idx] : null;
+  const prev = () => setIdx((i) => (i - 1 + qualityReviews.length) % qualityReviews.length);
+  const next = () => setIdx((i) => (i + 1) % qualityReviews.length);
 
   return (
     <section data-testid="google-reviews-section" className="relative border border-white/10 bg-[#0a0a0a] p-8 md:p-12">
@@ -91,25 +117,72 @@ export default function GoogleReviews({ variant = "full" }) {
           )}
         </div>
 
-        {enabled && reviews?.length > 0 && (
-          <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {reviews.slice(0, 4).map((r, i) => (
-              <div key={i} data-testid={`gr-review-${i}`} className="border border-white/10 p-5 bg-black/30 flex flex-col">
-                <div className="flex items-center gap-3 mb-3">
-                  {r.profile_photo_url ? (
-                    <img src={r.profile_photo_url} alt="" className="w-8 h-8 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-8 h-8 bg-white/10 flex items-center justify-center text-white/60 text-xs">{(r.author_name || "?")[0]}</div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-white truncate">{r.author_name}</div>
-                    <div className="text-[10px] text-white/40 uppercase tracking-widest">{r.relative_time_description}</div>
+        {hasReviews && (
+          <div
+            className="lg:col-span-7 relative"
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+            data-testid="gr-slideshow"
+          >
+            {/* Slide stack (cross-fade) */}
+            <div className="relative min-h-[240px] md:min-h-[260px]">
+              {qualityReviews.map((r, i) => (
+                <div
+                  key={i}
+                  data-testid={`gr-review-${i}`}
+                  aria-hidden={i !== idx}
+                  className={`absolute inset-0 border border-white/10 p-6 md:p-8 bg-black/40 flex flex-col transition-opacity duration-700 ${i === idx ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    {r.profile_photo_url ? (
+                      <img src={r.profile_photo_url} alt="" className="w-10 h-10 rounded-full object-cover border border-white/10" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/70 text-sm font-serif">{(r.author_name || "?")[0]}</div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm md:text-base text-white truncate font-serif">{r.author_name}</div>
+                      <div className="text-[10px] text-white/40 uppercase tracking-widest mt-0.5">{r.relative_time_description}</div>
+                    </div>
+                    <Stars value={r.rating} />
                   </div>
-                  <Stars value={r.rating} />
+                  <p className="text-white/75 text-sm md:text-[15px] leading-relaxed line-clamp-6 md:line-clamp-none flex-1">
+                    <span className="font-serif text-[#D4AF37] text-2xl leading-none mr-1 align-top">&ldquo;</span>
+                    {r.text}
+                  </p>
                 </div>
-                <p className="text-white/70 text-sm leading-relaxed line-clamp-5">{r.text}</p>
+              ))}
+            </div>
+
+            {/* Controls */}
+            {qualityReviews.length > 1 && (
+              <div className="mt-5 flex items-center justify-between">
+                <div className="flex items-center gap-2" data-testid="gr-dots">
+                  {qualityReviews.map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setIdx(i)}
+                      aria-label={`Go to review ${i + 1}`}
+                      data-testid={`gr-dot-${i}`}
+                      className={`h-1.5 transition-all ${i === idx ? "w-8 bg-[#D4AF37]" : "w-4 bg-white/20 hover:bg-white/40"}`}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-[10px] uppercase tracking-widest text-white/40 mr-2 font-serif">
+                    {String(idx + 1).padStart(2, "0")} <span className="text-white/25">/</span> {String(qualityReviews.length).padStart(2, "0")}
+                  </div>
+                  <button type="button" onClick={prev} data-testid="gr-prev" aria-label="Previous review"
+                    className="w-9 h-9 border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/70 flex items-center justify-center transition-colors">
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button type="button" onClick={next} data-testid="gr-next" aria-label="Next review"
+                    className="w-9 h-9 border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/70 flex items-center justify-center transition-colors">
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
