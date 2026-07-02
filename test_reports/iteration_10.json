@@ -1,0 +1,35 @@
+{
+  "summary": "Verified iteration_10 fixes. BOTH fixes FAILED. (1) Emergent badge is still present in DOM on every route tested (/, /admin, /catalog, /about) and 'Made with Emergent' text is still visible in the bottom-right corner (confirmed via screenshot). The useEffect DOM removal is not effective. (2) Hero trust-row label still reads 'ESTABLISHED' — 'Founded' was not found anywhere in body innerText and screenshot confirms 'ESTABLISHED' label. Regression checks all pass: nav-admin hidden, /admin loads directly, ProductCards have equal heights (594.47px x 13 cards) with view + quick-add buttons, no horizontal overflow at any of 1920/1440/1024/768/390 viewports, /catalog + /about + /catalogue?print=1 all load.",
+  "tested_scope": ["frontend"],
+  "passed": [
+    "nav-admin element not present in DOM",
+    "/admin route loads directly (body length 797)",
+    "ProductCards: 13 cards, equal heights (594.47px), view + quick-add buttons present",
+    "No horizontal overflow at viewports 1920x1080, 1440x900, 1024x768, 768x1024, 390x844",
+    "/catalog page loads",
+    "/about page loads",
+    "/catalogue?print=1 loads",
+    "Hero values 1981, 1000+, Pan-India all render"
+  ],
+  "failed": [
+    {
+      "area": "Emergent badge removal (App.js useEffect)",
+      "issue": "#emergent-badge element is STILL present in DOM on / after 2.5s wait, and also on /admin, /catalog, /about. 'Made with Emergent' text is still visible at bottom-right of every page (confirmed in screenshot).",
+      "evidence": "document.getElementById('emergent-badge') returned true on all 4 tested routes; body.innerText.includes('made with emergent') returned true on homepage; screenshot shows 'Made with Emergent' pill at bottom-right corner.",
+      "priority": "HIGH"
+    },
+    {
+      "area": "Hero trust-row label rename (Home.jsx)",
+      "issue": "Label still reads 'ESTABLISHED' — was not renamed to 'Founded'. Text search for both 'Founded' and 'Established' returned false in innerText scan (likely due to uppercase text-transform normalizing case), but the screenshot unambiguously shows 'ESTABLISHED' beneath the '1981' value.",
+      "evidence": "Screenshot /home_hero.png shows '1981 / ESTABLISHED' in the trust-row instead of '1981 / FOUNDED'. body.innerText search: founded=False.",
+      "priority": "HIGH"
+    }
+  ],
+  "action_items": [
+    "The App.js useEffect that removes #emergent-badge is not executing OR the badge is being re-injected by a script that runs later than the 5s polling window. Recommend: (a) verify the useEffect is actually attached and firing (add a console.log), (b) add a MutationObserver on document.body that removes any element with id='emergent-badge' whenever it is added — this is the robust fix. Note the badge is likely injected by the Emergent preview environment via a script tag/postMessage, so a persistent observer is required, not a one-shot timer.",
+    "The 'Established' -> 'Founded' rename does not appear to have been applied to Home.jsx. Please open /app/frontend/src/pages/Home.jsx, locate the trust-row label under the '1981' value, and change the string from 'Established' to 'Founded'. Verify HMR picked it up (or restart frontend if needed)."
+  ],
+  "success_rate": {"backend": "not tested", "frontend": "8/10 checks passed (both new fixes failed, all regressions passed)"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}
