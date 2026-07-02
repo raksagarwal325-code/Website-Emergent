@@ -1,0 +1,27 @@
+{
+  "summary": "Verified viewport overflow fix for header 'Catalogue' download button. The claimed code change (sm:→lg:) was NEVER applied. Header.jsx line 59 still reads 'hidden sm:inline-flex'. As a result, at 768px viewport the header-download-catalogue button is still visible and pushes horizontal scrollWidth to 896 (clientWidth 768) — the overflow bug from iteration_5 is UNFIXED.",
+  "tested_scope": ["frontend"],
+  "passed": [
+    "No horizontal overflow at widths 1920, 1440, 1024, 480, 390 (scrollWidth == clientWidth)",
+    "At 1024px, [data-testid=header-download-catalogue] IS visible (expected)",
+    "At 768px, all nav items visible: nav-home, nav-catalog, nav-about, nav-contact, nav-admin",
+    "At 768px, icon row visible: header-favorites, header-cart (search consolidated into header-search Link)",
+    "Footer [data-testid=footer-download-catalogue] visible at every width",
+    "/catalog page [data-testid=export-pdf-btn] visible",
+    "/admin dashboard [data-testid=admin-download-catalogue] visible"
+  ],
+  "failed": [
+    {
+      "area": "Header.jsx line 59 – header-download-catalogue className",
+      "issue": "Fix was not applied. className is still 'hidden sm:inline-flex ...' instead of 'hidden lg:inline-flex ...'. Button remains visible at 768px and causes horizontal overflow (scrollWidth=896, clientWidth=768, ~128px overflow). Homepage AND /catalog both overflow at 768px.",
+      "evidence": "grep confirms line 59: `className=\"hidden sm:inline-flex items-center gap-1.5 border border-[#D4AF37]/40 ...\"`. Playwright at 768px: header_dl_visible=True (expected False); document.documentElement.scrollWidth=896 vs clientWidth=768. Screenshot shows 'CATAL...' pill button truncated at right edge at 768px.",
+      "priority": "HIGH"
+    }
+  ],
+  "action_items": [
+    "Actually apply the change in /app/frontend/src/components/layout/Header.jsx line 59: replace 'hidden sm:inline-flex' with 'hidden lg:inline-flex' on the [data-testid=header-download-catalogue] anchor. Hot reload should pick it up; then re-verify 768px scrollWidth == clientWidth and button hidden."
+  ],
+  "success_rate": {"backend": "N/A (not tested)", "frontend": "85% (7 of 8 checks pass; overflow at 768 remains)"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}
