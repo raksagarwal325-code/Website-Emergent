@@ -4,20 +4,28 @@
 @tailwind utilities;
 
 :root {
-  --bg: #050505;
-  --bg-elev: #0d0d0d;
-  --surface: #121212;
-  --surface-2: #1a1a1a;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.16);
+  --bg: #1a0a17;
+  --bg-elev: #23121e;
+  --surface: #2A1125;
+  --surface-2: #341729;
+  --border: rgba(191, 153, 114, 0.14);
+  --border-strong: rgba(191, 153, 114, 0.28);
   --text: #ffffff;
-  --text-muted: #a1a1aa;
-  --gold: #d4af37;
+  --text-muted: #c9b3a0;
+  --gold: #D4AF37;
   --gold-hover: #b5952f;
+  --terracotta: #A36350;
+  --copper: #AE765C;
+  --beige: #BF9972;
+  --deep: #2A1125;
 }
 
 html, body, #root {
-  background: var(--bg);
+  background:
+    radial-gradient(ellipse at 12% -10%, rgba(163, 99, 80, 0.28), transparent 55%),
+    radial-gradient(ellipse at 92% 105%, rgba(174, 118, 92, 0.22), transparent 60%),
+    #16070f;
+  background-attachment: fixed;
   color: var(--text);
   font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
   font-weight: 300;
@@ -47,24 +55,24 @@ body {
 /* Shadcn tokens overridden for dark luxury */
 @layer base {
   :root {
-    --background: 0 0% 2%;
+    --background: 320 42% 12%;
     --foreground: 0 0% 100%;
-    --card: 0 0% 7%;
+    --card: 320 40% 14%;
     --card-foreground: 0 0% 100%;
-    --popover: 0 0% 5%;
+    --popover: 320 42% 10%;
     --popover-foreground: 0 0% 100%;
     --primary: 45 65% 52%;
-    --primary-foreground: 0 0% 5%;
-    --secondary: 0 0% 10%;
+    --primary-foreground: 320 42% 12%;
+    --secondary: 15 30% 20%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 63%;
-    --accent: 0 0% 12%;
+    --muted: 15 20% 18%;
+    --muted-foreground: 30 20% 70%;
+    --accent: 15 30% 25%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 63% 40%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 15%;
-    --input: 0 0% 12%;
+    --border: 30 25% 30%;
+    --input: 320 30% 16%;
     --ring: 45 65% 52%;
     --radius: 0px;
   }
@@ -77,9 +85,36 @@ button, input, select, textarea {
 
 /* Elegant scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: #2a2a2a; }
+::-webkit-scrollbar-track { background: #16070f; }
+::-webkit-scrollbar-thumb { background: #4a2536; }
 ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+/* Warm brand utilities */
+.brand-glow {
+  box-shadow:
+    0 0 0 1px rgba(212, 175, 55, 0.35),
+    0 8px 40px -8px rgba(163, 99, 80, 0.55),
+    inset 0 0 40px rgba(191, 153, 114, 0.10);
+}
+.brand-gradient-text {
+  background: linear-gradient(90deg, #D4AF37 0%, #BF9972 50%, #AE765C 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.warm-panel {
+  background:
+    linear-gradient(180deg, rgba(163, 99, 80, 0.10) 0%, rgba(42, 17, 37, 0.0) 100%),
+    #1e0d1a;
+  border: 1px solid rgba(191, 153, 114, 0.15);
+}
+.logo-badge {
+  border-radius: 9999px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(212, 175, 55, 0.5),
+    0 6px 22px -6px rgba(163, 99, 80, 0.7);
+}
 
 /* Selection */
 ::selection {

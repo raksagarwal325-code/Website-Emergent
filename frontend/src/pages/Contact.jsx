@@ -36,7 +36,13 @@ export default function Contact() {
     <div data-testid="page-contact" className="max-w-7xl mx-auto px-6 py-16">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
         <div className="lg:col-span-5">
-          <div className="eyebrow mb-3">Get in touch</div>
+          <div className="flex items-center gap-5 mb-6">
+            <img src="/logo.jpeg" alt="Samrat Glass Emporium" className="w-20 h-20 object-cover brand-glow" />
+            <div>
+              <div className="eyebrow mb-1">Get in touch</div>
+              <div className="font-serif text-lg brand-gradient-text">Samrat Glass Emporium</div>
+            </div>
+          </div>
           <h1 className="font-serif text-4xl sm:text-5xl leading-tight">Enquiries, custom sizes &amp; bulk orders.</h1>
           <p className="mt-6 text-white/60 leading-relaxed">
             We&apos;re happy to help with product recommendations, installation guidance, custom-sized pieces, and bulk orders for weddings, showrooms and hotels.

@@ -25,11 +25,17 @@ export default function Header() {
   return (
     <header
       data-testid="site-header"
-      className={`sticky top-0 z-50 w-full backdrop-blur-2xl transition-all duration-300 ${scrolled ? "bg-black/85 border-b border-white/10" : "bg-black/40"}`}
+      className={`sticky top-0 z-50 w-full backdrop-blur-2xl transition-all duration-300 ${scrolled ? "bg-[#16070f]/90 border-b border-[#BF9972]/20" : "bg-[#16070f]/50"}`}
     >
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-        <Link to="/" data-testid="header-brand" className="font-serif text-lg md:text-xl tracking-wide whitespace-nowrap">
-          Samrat Glass<span className="text-[#D4AF37]"> Emporium</span>
+        <Link to="/" data-testid="header-brand" className="flex items-center gap-3 whitespace-nowrap">
+          <span className="logo-badge inline-flex h-10 w-10 flex-shrink-0">
+            <img src="/logo.jpeg" alt="Samrat Glass Emporium" className="w-full h-full object-cover" />
+          </span>
+          <span className="font-serif text-base md:text-lg tracking-wide leading-tight">
+            <span className="block text-white">Samrat Glass</span>
+            <span className="block text-[10px] tracking-[0.28em] uppercase text-[#BF9972]">Emporium</span>
+          </span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-10">
@@ -66,7 +72,7 @@ export default function Header() {
         </div>
       </div>
       {open && (
-        <div className="md:hidden border-t border-white/10 px-6 py-6 flex flex-col gap-4 bg-black">
+        <div className="md:hidden border-t border-[#BF9972]/20 px-6 py-6 flex flex-col gap-4 bg-[#16070f]">
           {[["/", "Home"],["/catalog", "Catalog"],["/contact", "Contact"],["/admin", "Admin"]].map(([to, label]) => (
             <NavLink key={to} to={to} end={to === "/"} onClick={() => setOpen(false)} className={linkClass}>{label}</NavLink>
           ))}

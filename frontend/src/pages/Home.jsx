@@ -27,15 +27,19 @@ export default function Home() {
             alt=""
             className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/70 to-black"></div>
+          <div className="absolute inset-0" style={{background: "linear-gradient(180deg, rgba(42,17,37,0.55) 0%, rgba(22,7,15,0.85) 60%, #16070f 100%)"}}></div>
+          <div className="absolute inset-0" style={{background: "radial-gradient(circle at 80% 20%, rgba(163,99,80,0.35), transparent 45%)"}}></div>
         </div>
 
         <div className="relative max-w-7xl mx-auto px-6 pt-28 pb-32 md:pt-36 md:pb-40">
           <div className="max-w-2xl fade-up">
-            <div className="eyebrow mb-8">Est. Firozabad · The City of Glass</div>
+            <div className="flex items-center gap-4 mb-8">
+              <img src="/logo.jpeg" alt="" className="w-14 h-14 object-cover brand-glow" />
+              <div className="eyebrow">Est. Firozabad · The City of Glass</div>
+            </div>
             <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05]">
               Fancy lights that<br />
-              <span className="italic text-[#D4AF37]">turn houses into homes.</span>
+              <span className="italic brand-gradient-text">turn houses into homes.</span>
             </h1>
             <p className="mt-8 text-white/70 max-w-lg leading-relaxed">
               A curated catalog of crystal chandeliers, pendant lights, wall sconces, table lamps &amp; decorative lighting — hand-blown and hand-assembled by our artisans in Firozabad.
