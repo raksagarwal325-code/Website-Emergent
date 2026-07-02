@@ -233,18 +233,18 @@ export default function Footer() {
             <div className="eyebrow mb-4">Contact</div>
             <div className="space-y-3.5">
               {waHref && (
-                <ContactRow icon={WA} label="WhatsApp" value={phoneDisplay} href={waHref} external testId="footer-contact-whatsapp" />
+                <ContactRow icon={WA} value={phoneDisplay} href={waHref} external testId="footer-contact-whatsapp" />
               )}
               {phoneHref && (
-                <ContactRow icon={Phone} label="Call" value={phoneDisplay} href={phoneHref} testId="footer-contact-phone" />
+                <ContactRow icon={Phone} value={phoneDisplay} href={phoneHref} testId="footer-contact-phone" />
               )}
               {emailHref && (
-                <ContactRow icon={Mail} label="Email" href={emailHref} external testId="footer-contact-email">
+                <ContactRow icon={Mail} href={emailHref} external testId="footer-contact-email">
                   <BreakableEmail address={settings?.admin_email} />
                 </ContactRow>
               )}
               {settings?.address && (
-                <ContactRow icon={MapPin} label="Showroom" testId="footer-contact-address">
+                <ContactRow icon={MapPin} testId="footer-contact-address">
                   <span className="block whitespace-pre-line">{settings.address}</span>
                   {mapsHref && (
                     <a
@@ -260,13 +260,13 @@ export default function Footer() {
                 </ContactRow>
               )}
               {settings?.business_hours && (
-                <ContactRow icon={Clock} label="Hours" testId="footer-contact-hours">
+                <ContactRow icon={Clock} testId="footer-contact-hours">
                   <span className="whitespace-pre-line">{settings.business_hours}</span>
                 </ContactRow>
               )}
               {settings?.gstin && (
-                <div className="pt-1 text-[10px] text-white/40 uppercase tracking-[0.22em]" data-testid="footer-contact-gstin">
-                  GSTIN · <span className="text-white/60">{settings.gstin}</span>
+                <div className="pt-2 text-[11px] text-white/50" data-testid="footer-contact-gstin">
+                  GSTIN: <span className="text-white/70">{settings.gstin}</span>
                 </div>
               )}
             </div>
