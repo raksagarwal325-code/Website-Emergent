@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Mail, MapPin, Clock, Phone, Download, ExternalLink } from "lucide-react";
 import { useSettings } from "../../context/SettingsContext";
+import { formatPhone } from "../../lib/api";
 
 // WhatsApp glyph (brand-safe)
 const WA = ({ size = 15 }) => (
@@ -110,7 +111,8 @@ export default function Footer() {
 
   const waRaw = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
   const waHref = waRaw ? `https://wa.me/${waRaw}?text=${encodeURIComponent("Hi Rakshit ji, I am interested in Samrat Glass Emporium products. Please share more details.")}` : "";
-  const phoneHref = settings?.whatsapp_number ? `tel:${settings.whatsapp_number.replace(/\s+/g, "")}` : "";
+  const phoneHref = settings?.whatsapp_number ? `tel:+${(settings.whatsapp_number || "").replace(/[^0-9]/g, "")}` : "";
+  const phoneDisplay = formatPhone(settings?.whatsapp_number);
   const emailHref = settings?.admin_email ? `mailto:${settings.admin_email}` : "";
   const mapsHref = settings?.google_maps_url || (settings?.google_cid ? `https://www.google.com/maps?cid=${settings.google_cid}` : "");
   const googleReviewsView = settings?.google_cid ? `https://www.google.com/maps?cid=${settings.google_cid}` : "";
@@ -231,10 +233,10 @@ export default function Footer() {
             <div className="eyebrow mb-4">Contact</div>
             <div className="space-y-3.5">
               {waHref && (
-                <ContactRow icon={WA} label="WhatsApp" value={settings?.whatsapp_number} href={waHref} external testId="footer-contact-whatsapp" />
+                <ContactRow icon={WA} label="WhatsApp" value={phoneDisplay} href={waHref} external testId="footer-contact-whatsapp" />
               )}
               {phoneHref && (
-                <ContactRow icon={Phone} label="Call" value={settings?.whatsapp_number} href={phoneHref} testId="footer-contact-phone" />
+                <ContactRow icon={Phone} label="Call" value={phoneDisplay} href={phoneHref} testId="footer-contact-phone" />
               )}
               {emailHref && (
                 <ContactRow icon={Mail} label="Email" href={emailHref} external testId="footer-contact-email">
@@ -243,16 +245,24 @@ export default function Footer() {
               )}
               {settings?.address && (
                 <ContactRow icon={MapPin} label="Showroom" testId="footer-contact-address">
-                  <span className="whitespace-pre-line">{settings.address}</span>
+                  <span className="block whitespace-pre-line">{settings.address}</span>
                   {mapsHref && (
-                    <a href={mapsHref} target="_blank" rel="noreferrer" data-testid="footer-contact-maps" className="mt-1.5 inline-flex items-center gap-1 whitespace-nowrap text-[10px] uppercase tracking-[0.24em] text-[#D4AF37] hover:text-[#B5952F]">
+                    <a
+                      href={mapsHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-testid="footer-contact-maps"
+                      className="mt-2 inline-flex items-center gap-1 whitespace-nowrap text-[10px] uppercase tracking-[0.24em] text-[#D4AF37] hover:text-[#B5952F]"
+                    >
                       Visit our showroom <ExternalLink size={10} />
                     </a>
                   )}
                 </ContactRow>
               )}
               {settings?.business_hours && (
-                <ContactRow icon={Clock} label="Hours" value={settings.business_hours} testId="footer-contact-hours" />
+                <ContactRow icon={Clock} label="Hours" testId="footer-contact-hours">
+                  <span className="whitespace-pre-line">{settings.business_hours}</span>
+                </ContactRow>
               )}
               {settings?.gstin && (
                 <div className="pt-1 text-[10px] text-white/40 uppercase tracking-[0.22em]" data-testid="footer-contact-gstin">

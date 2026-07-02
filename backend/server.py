@@ -167,7 +167,7 @@ class Settings(BaseModel):
     facebook_url: str = ""
     youtube_url: str = ""
     pinterest_url: str = ""
-    business_hours: str = "Mon – Sat · 10:30 AM – 8:00 PM · Sunday closed"
+    business_hours: str = "Mon – Sat: 10:30 AM – 8:00 PM\nSunday: Closed"
     google_maps_url: str = "https://www.google.com/maps?cid=16850385744624001495"
 
 

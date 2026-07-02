@@ -51,6 +51,20 @@ export const formatPrice = (v, symbol = "₹") => {
   return `${symbol}${Number(v).toLocaleString("en-IN")}`;
 };
 
+// Formats an Indian mobile like "+91 89203 92937" for premium display.
+// Falls back gracefully for non-Indian or malformed numbers.
+export const formatPhone = (raw) => {
+  if (!raw) return "";
+  const digits = String(raw).replace(/[^0-9]/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) {
+    return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+  }
+  return raw;
+};
+
 // Luxury "From ₹X" display — used on discovery views (cards, product detail, wishlist, catalogue).
 // Skipped when product.fixed_price === true or a plain formatted price is passed in.
 export const formatLuxuryPrice = (product, symbol = "₹") => {
