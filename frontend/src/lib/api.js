@@ -51,4 +51,12 @@ export const formatPrice = (v, symbol = "₹") => {
   return `${symbol}${Number(v).toLocaleString("en-IN")}`;
 };
 
+// Luxury "From ₹X" display — used on discovery views (cards, product detail, wishlist, catalogue).
+// Skipped when product.fixed_price === true or a plain formatted price is passed in.
+export const formatLuxuryPrice = (product, symbol = "₹") => {
+  if (!product || product.price == null) return "";
+  const base = formatPrice(product.price, symbol);
+  return product.fixed_price ? base : `From ${base}`;
+};
+
 export default api;

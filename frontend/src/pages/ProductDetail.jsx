@@ -91,10 +91,16 @@ export default function ProductDetail() {
             <div className="mt-3 text-white/50 text-sm">SKU: {product.sku}</div>
           </div>
 
-          <div className="flex items-baseline gap-3">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            {!product.fixed_price && (
+              <span className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">From</span>
+            )}
             <span data-testid="product-price" className="font-serif text-3xl text-[#D4AF37]">{formatPrice(product.price)}</span>
             {product.compare_at_price && (
               <span className="text-white/40 line-through">{formatPrice(product.compare_at_price)}</span>
+            )}
+            {!product.fixed_price && (
+              <span className="text-[11px] text-white/40 italic ml-1">· final quotation on inquiry</span>
             )}
           </div>
 

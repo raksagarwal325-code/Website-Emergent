@@ -86,10 +86,17 @@ export default function ProductCard({ product, index = 0 }) {
         </Link>
         <div className="text-[10px] uppercase tracking-widest text-white/40">SKU · {product.sku}</div>
         <div className="flex items-baseline justify-between pt-1">
-          <div className="flex items-baseline gap-2">
-            <span className="text-[#D4AF37] font-serif text-lg">{formatPrice(product.price)}</span>
+          <div className="flex items-baseline gap-2 min-w-0">
+            <span className="text-[#D4AF37] font-serif text-lg truncate">
+              {product.fixed_price ? formatPrice(product.price) : (
+                <>
+                  <span className="text-[10px] uppercase tracking-[0.24em] text-[#BF9972] mr-1 font-sans not-italic">From</span>
+                  {formatPrice(product.price)}
+                </>
+              )}
+            </span>
             {product.compare_at_price && (
-              <span className="text-white/40 line-through text-xs">{formatPrice(product.compare_at_price)}</span>
+              <span className="text-white/40 line-through text-xs flex-shrink-0">{formatPrice(product.compare_at_price)}</span>
             )}
           </div>
         </div>

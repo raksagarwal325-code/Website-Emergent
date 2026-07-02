@@ -33,7 +33,7 @@ export default function Favorites() {
                 <div className="p-5 space-y-1">
                   <div className="eyebrow">{p.category}</div>
                   <div className="font-serif text-lg">{p.name}</div>
-                  <div className="text-white/70">{formatPrice(p.price)}</div>
+                  <div className="text-white/70">{p.fixed_price ? formatPrice(p.price) : <><span className="text-[10px] uppercase tracking-[0.22em] text-[#BF9972] mr-1">From</span>{formatPrice(p.price)}</>}</div>
                 </div>
               </Link>
               <button

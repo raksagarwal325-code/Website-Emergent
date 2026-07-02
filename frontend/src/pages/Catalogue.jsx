@@ -189,7 +189,8 @@ export default function Catalogue() {
                   <div className="text-[10px] uppercase tracking-[0.22em] text-[#BF9972]">{p.category}</div>
                   <h3 className="font-serif text-lg mt-1 leading-snug">{p.name}</h3>
                   <div className="text-[10px] text-white/40 mt-0.5">SKU · {p.sku}</div>
-                  <div className="mt-2 flex items-baseline gap-2">
+                  <div className="mt-2 flex items-baseline gap-2 flex-wrap">
+                    {!p.fixed_price && <span className="text-[9px] uppercase tracking-[0.22em] text-[#BF9972]">From</span>}
                     <span className="text-[#D4AF37] font-serif text-lg">{formatPrice(p.price)}</span>
                     {p.compare_at_price && <span className="text-white/40 line-through text-xs">{formatPrice(p.compare_at_price)}</span>}
                   </div>

@@ -6,7 +6,7 @@ import AdminHomepage from "../components/AdminHomepage";
 
 const emptyProduct = {
   name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "USD",
-  short_description: "", description: "", images: [], tags: [], specs: {}, stock: 0, featured: false, badge: "",
+  short_description: "", description: "", images: [], tags: [], specs: {}, stock: 0, featured: false, badge: "", fixed_price: false,
 };
 
 export default function Admin() {
@@ -172,6 +172,10 @@ function ProductsAdmin({ products, refresh, editing, setEditing }) {
         <label className="inline-flex items-center gap-2 text-sm text-white/80">
           <input data-testid="p-featured" type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} />
           Featured
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-white/80 ml-6">
+          <input data-testid="p-fixed-price" type="checkbox" checked={!!form.fixed_price} onChange={(e) => setForm({ ...form, fixed_price: e.target.checked })} />
+          Fixed price <span className="text-[10px] text-white/40">(hides the &ldquo;From&rdquo; prefix on cards — useful for stocked items with a locked price)</span>
         </label>
 
         <div>
