@@ -10,6 +10,7 @@ import CollageSection from "../components/CollageSection";
 import ReasonsSection from "../components/ReasonsSection";
 import AtelierShowcase from "../components/AtelierShowcase";
 import TrustedBySection from "../components/TrustedBySection";
+import GalleryPreview from "../components/GalleryPreview";
 import { useSettings } from "../context/SettingsContext";
 
 export default function Home() {
@@ -174,6 +175,9 @@ export default function Home() {
 
       {/* Editorial banner / Atelier auto-rotating showcase */}
       <AtelierShowcase />
+
+      {/* Featured Projects (auto-hides when Gallery has no items) */}
+      <GalleryPreview />
     </div>
   );
 }
