@@ -1,0 +1,22 @@
+{
+  "summary": "Verified CollageSection rewrite: zero <img> tags in the section at all viewports, correct title/subtitle/description text, 4 stat cards, and both CTAs (Explore Catalog -> /catalog, WhatsApp -> wa.me/918920392937 in new tab). No horizontal overflow at 1920/1440/1024/768/390. Regression checks for /catalog (200, 13 products), /about (200), reasons-section (8 cards), header-catalogue visibility (visible desktop / hidden tablet) all pass. Zero console errors.",
+  "tested_scope": ["frontend", "integration"],
+  "passed": [
+    "collage-section renders with 0 <img> elements at 1920/1440/1024/768/390",
+    "Title contains '1000+ Light Options' and 'Inside'",
+    "Subtitle 'Handcrafted decorative lighting from Firozabad' present",
+    "Description contains 'chandeliers, hanging lights, wall lights'",
+    "All 4 stat cards (collage-stat-0..3) with values 1000+/40+/Pan-India/Custom and labels Designs/Years Experience/Delivery/Lighting Available",
+    "collage-explore-btn links to /catalog with text 'Explore Catalog'",
+    "collage-wa-btn href starts with https://wa.me/ contains 918920392937, target=_blank, text 'Send WhatsApp Inquiry'",
+    "No horizontal overflow at any tested viewport (scrollWidth == clientWidth)",
+    "Stat cards stack 4-col -> 2-col responsively",
+    "Regression: /catalog 200 with 13 product cards, /about 200, reasons-section renders 8 cards, header-download-catalogue visible@1440 hidden@768",
+    "0 console errors on homepage"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}
