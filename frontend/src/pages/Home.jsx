@@ -130,21 +130,33 @@ export default function Home() {
       {/* Editorial banner */}
       <section className="max-w-7xl mx-auto px-6 py-16 md:py-20">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-          <div className="md:col-span-7 aspect-[16/10] overflow-hidden border border-[#BF9972]/20 relative bg-gradient-to-br from-[#2A1125] to-[#1e0d1a]">
-            <img
-              src="https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=1400&q=80"
-              alt="Firozabad glass chandelier craftsmanship"
-              className="w-full h-full object-cover"
-              loading="lazy"
-              onError={(e)=>{e.currentTarget.style.display='none';}}
-            />
-            <div className="absolute inset-0 pointer-events-none" style={{background:"linear-gradient(135deg, rgba(42,17,37,0.20), transparent 60%)"}}></div>
+          <div className="md:col-span-7 aspect-[16/10] overflow-hidden border border-[#BF9972]/25 relative bg-gradient-to-br from-[#2A1125] to-[#1e0d1a]">
+            {featured[0]?.images?.[0] ? (
+              <img
+                src={api.resolveImage(featured[0].images[0])}
+                alt={`${featured[0].name} — Samrat Glass Emporium chandelier`}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                onError={(e)=>{e.currentTarget.style.display='none';}}
+              />
+            ) : (
+              <img
+                src="https://images.unsplash.com/photo-1524634126442-357e0eac3c14?auto=format&fit=crop&w=1400&q=80"
+                alt="Firozabad handcrafted crystal chandelier"
+                className="w-full h-full object-cover"
+                loading="lazy"
+                onError={(e)=>{e.currentTarget.style.display='none';}}
+              />
+            )}
+            {/* Warm brand wash so the image matches wine/copper/gold theme */}
+            <div className="absolute inset-0 pointer-events-none" style={{background:"linear-gradient(135deg, rgba(42,17,37,0.45) 0%, rgba(163,99,80,0.18) 45%, transparent 75%)"}}></div>
+            <div className="absolute inset-0 pointer-events-none" style={{background:"radial-gradient(circle at 20% 80%, rgba(212,175,55,0.10), transparent 55%)"}}></div>
           </div>
           <div className="md:col-span-5">
             <div className="eyebrow mb-3">The Atelier</div>
             <h2 className="font-serif text-3xl sm:text-4xl leading-tight">Where glass is a family heirloom.</h2>
             <p className="mt-6 text-white/70 leading-relaxed">
-              For four generations, our craftsmen in Firozabad have shaped molten glass into things of beauty — from the traditional <em>jhoomars</em> of Rajwada palaces to the sculpted crystal chandeliers of modern homes. Every piece we ship carries that quiet craft.
+              For more than 40 years, our craftsmen in Firozabad have shaped glass into decorative lighting that brings warmth, beauty, and character into Indian homes, hotels, showrooms, and luxury interiors. From traditional <em>jhoomars</em> to crystal chandeliers and handcrafted glass lamps, every piece reflects quiet craft and careful finishing.
             </p>
             <Link to="/catalog" className="mt-8 inline-flex items-center gap-2 text-[#D4AF37] hover:text-[#B5952F] text-xs uppercase tracking-[0.28em] link-underline">
               Discover the collection <ArrowUpRight size={14} />
