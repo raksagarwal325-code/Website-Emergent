@@ -94,9 +94,9 @@ export default function Catalog() {
           <button data-testid="export-csv-btn" onClick={handleExportCsv} className="inline-flex items-center gap-2 border border-white/15 hover:border-[#D4AF37] px-4 py-3 text-xs uppercase tracking-[0.2em] text-white/80">
             <Download size={14} /> CSV
           </button>
-          <button data-testid="export-pdf-btn" onClick={handleExportPdf} className="inline-flex items-center gap-2 border border-white/15 hover:border-[#D4AF37] px-4 py-3 text-xs uppercase tracking-[0.2em] text-white/80">
-            <Download size={14} /> PDF
-          </button>
+          <a href="/catalogue?print=1" target="_blank" rel="noreferrer" data-testid="export-pdf-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/50 hover:border-[#D4AF37] hover:text-[#D4AF37] px-4 py-3 text-xs uppercase tracking-[0.2em] text-white/80">
+            <Download size={14} /> Catalogue PDF
+          </a>
         </div>
       </div>
 

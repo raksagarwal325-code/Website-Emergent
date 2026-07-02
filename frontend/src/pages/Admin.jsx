@@ -58,13 +58,23 @@ export default function Admin() {
       </div>
 
       {tab === "dashboard" && stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[["Products", stats.products],["Inquiries", stats.inquiries],["Messages", stats.contact_messages],["Reviews", stats.reviews]].map(([label, val]) => (
-            <div key={label} className="border border-white/10 p-8">
-              <div className="eyebrow mb-3">{label}</div>
-              <div className="font-serif text-4xl">{val}</div>
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[["Products", stats.products],["Inquiries", stats.inquiries],["Messages", stats.contact_messages],["Reviews", stats.reviews]].map(([label, val]) => (
+              <div key={label} className="border border-white/10 p-8">
+                <div className="eyebrow mb-3">{label}</div>
+                <div className="font-serif text-4xl">{val}</div>
+              </div>
+            ))}
+          </div>
+          <div className="border border-[#D4AF37]/30 p-6 flex flex-wrap items-center justify-between gap-4" style={{background:"linear-gradient(90deg, rgba(163,99,80,0.14), transparent)"}}>
+            <div>
+              <div className="eyebrow mb-1">Brand catalogue</div>
+              <div className="font-serif text-xl">Download the complete product catalogue</div>
+              <div className="text-white/50 text-xs mt-1">Auto-generated from current products — updates instantly on edits.</div>
             </div>
-          ))}
+            <a data-testid="admin-download-catalogue" href="/catalogue?print=1" target="_blank" rel="noreferrer" className="bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]">Generate PDF</a>
+          </div>
         </div>
       )}
 

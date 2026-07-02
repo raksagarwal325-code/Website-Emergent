@@ -13,6 +13,7 @@ import Favorites from "@/pages/Favorites";
 import Cart from "@/pages/Cart";
 import Contact from "@/pages/Contact";
 import Admin from "@/pages/Admin";
+import Catalogue from "@/pages/Catalogue";
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
               <Route path="/cart" element={<Cart />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/catalogue" element={<Catalogue />} />
             </Routes>
           </main>
           <Footer />
