@@ -1,0 +1,29 @@
+{
+  "summary": "CollageSection layout fix verified at 1920/1440/1024/390 viewports. Grid is 5/7 split on desktop, image is square 432x432 (well under 520px cap), rounded card with border+shadow, single baked-in badge (no CSS overlay), all copy/buttons/feature-strip visible and readable. Mobile 390 stacks image above text correctly, no clipping, no overflow. Regression: reasons-section renders 8 cards; /about and /catalog load fine. BLOCKER at 768: horizontal overflow (scrollWidth 896 vs 768) caused by NAVBAR, not CollageSection — the header-download-catalogue button + adjacent flex row extends beyond viewport at tablet width. CollageSection itself is 768px-wide at 768 (no overflow).",
+  "tested_scope": ["frontend"],
+  "passed": [
+    "collage-section renders at 1440 with 5/7 grid (md:col-span-5 / md:col-span-7)",
+    "Title shows '1000+ Light Options' and 'Inside' on two lines",
+    "Explore Catalog + Our Story buttons visible, not clipped",
+    "Image container: aspectRatio 1/1, height 432px at 1440 (<= 520px cap), rounded-2xl border+shadow",
+    "No CSS-drawn duplicate badge — image wrapper contains no inner text",
+    "No horizontal overflow at 1920, 1440, 1024, 390",
+    "Mobile 390: image (340x340) stacks ABOVE text, feature strip fits (342px within 390), buttons visible",
+    "Regression: reasons-section renders exactly 8 cards",
+    "Regression: /about and /catalog pages load"
+  ],
+  "failed": [
+    {
+      "area": "Header / tablet layout (NOT CollageSection)",
+      "issue": "Horizontal overflow at viewport width 768 — document scrollWidth=896, clientWidth=768. Offending elements: header .flex.items-center.gap-5 (right=896) containing [data-testid=header-download-catalogue] which is 'hidden sm:inline-flex' and remains visible at 768, pushing nav content beyond viewport. Review request explicitly asked to verify no overflow at 768.",
+      "evidence": "page.evaluate returned scrollWidth 896 vs clientWidth 768 at 768x1024. Collage section itself measured left=0/right=768/width=768 (no overflow contribution). Offender: header link data-testid=header-download-catalogue at left=697 right=820.",
+      "priority": "MEDIUM"
+    }
+  ],
+  "action_items": [
+    "Fix tablet (768px) horizontal overflow in Navbar/Header: either hide 'header-download-catalogue' link below md (change 'hidden sm:inline-flex' -> 'hidden md:inline-flex' or 'hidden lg:inline-flex'), or otherwise compress the header actions row so header total width fits at 768px. CollageSection itself needs no changes."
+  ],
+  "success_rate": {"backend": "not tested", "frontend": "90%"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}
