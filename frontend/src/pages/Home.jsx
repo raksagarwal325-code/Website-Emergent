@@ -129,29 +129,38 @@ export default function Home() {
 
       {/* Editorial banner */}
       <section className="max-w-7xl mx-auto px-6 py-16 md:py-20">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-          <div className="md:col-span-7 aspect-[16/10] overflow-hidden border border-[#BF9972]/25 relative bg-gradient-to-br from-[#2A1125] to-[#1e0d1a]">
-            {featured[0]?.images?.[0] ? (
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
+          {/* Atelier hero image — real Samrat glowing crystal pendant on black */}
+          <div className="md:col-span-7">
+            <div
+              className="relative w-full bg-black border border-[#D4AF37]/25 overflow-hidden"
+              style={{
+                aspectRatio: "1 / 1",
+                maxHeight: "560px",
+                boxShadow:
+                  "0 0 0 1px rgba(191,153,114,0.15), 0 24px 60px -12px rgba(0,0,0,0.7), 0 0 80px -20px rgba(212,175,55,0.25)",
+              }}
+            >
               <img
-                src={api.resolveImage(featured[0].images[0])}
-                alt={`${featured[0].name} — Samrat Glass Emporium chandelier`}
-                className="w-full h-full object-cover"
+                src="/atelier-hero.png"
+                alt="Samrat Glass Emporium hand-cut crystal hanging light — glowing on black"
+                className="absolute inset-0 w-full h-full object-contain"
                 loading="lazy"
-                onError={(e)=>{e.currentTarget.style.display='none';}}
               />
-            ) : (
-              <img
-                src="https://images.unsplash.com/photo-1524634126442-357e0eac3c14?auto=format&fit=crop&w=1400&q=80"
-                alt="Firozabad handcrafted crystal chandelier"
-                className="w-full h-full object-cover"
-                loading="lazy"
-                onError={(e)=>{e.currentTarget.style.display='none';}}
-              />
-            )}
-            {/* Warm brand wash so the image matches wine/copper/gold theme */}
-            <div className="absolute inset-0 pointer-events-none" style={{background:"linear-gradient(135deg, rgba(42,17,37,0.45) 0%, rgba(163,99,80,0.18) 45%, transparent 75%)"}}></div>
-            <div className="absolute inset-0 pointer-events-none" style={{background:"radial-gradient(circle at 20% 80%, rgba(212,175,55,0.10), transparent 55%)"}}></div>
+              {/* Warm gold ambient glow to blend into brand palette */}
+              <div
+                className="absolute inset-0 pointer-events-none mix-blend-screen"
+                style={{
+                  background:
+                    "radial-gradient(circle at 50% 62%, rgba(212,175,55,0.18), transparent 55%)",
+                }}
+              ></div>
+              {/* Editorial frame: fine gold hairlines at top/bottom */}
+              <div className="absolute inset-x-6 top-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/40 to-transparent"></div>
+              <div className="absolute inset-x-6 bottom-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/40 to-transparent"></div>
+            </div>
           </div>
+
           <div className="md:col-span-5">
             <div className="eyebrow mb-3">The Atelier</div>
             <h2 className="font-serif text-3xl sm:text-4xl leading-tight">Where glass is a family heirloom.</h2>
