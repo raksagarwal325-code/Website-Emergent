@@ -6,6 +6,7 @@ import ProductCard from "../components/ProductCard";
 import GoogleReviews from "../components/GoogleReviews";
 import CollageSection from "../components/CollageSection";
 import ReasonsSection from "../components/ReasonsSection";
+import AtelierShowcase from "../components/AtelierShowcase";
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
@@ -127,52 +128,8 @@ export default function Home() {
       {/* Reasons Why We Are Better */}
       <ReasonsSection />
 
-      {/* Editorial banner */}
-      <section className="max-w-7xl mx-auto px-6 py-16 md:py-20">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
-          {/* Atelier hero image — real Samrat glowing crystal pendant on black */}
-          <div className="md:col-span-7">
-            <div
-              className="relative w-full bg-black border border-[#D4AF37]/25 overflow-hidden"
-              style={{
-                aspectRatio: "1 / 1",
-                maxHeight: "560px",
-                boxShadow:
-                  "0 0 0 1px rgba(191,153,114,0.15), 0 24px 60px -12px rgba(0,0,0,0.7), 0 0 80px -20px rgba(212,175,55,0.25)",
-              }}
-            >
-              <img
-                src="/atelier-hero.png"
-                alt="Samrat Glass Emporium hand-cut crystal hanging light — glowing on black"
-                className="absolute inset-0 w-full h-full object-contain"
-                loading="lazy"
-              />
-              {/* Warm gold ambient glow to blend into brand palette */}
-              <div
-                className="absolute inset-0 pointer-events-none mix-blend-screen"
-                style={{
-                  background:
-                    "radial-gradient(circle at 50% 62%, rgba(212,175,55,0.18), transparent 55%)",
-                }}
-              ></div>
-              {/* Editorial frame: fine gold hairlines at top/bottom */}
-              <div className="absolute inset-x-6 top-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/40 to-transparent"></div>
-              <div className="absolute inset-x-6 bottom-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/40 to-transparent"></div>
-            </div>
-          </div>
-
-          <div className="md:col-span-5">
-            <div className="eyebrow mb-3">The Atelier</div>
-            <h2 className="font-serif text-3xl sm:text-4xl leading-tight">Where glass is a family heirloom.</h2>
-            <p className="mt-6 text-white/70 leading-relaxed">
-              For more than 40 years, our craftsmen in Firozabad have shaped glass into decorative lighting that brings warmth, beauty, and character into Indian homes, hotels, showrooms, and luxury interiors. From traditional <em>jhoomars</em> to crystal chandeliers and handcrafted glass lamps, every piece reflects quiet craft and careful finishing.
-            </p>
-            <Link to="/catalog" className="mt-8 inline-flex items-center gap-2 text-[#D4AF37] hover:text-[#B5952F] text-xs uppercase tracking-[0.28em] link-underline">
-              Discover the collection <ArrowUpRight size={14} />
-            </Link>
-          </div>
-        </div>
-      </section>
+      {/* Editorial banner / Atelier auto-rotating showcase */}
+      <AtelierShowcase />
     </div>
   );
 }
