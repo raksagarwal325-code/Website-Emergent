@@ -7,20 +7,11 @@ export default function CollageSection() {
     <section data-testid="collage-section" className="relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none" style={{background:"radial-gradient(ellipse at 20% 50%, rgba(163,99,80,0.25), transparent 55%)"}}></div>
       <div className="relative max-w-7xl mx-auto px-6 py-24 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-        {/* Collage + Badge */}
+        {/* Collage (badge is already baked into the image) */}
         <div className="lg:col-span-7 relative">
           <div className="relative aspect-square overflow-hidden brand-glow" style={{boxShadow:"0 0 0 1px rgba(212,175,55,0.4), 0 20px 60px -10px rgba(163,99,80,0.6)"}}>
-            <img src="/collage.png" alt="Samrat Glass Emporium chandelier collection" className="w-full h-full object-cover" />
-            <div className="absolute inset-0" style={{background:"linear-gradient(135deg, rgba(42,17,37,0.15) 0%, transparent 60%)"}}></div>
-          </div>
-          {/* Circular badge overlay */}
-          <div className="absolute -bottom-6 -right-6 md:-bottom-10 md:-right-10 w-32 h-32 md:w-44 md:h-44 rounded-full flex items-center justify-center text-center relative"
-               style={{background:"radial-gradient(circle at 30% 30%, #BF9972, #A36350 60%, #8B4F3F)", boxShadow:"0 0 0 2px rgba(212,175,55,0.6), 0 15px 40px -8px rgba(0,0,0,0.7)"}}>
-            <div className="absolute inset-2 border border-[#D4AF37]/40 rounded-full pointer-events-none"></div>
-            <div className="px-4">
-              <div className="font-serif text-3xl md:text-5xl text-[#2A1125] leading-none">1000+</div>
-              <div className="text-[9px] md:text-[10px] uppercase tracking-[0.24em] text-[#2A1125]/85 mt-1 md:mt-2">Light Options<br/>Inside</div>
-            </div>
+            <img src="/collage.png" alt="Samrat Glass Emporium chandelier collection — 1000+ light options" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 pointer-events-none" style={{background:"linear-gradient(135deg, rgba(42,17,37,0.15) 0%, transparent 60%)"}}></div>
           </div>
         </div>
         {/* Copy */}

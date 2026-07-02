@@ -1,0 +1,25 @@
+{
+  "summary": "Targeted bug-fix verification for the homepage 'Why We Are Better' area. Verified (a) CollageSection now displays the correct product-collage image (chandeliers/lamps mosaic with the copper '1000+ LIGHT OPTIONS INSIDE' badge baked in), (b) no duplicate CSS 1000+ overlay is present, (c) no 'Reasons Why We Are Better' heading or mosaic-bowl screenshot is inside the collage section, (d) ReasonsSection is pure HTML with 8 text/icon cards (0 <img> elements, 8 SVG icons, all 8 titles match exactly), (e) 390px mobile has no horizontal overflow and cards stack in single column, (f) /about still renders ReasonsSection, /catalog still loads with no errors.",
+  "tested_scope": ["frontend"],
+  "passed": [
+    "Homepage loads and [data-testid=collage-section] present",
+    "Collage section has exactly 1 <img> with src=/collage.png (natural 527x716) — product collage asset",
+    "Collage section text does NOT contain 'Reasons Why We Are Better'",
+    "No standalone '1000+' CSS overlay nodes in collage section (badge appears exactly once, baked into image)",
+    "Copy '1000+ Light Options Inside' present as heading text in collage section",
+    "[data-testid=reasons-section] contains 0 <img> elements (pure HTML/SVG)",
+    "All 8 reason cards (reason-0..reason-7) present with exact expected titles",
+    "8 inline SVG icons rendered inside reasons-section",
+    "Mobile 390px: no horizontal scroll (body.scrollWidth==window.innerWidth==390)",
+    "Mobile 390px: reason cards stack in single column (reason-1 below reason-0)",
+    "Mobile 390px: collage image fits within viewport (342px wide)",
+    "Regression: /about renders reasons-section",
+    "Regression: /catalog loads with no error elements"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "Screenshots visually confirm: collage shows chandelier product mosaic with a single circular copper '1000+ LIGHT OPTIONS INSIDE' badge baked in; reasons section renders 8 clean text/icon cards on a dark themed background. Bug fix verified."
+}
