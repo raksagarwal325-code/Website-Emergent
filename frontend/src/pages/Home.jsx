@@ -33,11 +33,11 @@ export default function Home() {
           <div className="absolute inset-0" style={{background: "radial-gradient(circle at 80% 20%, rgba(163,99,80,0.35), transparent 45%)"}}></div>
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-6 pt-28 pb-32 md:pt-36 md:pb-40">
+        <div className="relative max-w-7xl mx-auto px-6 pt-20 pb-24 md:pt-24 md:pb-28">
           <div className="max-w-2xl fade-up">
-            <div className="flex items-center gap-4 mb-8">
-              <img src="/logo.jpeg" alt="" className="w-14 h-14 object-cover brand-glow" />
-              <div className="eyebrow">Est. Firozabad · The City of Glass</div>
+            <div className="mb-6 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]"></span>
+              <span className="text-[10px] uppercase tracking-[0.32em] text-[#BF9972]">Since 1981 · Handcrafted in Firozabad</span>
             </div>
             <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05]">
               Fancy lights that<br />
@@ -63,6 +63,16 @@ export default function Home() {
               >
                 <MessageCircle size={14} /> Chat on WhatsApp
               </a>
+            </div>
+
+            {/* Trust points strip */}
+            <div className="mt-14 pt-8 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
+              {[["1981","Established"],["1000+","Designs"],["Pan-India","Delivery"]].map(([v, l]) => (
+                <div key={l}>
+                  <div className="font-serif text-xl md:text-2xl brand-gradient-text leading-none">{v}</div>
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-white/50 mt-2">{l}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -91,8 +101,8 @@ export default function Home() {
       </section>
 
       {/* Featured */}
-      <section className="max-w-7xl mx-auto px-6 py-24">
-        <div className="flex items-end justify-between mb-12">
+      <section className="max-w-7xl mx-auto px-6 py-16 md:py-20">
+        <div className="flex items-end justify-between mb-10">
           <div>
             <div className="eyebrow mb-3">Featured</div>
             <h2 className="font-serif text-3xl sm:text-4xl">Pieces of the season</h2>
@@ -102,7 +112,7 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
           {featured.slice(0, 8).map((p, i) => (
             <ProductCard key={p.id} product={p} index={i} />
           ))}
@@ -110,7 +120,7 @@ export default function Home() {
       </section>
 
       {/* Google Reviews */}
-      <section className="max-w-7xl mx-auto px-6 pb-8">
+      <section className="max-w-7xl mx-auto px-6 pb-6">
         <GoogleReviews />
       </section>
 
@@ -118,13 +128,17 @@ export default function Home() {
       <ReasonsSection />
 
       {/* Editorial banner */}
-      <section className="max-w-7xl mx-auto px-6 py-24">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">          <div className="md:col-span-7 aspect-[16/10] overflow-hidden">
+      <section className="max-w-7xl mx-auto px-6 py-16 md:py-20">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+          <div className="md:col-span-7 aspect-[16/10] overflow-hidden border border-[#BF9972]/20 relative bg-gradient-to-br from-[#2A1125] to-[#1e0d1a]">
             <img
-              src="https://images.unsplash.com/photo-1587049016823-c90a1a2df325"
-              alt="Chandelier craftsmanship"
+              src="https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=1400&q=80"
+              alt="Firozabad glass chandelier craftsmanship"
               className="w-full h-full object-cover"
+              loading="lazy"
+              onError={(e)=>{e.currentTarget.style.display='none';}}
             />
+            <div className="absolute inset-0 pointer-events-none" style={{background:"linear-gradient(135deg, rgba(42,17,37,0.20), transparent 60%)"}}></div>
           </div>
           <div className="md:col-span-5">
             <div className="eyebrow mb-3">The Atelier</div>

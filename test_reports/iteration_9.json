@@ -1,0 +1,32 @@
+{
+  "summary": "Homepage polish verified. Nav admin hidden, /admin still works, hero eyebrow present, Atelier image loads (naturalWidth=1400), ProductCards have equal heights and view/quick-add testids, cart badge increments 0->1 on quick-add click, no horizontal overflow at any viewport, header 81px at 390, collage has 0 imgs, reasons has 8 cards, /catalog shows 26 products, /about renders. CRITICAL: Emergent badge CSS override is NOT applied — element has computed display:flex and is visible in screenshot. Minor: trust-row label 'Established' not found (other labels 'Designs' and 'Pan-India' are present).",
+  "tested_scope": ["frontend", "integration"],
+  "passed": [
+    "nav-admin absent at 1440; nav-home/catalog/about/contact present",
+    "/admin URL still loads page-admin",
+    "Hero eyebrow contains SINCE 1981 and HANDCRAFTED IN FIROZABAD",
+    "Atelier image renders (alt matches, naturalWidth=1400)",
+    "6 ProductCards on Featured each have view-btn-<id> and quick-add-<id>",
+    "First 4 card heights identical (5854.31px each, diff=0)",
+    "quick-add click increments cart badge from empty to 1",
+    "No horizontal overflow at 1920/1440/1024/768/480/390",
+    "Header height 81px at 390 (<=90)",
+    "collage-section contains 0 <img> tags",
+    "reasons-section contains 8 reason cards",
+    "/catalog renders 26 product cards",
+    "/about renders substantial content"
+  ],
+  "failed": [
+    {"area": "Emergent badge hide (App.css)", "issue": "#emergent-badge is still visible. getComputedStyle().display === 'flex' (expected 'none'). Badge 'Made with Emergent' visible in bottom-right of screenshot.", "evidence": "page.evaluate returned {exists:true, display:'flex', visibility:'visible'}; screenshot on /about confirms badge visible.", "priority": "HIGH"},
+    {"area": "Hero trust row label", "issue": "Text 'Established' not found on homepage body. 'Designs' and 'Pan-India' are found. Trust point label for the 1981 item may differ from spec.", "evidence": "body.innerText.includes('Established') === false", "priority": "LOW"},
+    {"area": "Quick-add toast", "issue": "Could not detect a toast/status element after quick-add click (selectors: [class*=toast],[role=status],[class*=Toast]). Cart badge did update, so core functionality works; toast may use a different selector.", "evidence": "toast query returned null but cart badge went from '' to '1'", "priority": "LOW"}
+  ],
+  "action_items": [
+    "Investigate why #emergent-badge{display:none!important} in App.css is not overriding the injected badge. Likely the badge element uses a different id/class, is in a shadow DOM, or is inserted after CSS with inline style. Consider targeting via [class*=emergent], or the actual selector used by the injected badge (e.g., a[href*='emergent.sh']), and use MutationObserver or inline <style> in index.html to guarantee it hides.",
+    "Verify hero 'trust points row' label for the 1981 item — spec expects 'Established' but the rendered label differs. Confirm intended copy.",
+    "Optional: add a data-testid on the shadcn/sonner toast so tests can assert it appears after quick-add."
+  ],
+  "success_rate": {"backend": "n/a", "frontend": "85%"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}

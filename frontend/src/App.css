@@ -3,3 +3,6 @@
   min-height: 100vh;
   background: transparent;
 }
+
+/* Hide Emergent badge on public site (per client polish request) */
+#emergent-badge { display: none !important; }
