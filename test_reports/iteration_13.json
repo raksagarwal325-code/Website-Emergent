@@ -1,0 +1,31 @@
+{
+  "summary": "SettingsProvider JSX fix is confirmed — app compiles cleanly, /admin and / load with 0 console errors. 6/7 requested flows pass end-to-end. One HIGH bug found: 'Reset section to defaults' in AdminHomepage (Atelier) does NOT reset the section state — the [data-testid=hp-atelier-headline] input keeps the edited value after clicking reset, and saving persists the edited value, so the homepage never reverts to the default 'Where glass is a family heirloom.' headline.",
+  "tested_scope": ["frontend", "backend", "integration"],
+  "passed": [
+    "GET /api/settings → 200 with brand + homepage settings",
+    "/ and /admin load with no CRA compile-error overlay and 0 console errors",
+    "/admin → [data-testid=admin-tab-homepage] renders [data-testid=admin-homepage-editor] with exactly 7 collapsible hp-section-* blocks",
+    "Expanding hp-section-atelier, filling [data-testid=hp-atelier-headline] with 'Where every jhoomar tells a story.', clicking [data-testid=hp-save-btn] → save toast/success and homepage (cache-busted) reflects the new headline",
+    "/catalog renders products (26 product-like cards)",
+    "Home reasons-section present with 8 grid children (reason cards)",
+    "collage-section contains 0 <img> tags",
+    "[data-testid=nav-admin] is absent from public nav",
+    "No horizontal overflow at 1440px or 390px viewports"
+  ],
+  "failed": [
+    {
+      "area": "Admin → Homepage → Atelier → Reset section to defaults",
+      "issue": "Clicking the visible 'Reset section to defaults' button in the expanded Atelier section does not restore the section's default state. After click, [data-testid=hp-atelier-headline] input still contains 'Where every jhoomar tells a story.' (the just-edited value) instead of the default 'Where glass is a family heirloom.'. Saving then persists the edited value, so the homepage never rolls back.",
+      "evidence": "Playwright: 2 'Reset section to defaults' buttons visible after expanding atelier; clicked the first visible one, then read input value → 'Where every jhoomar tells a story.'. After save + reload of /, body still contains 'Where every jhoomar tells a story.' and does NOT contain 'Where glass is a family heirloom.'.",
+      "priority": "HIGH"
+    }
+  ],
+  "action_items": [
+    "Fix resetSection('atelier') in AdminHomepage.jsx (line ~271) so that clicking 'Reset section to defaults' actually resets the atelier subtree of local state (headline, subheadline, image list, etc.) to the DEFAULT_HOMEPAGE constant. Likely the function is not merging/replacing the section correctly, or the input is uncontrolled and not re-reading the updated state.",
+    "Verify the same reset behavior for the other 6 sections (hero, reasons, collage, atelier, spotlight, testimonials, contact/etc.) — only atelier was validated but the same code path is used for all.",
+    "After fix, re-run this iteration focusing on the reset round-trip (edit → save → reset → save → default restored)."
+  ],
+  "success_rate": {"backend": "100%", "frontend": "~90% (reset bug)"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}

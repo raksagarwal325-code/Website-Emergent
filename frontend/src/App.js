@@ -32,6 +32,7 @@ function App() {
   return (
     <div className="App min-h-screen flex flex-col">
       <CatalogProvider>
+        <SettingsProvider>
         <BrowserRouter>
           <Header />
           <main className="flex-1">
