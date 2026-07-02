@@ -13,6 +13,7 @@ const SECTIONS = [
   { key: "google_reviews_fallback", label: "Google Reviews Fallback" },
   { key: "manual_reviews", label: "Manual Reviews / Testimonials" },
   { key: "about", label: "About Page" },
+  { key: "craft", label: "The Craft Page" },
   { key: "reasons", label: "Reasons Why We Are Better" },
   { key: "atelier", label: "The Atelier Section" },
   { key: "footer", label: "Footer Content" },
@@ -257,6 +258,44 @@ function SectionEditor({ sectionKey, data, patch }) {
         </div>
       );
     }
+    case "craft":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">Controls the <span className="text-white/70">/craft</span> page — hero, the 5 process steps, closing quote, and CTAs. Icons for each step stay fixed (Design · Flame · Scissors · Wrench · Award) mapped by position.</p>
+
+          <div className="eyebrow mb-1 mt-4">Hero</div>
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-craft-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Headline (white)" value={data.headline_pre} onChange={(v)=>set("headline_pre",v)} data-testid="hp-craft-h1" />
+            <Text label="Headline (gold italic)" value={data.headline_highlight} onChange={(v)=>set("headline_highlight",v)} data-testid="hp-craft-h2" />
+          </div>
+          <TextArea label="Intro paragraph" value={data.intro} onChange={(v)=>set("intro",v)} rows={3} data-testid="hp-craft-intro" />
+
+          <div className="eyebrow mb-1 mt-6">Process steps (add / remove / reorder)</div>
+          <ListEditor items={data.items || []} onChange={(v)=>set("items",v)}
+            defaultItem={{num:"", kicker:"", title:"", body:""}}
+            fields={[
+              {name:"num", label:"Number label (e.g. 01)"},
+              {name:"kicker", label:"Kicker caption (small caps)"},
+              {name:"title", label:"Step title"},
+              {name:"body", label:"Description", type:"textarea"},
+            ]}
+            testId="hp-craft-item" />
+
+          <div className="eyebrow mb-1 mt-6">Closing quote</div>
+          <Text label="Eyebrow above the quote" value={data.closer_eyebrow} onChange={(v)=>set("closer_eyebrow",v)} data-testid="hp-craft-closer-eyebrow" />
+          <TextArea label="Founder quote" value={data.founder_quote} onChange={(v)=>set("founder_quote",v)} rows={3} data-testid="hp-craft-quote" />
+          <Text label="Founder credit (e.g. — Mr. Sunil Kumar Agarwal, Founder)" value={data.founder_credit} onChange={(v)=>set("founder_credit",v)} data-testid="hp-craft-credit" />
+
+          <div className="eyebrow mb-1 mt-6">Closing CTA</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Primary CTA text" value={data.cta_primary_text} onChange={(v)=>set("cta_primary_text",v)} data-testid="hp-craft-cta1" />
+            <Text label="Primary CTA link" value={data.cta_primary_link} onChange={(v)=>set("cta_primary_link",v)} data-testid="hp-craft-cta1-link" />
+            <Text label="Secondary CTA text" value={data.cta_secondary_text} onChange={(v)=>set("cta_secondary_text",v)} data-testid="hp-craft-cta2" />
+            <Text label="Secondary CTA link" value={data.cta_secondary_link} onChange={(v)=>set("cta_secondary_link",v)} data-testid="hp-craft-cta2-link" />
+          </div>
+        </div>
+      );
     case "reasons":
       return (
         <div className="space-y-4">

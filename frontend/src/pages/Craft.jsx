@@ -2,51 +2,16 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowUpRight, Flame, Sparkles, Scissors, Wrench, Award } from "lucide-react";
+import { useSettings } from "../context/SettingsContext";
 
-const STEPS = [
-  {
-    num: "01",
-    icon: Sparkles,
-    title: "Design",
-    kicker: "The drawing",
-    body:
-      "Each piece begins as a pencil sketch on the workshop table — proportions calibrated to a room, a chandelier drop measured against a ceiling. Nothing is designed to be mass-produced; every silhouette is drawn to be lived under.",
-  },
-  {
-    num: "02",
-    icon: Flame,
-    title: "The Furnace",
-    kicker: "Molten glass · 1400°C",
-    body:
-      "Master glass-blowers in Firozabad gather glass from the furnace on iron blowpipes and coax it into form through breath and rotation — the same technique this city has practiced for over four centuries.",
-  },
-  {
-    num: "03",
-    icon: Scissors,
-    title: "Cutting",
-    kicker: "Facets by hand",
-    body:
-      "Once cooled, crystal panels are hand-cut on stone wheels to shape the signature diamond facets that catch light. It is slow, exacting work — the angle of each cut determines how the finished piece will glow.",
-  },
-  {
-    num: "04",
-    icon: Wrench,
-    title: "Assembly",
-    kicker: "Brass, wire, patience",
-    body:
-      "Individual glass elements are strung and set into hand-worked brass frames — sometimes a single chandelier requires 400+ pieces threaded together. This step alone can take a week for a single fixture.",
-  },
-  {
-    num: "05",
-    icon: Award,
-    title: "Finish",
-    kicker: "Signed and inspected",
-    body:
-      "Every finished piece is lit, inspected, and packed by hand in our atelier before dispatch. Bespoke commissions are also numbered and signed — a signature you'll only see on the underside of the mount.",
-  },
-];
+// Icon rotates through this fixed list by step index — user cannot pick icons via CMS
+const STEP_ICONS = [Sparkles, Flame, Scissors, Wrench, Award];
 
 export default function Craft() {
+  const { hp } = useSettings();
+  const c = hp.craft;
+  const items = c.items || [];
+
   return (
     <div data-testid="page-craft">
       {/* Hero */}
@@ -62,25 +27,25 @@ export default function Craft() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
           >
-            <div className="eyebrow mb-6">Firozabad · Since 1981</div>
+            <div className="eyebrow mb-6">{c.eyebrow}</div>
             <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05]">
-              The Craft <span className="brand-gradient-text italic">behind every piece.</span>
+              {c.headline_pre} <span className="brand-gradient-text italic">{c.headline_highlight}</span>
             </h1>
-            <p className="mt-6 max-w-2xl mx-auto text-white/70 text-base md:text-lg leading-relaxed">
-              A lighting piece from our atelier is the sum of five slow, deliberate acts. What follows is how a single chandelier gets from the furnace to your ceiling — traditionally, by hand, over weeks.
-            </p>
+            {c.intro && (
+              <p className="mt-6 max-w-2xl mx-auto text-white/70 text-base md:text-lg leading-relaxed">{c.intro}</p>
+            )}
           </motion.div>
         </div>
       </section>
 
       {/* Steps */}
       <section className="max-w-5xl mx-auto px-6 py-10 md:py-16 space-y-20 md:space-y-28">
-        {STEPS.map((s, i) => {
-          const Icon = s.icon;
+        {items.map((s, i) => {
+          const Icon = STEP_ICONS[i % STEP_ICONS.length];
           const alignRight = i % 2 === 1;
           return (
             <motion.div
-              key={s.num}
+              key={i}
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-80px" }}
@@ -90,7 +55,7 @@ export default function Craft() {
               {/* Number rail */}
               <div className={`md:col-span-3 flex ${alignRight ? "md:justify-end md:order-2" : ""} items-start`}>
                 <div className={`inline-flex flex-col ${alignRight ? "md:items-end" : "items-start"}`}>
-                  <div className="font-serif text-[64px] md:text-[88px] leading-none brand-gradient-text tracking-tight">{s.num}</div>
+                  <div className="font-serif text-[64px] md:text-[88px] leading-none brand-gradient-text tracking-tight">{s.num || String(i + 1).padStart(2, "0")}</div>
                   <div className={`mt-1 h-px w-16 bg-[#D4AF37]/50 ${alignRight ? "md:self-end" : ""}`}></div>
                 </div>
               </div>
@@ -101,7 +66,9 @@ export default function Craft() {
                   <span className="w-9 h-9 border border-[#D4AF37]/40 text-[#D4AF37] flex items-center justify-center flex-shrink-0">
                     <Icon size={16} strokeWidth={1.4} />
                   </span>
-                  <div className={`text-[10px] uppercase tracking-[0.32em] text-[#BF9972]`}>{s.kicker}</div>
+                  {s.kicker && (
+                    <div className="text-[10px] uppercase tracking-[0.32em] text-[#BF9972]">{s.kicker}</div>
+                  )}
                 </div>
                 <h2 className="font-serif text-3xl md:text-4xl mb-4 leading-tight">{s.title}</h2>
                 <p className="text-white/70 leading-relaxed text-base md:text-[17px] max-w-2xl md:inline-block">{s.body}</p>
@@ -121,18 +88,26 @@ export default function Craft() {
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
           >
-            <div className="eyebrow mb-4">A note from the atelier</div>
-            <p className="font-serif text-2xl md:text-3xl leading-snug italic text-white/85">
-              &ldquo;A great piece of glass is one you can live under for forty years without ever growing tired of it.&rdquo;
-            </p>
-            <div className="mt-6 text-[10px] uppercase tracking-[0.32em] text-[#BF9972]">— Mr. Sunil Kumar Agarwal, Founder</div>
+            {c.closer_eyebrow && <div className="eyebrow mb-4">{c.closer_eyebrow}</div>}
+            {c.founder_quote && (
+              <p className="font-serif text-2xl md:text-3xl leading-snug italic text-white/85">
+                &ldquo;{c.founder_quote}&rdquo;
+              </p>
+            )}
+            {c.founder_credit && (
+              <div className="mt-6 text-[10px] uppercase tracking-[0.32em] text-[#BF9972]">{c.founder_credit}</div>
+            )}
             <div className="mt-12 flex flex-wrap justify-center gap-3">
-              <Link to="/catalog" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]">
-                See the collection <ArrowUpRight size={14} />
-              </Link>
-              <Link to="/contact" className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.28em]">
-                Request a bespoke piece
-              </Link>
+              {c.cta_primary_text && (
+                <Link to={c.cta_primary_link || "/catalog"} className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]">
+                  {c.cta_primary_text} <ArrowUpRight size={14} />
+                </Link>
+              )}
+              {c.cta_secondary_text && (
+                <Link to={c.cta_secondary_link || "/contact"} className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.28em]">
+                  {c.cta_secondary_text}
+                </Link>
+              )}
             </div>
           </motion.div>
         </div>

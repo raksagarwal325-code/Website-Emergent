@@ -84,6 +84,27 @@ export const HOMEPAGE_DEFAULTS = {
     cta_secondary_text: "Get in touch",
     cta_secondary_link: "/contact",
   },
+  craft: {
+    eyebrow: "Firozabad · Since 1981",
+    headline_pre: "The Craft",
+    headline_highlight: "behind every piece.",
+    intro:
+      "A lighting piece from our atelier is the sum of five slow, deliberate acts. What follows is how a single chandelier gets from the furnace to your ceiling — traditionally, by hand, over weeks.",
+    items: [
+      { num: "01", kicker: "The drawing", title: "Design",   body: "Each piece begins as a pencil sketch on the workshop table — proportions calibrated to a room, a chandelier drop measured against a ceiling. Nothing is designed to be mass-produced; every silhouette is drawn to be lived under." },
+      { num: "02", kicker: "Molten glass · 1400°C", title: "The Furnace", body: "Master glass-blowers in Firozabad gather glass from the furnace on iron blowpipes and coax it into form through breath and rotation — the same technique this city has practiced for over four centuries." },
+      { num: "03", kicker: "Facets by hand", title: "Cutting", body: "Once cooled, crystal panels are hand-cut on stone wheels to shape the signature diamond facets that catch light. It is slow, exacting work — the angle of each cut determines how the finished piece will glow." },
+      { num: "04", kicker: "Brass, wire, patience", title: "Assembly", body: "Individual glass elements are strung and set into hand-worked brass frames — sometimes a single chandelier requires 400+ pieces threaded together. This step alone can take a week for a single fixture." },
+      { num: "05", kicker: "Signed and inspected", title: "Finish", body: "Every finished piece is lit, inspected, and packed by hand in our atelier before dispatch. Bespoke commissions are also numbered and signed — a signature you'll only see on the underside of the mount." },
+    ],
+    closer_eyebrow: "A note from the atelier",
+    founder_quote: "A great piece of glass is one you can live under for forty years without ever growing tired of it.",
+    founder_credit: "— Mr. Sunil Kumar Agarwal, Founder",
+    cta_primary_text: "See the collection",
+    cta_primary_link: "/catalog",
+    cta_secondary_text: "Request a bespoke piece",
+    cta_secondary_link: "/contact",
+  },
   reasons: {
     eyebrow: "Why choose us",
     heading: "Reasons Why We Are Better",
