@@ -274,6 +274,9 @@ function SettingsAdmin({ settings, onSave }) {
         ["gstin", "GSTIN"],
         ["delivery_info", "Delivery info"],
         ["payment_methods", "Payment methods"],
+        ["google_cid", "Google Business CID"],
+        ["google_place_id", "Google Place ID (for live reviews)"],
+        ["google_maps_api_key", "Google Maps API Key (server-side, keep secret)"],
       ].map(([k, label]) => (
         <div key={k}>
           <label className="text-xs uppercase tracking-[0.2em] text-white/50 mb-1 block">{label}</label>

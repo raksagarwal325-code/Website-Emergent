@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { MessageCircle, Mail, MapPin, Phone, FileText, Truck, CreditCard } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "sonner";
+import GoogleReviews from "../components/GoogleReviews";
 
 export default function Contact() {
   const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
@@ -88,6 +89,11 @@ export default function Contact() {
             {submitting ? "Sending…" : "Send message"}
           </button>
         </form>
+      </div>
+
+      {/* Google Reviews */}
+      <div className="mt-20">
+        <GoogleReviews />
       </div>
     </div>
   );

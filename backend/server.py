@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
+import requests
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
@@ -154,6 +155,9 @@ class Settings(BaseModel):
     delivery_info: str = "Pan-India shipping · 7–10 business days"
     payment_methods: str = "UPI · Net Banking"
     currency_symbol: str = "₹"
+    google_cid: str = "16850385744624001495"
+    google_place_id: str = ""
+    google_maps_api_key: str = ""
 
 
 class SettingsUpdate(BaseModel):
@@ -167,6 +171,9 @@ class SettingsUpdate(BaseModel):
     delivery_info: Optional[str] = None
     payment_methods: Optional[str] = None
     currency_symbol: Optional[str] = None
+    google_cid: Optional[str] = None
+    google_place_id: Optional[str] = None
+    google_maps_api_key: Optional[str] = None
 
 
 # --- Helpers ---
@@ -328,7 +335,9 @@ async def get_settings():
         s = Settings()
         await db.settings.insert_one(s.model_dump())
         return s
-    return doc
+    # Merge in defaults for any newly added fields (backward compat)
+    merged = {**Settings().model_dump(), **doc}
+    return merged
 
 
 @api.put("/settings", response_model=Settings)
@@ -338,6 +347,72 @@ async def update_settings(payload: SettingsUpdate):
     doc.update(updates)
     await db.settings.update_one({"id": "settings"}, {"$set": doc}, upsert=True)
     return doc
+
+
+# --- Google Reviews ---
+@api.get("/google/reviews")
+async def google_reviews():
+    raw = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    doc = {**Settings().model_dump(), **raw}
+    cid = doc.get("google_cid", "")
+    place_id = doc.get("google_place_id", "")
+    api_key = doc.get("google_maps_api_key", "")
+
+    view_url = f"https://www.google.com/maps?cid={cid}" if cid else ""
+    write_url = f"https://search.google.com/local/writereview?placeid={place_id}" if place_id else view_url
+
+    result = {
+        "enabled": False,
+        "view_url": view_url,
+        "write_url": write_url,
+        "cid": cid,
+        "place_id_set": bool(place_id),
+        "api_key_set": bool(api_key),
+        "rating": None,
+        "total_ratings": None,
+        "reviews": [],
+    }
+
+    if not (place_id and api_key):
+        return result
+
+    try:
+        r = requests.get(
+            "https://maps.googleapis.com/maps/api/place/details/json",
+            params={
+                "place_id": place_id,
+                "fields": "name,rating,user_ratings_total,reviews,url",
+                "key": api_key,
+                "reviews_no_translations": "true",
+                "reviews_sort": "newest",
+            },
+            timeout=10,
+        )
+        data = r.json()
+        if data.get("status") == "OK":
+            res = data.get("result", {})
+            result.update({
+                "enabled": True,
+                "rating": res.get("rating"),
+                "total_ratings": res.get("user_ratings_total"),
+                "reviews": [
+                    {
+                        "author_name": rv.get("author_name"),
+                        "profile_photo_url": rv.get("profile_photo_url"),
+                        "rating": rv.get("rating"),
+                        "relative_time_description": rv.get("relative_time_description"),
+                        "text": rv.get("text"),
+                    }
+                    for rv in (res.get("reviews") or [])
+                ],
+                "view_url": res.get("url") or view_url,
+            })
+        else:
+            logger.warning(f"Google Places status: {data.get('status')} - {data.get('error_message')}")
+    except Exception as e:
+        logger.error(f"Google reviews fetch failed: {e}")
+
+    return result
 
 
 # --- Uploads ---

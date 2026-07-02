@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
 import { api, formatPrice } from "../lib/api";
 import ProductCard from "../components/ProductCard";
+import GoogleReviews from "../components/GoogleReviews";
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
@@ -99,10 +100,14 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Google Reviews */}
+      <section className="max-w-7xl mx-auto px-6 pb-8">
+        <GoogleReviews />
+      </section>
+
       {/* Editorial banner */}
       <section className="max-w-7xl mx-auto px-6 py-24">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-          <div className="md:col-span-7 aspect-[16/10] overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">          <div className="md:col-span-7 aspect-[16/10] overflow-hidden">
             <img
               src="https://images.unsplash.com/photo-1587049016823-c90a1a2df325"
               alt="Chandelier craftsmanship"
