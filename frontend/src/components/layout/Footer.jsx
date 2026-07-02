@@ -8,7 +8,7 @@ export default function Footer() {
   return (
     <footer data-testid="site-footer" className="border-t border-[#BF9972]/15 mt-24 py-16 text-white/60 relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none opacity-40" style={{ background: "radial-gradient(ellipse at 85% 30%, rgba(163,99,80,0.25), transparent 55%)" }}></div>
-      <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12 relative">
+      <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-12 relative">
         <div className="md:col-span-2">
           <div className="flex items-start gap-5">
             <img src="/logo.jpeg" alt="Samrat Glass Emporium" className="w-24 h-24 object-cover brand-glow flex-shrink-0" />
@@ -47,6 +47,16 @@ export default function Footer() {
             <li className="text-white/50">Payments: {settings?.payment_methods || "UPI · Net Banking"}</li>
             {settings?.whatsapp_number && <li className="text-white/50">WhatsApp: {settings.whatsapp_number}</li>}
             {settings?.admin_email && <li className="text-white/50">{settings.admin_email}</li>}
+          </ul>
+        </div>
+        <div data-testid="footer-legal">
+          <div className="eyebrow mb-4">Legal</div>
+          <ul className="space-y-2 text-sm">
+            <li><Link to="/legal/privacy" className="link-underline" data-testid="footer-legal-privacy">Privacy Policy</Link></li>
+            <li><Link to="/legal/terms" className="link-underline" data-testid="footer-legal-terms">Terms &amp; Conditions</Link></li>
+            <li><Link to="/legal/shipping" className="link-underline" data-testid="footer-legal-shipping">Shipping &amp; Delivery</Link></li>
+            <li><Link to="/legal/returns" className="link-underline" data-testid="footer-legal-returns">Return &amp; Replacement</Link></li>
+            <li><Link to="/legal/payment" className="link-underline" data-testid="footer-legal-payment">Payment Policy</Link></li>
           </ul>
         </div>
       </div>

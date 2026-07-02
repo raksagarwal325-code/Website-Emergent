@@ -16,6 +16,7 @@ import Contact from "@/pages/Contact";
 import Admin from "@/pages/Admin";
 import Catalogue from "@/pages/Catalogue";
 import About from "@/pages/About";
+import LegalPage from "@/pages/LegalPage";
 
 function App() {
   React.useEffect(() => {
@@ -46,6 +47,7 @@ function App() {
               <Route path="/contact" element={<Contact />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/catalogue" element={<Catalogue />} />
+              <Route path="/legal/:slug" element={<LegalPage />} />
             </Routes>
           </main>
           <Footer />
