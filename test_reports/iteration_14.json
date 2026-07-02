@@ -1,0 +1,32 @@
+{
+  "summary": "Retest of Homepage 'Reset section to defaults' flow. The described fix (removal of window.confirm) was NOT applied to /app/frontend/src/components/AdminHomepage.jsx — line 233 still contains 'if (!window.confirm(...)) return;'. Browser test confirmed: after saving 'TEST_RESET_HEADLINE' and clicking 'Reset section to defaults', a confirm dialog fired ('Reset \"Hero Section\" to defaults?') and the input value did NOT revert to the default 'Where glass is a family heirloom.' — it remained 'TEST_RESET_HEADLINE'. Regression checks on nav-admin absence and public homepage loading still pass.",
+  "tested_scope": ["frontend", "integration"],
+  "passed": [
+    "/admin loads and Homepage tab renders",
+    "hp-atelier-headline input reachable via data-testid",
+    "Save with 'TEST_RESET_HEADLINE' persisted (input showed value after save; also visible on public homepage)",
+    "Public homepage loads without errors",
+    "nav-admin absent from public nav (count=0)"
+  ],
+  "failed": [
+    {
+      "area": "AdminHomepage.jsx resetSection()",
+      "issue": "Fix described in the request was NOT applied. window.confirm() still present at line 233 and it BLOCKS the reset. After clicking 'Reset section to defaults', input value stayed 'TEST_RESET_HEADLINE' instead of becoming 'Where glass is a family heirloom.'",
+      "evidence": "Playwright dialog listener captured: type=confirm, msg='Reset \"Hero Section\" to defaults?'. Post-reset input value logged: 'TEST_RESET_HEADLINE'. grep of source shows line 233: `if (!window.confirm(...)) return;`",
+      "priority": "HIGH"
+    },
+    {
+      "area": "Data pollution side effect",
+      "issue": "Because reset failed and a second Save was executed by the test, the public homepage now shows 'TEST_RESET_HEADLINE' as the hero headline. Once the reset fix is truly applied, main agent should re-run reset+save (or restore default) to clean prod data.",
+      "evidence": "Public GET / shows headline 'TEST_RESET_HEADLINE' in h1/h2 list.",
+      "priority": "HIGH"
+    }
+  ],
+  "action_items": [
+    "Actually apply the described fix in /app/frontend/src/components/AdminHomepage.jsx: replace lines 232-235 to remove window.confirm and deep-clone: `const resetSection = (k) => setState({ ...state, [k]: JSON.parse(JSON.stringify(HOMEPAGE_DEFAULTS[k])) });` and toast 'reset — click Save to publish'.",
+    "After fix, reset the atelier/hero headline back to 'Where glass is a family heirloom.' and save to clean up the leaked 'TEST_RESET_HEADLINE' from production homepage."
+  ],
+  "success_rate": {"backend": "not tested", "frontend": "60%"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}
