@@ -1,0 +1,38 @@
+{
+  "summary": "First-finish smoke test for Lumière luxury catalog app. Backend and frontend flows verified end-to-end. All critical API endpoints and UI flows work.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "passed": [
+    "GET /api/products returns 8 seeded products",
+    "GET /api/products/categories returns 5 categories",
+    "GET /api/products/{id} returns product; invalid id returns 404",
+    "GET /api/settings returns settings with admin_email=samratglassemp@gmail.com and whatsapp_number",
+    "PUT /api/settings supports partial updates",
+    "POST /api/reviews accepts rating 1-5 and persists",
+    "POST /api/inquiries with customer_name/customer_email creates inquiry and computes total (200)",
+    "POST /api/contact saves contact message",
+    "GET /api/stats returns counts",
+    "GET /api/export/products.csv returns CSV with correct content-type",
+    "Home page renders hero and navigation (hero-explore-btn visible)",
+    "Catalog page renders 8 product cards; search filter narrows to 1 for 'Noir'; sort/filters/price slider present",
+    "Export CSV and Export PDF buttons present on Catalog page",
+    "Product detail: add-to-cart-btn works and cart badge updates to 1; favorite toggle works; whatsapp-btn has valid wa.me link",
+    "Review submission via UI succeeds",
+    "Cart inquiry submission via UI succeeds and cart clears (badge disappears, backend inquiry count incremented)",
+    "Contact form submits successfully",
+    "Favorites page renders with empty state",
+    "Admin dashboard: all 5 tabs (dashboard, products, inquiries, messages, settings) navigate successfully; stats display correctly"
+  ],
+  "failed": [
+    {
+      "area": "Backend validation",
+      "issue": "POST /api/inquiries requires 'customer_name'/'customer_email' fields (frontend Cart.jsx correctly sends these). Any external client sending 'name'/'email' would get 422. Not a bug — frontend is aligned.",
+      "evidence": "Sending {name,email} returns 422; sending {customer_name,customer_email} returns 200 with computed total. Frontend Cart.jsx uses correct field names.",
+      "priority": "LOW"
+    }
+  ],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "No auth required per user choice. WhatsApp is a wa.me link (no API). Contact form saves to DB only per user choice. Test credentials file not needed (no auth)."
+}

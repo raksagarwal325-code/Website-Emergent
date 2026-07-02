@@ -1,0 +1,45 @@
+import axios from "axios";
+
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+export const API = `${BACKEND_URL}/api`;
+
+const client = axios.create({ baseURL: API });
+
+export const api = {
+  listProducts: (params = {}) => client.get("/products", { params }).then(r => r.data),
+  getProduct: (id) => client.get(`/products/${id}`).then(r => r.data),
+  createProduct: (data) => client.post("/products", data).then(r => r.data),
+  updateProduct: (id, data) => client.put(`/products/${id}`, data).then(r => r.data),
+  deleteProduct: (id) => client.delete(`/products/${id}`).then(r => r.data),
+  categories: () => client.get("/products/categories").then(r => r.data),
+
+  listReviews: (product_id) => client.get(`/reviews`, { params: { product_id } }).then(r => r.data),
+  createReview: (data) => client.post("/reviews", data).then(r => r.data),
+
+  createInquiry: (data) => client.post("/inquiries", data).then(r => r.data),
+  listInquiries: () => client.get("/inquiries").then(r => r.data),
+  updateInquiryStatus: (id, status) => client.patch(`/inquiries/${id}`, null, { params: { status } }).then(r => r.data),
+
+  createContact: (data) => client.post("/contact", data).then(r => r.data),
+  listContact: () => client.get("/contact").then(r => r.data),
+
+  getSettings: () => client.get("/settings").then(r => r.data),
+  updateSettings: (data) => client.put("/settings", data).then(r => r.data),
+
+  upload: (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return client.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } }).then(r => r.data);
+  },
+
+  exportCsvUrl: () => `${API}/export/products.csv`,
+  stats: () => client.get("/stats").then(r => r.data),
+  resolveImage: (u) => {
+    if (!u) return "";
+    if (u.startsWith("http")) return u;
+    if (u.startsWith("/api/")) return `${BACKEND_URL}${u}`;
+    return u;
+  },
+};
+
+export default api;
