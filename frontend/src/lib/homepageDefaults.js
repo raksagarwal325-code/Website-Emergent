@@ -55,6 +55,35 @@ export const HOMEPAGE_DEFAULTS = {
   manual_reviews: {
     items: [],
   },
+  about: {
+    eyebrow: "Est. Firozabad · Since 1981",
+    title_pre: "About",
+    title_highlight: "Samrat Glass Emporium",
+    tagline: "The story of four generations of glass — and the craft that lights every corner of it.",
+    story_paragraphs: [
+      { text: "Established in 1981 in Firozabad, the City of Glass, Samrat Glass Emporium is a trusted manufacturer of handcrafted decorative lighting. We create a wide range of hanging chandeliers, hanging lights, wall lights, table lamps, floor lamps, sconces, and customized decorative lighting solutions." },
+      { text: "Light does more than illuminate a space — it shapes mood, personality, and atmosphere. With this vision, Samrat Glass Emporium was founded to bring elegant, handcrafted lighting into Indian homes, hotels, showrooms, restaurants, and luxury interiors." },
+      { text: "Under the guidance of our founder, Mr. Sunil Kumar Agarwal, our craftsmen combine traditional glass-making techniques with modern design sensibilities. With more than 40 years of experience, we continue to create decorative lighting that blends artistry, quality, and sophistication." },
+      { text: "Our aim is to provide Indian consumers with designer lighting products that help them transform ordinary spaces into beautiful, memorable interiors." },
+    ],
+    founder: {
+      eyebrow: "Our Founder",
+      name: "Mr. Sunil Kumar Agarwal",
+      description: "Founded under the guidance of Mr. Sunil Kumar Agarwal, with over 40 years of experience in handcrafted decorative lighting — combining Firozabad's traditional glass artistry with contemporary Indian design sensibility.",
+      initial: "S",
+    },
+    stats: [
+      { value: "1981", label: "Founded" },
+      { value: "40+", label: "Years Experience" },
+      { value: "1000+", label: "Designs" },
+      { value: "Pan-India", label: "Delivery" },
+    ],
+    cta_heading: "See the collection your space deserves.",
+    cta_primary_text: "Explore Catalog",
+    cta_primary_link: "/catalog",
+    cta_secondary_text: "Get in touch",
+    cta_secondary_link: "/contact",
+  },
   reasons: {
     eyebrow: "Why choose us",
     heading: "Reasons Why We Are Better",

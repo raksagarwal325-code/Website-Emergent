@@ -12,6 +12,7 @@ const SECTIONS = [
   { key: "featured", label: "Pieces of the Season" },
   { key: "google_reviews_fallback", label: "Google Reviews Fallback" },
   { key: "manual_reviews", label: "Manual Reviews / Testimonials" },
+  { key: "about", label: "About Page" },
   { key: "reasons", label: "Reasons Why We Are Better" },
   { key: "atelier", label: "The Atelier Section" },
   { key: "footer", label: "Footer Content" },
@@ -210,6 +211,52 @@ function SectionEditor({ sectionKey, data, patch }) {
           </div>
         </div>
       );
+    case "about": {
+      const founder = data.founder || {};
+      const setFounder = (k, v) => set("founder", { ...founder, [k]: v });
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">Controls the <span className="text-white/70">/about</span> page — hero, story, founder callout, stats and the closing CTA.</p>
+
+          <div className="eyebrow mb-1 mt-4">Hero</div>
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-about-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Title (white part)" value={data.title_pre} onChange={(v)=>set("title_pre",v)} data-testid="hp-about-title-pre" />
+            <Text label="Title (gold gradient part)" value={data.title_highlight} onChange={(v)=>set("title_highlight",v)} data-testid="hp-about-title-highlight" />
+          </div>
+          <TextArea label="Tagline (italic, copper)" value={data.tagline} onChange={(v)=>set("tagline",v)} rows={2} data-testid="hp-about-tagline" />
+
+          <div className="eyebrow mb-1 mt-6">Story paragraphs</div>
+          <ListEditor items={data.story_paragraphs || []} onChange={(v)=>set("story_paragraphs",v)}
+            defaultItem={{text:""}}
+            fields={[{name:"text", label:"Paragraph", type:"textarea"}]}
+            testId="hp-about-para" />
+
+          <div className="eyebrow mb-1 mt-6">Founder callout</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Eyebrow" value={founder.eyebrow} onChange={(v)=>setFounder("eyebrow",v)} data-testid="hp-about-founder-eyebrow" />
+            <Text label="Circle initial (1 letter)" value={founder.initial} onChange={(v)=>setFounder("initial",(v||"").slice(0,1))} data-testid="hp-about-founder-initial" />
+          </div>
+          <Text label="Founder name" value={founder.name} onChange={(v)=>setFounder("name",v)} data-testid="hp-about-founder-name" />
+          <TextArea label="Founder description" value={founder.description} onChange={(v)=>setFounder("description",v)} rows={4} data-testid="hp-about-founder-desc" />
+
+          <div className="eyebrow mb-1 mt-6">Stats (4 tiles)</div>
+          <ListEditor items={data.stats || []} onChange={(v)=>set("stats",v)}
+            defaultItem={{value:"", label:""}}
+            fields={[{name:"value", label:"Value"}, {name:"label", label:"Label"}]}
+            testId="hp-about-stat" />
+
+          <div className="eyebrow mb-1 mt-6">Closing CTA</div>
+          <Text label="Heading" value={data.cta_heading} onChange={(v)=>set("cta_heading",v)} data-testid="hp-about-cta-heading" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Primary CTA text" value={data.cta_primary_text} onChange={(v)=>set("cta_primary_text",v)} data-testid="hp-about-cta1" />
+            <Text label="Primary CTA link" value={data.cta_primary_link} onChange={(v)=>set("cta_primary_link",v)} data-testid="hp-about-cta1-link" />
+            <Text label="Secondary CTA text" value={data.cta_secondary_text} onChange={(v)=>set("cta_secondary_text",v)} data-testid="hp-about-cta2" />
+            <Text label="Secondary CTA link" value={data.cta_secondary_link} onChange={(v)=>set("cta_secondary_link",v)} data-testid="hp-about-cta2-link" />
+          </div>
+        </div>
+      );
+    }
     case "reasons":
       return (
         <div className="space-y-4">
