@@ -47,7 +47,7 @@ export const HOMEPAGE_DEFAULTS = {
     fallback_total: "",
     write_review_override: "",
   },
-  reasons: {
+  atelier: {
     eyebrow: "Why choose us",
     heading: "Reasons Why We Are Better",
     items: [
