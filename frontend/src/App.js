@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import { CatalogProvider } from "@/context/CatalogContext";
+import { SettingsProvider } from "@/context/SettingsContext";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import Home from "@/pages/Home";
@@ -60,6 +61,7 @@ function App() {
             }}
           />
         </BrowserRouter>
+        </SettingsProvider>
       </CatalogProvider>
     </div>
   );

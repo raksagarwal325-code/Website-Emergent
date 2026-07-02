@@ -158,6 +158,7 @@ class Settings(BaseModel):
     google_cid: str = "16850385744624001495"
     google_place_id: str = ""
     google_maps_api_key: str = ""
+    homepage_content: dict = Field(default_factory=dict)
 
 
 class SettingsUpdate(BaseModel):
@@ -174,6 +175,7 @@ class SettingsUpdate(BaseModel):
     google_cid: Optional[str] = None
     google_place_id: Optional[str] = None
     google_maps_api_key: Optional[str] = None
+    homepage_content: Optional[dict] = None
 
 
 # --- Helpers ---

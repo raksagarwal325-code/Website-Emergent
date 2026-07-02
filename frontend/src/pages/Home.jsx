@@ -1,24 +1,32 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
-import { api, formatPrice } from "../lib/api";
+import { api } from "../lib/api";
 import ProductCard from "../components/ProductCard";
 import GoogleReviews from "../components/GoogleReviews";
 import CollageSection from "../components/CollageSection";
 import ReasonsSection from "../components/ReasonsSection";
 import AtelierShowcase from "../components/AtelierShowcase";
+import { useSettings } from "../context/SettingsContext";
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
-  const [settings, setSettings] = useState(null);
+  const { settings, hp } = useSettings();
 
   useEffect(() => {
     api.listProducts({ featured: true }).then(setFeatured).catch(() => {});
-    api.getSettings().then(setSettings).catch(() => {});
   }, []);
 
   const waNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waLink = waNumber ? `https://wa.me/${waNumber}?text=${encodeURIComponent("Hello Samrat Glass Emporium, I would like to enquire about your lighting collection.")}` : "#";
+  const waLink = waNumber
+    ? `https://wa.me/${waNumber}?text=${encodeURIComponent("Hello Samrat Glass Emporium, I would like to enquire about your lighting collection.")}`
+    : "#";
+
+  const H = hp.hero;
+  const F = hp.featured;
+
+  const heroSecondaryHref = H.secondary_cta_link || waLink;
+  const heroSecondaryExternal = heroSecondaryHref.startsWith("http") || heroSecondaryHref.startsWith("mailto") || heroSecondaryHref.startsWith("tel");
 
   return (
     <div data-testid="page-home">
@@ -38,40 +46,34 @@ export default function Home() {
           <div className="max-w-2xl fade-up">
             <div className="mb-6 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]"></span>
-              <span className="text-[10px] uppercase tracking-[0.32em] text-[#BF9972]">Since 1981 · Handcrafted in Firozabad</span>
+              <span className="text-[10px] uppercase tracking-[0.32em] text-[#BF9972]">{H.eyebrow}</span>
             </div>
             <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05]">
-              Fancy lights that<br />
-              <span className="italic brand-gradient-text">turn houses into homes.</span>
+              {H.headline_line1}<br />
+              <span className="italic brand-gradient-text">{H.headline_line2}</span>
             </h1>
-            <p className="mt-8 text-white/70 max-w-lg leading-relaxed">
-              A curated catalog of crystal chandeliers, pendant lights, wall sconces, table lamps &amp; decorative lighting — hand-blown and hand-assembled by our artisans in Firozabad.
-            </p>
-            <div className="mt-12 flex flex-wrap gap-4">
-              <Link
-                to="/catalog"
-                data-testid="hero-explore-btn"
-                className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] transition-colors"
-              >
-                Explore Catalog <ArrowUpRight size={14} />
+            <p className="mt-6 text-white/70 max-w-lg leading-relaxed">{H.description}</p>
+            <div className="mt-10 flex flex-wrap gap-3">
+              <Link to={H.primary_cta_link || "/catalog"} data-testid="hero-explore-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] transition-colors">
+                {H.primary_cta_text} <ArrowUpRight size={14} />
               </Link>
-              <a
-                href={waLink}
-                target="_blank"
-                rel="noreferrer"
-                data-testid="hero-wa-btn"
-                className="inline-flex items-center gap-2 border border-white/25 text-white px-8 py-4 uppercase text-xs tracking-[0.28em] hover:border-[#D4AF37] transition-colors"
-              >
-                <MessageCircle size={14} /> Chat on WhatsApp
-              </a>
+              {H.secondary_cta_text && (heroSecondaryExternal ? (
+                <a href={heroSecondaryHref} target="_blank" rel="noreferrer" data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-white/25 text-white px-8 py-4 uppercase text-xs tracking-[0.28em] hover:border-[#D4AF37] transition-colors">
+                  <MessageCircle size={14} /> {H.secondary_cta_text}
+                </a>
+              ) : (
+                <Link to={heroSecondaryHref} data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-white/25 text-white px-8 py-4 uppercase text-xs tracking-[0.28em] hover:border-[#D4AF37] transition-colors">
+                  <MessageCircle size={14} /> {H.secondary_cta_text}
+                </Link>
+              ))}
             </div>
 
             {/* Trust points strip */}
             <div className="mt-14 pt-8 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
-              {[["1981","Founded"],["1000+","Designs"],["Pan-India","Delivery"]].map(([v, l]) => (
-                <div key={l}>
-                  <div className="font-serif text-xl md:text-2xl brand-gradient-text leading-none">{v}</div>
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-white/50 mt-2">{l}</div>
+              {(H.trust || []).map((t, i) => (
+                <div key={i}>
+                  <div className="font-serif text-xl md:text-2xl brand-gradient-text leading-none">{t.value}</div>
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-white/50 mt-2">{t.label}</div>
                 </div>
               ))}
             </div>
@@ -105,16 +107,16 @@ export default function Home() {
       <section className="max-w-7xl mx-auto px-6 py-16 md:py-20">
         <div className="flex items-end justify-between mb-10">
           <div>
-            <div className="eyebrow mb-3">Featured</div>
-            <h2 className="font-serif text-3xl sm:text-4xl">Pieces of the season</h2>
+            <div className="eyebrow mb-3">{F.eyebrow}</div>
+            <h2 className="font-serif text-3xl sm:text-4xl">{F.title}</h2>
           </div>
-          <Link to="/catalog" className="hidden sm:inline-flex items-center gap-2 text-white/70 hover:text-white text-xs uppercase tracking-[0.28em] link-underline">
-            View all <ArrowUpRight size={14} />
+          <Link to={F.view_all_link || "/catalog"} className="hidden sm:inline-flex items-center gap-2 text-white/70 hover:text-white text-xs uppercase tracking-[0.28em] link-underline">
+            {F.view_all_text} <ArrowUpRight size={14} />
           </Link>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-          {featured.slice(0, 8).map((p, i) => (
+          {featured.slice(0, F.limit || 8).map((p, i) => (
             <ProductCard key={p.id} product={p} index={i} />
           ))}
         </div>

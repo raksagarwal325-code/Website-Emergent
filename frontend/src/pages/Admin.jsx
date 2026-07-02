@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle } from "lucide-react";
+import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "sonner";
+import AdminHomepage from "../components/AdminHomepage";
 
 const emptyProduct = {
   name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "USD",
@@ -31,6 +32,7 @@ export default function Admin() {
 
   const tabs = [
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { key: "homepage", label: "Homepage", icon: HomeIcon },
     { key: "products", label: "Products", icon: Package },
     { key: "inquiries", label: "Inquiries", icon: MessageSquare },
     { key: "messages", label: "Messages", icon: Mail },
@@ -77,6 +79,8 @@ export default function Admin() {
           </div>
         </div>
       )}
+
+      {tab === "homepage" && <AdminHomepage />}
 
       {tab === "products" && (
         <ProductsAdmin products={products} refresh={refresh} setEditing={setEditing} editing={editing} />

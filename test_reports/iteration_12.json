@@ -1,0 +1,28 @@
+{
+  "summary": "Backend GET /api/settings returns 200 with homepage_content field. Frontend build FAILS: App.js is missing the opening <SettingsProvider> tag while the closing </SettingsProvider> exists at line 64, causing a compile-time JSX SyntaxError ('Expected corresponding JSX closing tag for <CatalogProvider>'). This blocks the entire app — /admin and / both render only the CRA red overlay 'Compiled with problems'. Unable to test any editor / homepage flow until this compile error is fixed.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "passed": [
+    "GET /api/settings → 200 and includes homepage_content field (empty object initially)"
+  ],
+  "failed": [
+    {
+      "area": "frontend build",
+      "issue": "App.js has closing </SettingsProvider> on line 64 but no matching opening <SettingsProvider> — parser reports 'Expected corresponding JSX closing tag for <CatalogProvider>' at 64:8. Whole app fails to compile.",
+      "evidence": "Screenshot: CRA overlay 'Compiled with problems: ERROR in ./src/App.js — SyntaxError: /app/frontend/src/App.js: Expected corresponding JSX closing tag for <CatalogProvider>. (64:8)'. Confirmed by viewing App.js lines 34-65: only <CatalogProvider><BrowserRouter>...</BrowserRouter></SettingsProvider></CatalogProvider> — SettingsProvider is never opened.",
+      "priority": "HIGH"
+    },
+    {
+      "area": "admin homepage editor",
+      "issue": "[data-testid=admin-tab-homepage] not present because the app itself does not render (compile error blocks it).",
+      "evidence": "await page.query_selector('[data-testid=\"admin-tab-homepage\"]') returned None on /admin.",
+      "priority": "HIGH"
+    }
+  ],
+  "action_items": [
+    "Fix /app/frontend/src/App.js: add <SettingsProvider> opening tag just inside <CatalogProvider> (so the tree is <CatalogProvider><SettingsProvider><BrowserRouter>...</BrowserRouter></SettingsProvider></CatalogProvider>), per the PRD ('SettingsProvider wraps BrowserRouter inside CatalogProvider').",
+    "After fix, re-run this iteration to verify: admin tab renders, 7 sections present, atelier edit → save → live update, hero eyebrow round-trip, reasons add/remove, atelier image list add/remove, reset-section restores defaults, regression checks."
+  ],
+  "success_rate": {"backend": "100%", "frontend": "0%"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}
