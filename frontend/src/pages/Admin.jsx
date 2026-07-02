@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon } from "lucide-react";
+import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "sonner";
 
@@ -160,6 +160,8 @@ function ProductsAdmin({ products, refresh, editing, setEditing }) {
           Featured
         </label>
 
+        <SpecsEditor value={form.specs || {}} onChange={(specs) => setForm({ ...form, specs })} />
+
         <div>
           <div className="eyebrow mb-2">Images</div>
           <div className="flex flex-wrap gap-2 mb-3">
@@ -284,3 +286,111 @@ function SettingsAdmin({ settings, onSave }) {
     </form>
   );
 }
+
+const PRESET_SPEC_KEYS = [
+  "Material", "Finish", "Size", "Height", "Width", "Diameter",
+  "Holder Type", "Bulb Type", "Wattage", "Color", "Weight",
+  "Package Contents", "Care Instructions", "Warranty",
+];
+
+function SpecsEditor({ value, onChange }) {
+  const entries = Object.entries(value || {});
+  const [customKey, setCustomKey] = useState("");
+
+  const updateKey = (oldKey, newKey) => {
+    if (!newKey || newKey === oldKey) return;
+    const next = {};
+    entries.forEach(([k, v]) => { next[k === oldKey ? newKey : k] = v; });
+    onChange(next);
+  };
+  const updateVal = (k, v) => onChange({ ...value, [k]: v });
+  const removeKey = (k) => {
+    const next = { ...value };
+    delete next[k];
+    onChange(next);
+  };
+  const addKey = (k) => {
+    if (!k || value?.[k] !== undefined) return;
+    onChange({ ...(value || {}), [k]: "" });
+  };
+
+  const missingPresets = PRESET_SPEC_KEYS.filter((k) => value?.[k] === undefined);
+
+  return (
+    <div className="border border-white/10 p-4 space-y-3" data-testid="specs-editor">
+      <div className="flex items-center justify-between">
+        <div className="eyebrow">Specifications</div>
+        <span className="text-[10px] text-white/40">{entries.length} field(s)</span>
+      </div>
+
+      {entries.length === 0 && (
+        <div className="text-xs text-white/50 py-2">No specifications yet. Add from presets or a custom key.</div>
+      )}
+
+      <div className="space-y-2">
+        {entries.map(([k, v]) => (
+          <div key={k} className="grid grid-cols-12 gap-2 items-start" data-testid={`spec-row-edit-${k}`}>
+            <input
+              defaultValue={k}
+              key={`key-${k}`}
+              onBlur={(e) => updateKey(k, e.target.value.trim())}
+              className="col-span-4 bg-[#0a0a0a] border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.16em] text-white/70"
+              data-testid={`spec-key-${k}`}
+            />
+            <input
+              value={v}
+              onChange={(e) => updateVal(k, e.target.value)}
+              placeholder="Value"
+              className="col-span-7 bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm"
+              data-testid={`spec-val-${k}`}
+            />
+            <button type="button" onClick={() => removeKey(k)} data-testid={`spec-remove-${k}`} className="col-span-1 h-9 border border-white/15 hover:border-red-500 hover:text-red-400 text-white/60 flex items-center justify-center">
+              <Trash2 size={12} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {missingPresets.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2">Add preset</div>
+          <div className="flex flex-wrap gap-1.5">
+            {missingPresets.map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => addKey(k)}
+                data-testid={`spec-preset-${k.replace(/\s+/g, "-").toLowerCase()}`}
+                className="inline-flex items-center gap-1 border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-white/60"
+              >
+                <PlusCircle size={10} /> {k}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 pt-2 border-t border-white/5">
+        <input
+          value={customKey}
+          onChange={(e) => setCustomKey(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); addKey(customKey.trim()); setCustomKey(""); }
+          }}
+          placeholder="Custom key (press Enter)"
+          data-testid="spec-custom-key"
+          className="flex-1 bg-[#0a0a0a] border border-white/15 px-3 py-2 text-xs"
+        />
+        <button
+          type="button"
+          data-testid="spec-add-custom"
+          onClick={() => { addKey(customKey.trim()); setCustomKey(""); }}
+          className="border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] px-4 py-2 text-[10px] uppercase tracking-[0.2em]"
+        >
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+

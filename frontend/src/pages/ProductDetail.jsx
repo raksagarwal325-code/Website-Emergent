@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft } from "lucide-react";
+import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, MapPin } from "lucide-react";
 import { api, formatPrice } from "../lib/api";
 import { useCatalog } from "../context/CatalogContext";
 import { toast } from "sonner";
@@ -98,7 +98,7 @@ export default function ProductDetail() {
             )}
           </div>
 
-          <p className="text-white/70 leading-relaxed">{product.description || product.short_description}</p>
+          <p className="text-white/70 leading-relaxed">{product.short_description}</p>
 
           <div className="flex flex-wrap gap-3">
             <button
@@ -127,27 +127,15 @@ export default function ProductDetail() {
             </button>
           </div>
 
-          {/* Specs */}
-          {product.specs && Object.keys(product.specs).length > 0 && (
-            <div className="border-t border-white/10 pt-8">
-              <div className="eyebrow mb-4">Specifications</div>
-              <dl className="grid grid-cols-2 gap-y-3 gap-x-6 text-sm">
-                {Object.entries(product.specs).map(([k, v]) => (
-                  <React.Fragment key={k}>
-                    <dt className="text-white/50">{k}</dt>
-                    <dd className="text-white">{v}</dd>
-                  </React.Fragment>
-                ))}
-              </dl>
-            </div>
-          )}
-
           {/* Stock */}
           <div className="text-xs text-white/50 border-t border-white/10 pt-6">
             {product.stock > 0 ? `${product.stock} in stock` : "Currently unavailable"}
           </div>
         </div>
       </div>
+
+      {/* Tabbed details */}
+      <ProductTabs product={product} settings={settings} waLink={waLink} />
 
       {/* Reviews */}
       <section className="mt-24 border-t border-white/10 pt-16">
@@ -219,5 +207,152 @@ export default function ProductDetail() {
         </div>
       </section>
     </div>
+  );
+}
+
+
+const TABS = [
+  { key: "description", label: "Description" },
+  { key: "specifications", label: "Specifications" },
+  { key: "shipping", label: "Shipping & Delivery" },
+  { key: "inquiry", label: "Inquiry" },
+];
+
+function ProductTabs({ product, settings, waLink }) {
+  const [active, setActive] = useState("description");
+  const specEntries = product?.specs ? Object.entries(product.specs) : [];
+
+  return (
+    <section className="mt-20 border-t border-white/10 pt-12" data-testid="product-tabs">
+      {/* Editorial tab strip */}
+      <div className="flex flex-wrap gap-x-8 gap-y-2 border-b border-white/10 mb-10">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            data-testid={`tab-${t.key}`}
+            onClick={() => setActive(t.key)}
+            className={`relative py-4 text-xs uppercase tracking-[0.28em] transition-colors ${active === t.key ? "text-[#D4AF37]" : "text-white/50 hover:text-white"}`}
+          >
+            {t.label}
+            {active === t.key && (
+              <span className="absolute left-0 right-0 -bottom-px h-px bg-[#D4AF37]"></span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className="min-h-[240px] fade-up" key={active}>
+        {active === "description" && (
+          <div data-testid="tab-content-description" className="grid grid-cols-1 md:grid-cols-12 gap-10">
+            <div className="md:col-span-8">
+              <div className="eyebrow mb-3">About this piece</div>
+              <p className="text-white/75 leading-relaxed whitespace-pre-wrap text-[15px]">
+                {product.description || product.short_description || "No description provided."}
+              </p>
+              {product.tags?.length > 0 && (
+                <div className="mt-8 flex flex-wrap gap-2">
+                  {product.tags.map((t) => (
+                    <span key={t} className="text-[10px] uppercase tracking-[0.24em] border border-white/15 px-3 py-1 text-white/70">{t}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="md:col-span-4 border border-white/10 p-6">
+              <div className="eyebrow mb-3">At a glance</div>
+              <ul className="space-y-2 text-sm text-white/70">
+                <li>SKU · <span className="text-white">{product.sku}</span></li>
+                <li>Category · <span className="text-white">{product.category}</span></li>
+                <li>Stock · <span className="text-white">{product.stock > 0 ? `${product.stock} available` : "Currently unavailable"}</span></li>
+                <li>Rating · <span className="text-white">{product.rating > 0 ? `${product.rating.toFixed(1)} / 5` : "—"}</span></li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {active === "specifications" && (
+          <div data-testid="tab-content-specifications">
+            <div className="eyebrow mb-6">Product specifications</div>
+            {specEntries.length === 0 ? (
+              <div className="text-white/50 text-sm">No specifications listed yet.</div>
+            ) : (
+              <div className="border border-white/10 overflow-hidden">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {specEntries.map(([k, v], i) => (
+                      <tr key={k} data-testid={`spec-row-${k}`} className={`${i % 2 === 0 ? "bg-white/[0.02]" : "bg-transparent"} border-b border-white/5 last:border-b-0`}>
+                        <th scope="row" className="text-left align-top py-4 px-6 md:w-1/3 text-white/50 uppercase text-[11px] tracking-[0.22em] font-normal">{k}</th>
+                        <td className="py-4 px-6 text-white leading-relaxed whitespace-pre-wrap">{String(v)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {active === "shipping" && (
+          <div data-testid="tab-content-shipping" className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="border border-white/10 p-6">
+              <div className="flex items-center gap-3 mb-3"><Truck size={16} className="text-[#D4AF37]" /><div className="eyebrow">Shipping</div></div>
+              <div className="text-white text-sm mb-1">{settings?.delivery_info || "Pan-India shipping · 7–10 business days"}</div>
+              <p className="text-white/60 text-sm leading-relaxed mt-2">
+                All items are carefully packaged in double-corrugated boxes with foam inserts. Larger chandeliers ship in custom crates.
+              </p>
+            </div>
+            <div className="border border-white/10 p-6">
+              <div className="flex items-center gap-3 mb-3"><CreditCard size={16} className="text-[#D4AF37]" /><div className="eyebrow">Payments</div></div>
+              <div className="text-white text-sm mb-1">{settings?.payment_methods || "UPI · Net Banking"}</div>
+              <p className="text-white/60 text-sm leading-relaxed mt-2">
+                Confirm your order via WhatsApp — we&apos;ll share UPI ID or bank details. GST invoice provided.
+              </p>
+            </div>
+            <div className="border border-white/10 p-6">
+              <div className="flex items-center gap-3 mb-3"><MapPin size={16} className="text-[#D4AF37]" /><div className="eyebrow">Origin</div></div>
+              <div className="text-white text-sm mb-1">Firozabad, Uttar Pradesh</div>
+              <p className="text-white/60 text-sm leading-relaxed mt-2">
+                Ships from our workshop. Transit damage? We replace at our cost — just share an unboxing photo within 48 hours.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {active === "inquiry" && (
+          <div data-testid="tab-content-inquiry" className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="border border-white/10 p-8">
+              <div className="eyebrow mb-3">Chat instantly</div>
+              <h3 className="font-serif text-2xl mb-3">Talk to us on WhatsApp</h3>
+              <p className="text-white/60 text-sm leading-relaxed mb-6">
+                Get availability, custom size quotes, bulk pricing, or installation advice within minutes.
+              </p>
+              <a
+                data-testid="tab-wa-btn"
+                href={waLink}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]"
+              >
+                <MessageCircle size={14} /> Chat on WhatsApp
+              </a>
+            </div>
+            <div className="border border-white/10 p-8">
+              <div className="eyebrow mb-3">Email or basket</div>
+              <h3 className="font-serif text-2xl mb-3">Send us a detailed inquiry</h3>
+              <p className="text-white/60 text-sm leading-relaxed mb-6">
+                Add this piece to your inquiry basket along with others, then submit — we&apos;ll respond by email or phone.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Link to="/cart" className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em]">
+                  <ShoppingBag size={14} /> Open basket
+                </Link>
+                <a href={`mailto:${settings?.admin_email || "samratglassemp@gmail.com"}?subject=${encodeURIComponent(`Inquiry: ${product.name} (${product.sku})`)}`} className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em]">
+                  Email us
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
