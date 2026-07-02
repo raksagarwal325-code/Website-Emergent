@@ -56,6 +56,7 @@ class Product(BaseModel):
     specs: dict = {}
     stock: int = 0
     featured: bool = False
+    badge: str = ""
     rating: float = 0.0
     review_count: int = 0
     created_at: str = Field(default_factory=now_iso)
@@ -76,6 +77,7 @@ class ProductCreate(BaseModel):
     specs: dict = {}
     stock: int = 0
     featured: bool = False
+    badge: str = ""
 
 
 class Review(BaseModel):

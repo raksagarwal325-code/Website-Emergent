@@ -16,6 +16,7 @@ import Contact from "@/pages/Contact";
 import Admin from "@/pages/Admin";
 import Catalogue from "@/pages/Catalogue";
 import About from "@/pages/About";
+import Craft from "@/pages/Craft";
 import LegalPage from "@/pages/LegalPage";
 
 function App() {
@@ -41,6 +42,7 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/catalog" element={<Catalog />} />
               <Route path="/about" element={<About />} />
+              <Route path="/craft" element={<Craft />} />
               <Route path="/product/:id" element={<ProductDetail />} />
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/cart" element={<Cart />} />

@@ -6,7 +6,7 @@ import AdminHomepage from "../components/AdminHomepage";
 
 const emptyProduct = {
   name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "USD",
-  short_description: "", description: "", images: [], tags: [], specs: {}, stock: 0, featured: false,
+  short_description: "", description: "", images: [], tags: [], specs: {}, stock: 0, featured: false, badge: "",
 };
 
 export default function Admin() {
@@ -173,6 +173,27 @@ function ProductsAdmin({ products, refresh, editing, setEditing }) {
           <input data-testid="p-featured" type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} />
           Featured
         </label>
+
+        <div>
+          <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">Signature Badge (optional, shown on the product card)</span>
+          <input
+            data-testid="p-badge"
+            list="badge-suggestions"
+            placeholder="e.g. Firozabad Signature, Bestseller, Made to Order, Signed Edition"
+            value={form.badge || ""}
+            onChange={(e) => setForm({ ...form, badge: e.target.value })}
+            className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm"
+          />
+          <datalist id="badge-suggestions">
+            <option value="Firozabad Signature" />
+            <option value="Bestseller" />
+            <option value="Made to Order" />
+            <option value="Signed Edition" />
+            <option value="Limited Edition" />
+            <option value="Heritage Piece" />
+          </datalist>
+          <p className="text-[10px] text-white/40 mt-1">Leave blank to hide the badge. Replaces star rating on the card.</p>
+        </div>
 
         <SpecsEditor value={form.specs || {}} onChange={(specs) => setForm({ ...form, specs })} />
 

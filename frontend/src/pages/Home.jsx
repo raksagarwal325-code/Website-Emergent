@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
 import { api } from "../lib/api";
 import ProductCard from "../components/ProductCard";
@@ -33,7 +34,12 @@ export default function Home() {
     <div data-testid="page-home">
       {/* Hero */}
       <section className="relative overflow-hidden grain">
-        <div className="absolute inset-0 opacity-45">
+        <motion.div
+          className="absolute inset-0 opacity-45"
+          initial={{ opacity: 0, scale: 1.06 }}
+          animate={{ opacity: 0.45, scale: 1 }}
+          transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
+        >
           <img
             src={settings?.hero_image || "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15"}
             alt=""
@@ -41,20 +47,42 @@ export default function Home() {
           />
           <div className="absolute inset-0" style={{background: "linear-gradient(180deg, rgba(42,17,37,0.55) 0%, rgba(22,7,15,0.85) 60%, #16070f 100%)"}}></div>
           <div className="absolute inset-0" style={{background: "radial-gradient(circle at 80% 20%, rgba(163,99,80,0.35), transparent 45%)"}}></div>
-        </div>
+        </motion.div>
 
         <div className="relative max-w-7xl mx-auto px-6 pt-20 pb-24 md:pt-24 md:pb-28">
-          <div className="max-w-2xl fade-up">
-            <div className="mb-6 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2">
+          <motion.div
+            className="max-w-2xl"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: {},
+              visible: { transition: { staggerChildren: 0.14, delayChildren: 0.1 } },
+            }}
+          >
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } } }}
+              className="mb-6 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2"
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]"></span>
               <span className="text-[10px] uppercase tracking-[0.32em] text-[#BF9972]">{H.eyebrow}</span>
-            </div>
-            <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05]">
+            </motion.div>
+            <motion.h1
+              variants={{ hidden: { opacity: 0, y: 26 }, visible: { opacity: 1, y: 0, transition: { duration: 1.05, ease: [0.22, 1, 0.36, 1] } } }}
+              className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05]"
+            >
               {H.headline_line1}<br />
               <span className="italic brand-gradient-text">{H.headline_line2}</span>
-            </h1>
-            <p className="mt-6 text-white/70 max-w-lg leading-relaxed">{H.description}</p>
-            <div className="mt-10 flex flex-wrap gap-3">
+            </motion.h1>
+            <motion.p
+              variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] } } }}
+              className="mt-6 text-white/70 max-w-lg leading-relaxed"
+            >
+              {H.description}
+            </motion.p>
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] } } }}
+              className="mt-10 flex flex-wrap gap-3"
+            >
               <Link to={H.primary_cta_link || "/catalog"} data-testid="hero-explore-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] transition-colors">
                 {H.primary_cta_text} <ArrowUpRight size={14} />
               </Link>
@@ -67,18 +95,21 @@ export default function Home() {
                   <MessageCircle size={14} /> {H.secondary_cta_text}
                 </Link>
               ))}
-            </div>
+            </motion.div>
 
             {/* Trust points strip */}
-            <div className="mt-14 pt-8 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] } } }}
+              className="mt-14 pt-8 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg"
+            >
               {(H.trust || []).map((t, i) => (
                 <div key={i}>
                   <div className="font-serif text-xl md:text-2xl brand-gradient-text leading-none">{t.value}</div>
                   <div className="text-[10px] uppercase tracking-[0.22em] text-white/50 mt-2">{t.label}</div>
                 </div>
               ))}
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </div>
       </section>
 

@@ -118,6 +118,7 @@ export const HOMEPAGE_DEFAULTS = {
       "Fancy lights, crystal chandeliers, glass lamps & decorative lighting — handcrafted in the city of glass, Firozabad.",
     quick_links: [
       { label: "Catalog", href: "/catalog" },
+      { label: "The Craft", href: "/craft" },
       { label: "About Us", href: "/about" },
       { label: "Wishlist", href: "/favorites" },
       { label: "Inquiry Basket", href: "/cart" },
