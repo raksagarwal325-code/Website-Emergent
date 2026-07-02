@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft } from "lucide-react";
-import { api } from "../lib/api";
+import { api, formatPrice } from "../lib/api";
 import { useCatalog } from "../context/CatalogContext";
 import { toast } from "sonner";
 
@@ -92,9 +92,9 @@ export default function ProductDetail() {
           </div>
 
           <div className="flex items-baseline gap-3">
-            <span data-testid="product-price" className="font-serif text-3xl text-[#D4AF37]">${product.price.toLocaleString()}</span>
+            <span data-testid="product-price" className="font-serif text-3xl text-[#D4AF37]">{formatPrice(product.price)}</span>
             {product.compare_at_price && (
-              <span className="text-white/40 line-through">${product.compare_at_price.toLocaleString()}</span>
+              <span className="text-white/40 line-through">{formatPrice(product.compare_at_price)}</span>
             )}
           </div>
 

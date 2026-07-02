@@ -42,4 +42,9 @@ export const api = {
   },
 };
 
+export const formatPrice = (v, symbol = "₹") => {
+  if (v == null) return "";
+  return `${symbol}${Number(v).toLocaleString("en-IN")}`;
+};
+
 export default api;

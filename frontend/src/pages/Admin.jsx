@@ -202,7 +202,7 @@ function ProductsAdmin({ products, refresh, editing, setEditing }) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-serif truncate">{p.name}</div>
-              <div className="text-xs text-white/50">{p.category} · ${p.price} · {p.stock} in stock</div>
+              <div className="text-xs text-white/50">{p.category} · ₹{p.price?.toLocaleString("en-IN")} · {p.stock} in stock</div>
             </div>
             <button onClick={() => setEditing(p)} data-testid={`edit-${p.id}`} className="text-white/60 hover:text-[#D4AF37]"><Edit3 size={14} /></button>
             <button onClick={() => remove(p.id)} data-testid={`del-${p.id}`} className="text-white/60 hover:text-red-400"><Trash2 size={14} /></button>
@@ -241,11 +241,11 @@ function InquiriesAdmin({ inquiries, refresh }) {
             {inq.items.map((i, k) => (
               <div key={k} className="flex justify-between text-sm border-t border-white/5 pt-2">
                 <span>{i.name} × {i.quantity}</span>
-                <span className="text-white/60">${(i.price * i.quantity).toLocaleString()}</span>
+                <span className="text-white/60">₹{(i.price * i.quantity).toLocaleString("en-IN")}</span>
               </div>
             ))}
           </div>
-          <div className="mt-3 text-right text-[#D4AF37] font-serif">Total: ${inq.total.toLocaleString()}</div>
+          <div className="mt-3 text-right text-[#D4AF37] font-serif">Total: ₹{inq.total.toLocaleString("en-IN")}</div>
         </div>
       ))}
     </div>
@@ -265,9 +265,13 @@ function SettingsAdmin({ settings, onSave }) {
       {[
         ["brand_name", "Brand name"],
         ["tagline", "Tagline"],
-        ["whatsapp_number", "WhatsApp number (e.g., +919876543210)"],
+        ["whatsapp_number", "WhatsApp number (e.g., +918920392937)"],
         ["admin_email", "Admin email"],
         ["hero_image", "Hero image URL"],
+        ["address", "Showroom address"],
+        ["gstin", "GSTIN"],
+        ["delivery_info", "Delivery info"],
+        ["payment_methods", "Payment methods"],
       ].map(([k, label]) => (
         <div key={k}>
           <label className="text-xs uppercase tracking-[0.2em] text-white/50 mb-1 block">{label}</label>

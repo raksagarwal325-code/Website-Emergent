@@ -13,7 +13,7 @@ export default function Catalog() {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("newest");
-  const [priceRange, setPriceRange] = useState([0, 10000]);
+  const [priceRange, setPriceRange] = useState([0, 60000]);
   const [showFilters, setShowFilters] = useState(true);
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export default function Catalog() {
     if (q) params.q = q;
     if (category !== "all") params.category = category;
     if (priceRange[0] > 0) params.min_price = priceRange[0];
-    if (priceRange[1] < 10000) params.max_price = priceRange[1];
+    if (priceRange[1] < 60000) params.max_price = priceRange[1];
     const t = setTimeout(() => {
       api.listProducts(params).then((data) => { setProducts(data); setLoading(false); }).catch(() => setLoading(false));
     }, 250);
@@ -45,7 +45,7 @@ export default function Catalog() {
   };
 
   const clearFilters = () => {
-    setQ(""); setCategory("all"); setSort("newest"); setPriceRange([0, 10000]);
+    setQ(""); setCategory("all"); setSort("newest"); setPriceRange([0, 60000]);
   };
 
   return (
@@ -124,15 +124,15 @@ export default function Catalog() {
               <Slider
                 data-testid="price-slider"
                 min={0}
-                max={10000}
-                step={50}
+                max={60000}
+                step={500}
                 value={priceRange}
                 onValueChange={setPriceRange}
                 className="mb-4"
               />
               <div className="flex items-center justify-between text-xs text-white/60">
-                <span>${priceRange[0]}</span>
-                <span>${priceRange[1]}</span>
+                <span>₹{priceRange[0].toLocaleString("en-IN")}</span>
+                <span>₹{priceRange[1].toLocaleString("en-IN")}</span>
               </div>
             </div>
 

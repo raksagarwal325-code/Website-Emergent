@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Trash2, Plus, Minus, MessageCircle } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
-import { api } from "../lib/api";
+import { api, formatPrice } from "../lib/api";
 import { toast } from "sonner";
 
 export default function Cart() {
@@ -27,7 +27,7 @@ export default function Cart() {
     }
     setSubmitting(true);
     try {
-      const items = cart.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price }));
+    const items = cart.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price }));
       await api.createInquiry({ ...form, items });
       toast.success("Inquiry sent. We'll be in touch shortly.");
       clearCart();
@@ -70,7 +70,7 @@ export default function Cart() {
                 </div>
                 <div className="flex-1">
                   <div className="font-serif text-lg">{i.name}</div>
-                  <div className="text-white/60 text-sm mt-1">${i.price?.toLocaleString()}</div>
+                  <div className="text-white/60 text-sm mt-1">{formatPrice(i.price)}</div>
                   <div className="flex items-center gap-3 mt-3">
                     <button data-testid={`qty-minus-${i.product_id}`} onClick={() => updateQty(i.product_id, i.quantity - 1)} className="w-8 h-8 border border-white/15 hover:border-[#D4AF37]"><Minus size={12} className="mx-auto" /></button>
                     <span data-testid={`qty-${i.product_id}`} className="text-sm w-6 text-center">{i.quantity}</span>
@@ -79,14 +79,14 @@ export default function Cart() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[#D4AF37] font-serif">${(i.price * i.quantity).toLocaleString()}</div>
+                  <div className="text-[#D4AF37] font-serif">{formatPrice(i.price * i.quantity)}</div>
                 </div>
               </div>
             ))}
 
             <div className="flex items-center justify-between pt-4 text-white/80">
               <button onClick={clearCart} data-testid="clear-basket-btn" className="text-xs uppercase tracking-[0.28em] text-white/50 hover:text-red-400">Clear basket</button>
-              <div className="text-lg">Total: <span data-testid="cart-total" className="text-[#D4AF37] font-serif text-2xl">${cartTotal.toLocaleString()}</span></div>
+              <div className="text-lg">Total: <span data-testid="cart-total" className="text-[#D4AF37] font-serif text-2xl">{formatPrice(cartTotal)}</span></div>
             </div>
           </div>
 

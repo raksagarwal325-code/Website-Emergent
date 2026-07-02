@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Heart } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
-import { api } from "../lib/api";
+import { api, formatPrice } from "../lib/api";
 
 export default function Favorites() {
   const { favorites, toggleFavorite } = useCatalog();
@@ -33,7 +33,7 @@ export default function Favorites() {
                 <div className="p-5 space-y-1">
                   <div className="eyebrow">{p.category}</div>
                   <div className="font-serif text-lg">{p.name}</div>
-                  <div className="text-white/70">${p.price?.toLocaleString()}</div>
+                  <div className="text-white/70">{formatPrice(p.price)}</div>
                 </div>
               </Link>
               <button

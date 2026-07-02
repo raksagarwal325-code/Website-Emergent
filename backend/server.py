@@ -144,11 +144,16 @@ class ContactCreate(BaseModel):
 class Settings(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = "settings"
-    brand_name: str = "Lumière"
-    tagline: str = "The art of curated luxury."
-    whatsapp_number: str = "+15551234567"
+    brand_name: str = "Samrat Glass Emporium"
+    tagline: str = "Fancy lights, chandeliers & decorative lighting — handcrafted in Firozabad."
+    whatsapp_number: str = "+918920392937"
     admin_email: str = "samratglassemp@gmail.com"
-    hero_image: str = "https://images.pexels.com/photos/4862863/pexels-photo-4862863.jpeg"
+    hero_image: str = "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15"
+    address: str = "Raniwala Market, Babboo Ji Ki Jeen, Firozabad - 283203, Uttar Pradesh, India"
+    gstin: str = "09ADCFS9258D1ZS"
+    delivery_info: str = "Pan-India shipping · 7–10 business days"
+    payment_methods: str = "UPI · Net Banking"
+    currency_symbol: str = "₹"
 
 
 class SettingsUpdate(BaseModel):
@@ -157,6 +162,11 @@ class SettingsUpdate(BaseModel):
     whatsapp_number: Optional[str] = None
     admin_email: Optional[str] = None
     hero_image: Optional[str] = None
+    address: Optional[str] = None
+    gstin: Optional[str] = None
+    delivery_info: Optional[str] = None
+    payment_methods: Optional[str] = None
+    currency_symbol: Optional[str] = None
 
 
 # --- Helpers ---
@@ -406,6 +416,18 @@ async def root():
 # --- Startup ---
 @app.on_event("startup")
 async def startup():
+    # Migrate old Lumière data → Samrat Glass Emporium (one-time)
+    old = await db.products.find_one({"sku": {"$regex": "^LUM-"}})
+    if old:
+        await db.products.delete_many({})
+        await db.reviews.delete_many({})
+        logger.info("Cleared old Lumière products")
+
+    settings_doc = await db.settings.find_one({"id": "settings"}, {"_id": 0})
+    if settings_doc and settings_doc.get("brand_name") == "Lumière":
+        await db.settings.delete_one({"id": "settings"})
+        logger.info("Reset old Lumière settings")
+
     # Seed products if empty
     count = await db.products.count_documents({})
     if count == 0:

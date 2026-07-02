@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Heart } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
-import { api } from "../lib/api";
+import { api, formatPrice } from "../lib/api";
 
 export default function ProductCard({ product, index = 0 }) {
   const { toggleFavorite, isFavorite } = useCatalog();
@@ -37,9 +37,9 @@ export default function ProductCard({ product, index = 0 }) {
           <div className="font-serif text-xl leading-snug">{product.name}</div>
           <div className="flex items-baseline justify-between pt-2">
             <div className="flex items-baseline gap-2">
-              <span className="text-white">${product.price?.toLocaleString()}</span>
+              <span className="text-white">{formatPrice(product.price)}</span>
               {product.compare_at_price && (
-                <span className="text-white/40 line-through text-sm">${product.compare_at_price?.toLocaleString()}</span>
+                <span className="text-white/40 line-through text-sm">{formatPrice(product.compare_at_price)}</span>
               )}
             </div>
             {product.rating > 0 && (

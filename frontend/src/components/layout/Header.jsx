@@ -8,7 +8,7 @@ export default function Header() {
   const { cart, favorites } = useCatalog();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
-  const [brand, setBrand] = useState("Lumière");
+  const [brand, setBrand] = useState("Samrat Glass Emporium");
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -28,8 +28,8 @@ export default function Header() {
       className={`sticky top-0 z-50 w-full backdrop-blur-2xl transition-all duration-300 ${scrolled ? "bg-black/85 border-b border-white/10" : "bg-black/40"}`}
     >
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-        <Link to="/" data-testid="header-brand" className="font-serif text-2xl tracking-wide">
-          {brand}<span className="text-[#D4AF37]">.</span>
+        <Link to="/" data-testid="header-brand" className="font-serif text-lg md:text-xl tracking-wide whitespace-nowrap">
+          Samrat Glass<span className="text-[#D4AF37]"> Emporium</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-10">
