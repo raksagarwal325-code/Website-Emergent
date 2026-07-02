@@ -16,17 +16,19 @@ export default function Admin() {
   const [messages, setMessages] = useState([]);
   const [settings, setSettings] = useState(null);
   const [stats, setStats] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [editing, setEditing] = useState(null);
 
   const refresh = async () => {
-    const [p, i, m, s, st] = await Promise.all([
+    const [p, i, m, s, st, cats] = await Promise.all([
       api.listProducts().catch(() => []),
       api.listInquiries().catch(() => []),
       api.listContact().catch(() => []),
       api.getSettings().catch(() => null),
       api.stats().catch(() => null),
+      api.categories().catch(() => []),
     ]);
-    setProducts(p); setInquiries(i); setMessages(m); setSettings(s); setStats(st);
+    setProducts(p); setInquiries(i); setMessages(m); setSettings(s); setStats(st); setCategories(cats);
   };
   useEffect(() => { refresh(); }, []);
 
@@ -83,7 +85,7 @@ export default function Admin() {
       {tab === "homepage" && <AdminHomepage />}
 
       {tab === "products" && (
-        <ProductsAdmin products={products} refresh={refresh} setEditing={setEditing} editing={editing} />
+        <ProductsAdmin products={products} categories={categories} refresh={refresh} setEditing={setEditing} editing={editing} />
       )}
 
       {tab === "inquiries" && <InquiriesAdmin inquiries={inquiries} refresh={refresh} />}
@@ -111,7 +113,7 @@ export default function Admin() {
   );
 }
 
-function ProductsAdmin({ products, refresh, editing, setEditing }) {
+function ProductsAdmin({ products, categories = [], refresh, editing, setEditing }) {
   const [form, setForm] = useState(emptyProduct);
   const [uploading, setUploading] = useState(false);
 
@@ -161,7 +163,36 @@ function ProductsAdmin({ products, refresh, editing, setEditing }) {
         </div>
         <input required data-testid="p-name" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
         <input required data-testid="p-sku" placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
-        <input required data-testid="p-category" placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
+        <div>
+          <input
+            required
+            data-testid="p-category"
+            list="product-category-suggestions"
+            placeholder="Category (e.g. Crystal Chandeliers, Pendant Lights, Wall Sconces)"
+            value={form.category}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm"
+          />
+          <datalist id="product-category-suggestions">
+            {categories.map((c) => <option key={c} value={c} />)}
+          </datalist>
+          {categories.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className="text-[9px] uppercase tracking-[0.24em] text-white/40 mr-1 self-center">Existing:</span>
+              {categories.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setForm({ ...form, category: c })}
+                  data-testid={`cat-chip-${c}`}
+                  className={`text-[10px] uppercase tracking-[0.16em] px-2 py-1 border transition-colors ${form.category === c ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/15 text-white/60 hover:border-[#BF9972] hover:text-white"}`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <input required type="number" step="0.01" data-testid="p-price" placeholder="Price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
           <input type="number" data-testid="p-stock" placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
