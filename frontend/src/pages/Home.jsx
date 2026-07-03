@@ -11,6 +11,7 @@ import ReasonsSection from "../components/ReasonsSection";
 import AtelierShowcase from "../components/AtelierShowcase";
 import TrustedBySection from "../components/TrustedBySection";
 import GalleryPreview from "../components/GalleryPreview";
+import FounderTeaser from "../components/FounderTeaser";
 import { useSettings } from "../context/SettingsContext";
 
 export default function Home() {
@@ -172,6 +173,9 @@ export default function Home() {
 
       {/* Reasons Why We Are Better */}
       <ReasonsSection />
+
+      {/* Meet the founder teaser */}
+      <FounderTeaser />
 
       {/* Editorial banner / Atelier auto-rotating showcase */}
       <AtelierShowcase />

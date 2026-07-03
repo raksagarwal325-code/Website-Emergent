@@ -171,6 +171,14 @@ export const HOMEPAGE_DEFAULTS = {
       { label: "Inquiry Basket", href: "/cart" },
     ],
   },
+  founder_teaser: {
+    enabled: true,
+    eyebrow: "Meet the founder",
+    title: "Four decades of glass, in one steady hand.",
+    body: "Since 1981, Mr. Sunil Kumar Agarwal has led our atelier in Firozabad — training master craftsmen, pushing form and finish, and quietly building a name that lights homes, hotels and hospitality across India.",
+    cta_text: "Read our story",
+    cta_link: "/about",
+  },
 };
 
 // Merges saved homepage_content over defaults (deep merge one level for objects, replaces arrays wholly)

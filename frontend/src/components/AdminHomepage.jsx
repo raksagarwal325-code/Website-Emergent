@@ -19,6 +19,7 @@ const SECTIONS = [
   { key: "reasons", label: "Reasons Why We Are Better" },
   { key: "atelier", label: "The Atelier Section" },
   { key: "footer", label: "Footer Content" },
+  { key: "founder_teaser", label: "Meet the Founder Teaser (Home)" },
 ];
 
 // Reusable inputs -----
@@ -478,6 +479,28 @@ function SectionEditor({ sectionKey, data, patch }) {
             <div className="eyebrow mb-2 mt-2">Quick links</div>
             <ListEditor items={data.quick_links || []} onChange={(v)=>set("quick_links",v)} defaultItem={{label:"",href:""}}
               fields={[{name:"label",label:"Label"},{name:"href",label:"Link (URL or /path)"}]} testId="hp-footer-link" />
+          </div>
+        </div>
+      );
+    case "founder_teaser":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">Shown on <span className="text-white/70">Home</span> just after "Reasons Why We Are Better". Uses the founder photo & name from Admin → Homepage → About.</p>
+          <label className="flex items-center gap-3 text-sm text-white/80">
+            <input
+              type="checkbox"
+              checked={data.enabled !== false}
+              onChange={(e)=>set("enabled", e.target.checked)}
+              data-testid="hp-founder-teaser-enabled"
+            />
+            Show this section on the Home page
+          </label>
+          <Text label="Eyebrow (small label above title)" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-founder-teaser-eyebrow" />
+          <Text label="Title" value={data.title} onChange={(v)=>set("title",v)} data-testid="hp-founder-teaser-title" />
+          <TextArea label="Body copy" value={data.body} onChange={(v)=>set("body",v)} rows={4} data-testid="hp-founder-teaser-body" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="CTA button text" value={data.cta_text} onChange={(v)=>set("cta_text",v)} data-testid="hp-founder-teaser-cta-text" />
+            <Text label="CTA link" value={data.cta_link} onChange={(v)=>set("cta_link",v)} data-testid="hp-founder-teaser-cta-link" />
           </div>
         </div>
       );
