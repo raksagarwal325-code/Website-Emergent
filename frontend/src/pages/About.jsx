@@ -70,7 +70,7 @@ export default function About() {
                 src={founder.image}
                 alt={founder.name || "Founder"}
                 loading="lazy"
-                style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 38%", display: "block" }}
+                style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 50%", display: "block" }}
               />
             </div>
           ) : (
