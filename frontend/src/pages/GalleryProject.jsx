@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { MapPin, ArrowLeft, X, ChevronLeft, ChevronRight, ArrowUpRight } from "lucide-react";
+import { MapPin, ArrowLeft, X, ChevronLeft, ChevronRight, ArrowUpRight, ShoppingBag } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
-import { api } from "../lib/api";
+import { useCatalog } from "../context/CatalogContext";
+import { api, formatPrice } from "../lib/api";
 import { findProjectBySlug, buildProjectSlugs } from "../lib/slug";
 import SEO from "../components/SEO";
+import { toast } from "sonner";
 
 /**
  * Single-project view at /gallery/:slug
@@ -51,14 +53,25 @@ function Lightbox({ open, index, images, onClose, onNav }) {
 export default function GalleryProject() {
   const { slug } = useParams();
   const { hp, settings } = useSettings();
+  const { addToCart } = useCatalog();
   const items = hp.gallery?.items || [];
   const { project, index } = findProjectBySlug(items, slug);
   const allSlugs = buildProjectSlugs(items);
   const [lbIdx, setLbIdx] = useState(null);
+  const [allProducts, setAllProducts] = useState([]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
   }, [slug]);
+  useEffect(() => { api.listProducts().then(setAllProducts).catch(() => {}); }, []);
+
+  const linkedProducts = useMemo(() => {
+    if (!project) return [];
+    const ids = new Set(project.products || []);
+    return allProducts.filter((p) => ids.has(p.id));
+  }, [project, allProducts]);
+
+  const waRaw = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
 
   // Settings still loading — don't redirect yet
   if (settings === null) {
@@ -143,6 +156,62 @@ export default function GalleryProject() {
                 <img src={api.resolveImage(img)} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
               </button>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* Featured products in this project */}
+      {linkedProducts.length > 0 && (
+        <section className="border-t border-[#BF9972]/15" data-testid="project-linked-products">
+          <div className="max-w-7xl mx-auto px-6 py-16 md:py-20">
+            <div className="mb-8 md:mb-10">
+              <div className="eyebrow mb-3">Featured Pieces</div>
+              <h2 className="font-serif text-2xl md:text-4xl leading-tight">
+                Pieces used in <span className="brand-gradient-text italic">this installation.</span>
+              </h2>
+              <p className="mt-3 text-white/60 max-w-xl text-sm md:text-base">Inquire directly about any piece below — we&apos;ll share sizing, finish options and a final quotation.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+              {linkedProducts.map((p) => {
+                const img = api.resolveImage(p.images?.[0]);
+                const waHref = waRaw
+                  ? `https://wa.me/${waRaw}?text=${encodeURIComponent(`Hi Rakshit ji, I saw the ${p.name} (SKU: ${p.sku}) in your ${project.title} project on the website. Please share more details.`)}`
+                  : "";
+                const handleAdd = (e) => { e.preventDefault(); e.stopPropagation(); addToCart(p); toast.success(`${p.name} added to inquiry`); };
+                return (
+                  <div key={p.id} data-testid={`project-product-${p.id}`} className="group border border-white/8 hover:border-[#D4AF37]/50 bg-[#0e0510] transition-colors flex flex-col">
+                    <Link to={`/product/${p.id}`} className="block">
+                      <div className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center">
+                        {img ? (
+                          <img src={img} alt={p.name} loading="lazy" className="w-full h-full object-cover opacity-95 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700" />
+                        ) : (
+                          <span className="font-serif italic text-[#D4AF37]/15 text-8xl">S</span>
+                        )}
+                      </div>
+                    </Link>
+                    <div className="p-5 flex flex-col flex-1">
+                      <div className="eyebrow truncate">{p.category}</div>
+                      <Link to={`/product/${p.id}`} className="font-serif text-lg leading-snug text-white group-hover:text-[#D4AF37] transition-colors line-clamp-2 mt-2 min-h-[3rem]">{p.name}</Link>
+                      {p.short_description && <p className="text-xs text-white/50 mt-2 line-clamp-2">{p.short_description}</p>}
+                      <div className="mt-3 flex items-baseline gap-2">
+                        {!p.fixed_price && <span className="text-[10px] uppercase tracking-[0.22em] text-[#BF9972]">From</span>}
+                        <span className="text-[#D4AF37] font-serif text-lg">{formatPrice(p.price)}</span>
+                      </div>
+                      <div className="mt-auto pt-4 grid grid-cols-2 gap-2">
+                        <button onClick={handleAdd} data-testid={`project-product-add-${p.id}`} className="inline-flex items-center justify-center gap-1 border border-white/20 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/80 px-2 py-2.5 text-[10px] uppercase tracking-[0.16em] transition-colors">
+                          <ShoppingBag size={11} /> Inquire
+                        </button>
+                        {waHref && (
+                          <a href={waHref} target="_blank" rel="noreferrer" data-testid={`project-product-wa-${p.id}`} className="inline-flex items-center justify-center bg-[#D4AF37] text-black px-2 py-2.5 text-[10px] uppercase tracking-[0.16em] hover:bg-[#B5952F]">
+                            WhatsApp
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </section>
       )}

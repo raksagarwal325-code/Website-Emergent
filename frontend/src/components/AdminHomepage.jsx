@@ -38,6 +38,47 @@ const TextArea = ({ label, value, onChange, rows = 4, "data-testid": tid }) => (
   </label>
 );
 
+const ProductPicker = ({ label, value, onChange, "data-testid": tid }) => {
+  const [products, setProducts] = useState([]);
+  const [q, setQ] = useState("");
+  const selected = Array.isArray(value) ? value : [];
+  useEffect(() => { api.listProducts().then(setProducts).catch(() => {}); }, []);
+  const filtered = products.filter((p) => {
+    if (!q.trim()) return true;
+    const needle = q.toLowerCase();
+    return `${p.name} ${p.sku} ${p.category}`.toLowerCase().includes(needle);
+  });
+  const toggle = (id) => onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  return (
+    <div data-testid={tid}>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search products by name, SKU, category…"
+        className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-xs mb-2"
+      />
+      <div className="max-h-52 overflow-y-auto border border-white/10 divide-y divide-white/5 bg-[#0a0510]">
+        {filtered.length === 0 && <div className="text-white/40 text-xs px-3 py-3">No products match.</div>}
+        {filtered.map((p) => {
+          const on = selected.includes(p.id);
+          return (
+            <button key={p.id} type="button" onClick={() => toggle(p.id)} data-testid={`${tid}-opt-${p.id}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${on ? "bg-[#D4AF37]/10" : "hover:bg-white/[0.02]"}`}>
+              <span className={`w-3.5 h-3.5 border ${on ? "bg-[#D4AF37] border-[#D4AF37]" : "border-white/25"} flex-shrink-0 flex items-center justify-center text-black text-[8px]`}>{on ? "✓" : ""}</span>
+              <span className="flex-1 min-w-0">
+                <span className="text-sm text-white truncate block">{p.name}</span>
+                <span className="text-[10px] uppercase tracking-widest text-white/40">{p.category} · {p.sku}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {selected.length > 0 && <div className="mt-1 text-[10px] uppercase tracking-widest text-[#D4AF37]">{selected.length} linked</div>}
+    </div>
+  );
+};
+
 const MultiImagePicker = ({ label, value, onChange, "data-testid": tid }) => {
   const [busy, setBusy] = useState(false);
   const list = Array.isArray(value) ? value : [];
@@ -138,6 +179,8 @@ function ListEditor({ items, onChange, fields, defaultItem, testId }) {
               <ImagePicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
             ) : f.type === "gallery" ? (
               <MultiImagePicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
+            ) : f.type === "productPicker" ? (
+              <ProductPicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
             ) : f.type === "textarea" ? (
               <TextArea key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
             ) : (
@@ -360,12 +403,13 @@ function SectionEditor({ sectionKey, data, patch }) {
 
           <div className="eyebrow mb-1 mt-6">Projects</div>
           <ListEditor items={data.items || []} onChange={(v)=>set("items",v)}
-            defaultItem={{title:"", location:"", note:"", images:[]}}
+            defaultItem={{title:"", location:"", note:"", images:[], products:[]}}
             fields={[
               {name:"title", label:"Project title (e.g. Wedding Banquet · The Leela Palace)"},
               {name:"location", label:"Location (e.g. Jaipur, Rajasthan)"},
               {name:"note", label:"Short story about the project", type:"textarea"},
               {name:"images", label:"Project images (first is the cover; up to 4 more show as thumbnails)", type:"gallery"},
+              {name:"products", label:"Featured products from the catalog (visitors can inquire directly)", type:"productPicker"},
             ]}
             testId="hp-gallery-item" />
         </div>
