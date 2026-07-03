@@ -27,6 +27,13 @@ export const api = {
   updateSettings: (data) => client.put("/settings", data).then(r => r.data),
 
   upload: (file) => {
+    // Client-side guard so users get a friendly message before the network round-trip.
+    // Server hard cap is 25MB.
+    const MAX = 25 * 1024 * 1024;
+    if (file && file.size > MAX) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      return Promise.reject(new Error(`Image is ${sizeMB}MB — max 25MB. Please compress with tinypng.com or resize to ~2000px on the long edge.`));
+    }
     const fd = new FormData();
     fd.append("file", file);
     return client.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } }).then(r => r.data);

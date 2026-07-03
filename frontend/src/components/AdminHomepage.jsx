@@ -90,7 +90,7 @@ const MultiImagePicker = ({ label, value, onChange, "data-testid": tid }) => {
       const { url } = await api.upload(file);
       onChange([...list, url]);
       toast.success("Uploaded");
-    } catch { toast.error("Upload failed"); }
+    } catch (e) { toast.error(e?.response?.data?.detail || e?.message || "Upload failed"); }
     finally { setBusy(false); e.target.value = ""; }
   };
   const removeAt = (i) => onChange(list.filter((_, j) => j !== i));
@@ -331,6 +331,7 @@ function SectionEditor({ sectionKey, data, patch }) {
             <Text label="Circle initial (1 letter)" value={founder.initial} onChange={(v)=>setFounder("initial",(v||"").slice(0,1))} data-testid="hp-about-founder-initial" />
           </div>
           <Text label="Founder name" value={founder.name} onChange={(v)=>setFounder("name",v)} data-testid="hp-about-founder-name" />
+          <ImagePicker label="Founder photo (shown instead of the initial circle if set)" value={founder.image} onChange={(v)=>setFounder("image",v)} data-testid="hp-about-founder-image" />
           <TextArea label="Founder description" value={founder.description} onChange={(v)=>setFounder("description",v)} rows={4} data-testid="hp-about-founder-desc" />
 
           <div className="eyebrow mb-1 mt-6">Stats (4 tiles)</div>

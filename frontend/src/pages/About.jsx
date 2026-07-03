@@ -60,9 +60,15 @@ export default function About() {
       <section className="max-w-5xl mx-auto px-6 pb-16">
         <div className="warm-panel border-l-2 border-[#D4AF37] p-8 md:p-10 flex flex-col md:flex-row gap-6 md:items-center relative overflow-hidden">
           <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-30 pointer-events-none" style={{background:"radial-gradient(circle at 80% 50%, rgba(191,153,114,0.35), transparent 60%)"}}></div>
-          <div className="w-24 h-24 md:w-28 md:h-28 rounded-full flex-shrink-0 flex items-center justify-center brand-glow" style={{background:"linear-gradient(135deg,#A36350,#8B4F3F)"}}>
-            <span className="font-serif text-4xl text-[#2A1125]">{founder.initial || "S"}</span>
-          </div>
+          {founder.image ? (
+            <div className="w-28 h-28 md:w-32 md:h-32 rounded-full flex-shrink-0 overflow-hidden brand-glow ring-2 ring-[#D4AF37]/40" data-testid="founder-photo">
+              <img src={founder.image} alt={founder.name || "Founder"} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div className="w-24 h-24 md:w-28 md:h-28 rounded-full flex-shrink-0 flex items-center justify-center brand-glow" style={{background:"linear-gradient(135deg,#A36350,#8B4F3F)"}}>
+              <span className="font-serif text-4xl text-[#2A1125]">{founder.initial || "S"}</span>
+            </div>
+          )}
           <div className="relative">
             <div className="eyebrow mb-2 text-[#D4AF37]">{founder.eyebrow}</div>
             <h3 className="font-serif text-2xl md:text-3xl mb-3">{founder.name}</h3>

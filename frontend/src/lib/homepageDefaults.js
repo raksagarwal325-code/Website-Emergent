@@ -71,6 +71,7 @@ export const HOMEPAGE_DEFAULTS = {
       name: "Mr. Sunil Kumar Agarwal",
       description: "Founded under the guidance of Mr. Sunil Kumar Agarwal, with over 40 years of experience in handcrafted decorative lighting — combining Firozabad's traditional glass artistry with contemporary Indian design sensibility.",
       initial: "S",
+      image: "https://customer-assets.emergentagent.com/job_product-showcase-859/artifacts/qrdk7g3v_image.png",
     },
     stats: [
       { value: "1981", label: "Founded" },

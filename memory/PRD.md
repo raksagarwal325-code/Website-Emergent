@@ -73,3 +73,8 @@ INR pricing with en-IN formatting.
 - Customer accounts (JWT) + order history
 - Analytics dashboard (top viewed products, inquiry funnel)
 - Instagram feed on Home page
+
+## Changelog
+- 2026-02-03: Added founder photo to About page (Mr. Sunil Kumar Agarwal). CMS-editable via Admin → Homepage → About → "Founder photo". Circle-initial fallback preserved when no image is set.
+- 2026-02-03: Raised image upload limit from 8MB → 25MB (server.py + client-side pre-flight validation). Verification pending user acceptance.
+

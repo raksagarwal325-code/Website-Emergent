@@ -455,8 +455,8 @@ async def upload_image(file: UploadFile = File(...)):
         ext = "png"
     path = f"{APP_NAME}/products/{uuid.uuid4()}.{ext}"
     data = await file.read()
-    if len(data) > 8 * 1024 * 1024:
-        raise HTTPException(400, "Max 8MB")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(400, "Image too large — max 25MB per file. Please compress or resize.")
     result = put_object(path, data, file.content_type)
     await db.files.insert_one({
         "id": str(uuid.uuid4()),
