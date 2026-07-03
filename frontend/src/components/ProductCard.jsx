@@ -104,7 +104,7 @@ export default function ProductCard({ product, index = 0 }) {
         <Link to={`/product/${product.id}`} className="font-serif text-lg leading-snug text-white hover:text-[#D4AF37] transition-colors line-clamp-2 min-h-[3.5rem]">
           {product.name}
         </Link>
-        <div className="text-[10px] uppercase tracking-widest text-white/40">SKU · {product.sku}</div>
+        <div className="text-[10px] uppercase tracking-widest text-white/40">{product.category}</div>
         <div className="flex items-baseline justify-between pt-1">
           <div className="flex items-baseline gap-2 min-w-0">
             {(() => {

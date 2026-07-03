@@ -129,7 +129,7 @@ export default function ProductDetail() {
           <div>
             <div className="eyebrow mb-3">{product.category}</div>
             <h1 className="font-serif text-4xl leading-tight">{product.name}</h1>
-            <div className="mt-3 text-white/50 text-sm">SKU: {product.sku}</div>
+            <div className="mt-3 text-white/50 text-sm" data-testid="product-reference-code">Reference Code: {product.sku}</div>
           </div>
 
           <div className="flex items-baseline gap-3 flex-wrap">
@@ -324,7 +324,7 @@ function ProductTabs({ product, settings, waLink }) {
             <div className="md:col-span-4 border border-white/10 p-6">
               <div className="eyebrow mb-3">At a glance</div>
               <ul className="space-y-2 text-sm text-white/70">
-                <li>SKU · <span className="text-white">{product.sku}</span></li>
+                <li>Reference Code · <span className="text-white">{product.sku}</span></li>
                 <li>Category · <span className="text-white">{product.category}</span></li>
                 <li>Stock · <span className="text-white">{product.stock > 0 ? `${product.stock} available` : "Currently unavailable"}</span></li>
                 <li>Rating · <span className="text-white">{product.rating > 0 ? `${product.rating.toFixed(1)} / 5` : "—"}</span></li>
