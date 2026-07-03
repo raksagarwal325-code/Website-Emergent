@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, Plus, Trash2, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2, Upload, ArrowUp, ArrowDown } from "lucide-react";
 import { api } from "../lib/api";
 import { HOMEPAGE_DEFAULTS, mergeHomepage } from "../lib/homepageDefaults";
 import { useSettings } from "../context/SettingsContext";
@@ -416,6 +416,46 @@ function SectionEditor({ sectionKey, data, patch }) {
               {name:"products", label:"Featured products from the catalog (visitors can inquire directly)", type:"productPicker"},
             ]}
             testId="hp-gallery-item" />
+
+          <div className="eyebrow mb-1 mt-8">Homepage carousel</div>
+          <p className="text-[11px] text-white/40">Controls the &ldquo;Our Work in the Wild&rdquo; section on the <span className="text-white/70">Home</span> page. Hidden entirely when no projects have content.</p>
+
+          <label className="flex items-center gap-3 text-sm text-white/85 mt-2">
+            <input
+              type="checkbox"
+              checked={data.home_randomize !== false}
+              onChange={(e)=>set("home_randomize", e.target.checked)}
+              data-testid="hp-gallery-randomize"
+            />
+            Randomize project order on every page load
+          </label>
+          <label className="flex items-center gap-3 text-sm text-white/85">
+            <input
+              type="checkbox"
+              checked={data.home_autoplay !== false}
+              onChange={(e)=>set("home_autoplay", e.target.checked)}
+              data-testid="hp-gallery-autoplay"
+            />
+            Auto-slide the carousel every 4.5 seconds (pauses on hover)
+          </label>
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-[0.22em] text-white/50 mb-1">Projects per slide (desktop)</label>
+            <select
+              data-testid="hp-gallery-per-view"
+              value={String(data.home_per_view || 3)}
+              onChange={(e)=>set("home_per_view", parseInt(e.target.value))}
+              className="bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm"
+            >
+              <option value="3">3 (single row)</option>
+              <option value="6">6 (two rows)</option>
+              <option value="9">9 (three rows)</option>
+            </select>
+            <p className="text-[11px] text-white/40 mt-1">Mobile always shows 1 project at a time with swipe.</p>
+          </div>
+
+          <FeaturedGalleryPicker items={data.items || []} selectedIndices={data.home_featured_indices || []}
+            onChange={(v)=>set("home_featured_indices", v)} randomize={data.home_randomize !== false} />
         </div>
       );
     case "faq":
@@ -573,6 +613,108 @@ export default function AdminHomepage() {
         <button data-testid="hp-save-btn-bottom" onClick={save} disabled={saving} className="bg-[#D4AF37] text-black px-8 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-60">
           {saving ? "Saving…" : "Save Changes"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+
+function FeaturedGalleryPicker({ items, selectedIndices, onChange, randomize }) {
+  const rows = items.map((p, idx) => ({
+    idx,
+    title: (p?.title || "").trim() || "Untitled project",
+    hasCover: (p?.images || []).some(Boolean),
+    location: p?.location || "",
+  }));
+  const selected = selectedIndices.filter((i) => i >= 0 && i < items.length);
+  const isPicked = (i) => selected.includes(i);
+
+  const toggle = (i) => {
+    if (isPicked(i)) onChange(selected.filter((x) => x !== i));
+    else onChange([...selected, i]);
+  };
+  const move = (pos, delta) => {
+    const next = selected.slice();
+    const to = pos + delta;
+    if (to < 0 || to >= next.length) return;
+    [next[pos], next[to]] = [next[to], next[pos]];
+    onChange(next);
+  };
+  const clear = () => onChange([]);
+
+  if (rows.length === 0) {
+    return (
+      <div className="text-[11px] text-white/40 italic border border-white/10 p-4 bg-black/20">
+        Add gallery projects above first, then choose which ones to feature on the homepage.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="text-xs uppercase tracking-[0.24em] text-[#BF9972] mb-1">Featured on homepage</div>
+        <p className="text-[11px] text-white/40">
+          Pick which projects appear in the homepage carousel. Leave empty to show all projects
+          (latest first). {randomize ? "Order is randomized on every page load — the list below defines the shuffle pool." : "Order below is respected 1:1."}
+        </p>
+      </div>
+
+      {selected.length > 0 && (
+        <div className="border border-[#D4AF37]/25 p-3 space-y-2 bg-black/20" data-testid="hp-gallery-featured-selected">
+          <div className="text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]">Selected ({selected.length})</div>
+          {selected.map((idx, pos) => {
+            const row = rows.find((r) => r.idx === idx);
+            if (!row) return null;
+            return (
+              <div key={idx} className="flex items-center justify-between gap-2 text-sm border border-white/8 px-2 py-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] text-white/40 w-5">{pos + 1}.</span>
+                  <span className="truncate text-white/85">{row.title}</span>
+                  {row.location && <span className="text-white/40 text-[11px] truncate">· {row.location}</span>}
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button type="button" onClick={() => move(pos, -1)} disabled={randomize || pos === 0}
+                    className="p-1 text-white/60 hover:text-[#D4AF37] disabled:opacity-30" title="Move up"
+                    data-testid={`hp-gallery-featured-up-${idx}`}>
+                    <ArrowUp size={14} />
+                  </button>
+                  <button type="button" onClick={() => move(pos, 1)} disabled={randomize || pos === selected.length - 1}
+                    className="p-1 text-white/60 hover:text-[#D4AF37] disabled:opacity-30" title="Move down"
+                    data-testid={`hp-gallery-featured-down-${idx}`}>
+                    <ArrowDown size={14} />
+                  </button>
+                  <button type="button" onClick={() => toggle(idx)}
+                    className="p-1 text-white/60 hover:text-red-400" title="Remove"
+                    data-testid={`hp-gallery-featured-remove-${idx}`}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          <button type="button" onClick={clear} className="text-[10px] uppercase tracking-[0.22em] text-white/50 hover:text-red-400">
+            Clear all selections
+          </button>
+        </div>
+      )}
+
+      <div>
+        <div className="text-[10px] uppercase tracking-[0.22em] text-white/50 mb-1">All projects</div>
+        <div className="border border-white/10 max-h-64 overflow-y-auto divide-y divide-white/5">
+          {rows.map((r) => (
+            <label
+              key={r.idx}
+              className={`flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-white/5 ${isPicked(r.idx) ? "bg-[#D4AF37]/10" : ""}`}
+              data-testid={`hp-gallery-featured-toggle-${r.idx}`}
+            >
+              <input type="checkbox" checked={isPicked(r.idx)} onChange={() => toggle(r.idx)} />
+              <span className={`truncate ${isPicked(r.idx) ? "text-[#D4AF37]" : "text-white/85"}`}>{r.title}</span>
+              {!r.hasCover && <span className="text-[10px] text-red-400/70">no cover image</span>}
+              {r.location && <span className="text-white/35 text-[11px] truncate">· {r.location}</span>}
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   );

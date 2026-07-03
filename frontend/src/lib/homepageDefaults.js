@@ -114,6 +114,11 @@ export const HOMEPAGE_DEFAULTS = {
     title_highlight: "in the wild.",
     tagline: "Homes, hotels, weddings, showrooms — spaces we've helped illuminate. Each piece here is custom-made in Firozabad.",
     items: [],
+    // Homepage carousel controls
+    home_randomize: true,
+    home_autoplay: true,
+    home_per_view: 3,
+    home_featured_indices: [], // reorder-able list of project indices; empty = use all/latest
   },
   faq: {
     eyebrow: "Support · FAQ",
