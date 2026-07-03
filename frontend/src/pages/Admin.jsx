@@ -90,23 +90,7 @@ export default function Admin() {
 
       {tab === "inquiries" && <InquiriesAdmin inquiries={inquiries} refresh={refresh} />}
 
-      {tab === "messages" && (
-        <div className="space-y-4">
-          {messages.length === 0 && <div className="text-white/50 text-sm py-12">No messages yet.</div>}
-          {messages.map((m) => (
-            <div key={m.id} className="border border-white/10 p-6" data-testid={`msg-${m.id}`}>
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="font-serif text-lg">{m.subject || "No subject"}</div>
-                  <div className="text-white/50 text-sm mt-1">from {m.name} · {m.email}</div>
-                </div>
-                <div className="text-xs text-white/40">{new Date(m.created_at).toLocaleString()}</div>
-              </div>
-              <p className="mt-4 text-white/70 text-sm leading-relaxed whitespace-pre-wrap">{m.message}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      {tab === "messages" && <MessagesAdmin messages={messages} />}
 
       {tab === "settings" && settings && <SettingsAdmin settings={settings} onSave={refresh} />}
     </div>
@@ -286,40 +270,157 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
 }
 
 function InquiriesAdmin({ inquiries, refresh }) {
+  const [filter, setFilter] = useState("all");
+  const [q, setQ] = useState("");
+
   const setStatus = async (id, s) => {
     await api.updateInquiryStatus(id, s);
     toast.success("Status updated");
     refresh();
   };
+
+  const counts = {
+    all: inquiries.length,
+    new: inquiries.filter((i) => i.status === "new").length,
+    in_progress: inquiries.filter((i) => i.status === "in_progress").length,
+    closed: inquiries.filter((i) => i.status === "closed").length,
+  };
+
+  const filtered = inquiries.filter((i) => {
+    if (filter !== "all" && i.status !== filter) return false;
+    if (q.trim()) {
+      const needle = q.toLowerCase();
+      const hay = `${i.customer_name || ""} ${i.customer_email || ""} ${i.customer_phone || ""} ${i.message || ""}`.toLowerCase();
+      if (!hay.includes(needle)) return false;
+    }
+    return true;
+  });
+
+  const waNumber = (raw) => (raw || "").replace(/[^0-9]/g, "");
+
   return (
     <div className="space-y-4">
-      {inquiries.length === 0 && <div className="text-white/50 text-sm py-12">No inquiries yet.</div>}
-      {inquiries.map((inq) => (
-        <div key={inq.id} data-testid={`inq-${inq.id}`} className="border border-white/10 p-6">
-          <div className="flex flex-wrap justify-between gap-4">
-            <div>
-              <div className="font-serif text-lg">{inq.customer_name}</div>
-              <div className="text-white/50 text-sm">{inq.customer_email} {inq.customer_phone && `· ${inq.customer_phone}`}</div>
-              <div className="text-xs text-white/40 mt-1">{new Date(inq.created_at).toLocaleString()}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              {["new","in_progress","closed"].map((s) => (
-                <button key={s} onClick={() => setStatus(inq.id, s)} className={`text-xs uppercase tracking-[0.24em] px-3 py-1 border ${inq.status === s ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/15 text-white/60 hover:text-white"}`}>{s}</button>
-              ))}
-            </div>
-          </div>
-          {inq.message && <p className="mt-3 text-white/70 text-sm">{inq.message}</p>}
-          <div className="mt-4 space-y-2">
-            {inq.items.map((i, k) => (
-              <div key={k} className="flex justify-between text-sm border-t border-white/5 pt-2">
-                <span>{i.name} × {i.quantity}</span>
-                <span className="text-white/60">₹{(i.price * i.quantity).toLocaleString("en-IN")}</span>
+      {/* Toolbar: filters + search */}
+      <div className="flex flex-wrap items-center gap-3 mb-2">
+        {[["all","All"],["new","New"],["in_progress","In progress"],["closed","Closed"]].map(([k, label]) => (
+          <button key={k} type="button" data-testid={`inq-filter-${k}`} onClick={() => setFilter(k)}
+            className={`text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border transition-colors inline-flex items-center gap-2 ${filter === k ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/15 text-white/60 hover:border-[#BF9972] hover:text-white"}`}>
+            {label}
+            <span className={`text-[10px] tabular-nums ${filter === k ? "text-[#D4AF37]" : "text-white/40"}`}>{counts[k]}</span>
+          </button>
+        ))}
+        <input
+          data-testid="inq-search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search name, email, phone, message…"
+          className="flex-1 min-w-[200px] bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-sm"
+        />
+      </div>
+
+      {filtered.length === 0 && <div className="text-white/50 text-sm py-12 text-center border border-white/5">No inquiries match this filter.</div>}
+
+      {filtered.map((inq) => {
+        const digits = waNumber(inq.customer_phone);
+        const waLink = digits ? `https://wa.me/${digits}?text=${encodeURIComponent(`Hi ${inq.customer_name}, thank you for your inquiry to Samrat Glass Emporium. `)}` : "";
+        const mailLink = inq.customer_email ? `mailto:${inq.customer_email}?subject=Re: Your inquiry to Samrat Glass Emporium` : "";
+        return (
+          <div key={inq.id} data-testid={`inq-${inq.id}`} className="border border-white/10 p-6 hover:border-white/20 transition-colors">
+            <div className="flex flex-wrap justify-between gap-4">
+              <div>
+                <div className="font-serif text-lg">{inq.customer_name}</div>
+                <div className="text-white/50 text-sm mt-1">
+                  {inq.customer_email && <span>{inq.customer_email}</span>}
+                  {inq.customer_phone && <span> · {inq.customer_phone}</span>}
+                </div>
+                <div className="text-xs text-white/40 mt-1">{new Date(inq.created_at).toLocaleString()}</div>
               </div>
-            ))}
+              <div className="flex flex-wrap items-center gap-2">
+                {waLink && (
+                  <a href={waLink} target="_blank" rel="noreferrer" data-testid={`inq-wa-${inq.id}`}
+                    className="text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-[#25D366]/50 text-[#25D366] hover:bg-[#25D366]/10">
+                    WhatsApp
+                  </a>
+                )}
+                {mailLink && (
+                  <a href={mailLink} data-testid={`inq-mail-${inq.id}`}
+                    className="text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-white/25 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]">
+                    Email
+                  </a>
+                )}
+                {["new","in_progress","closed"].map((s) => (
+                  <button key={s} onClick={() => setStatus(inq.id, s)} className={`text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border ${inq.status === s ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/15 text-white/60 hover:text-white"}`}>{s === "in_progress" ? "In progress" : s}</button>
+                ))}
+              </div>
+            </div>
+            {inq.message && <p className="mt-3 text-white/70 text-sm whitespace-pre-wrap">{inq.message}</p>}
+            {inq.items?.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {inq.items.map((i, k) => (
+                  <div key={k} className="flex justify-between text-sm border-t border-white/5 pt-2">
+                    <span>{i.name} × {i.quantity}</span>
+                    <span className="text-white/60">₹{(i.price * i.quantity).toLocaleString("en-IN")}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {inq.total > 0 && (
+              <div className="mt-3 text-right text-[#D4AF37] font-serif">Total: ₹{inq.total.toLocaleString("en-IN")}</div>
+            )}
           </div>
-          <div className="mt-3 text-right text-[#D4AF37] font-serif">Total: ₹{inq.total.toLocaleString("en-IN")}</div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MessagesAdmin({ messages }) {
+  const [q, setQ] = useState("");
+  const filtered = messages.filter((m) => {
+    if (!q.trim()) return true;
+    const needle = q.toLowerCase();
+    return `${m.name || ""} ${m.email || ""} ${m.subject || ""} ${m.message || ""}`.toLowerCase().includes(needle);
+  });
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3 mb-2">
+        <div className="text-[10px] uppercase tracking-[0.24em] text-white/50 px-3 py-1.5 border border-white/15">
+          {messages.length} total
         </div>
-      ))}
+        <input
+          data-testid="msg-search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search name, email, subject, message…"
+          className="flex-1 min-w-[200px] bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-sm"
+        />
+      </div>
+      {filtered.length === 0 && (
+        <div className="text-white/50 text-sm py-12 text-center border border-white/5">
+          {messages.length === 0 ? "No messages yet." : "No messages match this search."}
+        </div>
+      )}
+      {filtered.map((m) => {
+        const mailLink = m.email ? `mailto:${m.email}?subject=${encodeURIComponent(`Re: ${m.subject || "Your enquiry to Samrat Glass Emporium"}`)}` : "";
+        return (
+          <div key={m.id} className="border border-white/10 p-6 hover:border-white/20 transition-colors" data-testid={`msg-${m.id}`}>
+            <div className="flex flex-wrap justify-between items-start gap-4">
+              <div>
+                <div className="font-serif text-lg">{m.subject || "No subject"}</div>
+                <div className="text-white/50 text-sm mt-1">from {m.name} · <span className="text-white/70">{m.email}</span></div>
+                <div className="text-xs text-white/40 mt-1">{new Date(m.created_at).toLocaleString()}</div>
+              </div>
+              {mailLink && (
+                <a href={mailLink} data-testid={`msg-reply-${m.id}`}
+                  className="text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-white/25 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]">
+                  Reply by email
+                </a>
+              )}
+            </div>
+            <p className="mt-4 text-white/70 text-sm leading-relaxed whitespace-pre-wrap">{m.message}</p>
+          </div>
+        );
+      })}
     </div>
   );
 }
