@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { MapPin, ArrowUpRight, X } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
+import { buildProjectSlugs } from "../lib/slug";
 import SEO from "../components/SEO";
 
 /**
@@ -27,7 +28,7 @@ function Lightbox({ open, onClose, src, alt }) {
   );
 }
 
-function ProjectCard({ project, index }) {
+function ProjectCard({ project, index, slug }) {
   const [openIdx, setOpenIdx] = useState(null);
   const images = (project.images || []).filter(Boolean);
   const cover = images[0];
@@ -54,10 +55,17 @@ function ProjectCard({ project, index }) {
               <MapPin size={12} strokeWidth={1.5} /> {project.location}
             </div>
           )}
-          <h3 className="font-serif text-2xl md:text-3xl leading-tight text-white mb-4">{project.title}</h3>
+          <Link to={`/gallery/${slug}`} data-testid={`gallery-project-link-${index}`} className="group">
+            <h3 className="font-serif text-2xl md:text-3xl leading-tight text-white group-hover:text-[#D4AF37] transition-colors mb-4">{project.title}</h3>
+          </Link>
           {project.note && (
-            <p className="text-white/70 leading-relaxed text-sm md:text-[15px]">{project.note}</p>
+            <p className="text-white/70 leading-relaxed text-sm md:text-[15px] line-clamp-4">{project.note}</p>
           )}
+          <div className="mt-5">
+            <Link to={`/gallery/${slug}`} className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-[#D4AF37] hover:text-[#B5952F]">
+              View project <ArrowUpRight size={12} />
+            </Link>
+          </div>
           {rest.length > 0 && (
             <div className="mt-6 grid grid-cols-4 gap-2">
               {rest.slice(0, 4).map((img, i) => (
@@ -83,6 +91,7 @@ export default function Gallery() {
   const { hp, settings } = useSettings();
   const g = hp.gallery || {};
   const items = (g.items || []).filter((p) => (p?.title || "").trim() || (p?.images || []).some(Boolean));
+  const slugs = buildProjectSlugs(items);
 
   return (
     <div data-testid="page-gallery">
@@ -113,7 +122,7 @@ export default function Gallery() {
       <section className="max-w-6xl mx-auto px-6 py-10 md:py-16">
         {items.length > 0 ? (
           <div className="space-y-10 md:space-y-14">
-            {items.map((p, i) => <ProjectCard key={i} project={p} index={i} />)}
+            {items.map((p, i) => <ProjectCard key={i} project={p} index={i} slug={slugs[i]} />)}
           </div>
         ) : (
           <div className="border border-white/10 py-20 text-center text-white/50">

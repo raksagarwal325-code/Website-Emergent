@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { MapPin, ArrowUpRight } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
+import { buildProjectSlugs } from "../lib/slug";
 
 /**
  * Home-page preview of the /gallery projects.
@@ -15,6 +16,7 @@ export default function GalleryPreview() {
   const g = hp.gallery || {};
   const items = (g.items || []).filter((p) => (p?.title || "").trim() || (p?.images || []).some(Boolean));
   if (items.length === 0) return null;
+  const slugs = buildProjectSlugs(items);
   const preview = items.slice(0, 3);
 
   return (
@@ -47,7 +49,7 @@ export default function GalleryPreview() {
                 data-testid={`home-gallery-card-${i}`}
                 className="group border border-white/8 hover:border-[#D4AF37]/50 transition-colors bg-[#0e0510]"
               >
-                <Link to="/gallery" className="block">
+                <Link to={`/gallery/${slugs[i]}`} className="block">
                   <div className="aspect-[4/5] overflow-hidden bg-black">
                     {cover ? (
                       <img

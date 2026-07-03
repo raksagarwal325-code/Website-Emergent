@@ -19,6 +19,7 @@ import About from "@/pages/About";
 import Craft from "@/pages/Craft";
 import FAQ from "@/pages/FAQ";
 import Gallery from "@/pages/Gallery";
+import GalleryProject from "@/pages/GalleryProject";
 import LegalPage from "@/pages/LegalPage";
 import FloatingActions from "@/components/FloatingActions";
 import MobileReachStrip from "@/components/MobileReachStrip";
@@ -49,6 +50,7 @@ function App() {
               <Route path="/craft" element={<Craft />} />
               <Route path="/faq" element={<FAQ />} />
               <Route path="/gallery" element={<Gallery />} />
+              <Route path="/gallery/:slug" element={<GalleryProject />} />
               <Route path="/product/:id" element={<ProductDetail />} />
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/cart" element={<Cart />} />
