@@ -10,7 +10,7 @@ from typing import List, Optional
 
 import requests
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -20,6 +20,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
 from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E402
+from watermark import apply_watermark  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 
 # --- Setup ---
@@ -171,6 +172,13 @@ class Settings(BaseModel):
     pinterest_url: str = ""
     business_hours: str = "Mon – Sun: 10:00 AM – 8:00 PM"
     google_maps_url: str = "https://www.google.com/maps?cid=16850385744624001495"
+    watermark: dict = Field(default_factory=lambda: {
+        "enabled": True,
+        "opacity": 0.15,
+        "size_pct": 0.30,
+        "position": "center",
+        "adaptive_tone": True,
+    })
 
 
 class SettingsUpdate(BaseModel):
@@ -194,6 +202,7 @@ class SettingsUpdate(BaseModel):
     pinterest_url: Optional[str] = None
     business_hours: Optional[str] = None
     google_maps_url: Optional[str] = None
+    watermark: Optional[dict] = None
 
 
 # --- Helpers ---
@@ -448,6 +457,21 @@ async def google_reviews():
 
 
 # --- Uploads ---
+DEFAULT_WATERMARK = {
+    "enabled": True,
+    "opacity": 0.15,
+    "size_pct": 0.30,
+    "position": "center",
+    "adaptive_tone": True,
+}
+
+
+async def _get_watermark_settings() -> dict:
+    doc = await db.settings.find_one({"id": "settings"}, {"_id": 0, "watermark": 1})
+    wm = (doc or {}).get("watermark") or {}
+    return {**DEFAULT_WATERMARK, **wm}
+
+
 @api.post("/upload")
 async def upload_image(file: UploadFile = File(...)):
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -455,25 +479,49 @@ async def upload_image(file: UploadFile = File(...)):
     ext = (file.filename or "img.png").rsplit(".", 1)[-1].lower()
     if ext not in MIME_TYPES:
         ext = "png"
-    path = f"{APP_NAME}/products/{uuid.uuid4()}.{ext}"
     data = await file.read()
     if len(data) > 25 * 1024 * 1024:
         raise HTTPException(400, "Image too large — max 25MB per file. Please compress or resize.")
-    result = put_object(path, data, file.content_type)
+
+    file_id = str(uuid.uuid4())
+    original_path = f"{APP_NAME}/originals/{file_id}.{ext}"
+    public_path = f"{APP_NAME}/products/{file_id}.{ext}"
+
+    # Always keep the untouched original (admin-only).
+    put_object(original_path, data, file.content_type)
+
+    # Generate the public/watermarked variant based on current settings.
+    wm = await _get_watermark_settings()
+    if wm.get("enabled"):
+        public_bytes = apply_watermark(
+            data,
+            opacity=wm.get("opacity", 0.15),
+            size_pct=wm.get("size_pct", 0.30),
+            adaptive_tone=wm.get("adaptive_tone", True),
+            content_type=file.content_type,
+        )
+    else:
+        public_bytes = data
+    result = put_object(public_path, public_bytes, file.content_type)
+
     await db.files.insert_one({
-        "id": str(uuid.uuid4()),
+        "id": file_id,
         "storage_path": result["path"],
+        "original_path": original_path,
         "original_filename": file.filename,
         "content_type": file.content_type,
         "size": result["size"],
+        "watermarked": bool(wm.get("enabled")),
         "created_at": now_iso(),
     })
-    # Return a URL the frontend can use directly
     return {"path": result["path"], "url": f"/api/files/{result['path']}"}
 
 
 @api.get("/files/{path:path}")
 async def serve_file(path: str):
+    # Private/admin originals shouldn't leak — block direct fetches.
+    if "/originals/" in f"/{path}":
+        raise HTTPException(404, "Not found")
     record = await db.files.find_one({"storage_path": path}, {"_id": 0})
     try:
         data, content_type = get_object(path)
@@ -482,6 +530,77 @@ async def serve_file(path: str):
         raise HTTPException(404, "File not found")
     ct = (record or {}).get("content_type") or content_type
     return Response(content=data, media_type=ct)
+
+
+# --- Watermark admin endpoints ---
+@api.post("/watermark/preview")
+async def watermark_preview(
+    file: UploadFile = File(...),
+    opacity: float = Form(0.15),
+    size_pct: float = Form(0.30),
+    adaptive_tone: bool = Form(True),
+):
+    """Return a watermarked preview PNG for the given file & settings.
+    Does NOT persist anything. Used by the Admin settings panel."""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(400, "Only images allowed")
+    data = await file.read()
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(400, "Preview image too large — max 25MB.")
+    stamped = apply_watermark(
+        data,
+        opacity=opacity,
+        size_pct=size_pct,
+        adaptive_tone=adaptive_tone,
+        content_type=file.content_type,
+    )
+    return Response(content=stamped, media_type=file.content_type or "image/png")
+
+
+@api.post("/watermark/reprocess")
+async def watermark_reprocess():
+    """Regenerate the public watermarked variant for every uploaded image
+    using the ORIGINAL bytes and the current watermark settings.
+
+    Only files with a stored `original_path` (uploaded after the watermark
+    feature was enabled) are eligible. Returns a small stats summary."""
+    wm = await _get_watermark_settings()
+    files = await db.files.find(
+        {"original_path": {"$exists": True, "$ne": None}}, {"_id": 0}
+    ).to_list(5000)
+
+    processed = 0
+    skipped = 0
+    failed = 0
+    for f in files:
+        try:
+            orig_path = f.get("original_path")
+            public_path = f.get("storage_path")
+            if not orig_path or not public_path:
+                skipped += 1
+                continue
+            data, ct = get_object(orig_path)
+            if wm.get("enabled"):
+                out = apply_watermark(
+                    data,
+                    opacity=wm.get("opacity", 0.15),
+                    size_pct=wm.get("size_pct", 0.30),
+                    adaptive_tone=wm.get("adaptive_tone", True),
+                    content_type=ct or f.get("content_type") or "image/png",
+                )
+            else:
+                out = data
+            put_object(public_path, out, ct or f.get("content_type") or "image/png")
+            await db.files.update_one(
+                {"storage_path": public_path},
+                {"$set": {"watermarked": bool(wm.get("enabled"))}},
+            )
+            processed += 1
+        except Exception as e:
+            logger.error(f"Reprocess failed for {f.get('storage_path')}: {e}")
+            failed += 1
+
+    return {"processed": processed, "skipped": skipped, "failed": failed, "total": len(files)}
 
 
 # --- Export CSV ---

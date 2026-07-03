@@ -92,7 +92,12 @@ export default function Admin() {
 
       {tab === "messages" && <MessagesAdmin messages={messages} />}
 
-      {tab === "settings" && settings && <SettingsAdmin settings={settings} onSave={refresh} />}
+      {tab === "settings" && settings && (
+        <div className="space-y-8">
+          <SettingsAdmin settings={settings} onSave={refresh} />
+          <WatermarkAdmin settings={settings} onSave={refresh} />
+        </div>
+      )}
     </div>
   );
 }
@@ -563,6 +568,204 @@ function SettingsAdmin({ settings, onSave }) {
         Save settings
       </button>
     </form>
+  );
+}
+
+const DEFAULT_WATERMARK = {
+  enabled: true,
+  opacity: 0.15,
+  size_pct: 0.30,
+  position: "center",
+  adaptive_tone: true,
+};
+
+function WatermarkAdmin({ settings, onSave }) {
+  const [wm, setWm] = useState({ ...DEFAULT_WATERMARK, ...(settings?.watermark || {}) });
+  const [previewFile, setPreviewFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const debounceRef = React.useRef(null);
+
+  const runPreview = React.useCallback(async () => {
+    if (!previewFile) return;
+    try {
+      const fd = new FormData();
+      fd.append("file", previewFile);
+      fd.append("opacity", String(wm.opacity));
+      fd.append("size_pct", String(wm.size_pct));
+      fd.append("adaptive_tone", wm.adaptive_tone ? "true" : "false");
+      const API = process.env.REACT_APP_BACKEND_URL;
+      const res = await fetch(`${API}/api/watermark/preview`, { method: "POST", body: fd });
+      if (!res.ok) throw new Error(`Preview failed (${res.status})`);
+      const blob = await res.blob();
+      setPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
+    } catch (e) { toast.error(e.message || "Preview failed"); }
+  }, [previewFile, wm.opacity, wm.size_pct, wm.adaptive_tone]);
+
+  // Debounced preview whenever sliders/toggles change
+  useEffect(() => {
+    if (!previewFile) return;
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(runPreview, 250);
+    return () => clearTimeout(debounceRef.current);
+  }, [previewFile, wm.opacity, wm.size_pct, wm.adaptive_tone, runPreview]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.updateSettings({ watermark: wm });
+      toast.success("Watermark settings saved");
+      onSave();
+    } catch { toast.error("Save failed"); }
+    finally { setBusy(false); }
+  };
+
+  const reprocess = async () => {
+    if (!window.confirm("Regenerate watermarks for every uploaded image? This may take a moment.")) return;
+    setBusy(true);
+    try {
+      const API = process.env.REACT_APP_BACKEND_URL;
+      const res = await fetch(`${API}/api/watermark/reprocess`, { method: "POST" });
+      const j = await res.json();
+      toast.success(`Reprocessed ${j.processed} / ${j.total} images (skipped ${j.skipped}, failed ${j.failed})`);
+    } catch { toast.error("Reprocess failed"); }
+    finally { setBusy(false); }
+  };
+
+  const onFile = (e) => {
+    const f = e.target.files?.[0];
+    if (f) setPreviewFile(f);
+  };
+
+  return (
+    <div className="max-w-3xl space-y-6 border border-white/10 p-8" data-testid="watermark-admin">
+      <div>
+        <div className="eyebrow text-[#D4AF37]">Image watermark</div>
+        <h3 className="font-serif text-xl mt-1">Centered logo watermark for uploaded images</h3>
+        <p className="text-white/50 text-sm mt-1">
+          Applied automatically to every new product & gallery image you upload.
+          Originals are kept privately for admin use only.
+        </p>
+      </div>
+
+      <label className="flex items-center gap-3 text-sm text-white/85">
+        <input
+          type="checkbox"
+          checked={!!wm.enabled}
+          onChange={(e) => setWm({ ...wm, enabled: e.target.checked })}
+          data-testid="wm-enabled"
+        />
+        Enable watermark on all future uploads
+      </label>
+
+      <fieldset disabled={!wm.enabled} className="space-y-5 disabled:opacity-40">
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs uppercase tracking-[0.2em] text-white/60">Opacity</label>
+            <span className="text-xs text-[#D4AF37] font-mono">{Math.round(wm.opacity * 100)}%</span>
+          </div>
+          <input
+            type="range" min="0.05" max="0.6" step="0.01"
+            value={wm.opacity}
+            onChange={(e) => setWm({ ...wm, opacity: parseFloat(e.target.value) })}
+            className="w-full accent-[#D4AF37]"
+            data-testid="wm-opacity"
+          />
+          <p className="text-[11px] text-white/40 mt-1">Recommended: 12–20% — visible but never harsh.</p>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs uppercase tracking-[0.2em] text-white/60">Size (% of image width)</label>
+            <span className="text-xs text-[#D4AF37] font-mono">{Math.round(wm.size_pct * 100)}%</span>
+          </div>
+          <input
+            type="range" min="0.15" max="0.6" step="0.01"
+            value={wm.size_pct}
+            onChange={(e) => setWm({ ...wm, size_pct: parseFloat(e.target.value) })}
+            className="w-full accent-[#D4AF37]"
+            data-testid="wm-size"
+          />
+          <p className="text-[11px] text-white/40 mt-1">Recommended: 25–35% — hard to crop out without losing the product.</p>
+        </div>
+
+        <div>
+          <label className="text-xs uppercase tracking-[0.2em] text-white/60 mb-1 block">Position</label>
+          <div className="inline-flex border border-white/15 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setWm({ ...wm, position: "center" })}
+              className={`px-4 py-2 text-xs uppercase tracking-[0.2em] ${wm.position === "center" ? "bg-[#D4AF37] text-black" : "text-white/60 hover:text-white"}`}
+              data-testid="wm-pos-center"
+            >
+              Center (recommended)
+            </button>
+          </div>
+          <p className="text-[11px] text-white/40 mt-1">Center placement can&apos;t be cropped out — side/corner watermarks always can.</p>
+        </div>
+
+        <label className="flex items-center gap-3 text-sm text-white/85">
+          <input
+            type="checkbox"
+            checked={!!wm.adaptive_tone}
+            onChange={(e) => setWm({ ...wm, adaptive_tone: e.target.checked })}
+            data-testid="wm-adaptive"
+          />
+          Adaptive tone (white on dark photos · dark grey on light photos)
+        </label>
+      </fieldset>
+
+      {/* Preview */}
+      <div className="border border-white/10 p-5 space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <div className="text-xs uppercase tracking-[0.24em] text-[#BF9972]">Live preview</div>
+            <p className="text-[11px] text-white/40 mt-1">Upload any sample product photo — the preview updates as you drag the sliders.</p>
+          </div>
+          <label className="inline-flex items-center gap-2 border border-[#D4AF37]/60 hover:border-[#D4AF37] text-[#D4AF37] px-4 py-2 uppercase text-xs tracking-[0.24em] cursor-pointer">
+            <Upload size={14} /> Choose sample
+            <input type="file" accept="image/*" onChange={onFile} className="hidden" data-testid="wm-preview-file" />
+          </label>
+        </div>
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt="Watermark preview"
+            className="w-full max-h-[520px] object-contain bg-black/40"
+            data-testid="wm-preview-image"
+          />
+        ) : (
+          <div className="w-full aspect-[4/3] flex items-center justify-center bg-black/30 border border-dashed border-white/10 text-white/40 text-sm">
+            Choose a sample image to see the watermark preview
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy}
+          className="bg-[#D4AF37] text-black px-8 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-50"
+          data-testid="wm-save"
+        >
+          Save watermark settings
+        </button>
+        <button
+          type="button"
+          onClick={reprocess}
+          disabled={busy}
+          className="border border-white/20 hover:border-[#D4AF37] hover:text-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em] disabled:opacity-50"
+          data-testid="wm-reprocess"
+        >
+          Apply to all existing uploads
+        </button>
+      </div>
+      <p className="text-[11px] text-white/35">
+        Reprocess re-generates watermarks for images uploaded through this Admin panel (using their stored original).
+        Externally-linked images (Unsplash/CDN URLs) aren&apos;t touched — replace them by re-uploading.
+      </p>
+    </div>
   );
 }
 
