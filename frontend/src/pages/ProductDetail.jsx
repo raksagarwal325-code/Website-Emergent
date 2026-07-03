@@ -6,6 +6,7 @@ import { useCatalog } from "../context/CatalogContext";
 import { toast } from "sonner";
 import SEO from "../components/SEO";
 import SchemaLD from "../components/SchemaLD";
+import SeenInProjects from "../components/SeenInProjects";
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -182,6 +183,9 @@ export default function ProductDetail() {
 
       {/* Tabbed details */}
       <ProductTabs product={product} settings={settings} waLink={waLink} />
+
+      {/* Seen in gallery projects (auto-hides when this product isn't tagged in any project) */}
+      <SeenInProjects productId={product.id} />
 
       {/* Reviews */}
       <section className="mt-24 border-t border-white/10 pt-16">
