@@ -333,6 +333,8 @@ function SectionEditor({ sectionKey, data, patch }) {
           <Text label="Founder name" value={founder.name} onChange={(v)=>setFounder("name",v)} data-testid="hp-about-founder-name" />
           <ImagePicker label="Founder photo (shown instead of the initial circle if set)" value={founder.image} onChange={(v)=>setFounder("image",v)} data-testid="hp-about-founder-image" />
           <TextArea label="Founder description" value={founder.description} onChange={(v)=>setFounder("description",v)} rows={4} data-testid="hp-about-founder-desc" />
+          <TextArea label="Founder quote (shown as an italic pull-quote below the photo — leave blank to hide)" value={founder.quote} onChange={(v)=>setFounder("quote",v)} rows={3} data-testid="hp-about-founder-quote" />
+          <Text label="Signature line (e.g. — Mr. Sunil Kumar Agarwal · Founder, Since 1981)" value={founder.signature} onChange={(v)=>setFounder("signature",v)} data-testid="hp-about-founder-signature" />
 
           <div className="eyebrow mb-1 mt-6">Stats (4 tiles)</div>
           <ListEditor items={data.stats || []} onChange={(v)=>set("stats",v)}

@@ -75,6 +75,20 @@ export default function About() {
             <p className="text-white/70 leading-relaxed">{founder.description}</p>
           </div>
         </div>
+
+        {founder.quote && (
+          <div data-testid="founder-quote-block" className="relative mt-6 md:mt-8 max-w-3xl mx-auto text-center px-6 md:px-10 py-10 md:py-12">
+            <span aria-hidden className="absolute left-0 top-0 font-serif text-[6rem] md:text-[8rem] leading-none text-[#D4AF37]/25 select-none">&ldquo;</span>
+            <span aria-hidden className="absolute right-0 bottom-0 font-serif text-[6rem] md:text-[8rem] leading-none text-[#D4AF37]/25 select-none rotate-180">&ldquo;</span>
+            <p className="font-serif italic text-xl md:text-2xl leading-relaxed text-white/85">
+              {founder.quote}
+            </p>
+            <div className="mx-auto mt-6 h-px w-16 bg-[#D4AF37]/60"></div>
+            {founder.signature && (
+              <div className="mt-4 text-[11px] uppercase tracking-[0.32em] text-[#BF9972]">{founder.signature}</div>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Stats */}
