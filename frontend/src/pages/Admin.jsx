@@ -6,7 +6,7 @@ import AdminHomepage from "../components/AdminHomepage";
 
 const emptyProduct = {
   name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "USD",
-  short_description: "", description: "", images: [], tags: [], specs: {}, stock: 0, featured: false, badge: "", fixed_price: false,
+  short_description: "", description: "", images: [], tags: [], specs: {}, stock: 0, featured: false, badge: "", fixed_price: false, price_display: "starting_from",
 };
 
 export default function Admin() {
@@ -101,12 +101,32 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
   const [form, setForm] = useState(emptyProduct);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => { setForm(editing ? { ...emptyProduct, ...editing } : emptyProduct); }, [editing]);
+  useEffect(() => {
+    if (!editing) { setForm(emptyProduct); return; }
+    // Backfill price_display from legacy fixed_price when older products don't have it set.
+    const price_display =
+      editing.price_display ||
+      (editing.fixed_price ? "fixed" : "starting_from");
+    setForm({ ...emptyProduct, ...editing, price_display });
+  }, [editing]);
 
   const submit = async (e) => {
     e.preventDefault();
     try {
-      const payload = { ...form, price: parseFloat(form.price) || 0, stock: parseInt(form.stock) || 0 };
+      const cmp = form.compare_at_price === "" || form.compare_at_price == null
+        ? null
+        : parseFloat(form.compare_at_price);
+      const price = form.price_display === "on_request"
+        ? 0
+        : parseFloat(form.price) || 0;
+      const payload = {
+        ...form,
+        price,
+        compare_at_price: Number.isFinite(cmp) && cmp > 0 ? cmp : null,
+        stock: parseInt(form.stock) || 0,
+        price_display: form.price_display || "starting_from",
+        fixed_price: form.price_display === "fixed", // legacy sync
+      };
       if (editing) await api.updateProduct(editing.id, payload);
       else await api.createProduct(payload);
       toast.success(editing ? "Product updated" : "Product created");
@@ -177,9 +197,92 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
             </div>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <input required type="number" step="0.01" data-testid="p-price" placeholder="Price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
-          <input type="number" data-testid="p-stock" placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
+        {/* Pricing block */}
+        <div className="border border-white/10 p-4 bg-black/20 space-y-3">
+          <div className="eyebrow text-[#D4AF37]">Pricing</div>
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-[0.22em] text-white/50 mb-2">Price display</label>
+            <select
+              data-testid="p-price-display"
+              value={form.price_display || "starting_from"}
+              onChange={(e) => setForm({ ...form, price_display: e.target.value })}
+              className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm"
+            >
+              <option value="starting_from">Starting from ₹X (default — good for handmade/bespoke)</option>
+              <option value="fixed">Fixed price ₹X (locked, no “From” prefix)</option>
+              <option value="on_request">Price on request (custom & bespoke pieces)</option>
+            </select>
+          </div>
+
+          {form.price_display !== "on_request" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] uppercase tracking-[0.22em] text-white/50 mb-1">Selling price ₹ *</label>
+                <input
+                  required
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  data-testid="p-price"
+                  placeholder="e.g. 25000"
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-[0.22em] text-white/50 mb-1">
+                  MRP / Original ₹ <span className="text-white/35 lowercase tracking-normal">(optional)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  data-testid="p-compare-at-price"
+                  placeholder="Only if higher than selling price"
+                  value={form.compare_at_price ?? ""}
+                  onChange={(e) => setForm({ ...form, compare_at_price: e.target.value })}
+                  className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Discount preview */}
+          {form.price_display !== "on_request" &&
+            Number(form.compare_at_price) > 0 &&
+            Number(form.compare_at_price) > Number(form.price) && (
+              <div className="text-[11px] text-[#BF9972]" data-testid="p-discount-preview">
+                Will show <span className="text-white/40 line-through mx-1">₹{Number(form.compare_at_price).toLocaleString("en-IN")}</span>
+                — a{" "}
+                {Math.round(
+                  ((Number(form.compare_at_price) - Number(form.price)) / Number(form.compare_at_price)) * 100
+                )}
+                % discount badge on the card.
+              </div>
+            )}
+          {form.price_display !== "on_request" &&
+            form.compare_at_price !== "" &&
+            form.compare_at_price != null &&
+            Number(form.compare_at_price) > 0 &&
+            Number(form.compare_at_price) <= Number(form.price) && (
+              <div className="text-[11px] text-white/40 italic">
+                MRP is ≤ selling price — the crossed-out price is hidden automatically. Leave MRP blank to keep it clean.
+              </div>
+            )}
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-[0.22em] text-white/50 mb-1">Stock</label>
+            <input
+              type="number"
+              data-testid="p-stock"
+              placeholder="e.g. 10"
+              value={form.stock}
+              onChange={(e) => setForm({ ...form, stock: e.target.value })}
+              className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm"
+            />
+          </div>
         </div>
         <input data-testid="p-short-desc" placeholder="Short description" value={form.short_description} onChange={(e) => setForm({ ...form, short_description: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
         <textarea rows="4" data-testid="p-desc" placeholder="Full description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm resize-none" />
@@ -187,10 +290,6 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
         <label className="inline-flex items-center gap-2 text-sm text-white/80">
           <input data-testid="p-featured" type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} />
           Featured
-        </label>
-        <label className="inline-flex items-center gap-2 text-sm text-white/80 ml-6">
-          <input data-testid="p-fixed-price" type="checkbox" checked={!!form.fixed_price} onChange={(e) => setForm({ ...form, fixed_price: e.target.checked })} />
-          Fixed price <span className="text-[10px] text-white/40">(hides the &ldquo;From&rdquo; prefix on cards — useful for stocked items with a locked price)</span>
         </label>
 
         <div>

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Heart, ShoppingBag, ArrowUpRight, Sparkles } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
 import { useSettings } from "../context/SettingsContext";
-import { api, formatPrice } from "../lib/api";
+import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { toast } from "sonner";
 
 // Elegant fallback: a subtle gold "S" monogram on solid black
@@ -107,17 +107,42 @@ export default function ProductCard({ product, index = 0 }) {
         <div className="text-[10px] uppercase tracking-widest text-white/40">SKU · {product.sku}</div>
         <div className="flex items-baseline justify-between pt-1">
           <div className="flex items-baseline gap-2 min-w-0">
-            <span className="text-[#D4AF37] font-serif text-lg truncate">
-              {product.fixed_price ? formatPrice(product.price) : (
+            {(() => {
+              const p = formatProductPrice(product);
+              if (p.onRequest) {
+                return (
+                  <span
+                    data-testid={`product-price-${product.id}`}
+                    className="text-[#D4AF37] font-serif text-base italic truncate"
+                  >
+                    Price on request
+                  </span>
+                );
+              }
+              return (
                 <>
-                  <span className="text-[10px] uppercase tracking-[0.24em] text-[#BF9972] mr-1 font-sans not-italic">From</span>
-                  {formatPrice(product.price)}
+                  <span
+                    data-testid={`product-price-${product.id}`}
+                    className="text-[#D4AF37] font-serif text-lg truncate"
+                  >
+                    {p.label && (
+                      <span className="text-[10px] uppercase tracking-[0.24em] text-[#BF9972] mr-1 font-sans not-italic">
+                        {p.label}
+                      </span>
+                    )}
+                    {p.primary}
+                  </span>
+                  {p.compareAt && (
+                    <span
+                      data-testid={`product-mrp-${product.id}`}
+                      className="text-white/40 line-through text-xs flex-shrink-0"
+                    >
+                      {p.compareAt}
+                    </span>
+                  )}
                 </>
-              )}
-            </span>
-            {product.compare_at_price && (
-              <span className="text-white/40 line-through text-xs flex-shrink-0">{formatPrice(product.compare_at_price)}</span>
-            )}
+              );
+            })()}
           </div>
         </div>
         <div className="pt-3 mt-auto grid grid-cols-2 gap-2">

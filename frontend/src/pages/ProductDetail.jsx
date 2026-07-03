@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, MapPin } from "lucide-react";
-import { api, formatPrice } from "../lib/api";
+import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { useCatalog } from "../context/CatalogContext";
 import { toast } from "sonner";
 import SEO from "../components/SEO";
@@ -133,16 +133,30 @@ export default function ProductDetail() {
           </div>
 
           <div className="flex items-baseline gap-3 flex-wrap">
-            {!product.fixed_price && (
-              <span className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">From</span>
-            )}
-            <span data-testid="product-price" className="font-serif text-3xl text-[#D4AF37]">{formatPrice(product.price)}</span>
-            {product.compare_at_price && (
-              <span className="text-white/40 line-through">{formatPrice(product.compare_at_price)}</span>
-            )}
-            {!product.fixed_price && (
-              <span className="text-[11px] text-white/40 italic ml-1">· final quotation on inquiry</span>
-            )}
+            {(() => {
+              const p = formatProductPrice(product);
+              if (p.onRequest) {
+                return (
+                  <span data-testid="product-price" className="font-serif text-3xl text-[#D4AF37] italic">
+                    Price on request
+                  </span>
+                );
+              }
+              return (
+                <>
+                  {p.label && (
+                    <span className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">{p.label}</span>
+                  )}
+                  <span data-testid="product-price" className="font-serif text-3xl text-[#D4AF37]">{p.primary}</span>
+                  {p.compareAt && (
+                    <span data-testid="product-mrp" className="text-white/40 line-through">{p.compareAt}</span>
+                  )}
+                  {p.label && (
+                    <span className="text-[11px] text-white/40 italic ml-1">· final quotation on inquiry</span>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           <p className="text-white/70 leading-relaxed">{product.short_description}</p>

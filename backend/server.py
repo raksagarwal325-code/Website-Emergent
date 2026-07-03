@@ -58,6 +58,7 @@ class Product(BaseModel):
     featured: bool = False
     badge: str = ""
     fixed_price: bool = False
+    price_display: str = "starting_from"  # starting_from | fixed | on_request
     rating: float = 0.0
     review_count: int = 0
     created_at: str = Field(default_factory=now_iso)
@@ -80,6 +81,7 @@ class ProductCreate(BaseModel):
     featured: bool = False
     badge: str = ""
     fixed_price: bool = False
+    price_display: str = "starting_from"
 
 
 class Review(BaseModel):

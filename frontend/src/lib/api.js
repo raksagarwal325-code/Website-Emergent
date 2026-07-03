@@ -72,12 +72,40 @@ export const formatPhone = (raw) => {
   return raw;
 };
 
-// Luxury "From ₹X" display — used on discovery views (cards, product detail, wishlist, catalogue).
-// Skipped when product.fixed_price === true or a plain formatted price is passed in.
+// Luxury price rendering — single source of truth for cards, product detail,
+// wishlist, catalogue and gallery lists. Returns a structured object so views
+// can style each part however they want.
+//
+//   product.price_display: "starting_from" (default) | "fixed" | "on_request"
+//   product.fixed_price: legacy boolean — mapped to "fixed" when set.
+//   product.compare_at_price: only shown if > 0 AND > product.price.
+export const formatProductPrice = (product, symbol = "₹") => {
+  if (!product) return { onRequest: false, label: null, primary: "", compareAt: null };
+
+  // Resolve display mode with legacy fallback
+  let mode = product.price_display;
+  if (!mode) mode = product.fixed_price ? "fixed" : "starting_from";
+
+  if (mode === "on_request") {
+    return { onRequest: true, label: null, primary: "Price on request", compareAt: null };
+  }
+
+  const primary = product.price != null ? formatPrice(product.price, symbol) : "";
+  const label = mode === "fixed" ? null : "From";
+
+  const cmp = Number(product.compare_at_price);
+  const showCompare =
+    Number.isFinite(cmp) && cmp > 0 && Number(product.price) > 0 && cmp > Number(product.price);
+  const compareAt = showCompare ? formatPrice(cmp, symbol) : null;
+
+  return { onRequest: false, label, primary, compareAt };
+};
+
+// Legacy plain-text helper kept for print/PDF views.
 export const formatLuxuryPrice = (product, symbol = "₹") => {
-  if (!product || product.price == null) return "";
-  const base = formatPrice(product.price, symbol);
-  return product.fixed_price ? base : `From ${base}`;
+  const p = formatProductPrice(product, symbol);
+  if (p.onRequest) return "Price on request";
+  return p.label ? `${p.label} ${p.primary}` : p.primary;
 };
 
 export default api;

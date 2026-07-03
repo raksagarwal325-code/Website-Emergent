@@ -33,7 +33,23 @@ export default function Favorites() {
                 <div className="p-5 space-y-1">
                   <div className="eyebrow">{p.category}</div>
                   <div className="font-serif text-lg">{p.name}</div>
-                  <div className="text-white/70">{p.fixed_price ? formatPrice(p.price) : <><span className="text-[10px] uppercase tracking-[0.22em] text-[#BF9972] mr-1">From</span>{formatPrice(p.price)}</>}</div>
+                  <div className="text-white/70">
+                    {(() => {
+                      const fp = formatProductPrice(p);
+                      if (fp.onRequest) return <span className="italic text-[#BF9972]">Price on request</span>;
+                      return (
+                        <>
+                          {fp.label && (
+                            <span className="text-[10px] uppercase tracking-[0.22em] text-[#BF9972] mr-1">{fp.label}</span>
+                          )}
+                          {fp.primary}
+                          {fp.compareAt && (
+                            <span className="text-white/35 line-through text-xs ml-2">{fp.compareAt}</span>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
               </Link>
               <button

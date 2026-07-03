@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { api, formatPrice } from "../lib/api";
+import { api, formatPrice, formatProductPrice } from "../lib/api";
 import html2pdf from "html2pdf.js";
 
 export default function Catalogue() {
@@ -190,9 +190,19 @@ export default function Catalogue() {
                   <h3 className="font-serif text-lg mt-1 leading-snug">{p.name}</h3>
                   <div className="text-[10px] text-white/40 mt-0.5">SKU · {p.sku}</div>
                   <div className="mt-2 flex items-baseline gap-2 flex-wrap">
-                    {!p.fixed_price && <span className="text-[9px] uppercase tracking-[0.22em] text-[#BF9972]">From</span>}
-                    <span className="text-[#D4AF37] font-serif text-lg">{formatPrice(p.price)}</span>
-                    {p.compare_at_price && <span className="text-white/40 line-through text-xs">{formatPrice(p.compare_at_price)}</span>}
+                    {(() => {
+                      const fp = formatProductPrice(p);
+                      if (fp.onRequest) {
+                        return <span className="text-[#D4AF37] font-serif text-base italic">Price on request</span>;
+                      }
+                      return (
+                        <>
+                          {fp.label && <span className="text-[9px] uppercase tracking-[0.22em] text-[#BF9972]">{fp.label}</span>}
+                          <span className="text-[#D4AF37] font-serif text-lg">{fp.primary}</span>
+                          {fp.compareAt && <span className="text-white/40 line-through text-xs">{fp.compareAt}</span>}
+                        </>
+                      );
+                    })()}
                   </div>
                   {p.short_description && <p className="text-white/70 text-xs mt-2 leading-relaxed">{p.short_description}</p>}
                   {p.specs && Object.keys(p.specs).length > 0 && (

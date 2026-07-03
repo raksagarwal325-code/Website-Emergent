@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { MapPin, ArrowLeft, X, ChevronLeft, ChevronRight, ArrowUpRight, ShoppingBag } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { useCatalog } from "../context/CatalogContext";
-import { api, formatPrice } from "../lib/api";
+import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { findProjectBySlug, buildProjectSlugs } from "../lib/slug";
 import SEO from "../components/SEO";
 import { toast } from "sonner";
@@ -193,9 +193,20 @@ export default function GalleryProject() {
                       <div className="eyebrow truncate">{p.category}</div>
                       <Link to={`/product/${p.id}`} className="font-serif text-lg leading-snug text-white group-hover:text-[#D4AF37] transition-colors line-clamp-2 mt-2 min-h-[3rem]">{p.name}</Link>
                       {p.short_description && <p className="text-xs text-white/50 mt-2 line-clamp-2">{p.short_description}</p>}
-                      <div className="mt-3 flex items-baseline gap-2">
-                        {!p.fixed_price && <span className="text-[10px] uppercase tracking-[0.22em] text-[#BF9972]">From</span>}
-                        <span className="text-[#D4AF37] font-serif text-lg">{formatPrice(p.price)}</span>
+                      <div className="mt-3 flex items-baseline gap-2 flex-wrap">
+                        {(() => {
+                          const fp = formatProductPrice(p);
+                          if (fp.onRequest) {
+                            return <span className="text-[#D4AF37] font-serif text-base italic">Price on request</span>;
+                          }
+                          return (
+                            <>
+                              {fp.label && <span className="text-[10px] uppercase tracking-[0.22em] text-[#BF9972]">{fp.label}</span>}
+                              <span className="text-[#D4AF37] font-serif text-lg">{fp.primary}</span>
+                              {fp.compareAt && <span className="text-white/40 line-through text-xs">{fp.compareAt}</span>}
+                            </>
+                          );
+                        })()}
                       </div>
                       <div className="mt-auto pt-4 grid grid-cols-2 gap-2">
                         <button onClick={handleAdd} data-testid={`project-product-add-${p.id}`} className="inline-flex items-center justify-center gap-1 border border-white/20 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/80 px-2 py-2.5 text-[10px] uppercase tracking-[0.16em] transition-colors">
