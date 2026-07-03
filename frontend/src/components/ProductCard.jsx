@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Heart, ShoppingBag, ArrowUpRight } from "lucide-react";
+import { Heart, ShoppingBag, ArrowUpRight, Sparkles } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
+import { useSettings } from "../context/SettingsContext";
 import { api, formatPrice } from "../lib/api";
 import { toast } from "sonner";
 
@@ -31,8 +32,17 @@ function ProductPlaceholder({ name }) {
 
 export default function ProductCard({ product, index = 0 }) {
   const { toggleFavorite, isFavorite, addToCart } = useCatalog();
+  const { hp } = useSettings();
   const fav = isFavorite(product.id);
   const img = api.resolveImage(product.images?.[0]);
+
+  const projectCount = useMemo(() => {
+    const items = hp?.gallery?.items || [];
+    return items.reduce(
+      (n, it) => n + ((it.products || []).includes(product.id) ? 1 : 0),
+      0
+    );
+  }, [hp, product.id]);
 
   const handleAdd = (e) => {
     e.preventDefault();
@@ -70,11 +80,21 @@ export default function ProductCard({ product, index = 0 }) {
       </button>
 
       <Link to={`/product/${product.id}`} className="block" data-testid={`product-link-${product.id}`}>
-        <div className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center">
+        <div className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center relative">
           {img ? (
             <img src={img} alt={product.name} className="product-image w-full h-full object-cover opacity-95 group-hover:opacity-100" loading="lazy" />
           ) : (
             <ProductPlaceholder name={product.name} />
+          )}
+          {projectCount > 0 && (
+            <div
+              data-testid={`product-projects-badge-${product.id}`}
+              className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 border border-[#D4AF37]/40 bg-black/70 backdrop-blur-sm px-2.5 py-1 text-[9px] uppercase tracking-[0.22em] text-[#D4AF37]"
+              title={`Featured in ${projectCount} real installation${projectCount === 1 ? "" : "s"}`}
+            >
+              <Sparkles size={10} strokeWidth={1.6} />
+              Featured in {projectCount} project{projectCount === 1 ? "" : "s"}
+            </div>
           )}
         </div>
       </Link>
