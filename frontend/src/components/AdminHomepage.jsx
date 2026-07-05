@@ -80,6 +80,60 @@ const ProductPicker = ({ label, value, onChange, "data-testid": tid }) => {
   );
 };
 
+const SingleProductPicker = ({ label, value, onChange, "data-testid": tid }) => {
+  const [products, setProducts] = useState([]);
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  useEffect(() => { api.listProducts().then(setProducts).catch(() => {}); }, []);
+  const selected = products.find((p) => p.id === value);
+  const filtered = products.filter((p) => {
+    if (!q.trim()) return true;
+    const needle = q.toLowerCase();
+    return `${p.name} ${p.sku} ${p.category}`.toLowerCase().includes(needle);
+  });
+  return (
+    <div data-testid={tid}>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+      {selected ? (
+        <div className="flex items-center gap-2 border border-[#D4AF37]/40 bg-black/30 px-3 py-2">
+          <span className="flex-1 min-w-0">
+            <span className="text-sm text-[#D4AF37] truncate block">{selected.name}</span>
+            <span className="text-[10px] uppercase tracking-widest text-white/40">{selected.category} · {selected.sku}</span>
+          </span>
+          <button type="button" onClick={() => { onChange(""); setOpen(true); }} className="text-[10px] uppercase tracking-widest text-white/50 hover:text-red-400">
+            Change
+          </button>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setOpen((v) => !v)}
+          className="w-full text-left border border-dashed border-white/20 hover:border-[#D4AF37]/60 text-white/50 text-xs px-3 py-2">
+          {open ? "Search below…" : "Link a product from catalog"}
+        </button>
+      )}
+      {(!selected || open) && (
+        <div className="mt-2">
+          <input value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Search products by name, SKU, category…"
+            className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-xs mb-2" />
+          <div className="max-h-52 overflow-y-auto border border-white/10 divide-y divide-white/5 bg-[#0a0510]">
+            {filtered.length === 0 && <div className="text-white/40 text-xs px-3 py-3">No products match.</div>}
+            {filtered.map((p) => (
+              <button key={p.id} type="button" onClick={() => { onChange(p.id); setOpen(false); setQ(""); }}
+                data-testid={`${tid}-opt-${p.id}`}
+                className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${p.id === value ? "bg-[#D4AF37]/10" : "hover:bg-white/[0.02]"}`}>
+                <span className="flex-1 min-w-0">
+                  <span className="text-sm text-white truncate block">{p.name}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-white/40">{p.category} · {p.sku}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const MultiImagePicker = ({ label, value, onChange, "data-testid": tid }) => {
   const [busy, setBusy] = useState(false);
   const list = Array.isArray(value) ? value : [];
@@ -182,6 +236,8 @@ function ListEditor({ items, onChange, fields, defaultItem, testId }) {
               <MultiImagePicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
             ) : f.type === "productPicker" ? (
               <ProductPicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
+            ) : f.type === "singleProduct" ? (
+              <SingleProductPicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
             ) : f.type === "textarea" ? (
               <TextArea key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
             ) : (
@@ -505,8 +561,12 @@ function SectionEditor({ sectionKey, data, patch }) {
           </div>
           <div>
             <div className="eyebrow mb-2 mt-2">Showcase images (auto cross-fade every 6s)</div>
-            <ListEditor items={data.images || []} onChange={(v)=>set("images",v)} defaultItem={{src:"",caption:""}}
-              fields={[{name:"src",label:"Image",type:"image"},{name:"caption",label:"Caption / product name (shown as chip)"}]} testId="hp-atelier-img" />
+            <ListEditor items={data.images || []} onChange={(v)=>set("images",v)} defaultItem={{src:"",caption:"",product_id:""}}
+              fields={[
+                {name:"src",label:"Image (falls back to the linked product's main image if left empty)",type:"image"},
+                {name:"caption",label:"Caption (blank = product name is used)"},
+                {name:"product_id",label:"Linked product (buttons on Home page will open this product)",type:"singleProduct"},
+              ]} testId="hp-atelier-img" />
           </div>
         </div>
       );
