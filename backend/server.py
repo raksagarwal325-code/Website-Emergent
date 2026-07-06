@@ -472,36 +472,65 @@ async def _get_watermark_settings() -> dict:
     return {**DEFAULT_WATERMARK, **wm}
 
 
+VIDEO_EXTS = {"mp4", "webm", "mov", "m4v"}
+VIDEO_MIME_TYPES = {
+    "mp4": "video/mp4",
+    "webm": "video/webm",
+    "mov": "video/quicktime",
+    "m4v": "video/x-m4v",
+}
+MAX_IMAGE_BYTES = 25 * 1024 * 1024
+MAX_VIDEO_BYTES = 100 * 1024 * 1024
+
+
 @api.post("/upload")
 async def upload_image(file: UploadFile = File(...)):
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(400, "Only images allowed")
-    ext = (file.filename or "img.png").rsplit(".", 1)[-1].lower()
-    if ext not in MIME_TYPES:
-        ext = "png"
+    ct = (file.content_type or "").lower()
+    is_image = ct.startswith("image/")
+    is_video = ct.startswith("video/")
+    if not (is_image or is_video):
+        raise HTTPException(400, "Only images or videos are allowed")
+
+    ext = (file.filename or "img").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+    if is_video:
+        if ext not in VIDEO_EXTS:
+            ext = "mp4"
+    else:
+        if ext not in MIME_TYPES:
+            ext = "png"
+
     data = await file.read()
-    if len(data) > 25 * 1024 * 1024:
-        raise HTTPException(400, "Image too large — max 25MB per file. Please compress or resize.")
+    limit = MAX_VIDEO_BYTES if is_video else MAX_IMAGE_BYTES
+    if len(data) > limit:
+        mb = limit // (1024 * 1024)
+        raise HTTPException(400, f"File too large — max {mb}MB. Please compress or resize.")
 
     file_id = str(uuid.uuid4())
+    subdir = "videos" if is_video else "products"
     original_path = f"{APP_NAME}/originals/{file_id}.{ext}"
-    public_path = f"{APP_NAME}/products/{file_id}.{ext}"
+    public_path = f"{APP_NAME}/{subdir}/{file_id}.{ext}"
 
     # Always keep the untouched original (admin-only).
     put_object(original_path, data, file.content_type)
 
-    # Generate the public/watermarked variant based on current settings.
-    wm = await _get_watermark_settings()
-    if wm.get("enabled"):
-        public_bytes = apply_watermark(
-            data,
-            opacity=wm.get("opacity", 0.15),
-            size_pct=wm.get("size_pct", 0.30),
-            adaptive_tone=wm.get("adaptive_tone", True),
-            content_type=file.content_type,
-        )
-    else:
+    # Videos are never watermarked — only images run through the watermark helper.
+    if is_video:
         public_bytes = data
+        wm_enabled_for_record = False
+    else:
+        wm = await _get_watermark_settings()
+        if wm.get("enabled"):
+            public_bytes = apply_watermark(
+                data,
+                opacity=wm.get("opacity", 0.15),
+                size_pct=wm.get("size_pct", 0.30),
+                adaptive_tone=wm.get("adaptive_tone", True),
+                content_type=file.content_type,
+            )
+        else:
+            public_bytes = data
+        wm_enabled_for_record = bool(wm.get("enabled"))
+
     result = put_object(public_path, public_bytes, file.content_type)
 
     await db.files.insert_one({
@@ -511,7 +540,8 @@ async def upload_image(file: UploadFile = File(...)):
         "original_filename": file.filename,
         "content_type": file.content_type,
         "size": result["size"],
-        "watermarked": bool(wm.get("enabled")),
+        "watermarked": wm_enabled_for_record,
+        "kind": "video" if is_video else "image",
         "created_at": now_iso(),
     })
     return {"path": result["path"], "url": f"/api/files/{result['path']}"}

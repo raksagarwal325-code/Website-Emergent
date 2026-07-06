@@ -92,13 +92,13 @@ export const HOMEPAGE_DEFAULTS = {
     headline_pre: "The Craft",
     headline_highlight: "behind every piece.",
     intro:
-      "A lighting piece from our atelier is the sum of five slow, deliberate acts. What follows is how a single chandelier gets from the furnace to your ceiling — traditionally, by hand, over weeks.",
+      "Our craft is not just a story — it is visible in every cut, curve, fitting, and final glow. Watch how decorative glass lighting is shaped and finished by experienced hands in Firozabad.",
     items: [
-      { num: "01", kicker: "The drawing", title: "Design",   body: "Each piece begins as a pencil sketch on the workshop table — proportions calibrated to a room, a chandelier drop measured against a ceiling. Nothing is designed to be mass-produced; every silhouette is drawn to be lived under." },
-      { num: "02", kicker: "Molten glass · 1400°C", title: "The Furnace", body: "Master glass-blowers in Firozabad gather glass from the furnace on iron blowpipes and coax it into form through breath and rotation — the same technique this city has practiced for over four centuries." },
-      { num: "03", kicker: "Facets by hand", title: "Cutting", body: "Once cooled, crystal panels are hand-cut on stone wheels to shape the signature diamond facets that catch light. It is slow, exacting work — the angle of each cut determines how the finished piece will glow." },
-      { num: "04", kicker: "Brass, wire, patience", title: "Assembly", body: "Individual glass elements are strung and set into hand-worked brass frames — sometimes a single chandelier requires 400+ pieces threaded together. This step alone can take a week for a single fixture." },
-      { num: "05", kicker: "Signed and inspected", title: "Finish", body: "Every finished piece is lit, inspected, and packed by hand in our atelier before dispatch. Bespoke commissions are also numbered and signed — a signature you'll only see on the underside of the mount." },
+      { num: "01", kicker: "The drawing", title: "Design",   body: "Each piece begins as a pencil sketch on the workshop table — proportions calibrated to a room, a chandelier drop measured against a ceiling. Nothing is designed to be mass-produced; every silhouette is drawn to be lived under.", visual: "" },
+      { num: "02", kicker: "Molten glass · 1400°C", title: "The Furnace", body: "Master glass-blowers in Firozabad gather glass from the furnace on iron blowpipes and coax it into form through breath and rotation — the same technique this city has practiced for over four centuries.", visual: "" },
+      { num: "03", kicker: "Facets by hand", title: "Cutting", body: "Once cooled, crystal panels are hand-cut on stone wheels to shape the signature diamond facets that catch light. It is slow, exacting work — the angle of each cut determines how the finished piece will glow.", visual: "" },
+      { num: "04", kicker: "Brass, wire, patience", title: "Assembly", body: "Individual glass elements are strung and set into hand-worked brass frames — sometimes a single chandelier requires 400+ pieces threaded together. This step alone can take a week for a single fixture.", visual: "" },
+      { num: "05", kicker: "Signed and inspected", title: "Finish", body: "Every finished piece is lit, inspected, and packed by hand in our atelier before dispatch. Bespoke commissions are also numbered and signed — a signature you'll only see on the underside of the mount.", visual: "" },
     ],
     closer_eyebrow: "A note from the atelier",
     founder_quote: "A great piece of glass is one you can live under for forty years without ever growing tired of it.",
@@ -107,6 +107,25 @@ export const HOMEPAGE_DEFAULTS = {
     cta_primary_link: "/catalog",
     cta_secondary_text: "Request a bespoke piece",
     cta_secondary_link: "/contact",
+  },
+  craft_video: {
+    enabled: true,
+    // "Watch Our Craft in Motion" section
+    section_eyebrow: "Process Reel",
+    section_title_pre: "Watch Our Craft",
+    section_title_highlight: "in Motion.",
+    caption: "Behind the scenes at Samrat Glass Emporium — handcrafted decorative lighting from Firozabad.",
+    // Video sources
+    video_url: "",                 // uploaded MP4/webm — preferred when set
+    instagram_url: "https://www.instagram.com/reel/CqS8MlDoVuH/",
+    thumbnail_url: "",             // poster image / placeholder still
+    // Behaviour
+    bg_autoplay: true,             // muted autoplay loop for Craft hero background (uses uploaded video only)
+    cta_text: "Watch on Instagram",
+    cta_link: "https://www.instagram.com/reel/CqS8MlDoVuH/",
+    // About page mini video block
+    about_enabled: true,
+    about_caption: "A moment from our Firozabad workshop.",
   },
   gallery: {
     eyebrow: "Installations",

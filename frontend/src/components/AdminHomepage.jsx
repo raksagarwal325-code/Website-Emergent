@@ -14,6 +14,7 @@ const SECTIONS = [
   { key: "manual_reviews", label: "Manual Reviews / Testimonials" },
   { key: "about", label: "About Page" },
   { key: "craft", label: "The Craft Page" },
+  { key: "craft_video", label: "Craft Video · Instagram Reel" },
   { key: "gallery", label: "Project Gallery" },
   { key: "faq", label: "FAQ Page" },
   { key: "reasons", label: "Reasons Why We Are Better" },
@@ -220,6 +221,52 @@ const ImagePicker = ({ label, value, onChange, "data-testid": tid }) => {
 };
 
 // List editor for arrays of objects (used for stats, reasons, atelier images, quick_links, hero trust) -----
+const VideoPicker = ({ label, value, onChange, "data-testid": tid }) => {
+  const [busy, setBusy] = useState(false);
+  const upload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      const { url } = await api.upload(file);
+      onChange(url);
+      toast.success("Video uploaded");
+    } catch (err) {
+      toast.error(err?.message || err?.response?.data?.detail || "Upload failed");
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
+  };
+  return (
+    <div>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+      <div className="flex gap-2 items-start">
+        {value && (
+          <div className="relative w-20 h-28 border border-white/10 bg-black flex-shrink-0 overflow-hidden">
+            <video src={api.resolveImage(value)} className="w-full h-full object-cover" muted playsInline preload="metadata" />
+          </div>
+        )}
+        <div className="flex-1 space-y-2 min-w-0">
+          <input value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder="/path or https://... (mp4)"
+            data-testid={tid}
+            className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-xs text-white" />
+          <div className="flex gap-2 flex-wrap">
+            <label className="inline-flex items-center gap-1 border border-white/15 hover:border-[#D4AF37] px-3 py-1.5 text-[10px] uppercase tracking-widest cursor-pointer">
+              <Upload size={11} /> {busy ? "Uploading…" : "Upload video"}
+              <input type="file" accept="video/*" onChange={upload} className="hidden" />
+            </label>
+            {value && (
+              <button type="button" onClick={() => onChange("")} className="border border-white/15 hover:border-red-500 hover:text-red-400 px-3 py-1.5 text-[10px] uppercase tracking-widest text-white/60">Clear</button>
+            )}
+          </div>
+          <p className="text-[10px] text-white/40">Max 100MB · MP4 recommended for widest browser support.</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function ListEditor({ items, onChange, fields, defaultItem, testId }) {
   const update = (i, patch) => onChange(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   const remove = (i) => onChange(items.filter((_, j) => j !== i));
@@ -425,12 +472,13 @@ function SectionEditor({ sectionKey, data, patch }) {
 
           <div className="eyebrow mb-1 mt-6">Process steps (add / remove / reorder)</div>
           <ListEditor items={data.items || []} onChange={(v)=>set("items",v)}
-            defaultItem={{num:"", kicker:"", title:"", body:""}}
+            defaultItem={{num:"", kicker:"", title:"", body:"", visual:""}}
             fields={[
               {name:"num", label:"Number label (e.g. 01)"},
               {name:"kicker", label:"Kicker caption (small caps)"},
               {name:"title", label:"Step title"},
               {name:"body", label:"Description", type:"textarea"},
+              {name:"visual", label:"Step visual (still frame or photo — 1:1 works best)", type:"image"},
             ]}
             testId="hp-craft-item" />
 
@@ -568,6 +616,51 @@ function SectionEditor({ sectionKey, data, patch }) {
                 {name:"product_id",label:"Linked product (buttons on Home page will open this product)",type:"singleProduct"},
               ]} testId="hp-atelier-img" />
           </div>
+        </div>
+      );
+    case "craft_video":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">
+            Controls the &ldquo;Watch Our Craft in Motion&rdquo; section on <span className="text-white/70">/craft</span>,
+            the muted autoplay background on the Craft hero, and the small behind-the-scenes block on <span className="text-white/70">/about</span>.
+            Uploaded videos always take priority over Instagram Reels for reliability.
+          </p>
+
+          <label className="flex items-center gap-3 text-sm text-white/85 mt-2">
+            <input type="checkbox" checked={data.enabled !== false} onChange={(e)=>set("enabled", e.target.checked)} data-testid="hp-craftvideo-enabled" />
+            Show &ldquo;Watch Our Craft in Motion&rdquo; on the Craft page
+          </label>
+
+          <div className="eyebrow mb-1 mt-4">Section header</div>
+          <Text label="Eyebrow (small label)" value={data.section_eyebrow} onChange={(v)=>set("section_eyebrow",v)} data-testid="hp-craftvideo-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Title (white)" value={data.section_title_pre} onChange={(v)=>set("section_title_pre",v)} data-testid="hp-craftvideo-title-pre" />
+            <Text label="Title (gold italic)" value={data.section_title_highlight} onChange={(v)=>set("section_title_highlight",v)} data-testid="hp-craftvideo-title-highlight" />
+          </div>
+          <TextArea label="Caption below the video" value={data.caption} onChange={(v)=>set("caption",v)} rows={2} data-testid="hp-craftvideo-caption" />
+
+          <div className="eyebrow mb-1 mt-6">Video sources</div>
+          <VideoPicker label="Upload craft video (preferred — most reliable)" value={data.video_url} onChange={(v)=>set("video_url",v)} data-testid="hp-craftvideo-file" />
+          <Text label="Instagram Reel URL (used when no video is uploaded)" value={data.instagram_url} onChange={(v)=>set("instagram_url",v)} data-testid="hp-craftvideo-ig" />
+          <ImagePicker label="Poster / thumbnail (shown before the video plays and as the fallback still)" value={data.thumbnail_url} onChange={(v)=>set("thumbnail_url",v)} data-testid="hp-craftvideo-poster" />
+
+          <div className="eyebrow mb-1 mt-6">Behaviour</div>
+          <label className="flex items-center gap-3 text-sm text-white/85">
+            <input type="checkbox" checked={data.bg_autoplay !== false} onChange={(e)=>set("bg_autoplay", e.target.checked)} data-testid="hp-craftvideo-bg-autoplay" />
+            Play the uploaded video as a muted background loop on the Craft hero
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Fallback CTA text" value={data.cta_text} onChange={(v)=>set("cta_text",v)} data-testid="hp-craftvideo-cta-text" />
+            <Text label="Fallback CTA link (defaults to the Instagram URL)" value={data.cta_link} onChange={(v)=>set("cta_link",v)} data-testid="hp-craftvideo-cta-link" />
+          </div>
+
+          <div className="eyebrow mb-1 mt-6">About page mini block</div>
+          <label className="flex items-center gap-3 text-sm text-white/85">
+            <input type="checkbox" checked={data.about_enabled !== false} onChange={(e)=>set("about_enabled", e.target.checked)} data-testid="hp-craftvideo-about-enabled" />
+            Show the small behind-the-scenes block on the About page
+          </label>
+          <TextArea label="About-page caption" value={data.about_caption} onChange={(v)=>set("about_caption",v)} rows={2} data-testid="hp-craftvideo-about-caption" />
         </div>
       );
     case "footer":

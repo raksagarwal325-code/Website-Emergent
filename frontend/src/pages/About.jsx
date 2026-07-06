@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, Award, Sparkles, Package, Truck } from "lucide-react";
 import ReasonsSection from "../components/ReasonsSection";
+import CraftVideoBlock from "../components/CraftVideoBlock";
 import SEO from "../components/SEO";
 import { useSettings } from "../context/SettingsContext";
 
@@ -10,9 +11,12 @@ const STAT_ICONS = [Award, Sparkles, Package, Truck];
 export default function About() {
   const { hp } = useSettings();
   const a = hp.about;
+  const cv = hp.craft_video || {};
   const founder = a.founder || {};
   const paragraphs = (a.story_paragraphs || []).map((p) => (typeof p === "string" ? p : p?.text || ""));
   const stats = a.stats || [];
+  const showAboutVideo =
+    cv.about_enabled !== false && (cv.video_url || cv.instagram_url || cv.thumbnail_url);
 
   return (
     <div data-testid="page-about">
@@ -122,6 +126,29 @@ export default function About() {
       )}
 
       <ReasonsSection compact />
+
+      {/* Behind the scenes video */}
+      {showAboutVideo && (
+        <section data-testid="about-video-section" className="max-w-4xl mx-auto px-6 pb-16">
+          <div className="text-center mb-8">
+            <div className="eyebrow mb-3 text-[#D4AF37]">Behind the scenes</div>
+            <h2 className="font-serif text-2xl md:text-3xl">A moment from the workshop</h2>
+          </div>
+          <div className="max-w-xs sm:max-w-sm mx-auto">
+            <CraftVideoBlock
+              video_url={cv.video_url}
+              instagram_url={cv.instagram_url}
+              thumbnail_url={cv.thumbnail_url}
+              caption={cv.about_caption}
+              cta_text={cv.cta_text}
+              cta_link={cv.cta_link}
+              variant="compact"
+              aspect="9 / 16"
+              data-testid="about-video"
+            />
+          </div>
+        </section>
+      )}
 
       {/* CTA */}
       <section className="max-w-4xl mx-auto px-6 py-20 text-center">

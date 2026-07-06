@@ -28,10 +28,14 @@ export const api = {
 
   upload: (file) => {
     // Client-side guard so users get a friendly message before the network round-trip.
-    // Server hard cap is 25MB.
-    const MAX = 25 * 1024 * 1024;
+    // Server hard cap: 25MB for images, 100MB for videos.
+    const isVideo = (file?.type || "").toLowerCase().startsWith("video/");
+    const MAX = isVideo ? 100 * 1024 * 1024 : 25 * 1024 * 1024;
     if (file && file.size > MAX) {
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      if (isVideo) {
+        return Promise.reject(new Error(`Video is ${sizeMB}MB — max 100MB. Trim/compress the clip before uploading.`));
+      }
       return Promise.reject(new Error(`Image is ${sizeMB}MB — max 25MB. Please compress with tinypng.com or resize to ~2000px on the long edge.`));
     }
     const fd = new FormData();
