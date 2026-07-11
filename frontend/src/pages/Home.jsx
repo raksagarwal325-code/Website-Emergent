@@ -11,6 +11,7 @@ import ReasonsSection from "../components/ReasonsSection";
 import AtelierShowcase from "../components/AtelierShowcase";
 import TrustedBySection from "../components/TrustedBySection";
 import GalleryPreview from "../components/GalleryPreview";
+import InfluencerPromotions from "../components/InfluencerPromotions";
 import FounderTeaser from "../components/FounderTeaser";
 import { useSettings } from "../context/SettingsContext";
 
@@ -182,6 +183,9 @@ export default function Home() {
 
       {/* Featured Projects (auto-hides when Gallery has no items) */}
       <GalleryPreview />
+
+      {/* Influencer Promotions — auto-hides when no items are configured */}
+      <InfluencerPromotions />
     </div>
   );
 }

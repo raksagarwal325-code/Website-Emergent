@@ -19,6 +19,7 @@ const SECTIONS = [
   { key: "faq", label: "FAQ Page" },
   { key: "reasons", label: "Reasons Why We Are Better" },
   { key: "atelier", label: "The Atelier Section" },
+  { key: "influencer_promotions", label: "Influencer Promotions (As Styled By)" },
   { key: "footer", label: "Footer Content" },
   { key: "founder_teaser", label: "Meet the Founder Teaser (Home)" },
 ];
@@ -661,6 +662,56 @@ function SectionEditor({ sectionKey, data, patch }) {
             Show the small behind-the-scenes block on the About page
           </label>
           <TextArea label="About-page caption" value={data.about_caption} onChange={(v)=>set("about_caption",v)} rows={2} data-testid="hp-craftvideo-about-caption" />
+        </div>
+      );
+    case "influencer_promotions":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">
+            Shown on <span className="text-white/70">Home</span> right after the &ldquo;Our Work in the Wild&rdquo; carousel.
+            Paste either a full Instagram embed code (Instagram Reel/Post → Embed → Copy Embed Code) <span className="text-white/70">or</span> just the Reel / Post URL — both work.
+            The section auto-hides when the list is empty.
+          </p>
+          <label className="flex items-center gap-3 text-sm text-white/85">
+            <input
+              type="checkbox"
+              checked={data.enabled !== false}
+              onChange={(e)=>set("enabled", e.target.checked)}
+              data-testid="hp-influencer-enabled"
+            />
+            Show this section on the Home page
+          </label>
+
+          <div className="eyebrow mb-1 mt-4">Header</div>
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-influencer-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Title (white)" value={data.title_pre} onChange={(v)=>set("title_pre",v)} data-testid="hp-influencer-title-pre" />
+            <Text label="Title (gold italic)" value={data.title_highlight} onChange={(v)=>set("title_highlight",v)} data-testid="hp-influencer-title-highlight" />
+          </div>
+          <TextArea label="Subtitle" value={data.subtitle} onChange={(v)=>set("subtitle",v)} rows={2} data-testid="hp-influencer-subtitle" />
+
+          <div className="eyebrow mb-1 mt-6">&ldquo;View More on Instagram&rdquo; button</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Button text" value={data.view_more_text} onChange={(v)=>set("view_more_text",v)} data-testid="hp-influencer-vm-text" />
+            <Text label="Button link (Instagram profile URL — leave blank to hide the button)" value={data.view_more_link} onChange={(v)=>set("view_more_link",v)} data-testid="hp-influencer-vm-link" />
+          </div>
+
+          <div className="eyebrow mb-1 mt-6">Influencer posts / reels</div>
+          <ListEditor
+            items={data.items || []}
+            onChange={(v)=>set("items",v)}
+            defaultItem={{ input: "", handle: "", caption: "" }}
+            testId="hp-influencer-item"
+            fields={[
+              { name: "input", label: "Instagram Reel/Post URL — or full <blockquote…> embed code", type: "textarea" },
+              { name: "handle", label: "Creator handle (e.g. @designstudio) — optional" },
+              { name: "caption", label: "Short caption / context — optional", type: "textarea" },
+            ]}
+          />
+          <p className="text-[11px] text-white/40 mt-2">
+            Tip: A creator&apos;s handle can be their <span className="text-white/70">@username</span>, a full profile URL, or left blank.
+            Grid layout is fixed at 3 per row on desktop, 2 on tablets, and 1 on mobile.
+          </p>
         </div>
       );
     case "footer":

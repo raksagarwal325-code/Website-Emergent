@@ -53,8 +53,9 @@ Wall Lights, Ceiling Lamps, Table Lamps, Floor Lamps, Decorative Lights.
 INR pricing with en-IN formatting.
 
 ### Homepage CMS (Admin → Homepage Editor)
-- Fully editable sections: Hero, **Trusted-by strip (new · Feb 2026)**, 1000+ Light Options collage, Featured, Google Reviews fallback, Reasons Why We Are Better, The Atelier, Footer
+- Fully editable sections: Hero, **Trusted-by strip (new · Feb 2026)**, 1000+ Light Options collage, Featured, Google Reviews fallback, Reasons Why We Are Better, The Atelier, **Influencer Promotions "As Styled By" (new · Feb 2026)**, Footer
 - Trusted-by strip: hidden until admin adds at least one client/venue; each item has name + optional logo upload; static row on desktop, auto-scrolling marquee on mobile
+- Influencer Promotions: responsive grid (3-col desktop / 2-col tablet / 1-col mobile) rendering Instagram embeds. Admin can paste EITHER a full Instagram embed code OR just a Reel/Post URL (auto-detected). Supports handle, caption, optional "View More on Instagram" CTA. Auto-hides when empty.
 
 ## Backlog / Next Actions
 ### P0 (before hard launch)
@@ -75,6 +76,7 @@ INR pricing with en-IN formatting.
 - Instagram feed on Home page
 
 ## Changelog
+- 2026-02-11: **Influencer Promotions ("As Styled By") section shipped.** New CMS-editable section on Home (renders after "Our Work in the Wild"). Admin can add unlimited items via `/admin` → Homepage → Influencer Promotions; each item accepts a full Instagram embed `<blockquote>` code OR just a Reel/Post URL (auto-normalized). Frontend loads `embed.js` once and re-processes on item changes. Responsive grid: 3-col desktop / 2-col tablet / 1-col mobile. Section auto-hides when list empty. Files: `frontend/src/components/InfluencerPromotions.jsx` (new), `frontend/src/components/AdminHomepage.jsx`, `frontend/src/lib/homepageDefaults.js`, `frontend/src/pages/Home.jsx`.
 - 2026-02-03: Added founder photo to About page (Mr. Sunil Kumar Agarwal). CMS-editable via Admin → Homepage → About → "Founder photo". Circle-initial fallback preserved when no image is set.
 - 2026-02-03: Raised image upload limit from 8MB → 25MB (server.py + client-side pre-flight validation). Verification pending user acceptance.
 

@@ -203,6 +203,21 @@ export const HOMEPAGE_DEFAULTS = {
     cta_text: "Read our story",
     cta_link: "/about",
   },
+  influencer_promotions: {
+    enabled: true,
+    eyebrow: "Featured Creators",
+    title_pre: "As",
+    title_highlight: "Styled By.",
+    subtitle:
+      "Real homes. Real spaces. Real stories from creators who styled Samrat Glass Emporium lights.",
+    view_more_text: "View More on Instagram",
+    view_more_link: "",
+    // Each item accepts EITHER a full Instagram embed <blockquote>… snippet OR a
+    // plain Reel / Post URL (e.g. https://www.instagram.com/reel/XYZ/) — the
+    // renderer auto-detects and normalizes both.
+    items: [],
+    // item shape: { input: string, handle: string, caption: string }
+  },
 };
 
 // Merges saved homepage_content over defaults (deep merge one level for objects, replaces arrays wholly)
