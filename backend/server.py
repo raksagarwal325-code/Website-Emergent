@@ -579,11 +579,18 @@ _IG_UA = (
 
 async def _extract_ig_cover_via_browser(url: str) -> Optional[str]:
     """Load an Instagram permalink in headless Chromium and return the URL of
-    the reel/post poster image. Returns None if no suitable image is found.
+    the reel/post poster image.
 
-    Instagram's public HTML no longer exposes og:image to bots, but a real
-    browser still receives the poster image (with alt="Video by …" or
-    "Photo by …") from their CDN. We piggy-back on that behavior.
+    Priority order (most accurate first):
+      1. `og:image` meta tag — Instagram's canonical share thumbnail, populated
+         by their SPA after render (empty in the initial HTML).
+      2. `twitter:image` meta tag — same source, fallback.
+      3. Main <video> poster attribute (when Instagram renders the reel).
+      4. First large `<img alt="Video by …">` OR `<img alt="Photo by …">` —
+         last-resort scan of the DOM.
+
+    We deliberately avoid the "More posts from …" grid: those are unrelated
+    older uploads and picking one of them yields a completely wrong cover.
     """
     from playwright.async_api import async_playwright
 
@@ -598,24 +605,31 @@ async def _extract_ig_cover_via_browser(url: str) -> Optional[str]:
             page = await ctx.new_page()
             resp = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             status = resp.status if resp else 0
-            # Give Instagram's SPA a moment to inject the poster image.
-            await page.wait_for_timeout(4500)
-            # Prefer the reel/video poster (alt starts with "Video by …");
-            # fall back to a photo post if this permalink is a still.
+            # Give Instagram's SPA time to inject og:image / render video.
+            await page.wait_for_timeout(5000)
+
             src = await page.evaluate(
                 """() => {
-                    const imgs = Array.from(document.querySelectorAll('img'));
-                    const bigVideo = imgs.find(i =>
-                        (i.alt||'').startsWith('Video by') && i.naturalWidth > 200);
-                    if (bigVideo) return bigVideo.src;
-                    const bigPhoto = imgs.find(i =>
-                        (i.alt||'').startsWith('Photo by') && i.naturalWidth > 200);
-                    if (bigPhoto) return bigPhoto.src;
+                    // 1. og:image (most accurate — Instagram's canonical cover)
+                    const og = document.querySelector('meta[property=\"og:image\"]')?.content;
+                    if (og && og.startsWith('http')) return og;
+                    // 2. twitter:image
+                    const tw = document.querySelector('meta[name=\"twitter:image\"]')?.content;
+                    if (tw && tw.startsWith('http')) return tw;
+                    // 3. Main <video> poster
+                    for (const v of document.querySelectorAll('video')) {
+                        if (v.poster && v.poster.startsWith('http')) return v.poster;
+                    }
+                    // 4. Fallback: only scan <article> (never the "More posts" grid)
+                    const article = document.querySelector('article');
+                    if (article) {
+                        const imgs = Array.from(article.querySelectorAll('img'))
+                            .filter(i => i.naturalWidth > 200 && !(i.alt||'').includes('profile picture'));
+                        if (imgs.length) return imgs[0].src;
+                    }
                     return null;
                 }"""
             )
-            # Return status alongside src so the caller can distinguish
-            # deleted (404/410) from just "no poster on page".
             return src, status
         finally:
             await browser.close()
