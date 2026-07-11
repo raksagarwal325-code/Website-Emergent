@@ -1,6 +1,8 @@
-import React, { useEffect, useRef } from "react";
-import { ArrowUpRight, Instagram } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { ArrowUpRight, Instagram, ShoppingBag } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
+import { api } from "../lib/api";
 
 const IG_SCRIPT_SRC = "https://www.instagram.com/embed.js";
 
@@ -65,7 +67,7 @@ function handleHref(raw) {
   return `https://www.instagram.com/${displayHandle(s)}/`;
 }
 
-function InfluencerCard({ item, index }) {
+function InfluencerCard({ item, product, index }) {
   const html = itemToEmbedHtml(item);
   const handle = displayHandle(item?.handle);
   const href = handleHref(item?.handle);
@@ -106,6 +108,27 @@ function InfluencerCard({ item, index }) {
               "radial-gradient(circle at 50% 100%, rgba(163,99,80,0.14), transparent 55%)",
           }}
         />
+
+        {/* Shop this look pill — only when a catalog product is linked */}
+        {product && (
+          <Link
+            to={`/product/${product.id}`}
+            data-testid={`influencer-card-${index}-shop-btn`}
+            aria-label={`Shop this look — ${product.name}`}
+            className="absolute z-10 bottom-4 right-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-full transition-all duration-300 hover:-translate-y-0.5"
+            style={{
+              background: "linear-gradient(180deg, #D4AF37 0%, #B5952F 100%)",
+              color: "#2a1125",
+              boxShadow:
+                "0 8px 20px -6px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,235,180,0.4), inset 0 1px 0 rgba(255,255,255,0.35)",
+            }}
+          >
+            <ShoppingBag size={13} strokeWidth={2} />
+            <span className="text-[10px] uppercase tracking-[0.24em] font-medium">
+              Shop this look
+            </span>
+          </Link>
+        )}
       </div>
 
       {/* Caption footer */}
@@ -132,10 +155,21 @@ function InfluencerCard({ item, index }) {
               a creator we love
             </span>
           )}
-          {item?.caption && (
-            <div className="mt-1 text-[11px] text-white/50 leading-snug line-clamp-2">
-              {item.caption}
-            </div>
+          {product ? (
+            <Link
+              to={`/product/${product.id}`}
+              data-testid={`influencer-card-${index}-product-link`}
+              className="mt-1 text-[11px] text-white/60 hover:text-[#D4AF37] leading-snug line-clamp-2 transition-colors block"
+            >
+              <span className="text-[#BF9972]">Featuring · </span>
+              {product.name}
+            </Link>
+          ) : (
+            item?.caption && (
+              <div className="mt-1 text-[11px] text-white/50 leading-snug line-clamp-2">
+                {item.caption}
+              </div>
+            )
           )}
         </div>
       </div>
@@ -150,6 +184,22 @@ export default function InfluencerPromotions() {
 
   const validItems = (P.items || []).filter(
     (it) => (it?.input || "").trim().length > 0,
+  );
+
+  // Fetch products once so we can resolve product_id → product for "Shop this look".
+  const [products, setProducts] = useState([]);
+  const needsProducts = validItems.some((it) => (it?.product_id || "").trim());
+  useEffect(() => {
+    if (!needsProducts) return undefined;
+    let alive = true;
+    api.listProducts()
+      .then((rows) => { if (alive) setProducts(rows); })
+      .catch(() => { /* silent — card just hides pill */ });
+    return () => { alive = false; };
+  }, [needsProducts]);
+  const productById = useMemo(
+    () => Object.fromEntries(products.map((p) => [p.id, p])),
+    [products],
   );
 
   const embedsSignature = validItems.map((i) => i.input).join("|");
@@ -232,7 +282,12 @@ export default function InfluencerPromotions() {
           className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 items-stretch max-w-md mx-auto lg:max-w-none"
         >
           {validItems.map((it, i) => (
-            <InfluencerCard key={`${it.input}-${i}`} item={it} index={i} />
+            <InfluencerCard
+              key={`${it.input}-${i}`}
+              item={it}
+              product={it?.product_id ? productById[it.product_id] || null : null}
+              index={i}
+            />
           ))}
         </div>
 

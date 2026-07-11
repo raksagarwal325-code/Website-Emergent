@@ -700,12 +700,13 @@ function SectionEditor({ sectionKey, data, patch }) {
           <ListEditor
             items={data.items || []}
             onChange={(v)=>set("items",v)}
-            defaultItem={{ input: "", handle: "", caption: "" }}
+            defaultItem={{ input: "", handle: "", caption: "", product_id: "" }}
             testId="hp-influencer-item"
             fields={[
               { name: "input", label: "Instagram Reel/Post URL — or full <blockquote…> embed code", type: "textarea" },
               { name: "handle", label: "Creator handle (e.g. @designstudio) — optional" },
               { name: "caption", label: "Short caption / context — optional", type: "textarea" },
+              { name: "product_id", label: "Shop this look — link a product from the catalog (optional)", type: "singleProduct" },
             ]}
           />
           <p className="text-[11px] text-white/40 mt-2">
