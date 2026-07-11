@@ -46,6 +46,7 @@ export const api = {
   exportCsvUrl: () => `${API}/export/products.csv`,
   stats: () => client.get("/stats").then(r => r.data),
   googleReviews: () => client.get("/google/reviews").then(r => r.data),
+  pullInstagramCover: (url) => client.post("/admin/instagram/cover", { url }).then(r => r.data),
   resolveImage: (u, opts = {}) => {
     if (!u) return "";
     if (u.startsWith("/api/")) return `${BACKEND_URL}${u}`;

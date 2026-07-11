@@ -240,9 +240,15 @@ export default function InfluencerPromotions() {
   const { hp } = useSettings();
   const P = hp?.influencer_promotions || {};
 
-  const validItems = (P.items || []).filter(
-    (it) => (it?.input || "").trim().length > 0 || (it?.thumbnail || "").trim().length > 0,
-  );
+  // Only show cards that are truly ready for the public site:
+  // must have an Instagram URL, a creator handle, AND a cover image.
+  // (Requirement #7 — never render a broken/half-configured card.)
+  const validItems = (P.items || []).filter((it) => {
+    const hasUrl = (it?.input || "").trim().length > 0;
+    const hasHandle = (it?.handle || "").trim().length > 0;
+    const hasCover = (it?.thumbnail || "").trim().length > 0;
+    return hasUrl && hasHandle && hasCover;
+  });
 
   // Lazy-load products only when at least one item links to the catalog.
   const [products, setProducts] = useState([]);

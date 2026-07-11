@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, Plus, Trash2, Upload, ArrowUp, ArrowDown } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2, Upload, ArrowUp, ArrowDown, Instagram, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
 import { HOMEPAGE_DEFAULTS, mergeHomepage } from "../lib/homepageDefaults";
 import { useSettings } from "../context/SettingsContext";
@@ -268,6 +268,133 @@ const VideoPicker = ({ label, value, onChange, "data-testid": tid }) => {
   );
 };
 
+// Instagram cover picker — combines manual upload with an "Auto-pull from
+// Instagram" backend call. Falls back gracefully when IG blocks the scrape.
+const InstagramCoverPicker = ({ label, value, onChange, sourceUrl, "data-testid": tid }) => {
+  const [busy, setBusy] = useState(false);
+  const [action, setAction] = useState(null); // "pull" | "upload"
+  const [status, setStatus] = useState(null); // { kind, message }
+
+  const pull = async () => {
+    const url = (sourceUrl || "").trim();
+    if (!url) {
+      setStatus({ kind: "error", message: "Please paste the Instagram Reel/Post URL in the field above first." });
+      return;
+    }
+    setBusy(true);
+    setAction("pull");
+    setStatus(null);
+    try {
+      const res = await api.pullInstagramCover(url);
+      if (res?.success && res?.url) {
+        onChange(res.url);
+        setStatus({ kind: "success", message: "Cover pulled successfully." });
+        toast.success("Cover pulled from Instagram");
+      } else {
+        const msg = res?.message || "Could not pull cover. Please upload manually.";
+        setStatus({ kind: "error", message: msg });
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e?.message || "Could not pull cover. Please upload manually.";
+      setStatus({ kind: "error", message: msg });
+    } finally {
+      setBusy(false);
+      setAction(null);
+    }
+  };
+
+  const upload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setAction("upload");
+    try {
+      const { url } = await api.upload(file);
+      onChange(url);
+      toast.success("Uploaded");
+      setStatus(null);
+    } catch (err) {
+      toast.error(err?.message || "Upload failed");
+    } finally {
+      setBusy(false);
+      setAction(null);
+      e.target.value = "";
+    }
+  };
+
+  const hasCover = !!value;
+  return (
+    <div>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+      <div className="flex gap-2 items-start">
+        {value && (
+          <div className="relative w-16 h-20 border border-[#D4AF37]/30 bg-black flex-shrink-0 overflow-hidden">
+            <img src={api.resolveImage(value)} alt="" className="w-full h-full object-cover" />
+          </div>
+        )}
+        <div className="flex-1 space-y-2 min-w-0">
+          <input
+            value={value || ""}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="/path or https://... (auto-filled after pulling from Instagram)"
+            data-testid={tid}
+            className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-xs text-white"
+          />
+          <div className="flex gap-2 flex-wrap">
+            <label className="inline-flex items-center gap-1.5 border border-white/15 hover:border-[#D4AF37] px-3 py-1.5 text-[10px] uppercase tracking-widest cursor-pointer">
+              <Upload size={11} /> {busy && action === "upload" ? "Uploading…" : "Upload manually"}
+              <input type="file" accept="image/*" onChange={upload} className="hidden" disabled={busy} />
+            </label>
+            <button
+              type="button"
+              onClick={pull}
+              disabled={busy}
+              data-testid={`${tid}-pull-btn`}
+              className="inline-flex items-center gap-1.5 border border-[#D4AF37]/50 hover:border-[#D4AF37] hover:bg-[#D4AF37]/10 text-[#D4AF37] px-3 py-1.5 text-[10px] uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {hasCover ? <RefreshCw size={11} /> : <Instagram size={11} />}
+              {busy && action === "pull"
+                ? "Pulling…"
+                : hasCover
+                ? "Refresh cover from Instagram"
+                : "Auto-pull cover from Instagram"}
+            </button>
+            {value && (
+              <button
+                type="button"
+                onClick={() => { onChange(""); setStatus(null); }}
+                className="border border-white/15 hover:border-red-500 hover:text-red-400 px-3 py-1.5 text-[10px] uppercase tracking-widest text-white/60"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {status ? (
+            <div
+              data-testid={`${tid}-status`}
+              className={
+                status.kind === "success"
+                  ? "text-[11px] text-emerald-400"
+                  : status.kind === "info"
+                  ? "text-[11px] text-[#BF9972]"
+                  : "text-[11px] text-red-400"
+              }
+            >
+              {status.message}
+            </div>
+          ) : (
+            <p className="text-[10px] text-white/35 leading-relaxed">
+              Instagram now blocks most auto-pull attempts for private, age-gated, or region-restricted
+              posts — if the pull fails, please upload a cover screenshot manually. The saved cover is
+              cached on our server so Instagram is not called on every page load.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function ListEditor({ items, onChange, fields, defaultItem, testId }) {
   const update = (i, patch) => onChange(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   const remove = (i) => onChange(items.filter((_, j) => j !== i));
@@ -286,6 +413,15 @@ function ListEditor({ items, onChange, fields, defaultItem, testId }) {
               <ProductPicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
             ) : f.type === "singleProduct" ? (
               <SingleProductPicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
+            ) : f.type === "igCover" ? (
+              <InstagramCoverPicker
+                key={f.name}
+                label={f.label}
+                value={it[f.name]}
+                onChange={(v) => update(i, { [f.name]: v })}
+                sourceUrl={it[f.sourceField || "input"]}
+                data-testid={`${testId}-${i}-${f.name}`}
+              />
             ) : f.type === "textarea" ? (
               <TextArea key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
             ) : (
@@ -698,18 +834,19 @@ function SectionEditor({ sectionKey, data, patch }) {
 
           <div className="eyebrow mb-1 mt-6">Influencer posts / reels</div>
           <p className="text-[11px] text-white/40 mb-2">
-            Upload a custom cover thumbnail for each card (recommended — gives full brand control).
-            Card click opens the Instagram Reel/Post in a new tab.
+            Paste the Instagram Reel/Post URL first, then click <span className="text-[#D4AF37]">Auto-pull cover</span>{" "}
+            to try and grab the cover automatically. If Instagram blocks it (private / age-gated / restricted posts),
+            upload a cover screenshot manually. Card clicks open the original Reel/Post in a new tab.
           </p>
           <ListEditor
             items={data.items || []}
             onChange={(v)=>set("items",v)}
-            defaultItem={{ input: "", handle: "", caption: "", product_id: "", thumbnail: "" }}
+            defaultItem={{ input: "", thumbnail: "", handle: "", caption: "", product_id: "" }}
             testId="hp-influencer-item"
             fields={[
-              { name: "thumbnail", label: "Cover thumbnail (vertical 9:16 works best, e.g. a still from the Reel)", type: "image" },
-              { name: "input", label: "Instagram Reel/Post URL (opens in new tab when card is clicked)", type: "textarea" },
-              { name: "handle", label: "Creator handle (e.g. @designstudio) — optional" },
+              { name: "input", label: "Instagram Reel/Post URL (paste this first — opens in a new tab when the card is clicked)", type: "textarea" },
+              { name: "thumbnail", label: "Cover thumbnail (auto-pull, or upload a vertical 9:16 screenshot)", type: "igCover", sourceField: "input" },
+              { name: "handle", label: "Creator handle (e.g. @designstudio)" },
               { name: "caption", label: "Short caption / context — optional", type: "textarea" },
               { name: "product_id", label: "Shop this look — link a product from the catalog (optional)", type: "singleProduct" },
             ]}

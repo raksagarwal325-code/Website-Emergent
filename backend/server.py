@@ -547,6 +547,156 @@ async def upload_image(file: UploadFile = File(...)):
     return {"path": result["path"], "url": f"/api/files/{result['path']}"}
 
 
+# --- Instagram cover auto-pull ------------------------------------------------
+def _canonical_instagram_url(raw: str) -> Optional[str]:
+    """Return a canonical Reel/Post/TV permalink or None if not an IG URL."""
+    from urllib.parse import urlparse
+
+    try:
+        u = urlparse((raw or "").strip())
+    except Exception:
+        return None
+    host = (u.netloc or "").lower()
+    if not host.endswith("instagram.com"):
+        return None
+    path = u.path or "/"
+    if not path.endswith("/"):
+        path = path + "/"
+    # Support /p/, /reel/, /reels/, /tv/ permalinks
+    parts = [p for p in path.split("/") if p]
+    if len(parts) < 2 or parts[0] not in {"p", "reel", "reels", "tv"}:
+        return None
+    return f"{u.scheme or 'https'}://{host}{path}"
+
+
+_IG_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
+
+
+def _extract_og_image(html: str) -> Optional[str]:
+    """Pull og:image out of an Instagram public HTML page.
+    Falls back to twitter:image and JSON blobs when og:image is absent."""
+    import re
+
+    for pattern in (
+        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+        r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']',
+        r'"display_url"\s*:\s*"([^"]+)"',
+        r'"thumbnail_src"\s*:\s*"([^"]+)"',
+    ):
+        m = re.search(pattern, html, re.IGNORECASE)
+        if m:
+            url = m.group(1).replace("\\u0026", "&").replace("\\/", "/").replace("&amp;", "&")
+            if url.startswith("http"):
+                return url
+    return None
+
+
+class InstagramCoverRequest(BaseModel):
+    url: str
+
+
+@api.post("/admin/instagram/cover")
+async def pull_instagram_cover(payload: InstagramCoverRequest):
+    """Auto-pull an Instagram Reel/Post cover thumbnail, cache it in object
+    storage and return a stable /api/files/... URL the admin can use as the
+    card cover. Manual upload remains the default path.
+
+    Response shapes:
+      · 200 { success: true, path, url, source_url }
+      · 200 { success: false, reason: "<code>", message: "<user_msg>" }
+
+    Reason codes:
+      · invalid_url       → URL not provided / not a valid URL
+      · not_instagram     → URL is not an Instagram permalink we support
+      · private_or_deleted→ IG returned 4xx / login wall / no og:image
+      · network_error     → Could not reach Instagram / timeout
+      · image_fetch_failed→ og:image URL couldn't be downloaded
+    """
+    raw = (payload.url or "").strip()
+    if not raw:
+        return {"success": False, "reason": "invalid_url",
+                "message": "Please enter an Instagram Reel/Post URL first."}
+    canonical = _canonical_instagram_url(raw)
+    if not canonical:
+        return {"success": False, "reason": "not_instagram",
+                "message": "Please enter a valid Instagram Reel or Post URL."}
+
+    headers = {
+        "User-Agent": _IG_UA,
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    try:
+        page = requests.get(canonical, headers=headers, timeout=12, allow_redirects=True)
+    except requests.RequestException as e:
+        logger.warning(f"IG cover pull network error for {canonical}: {e}")
+        return {"success": False, "reason": "network_error",
+                "message": "Could not reach Instagram. Please upload the cover manually."}
+
+    if page.status_code >= 400:
+        return {"success": False, "reason": "private_or_deleted",
+                "message": "This Instagram post may be private, deleted, or unsupported. "
+                           "Please upload the cover manually."}
+
+    thumb = _extract_og_image(page.text or "")
+    if not thumb:
+        return {"success": False, "reason": "private_or_deleted",
+                "message": "This Instagram post may be private, deleted, or unsupported. "
+                           "Please upload the cover manually."}
+
+    try:
+        img_resp = requests.get(thumb, headers={"User-Agent": _IG_UA}, timeout=15, allow_redirects=True)
+    except requests.RequestException as e:
+        logger.warning(f"IG thumbnail fetch failed: {e}")
+        return {"success": False, "reason": "image_fetch_failed",
+                "message": "Could not pull the cover image. Please upload manually."}
+
+    if img_resp.status_code != 200 or not img_resp.content:
+        return {"success": False, "reason": "image_fetch_failed",
+                "message": "Could not pull the cover image. Please upload manually."}
+
+    # Persist the fetched image via existing object storage — same shape as
+    # the /upload endpoint so the frontend can drop the URL straight into the
+    # `thumbnail` field. Watermarking is intentionally skipped for these
+    # borrowed covers (they're social proof, not our own product imagery).
+    content_type = (img_resp.headers.get("content-type") or "image/jpeg").split(";")[0].strip()
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}.get(content_type, "jpg")
+    file_id = str(uuid.uuid4())
+    storage_path = f"{APP_NAME}/ig_covers/{file_id}.{ext}"
+
+    try:
+        result = put_object(storage_path, img_resp.content, content_type)
+    except Exception as e:
+        logger.error(f"IG cover store failed: {e}")
+        return {"success": False, "reason": "image_fetch_failed",
+                "message": "Could not save the cover image. Please try again."}
+
+    await db.files.insert_one({
+        "id": file_id,
+        "storage_path": result["path"],
+        "original_filename": f"instagram-cover-{file_id}.{ext}",
+        "content_type": content_type,
+        "size": result["size"],
+        "watermarked": False,
+        "kind": "image",
+        "source": "instagram",
+        "source_url": canonical,
+        "created_at": now_iso(),
+    })
+
+    return {
+        "success": True,
+        "path": result["path"],
+        "url": f"/api/files/{result['path']}",
+        "source_url": canonical,
+    }
+
+
 @api.get("/files/{path:path}")
 async def serve_file(path: str):
     # Private/admin originals shouldn't leak — block direct fetches.
