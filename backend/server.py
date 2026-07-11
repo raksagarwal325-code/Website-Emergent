@@ -577,6 +577,50 @@ _IG_UA = (
 )
 
 
+async def _extract_ig_cover_via_browser(url: str) -> Optional[str]:
+    """Load an Instagram permalink in headless Chromium and return the URL of
+    the reel/post poster image. Returns None if no suitable image is found.
+
+    Instagram's public HTML no longer exposes og:image to bots, but a real
+    browser still receives the poster image (with alt="Video by …" or
+    "Photo by …") from their CDN. We piggy-back on that behavior.
+    """
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+        try:
+            ctx = await browser.new_context(
+                viewport={"width": 500, "height": 900},
+                user_agent=_IG_UA,
+                locale="en-US",
+            )
+            page = await ctx.new_page()
+            resp = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            status = resp.status if resp else 0
+            # Give Instagram's SPA a moment to inject the poster image.
+            await page.wait_for_timeout(4500)
+            # Prefer the reel/video poster (alt starts with "Video by …");
+            # fall back to a photo post if this permalink is a still.
+            src = await page.evaluate(
+                """() => {
+                    const imgs = Array.from(document.querySelectorAll('img'));
+                    const bigVideo = imgs.find(i =>
+                        (i.alt||'').startsWith('Video by') && i.naturalWidth > 200);
+                    if (bigVideo) return bigVideo.src;
+                    const bigPhoto = imgs.find(i =>
+                        (i.alt||'').startsWith('Photo by') && i.naturalWidth > 200);
+                    if (bigPhoto) return bigPhoto.src;
+                    return null;
+                }"""
+            )
+            # Return status alongside src so the caller can distinguish
+            # deleted (404/410) from just "no poster on page".
+            return src, status
+        finally:
+            await browser.close()
+
+
 def _extract_og_image(html: str) -> Optional[str]:
     """Pull og:image out of an Instagram public HTML page.
     Falls back to twitter:image and JSON blobs when og:image is absent."""
@@ -629,35 +673,25 @@ async def pull_instagram_cover(payload: InstagramCoverRequest):
         return {"success": False, "reason": "not_instagram",
                 "message": "Please enter a valid Instagram Reel or Post URL."}
 
-    headers = {
-        "User-Agent": _IG_UA,
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    }
-
+    # Load the permalink in a real headless Chromium — Instagram no longer
+    # exposes og:image to plain HTTP scrapers, but the poster image is still
+    # rendered into the DOM for real browsers.
     try:
-        page = requests.get(canonical, headers=headers, timeout=12, allow_redirects=True)
-    except requests.RequestException as e:
-        logger.warning(f"IG cover pull network error for {canonical}: {e}")
+        thumb, status_code = await _extract_ig_cover_via_browser(canonical)
+    except Exception as e:
+        logger.warning(f"IG headless render failed for {canonical}: {e}")
         return {"success": False, "reason": "network_error",
-                "message": "Could not reach Instagram. Please upload the cover manually."}
+                "message": "Could not reach Instagram. Please try again or upload the cover manually."}
 
-    # Only 404 / 410 are unambiguous signals that the post is gone.
-    if page.status_code in (404, 410):
+    if status_code in (404, 410):
         return {"success": False, "reason": "private_or_deleted",
                 "message": "This Instagram post appears to be deleted or the URL is incorrect. "
                            "Please double-check the link or upload the cover manually."}
 
-    # Any other 4xx / 5xx — Instagram is refusing to serve us the page.
-    if page.status_code >= 400:
-        return {"success": False, "reason": "no_thumbnail",
-                "message": "Instagram did not provide a cover image for this post. "
-                           "Please upload a cover manually."}
-
-    thumb = _extract_og_image(page.text or "")
     if not thumb:
-        # Page loaded but Instagram didn't include og:image (common for the
-        # anonymous scraper path today). Not the same as "deleted".
+        # Page loaded but Instagram didn't render a recognizable poster image
+        # (e.g. carousel post with lazy-loaded slides, unusually formatted
+        # alt text, or a login-required post). Not the same as "deleted".
         return {"success": False, "reason": "no_thumbnail",
                 "message": "Instagram did not provide a cover image for this post. "
                            "Please upload a cover manually."}
