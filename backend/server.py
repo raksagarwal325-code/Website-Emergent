@@ -549,7 +549,8 @@ async def upload_image(file: UploadFile = File(...)):
 
 # --- Instagram cover auto-pull ------------------------------------------------
 def _canonical_instagram_url(raw: str) -> Optional[str]:
-    """Return a canonical Reel/Post/TV permalink or None if not an IG URL."""
+    """Return a canonical Reel/Post/TV permalink (no query params, no fragment)
+    or None if the input is not a supported Instagram URL."""
     from urllib.parse import urlparse
 
     try:
@@ -566,6 +567,7 @@ def _canonical_instagram_url(raw: str) -> Optional[str]:
     parts = [p for p in path.split("/") if p]
     if len(parts) < 2 or parts[0] not in {"p", "reel", "reels", "tv"}:
         return None
+    # Strip query string (?utm_source=, &igsh=, etc.) and fragment.
     return f"{u.scheme or 'https'}://{host}{path}"
 
 
@@ -610,11 +612,13 @@ async def pull_instagram_cover(payload: InstagramCoverRequest):
       · 200 { success: false, reason: "<code>", message: "<user_msg>" }
 
     Reason codes:
-      · invalid_url       → URL not provided / not a valid URL
-      · not_instagram     → URL is not an Instagram permalink we support
-      · private_or_deleted→ IG returned 4xx / login wall / no og:image
-      · network_error     → Could not reach Instagram / timeout
-      · image_fetch_failed→ og:image URL couldn't be downloaded
+      · invalid_url        → URL not provided / not a valid URL
+      · not_instagram      → URL is not an Instagram permalink we support
+      · private_or_deleted → IG explicitly returned 404 / 410 (post is gone)
+      · no_thumbnail       → Post exists but Instagram didn't expose a cover
+                             (very common today — login-walled HTML)
+      · network_error      → Could not reach Instagram / timeout
+      · image_fetch_failed → thumbnail URL couldn't be downloaded
     """
     raw = (payload.url or "").strip()
     if not raw:
@@ -638,16 +642,25 @@ async def pull_instagram_cover(payload: InstagramCoverRequest):
         return {"success": False, "reason": "network_error",
                 "message": "Could not reach Instagram. Please upload the cover manually."}
 
-    if page.status_code >= 400:
+    # Only 404 / 410 are unambiguous signals that the post is gone.
+    if page.status_code in (404, 410):
         return {"success": False, "reason": "private_or_deleted",
-                "message": "This Instagram post may be private, deleted, or unsupported. "
-                           "Please upload the cover manually."}
+                "message": "This Instagram post appears to be deleted or the URL is incorrect. "
+                           "Please double-check the link or upload the cover manually."}
+
+    # Any other 4xx / 5xx — Instagram is refusing to serve us the page.
+    if page.status_code >= 400:
+        return {"success": False, "reason": "no_thumbnail",
+                "message": "Instagram did not provide a cover image for this post. "
+                           "Please upload a cover manually."}
 
     thumb = _extract_og_image(page.text or "")
     if not thumb:
-        return {"success": False, "reason": "private_or_deleted",
-                "message": "This Instagram post may be private, deleted, or unsupported. "
-                           "Please upload the cover manually."}
+        # Page loaded but Instagram didn't include og:image (common for the
+        # anonymous scraper path today). Not the same as "deleted".
+        return {"success": False, "reason": "no_thumbnail",
+                "message": "Instagram did not provide a cover image for this post. "
+                           "Please upload a cover manually."}
 
     try:
         img_resp = requests.get(thumb, headers={"User-Agent": _IG_UA}, timeout=15, allow_redirects=True)

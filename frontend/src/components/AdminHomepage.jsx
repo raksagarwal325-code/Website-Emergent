@@ -25,18 +25,22 @@ const SECTIONS = [
 ];
 
 // Reusable inputs -----
-const Text = ({ label, value, onChange, "data-testid": tid, ...rest }) => (
+const Text = ({ label, value, onChange, "data-testid": tid, normalize, ...rest }) => (
   <label className="block">
     <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
-    <input value={value ?? ""} onChange={(e) => onChange(e.target.value)} data-testid={tid} {...rest}
+    <input value={value ?? ""} onChange={(e) => onChange(e.target.value)}
+      onBlur={normalize ? (e) => { const v = normalize(e.target.value); if (v !== e.target.value) onChange(v); } : undefined}
+      data-testid={tid} {...rest}
       className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-sm text-white" />
   </label>
 );
 
-const TextArea = ({ label, value, onChange, rows = 4, "data-testid": tid }) => (
+const TextArea = ({ label, value, onChange, rows = 4, "data-testid": tid, normalize }) => (
   <label className="block">
     <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
-    <textarea value={value ?? ""} onChange={(e) => onChange(e.target.value)} rows={rows} data-testid={tid}
+    <textarea value={value ?? ""} onChange={(e) => onChange(e.target.value)}
+      onBlur={normalize ? (e) => { const v = normalize(e.target.value); if (v !== e.target.value) onChange(v); } : undefined}
+      rows={rows} data-testid={tid}
       className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-sm text-white resize-none" />
   </label>
 );
@@ -268,6 +272,42 @@ const VideoPicker = ({ label, value, onChange, "data-testid": tid }) => {
   );
 };
 
+// --- Normalizers for the Influencer Promotions editor ---------------------
+// Strip Instagram's tracking params (?utm_source=, &igsh=, &igshid=…) and
+// normalize to a clean permalink like https://www.instagram.com/reel/XYZ/
+const normalizeIgUrlInput = (raw) => {
+  const t = (raw || "").trim();
+  if (!t) return t;
+  // Only touch strings that look like an IG URL — otherwise leave as-is so
+  // pasted embed codes (starting with "<") aren't destroyed.
+  if (!/instagram\.com/i.test(t)) return t;
+  try {
+    const u = new URL(t);
+    if (!u.hostname.toLowerCase().endsWith("instagram.com")) return t;
+    const path = u.pathname.endsWith("/") ? u.pathname : `${u.pathname}/`;
+    return `${u.protocol}//${u.hostname}${path}`;
+  } catch {
+    return t;
+  }
+};
+
+// Convert either a bare handle, a full profile URL, or "@handle" input into
+// the canonical "@handle" form the card expects.
+const normalizeIgHandle = (raw) => {
+  let s = (raw || "").trim();
+  if (!s) return s;
+  // Strip surrounding quotes if user pasted from spreadsheet
+  s = s.replace(/^["']|["']$/g, "");
+  // Full profile URL → username
+  s = s.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "");
+  s = s.replace(/^\/+/, "");
+  s = s.replace(/\/.*$/, ""); // drop trailing path
+  s = s.replace(/[?#].*$/, ""); // drop query / fragment
+  s = s.replace(/^@+/, "");
+  if (!s) return "";
+  return `@${s}`;
+};
+
 // Instagram cover picker — combines manual upload with an "Auto-pull from
 // Instagram" backend call. Falls back gracefully when IG blocks the scrape.
 const InstagramCoverPicker = ({ label, value, onChange, sourceUrl, "data-testid": tid }) => {
@@ -384,9 +424,9 @@ const InstagramCoverPicker = ({ label, value, onChange, sourceUrl, "data-testid"
             </div>
           ) : (
             <p className="text-[10px] text-white/35 leading-relaxed">
-              Instagram now blocks most auto-pull attempts for private, age-gated, or region-restricted
-              posts — if the pull fails, please upload a cover screenshot manually. The saved cover is
-              cached on our server so Instagram is not called on every page load.
+              Instagram may not provide covers automatically for all public reels/posts.
+              If auto-pull fails, upload a 9:16 screenshot manually. The saved cover is
+              cached on our server so Instagram is never called on public page loads.
             </p>
           )}
         </div>
@@ -423,9 +463,9 @@ function ListEditor({ items, onChange, fields, defaultItem, testId }) {
                 data-testid={`${testId}-${i}-${f.name}`}
               />
             ) : f.type === "textarea" ? (
-              <TextArea key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
+              <TextArea key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} normalize={f.normalize} data-testid={`${testId}-${i}-${f.name}`} />
             ) : (
-              <Text key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`}
+              <Text key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} normalize={f.normalize} data-testid={`${testId}-${i}-${f.name}`}
                 type={f.type || "text"} min={f.min} max={f.max} />
             )
           ))}
@@ -835,8 +875,8 @@ function SectionEditor({ sectionKey, data, patch }) {
           <div className="eyebrow mb-1 mt-6">Influencer posts / reels</div>
           <p className="text-[11px] text-white/40 mb-2">
             Paste the Instagram Reel/Post URL first, then click <span className="text-[#D4AF37]">Auto-pull cover</span>{" "}
-            to try and grab the cover automatically. If Instagram blocks it (private / age-gated / restricted posts),
-            upload a cover screenshot manually. Card clicks open the original Reel/Post in a new tab.
+            to try and grab the cover automatically. Instagram may not provide covers for every public reel/post —
+            if auto-pull fails, upload a 9:16 screenshot manually. Card clicks open the original Reel/Post in a new tab.
           </p>
           <ListEditor
             items={data.items || []}
@@ -844,9 +884,9 @@ function SectionEditor({ sectionKey, data, patch }) {
             defaultItem={{ input: "", thumbnail: "", handle: "", caption: "", product_id: "" }}
             testId="hp-influencer-item"
             fields={[
-              { name: "input", label: "Instagram Reel/Post URL (paste this first — opens in a new tab when the card is clicked)", type: "textarea" },
+              { name: "input", label: "Instagram Reel/Post URL (paste this first — tracking params like ?utm_source= are cleaned automatically on blur)", type: "textarea", normalize: normalizeIgUrlInput },
               { name: "thumbnail", label: "Cover thumbnail (auto-pull, or upload a vertical 9:16 screenshot)", type: "igCover", sourceField: "input" },
-              { name: "handle", label: "Creator handle (e.g. @designstudio)" },
+              { name: "handle", label: "Creator handle (e.g. @designstudio — a full profile URL is auto-converted)", normalize: normalizeIgHandle },
               { name: "caption", label: "Short caption / context — optional", type: "textarea" },
               { name: "product_id", label: "Shop this look — link a product from the catalog (optional)", type: "singleProduct" },
             ]}
