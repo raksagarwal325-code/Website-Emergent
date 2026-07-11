@@ -96,3 +96,5 @@ frontend/node_modules/.cache/default-development/10.pack
 frontend/node_modules/.cache/default-development/12.pack
 frontend/node_modules/.cache/default-development/2.pack
 frontend/node_modules/.cache/default-development/9.pack
+.pw-browsers/chromium_headless_shell-1187/chrome-linux/headless_shell
+.pw-browsers/chromium-1187/chrome-linux/chrome
