@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import { ArrowUpRight, Instagram, Play, ShoppingBag } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
@@ -75,9 +76,18 @@ function InfluencerCard({ item, product, index }) {
   const MediaTag = igUrl ? "a" : "div";
 
   return (
-    <article
+    <motion.article
       data-testid={`influencer-card-${index}`}
       className="influencer-card group relative flex flex-col overflow-hidden w-full max-w-[380px] md:w-[380px]"
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.2 }}
+      transition={{
+        duration: 0.7,
+        delay: 0.08 + index * 0.12,
+        ease: [0.22, 1, 0.36, 1], // "editorial" cubic-bezier
+      }}
+      whileHover={{ y: -6, transition: { duration: 0.35, ease: "easeOut" } }}
       style={{
         background: "linear-gradient(180deg, #23121e 0%, #1a0a17 100%)",
         border: "1px solid rgba(212,175,55,0.28)",
@@ -230,7 +240,7 @@ function InfluencerCard({ item, product, index }) {
           )}
         </div>
       </div>
-    </article>
+    </motion.article>
   );
 }
 
@@ -279,7 +289,13 @@ export default function InfluencerPromotions() {
     >
       <div className="max-w-7xl mx-auto px-6 py-16 md:py-20">
         {/* Header */}
-        <div className="text-center mb-8 md:mb-10">
+        <motion.div
+          className="text-center mb-8 md:mb-10"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.4 }}
+          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+        >
           {P.eyebrow && <div className="eyebrow mb-3">{P.eyebrow}</div>}
           {(titlePre || titleHi) && (
             <h2
@@ -298,7 +314,7 @@ export default function InfluencerPromotions() {
               {P.subtitle}
             </p>
           )}
-        </div>
+        </motion.div>
 
         {/* Cards — flex-wrap + justify-center so 1/2/3+ items are always
             centered without leaving empty grid columns on the right. */}
@@ -318,7 +334,17 @@ export default function InfluencerPromotions() {
 
         {/* View More CTA */}
         {P.view_more_link && (
-          <div className="mt-10 md:mt-12 flex justify-center">
+          <motion.div
+            className="mt-10 md:mt-12 flex justify-center"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.6 }}
+            transition={{
+              duration: 0.7,
+              delay: 0.08 + validItems.length * 0.12,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+          >
             <a
               href={P.view_more_link}
               target="_blank"
@@ -355,7 +381,7 @@ export default function InfluencerPromotions() {
                 className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
               />
             </a>
-          </div>
+          </motion.div>
         )}
       </div>
     </section>
