@@ -1,32 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Instagram, ShoppingBag } from "lucide-react";
+import { ArrowUpRight, Instagram, Play, ShoppingBag } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
 
-const IG_SCRIPT_SRC = "https://www.instagram.com/embed.js";
-
-// Ensure Instagram's embed.js loads exactly once, then resolve when ready.
-function ensureInstagramScript() {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined") return resolve();
-    if (window.instgrm && window.instgrm.Embeds) return resolve();
-    const existing = document.querySelector(`script[src="${IG_SCRIPT_SRC}"]`);
-    if (existing) {
-      if (existing.dataset.loaded === "true") return resolve();
-      existing.addEventListener("load", () => resolve(), { once: true });
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = IG_SCRIPT_SRC;
-    s.async = true;
-    s.onload = () => {
-      s.dataset.loaded = "true";
-      resolve();
-    };
-    document.body.appendChild(s);
-  });
-}
+// ---------- Helpers ---------------------------------------------------------
 
 function normalizeIgUrl(raw) {
   const trimmed = (raw || "").trim();
@@ -40,15 +18,28 @@ function normalizeIgUrl(raw) {
   }
 }
 
-// Auto-detect: <blockquote…> → use as-is · URL → wrap into standard IG blockquote.
-// We deliberately drop `data-instgrm-captioned` to keep card heights tight and
-// hide Instagram's likes / comments block for a cleaner luxury look.
-function itemToEmbedHtml(item) {
-  const input = (item?.input || "").trim();
-  if (!input) return "";
-  if (input.startsWith("<")) return input;
-  const url = normalizeIgUrl(input);
-  return `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14" style="background:#000; border:0; margin:0 auto; padding:0; width:100%; min-width:0;"></blockquote>`;
+// Accept either a raw URL or an <blockquote…> Instagram embed snippet and
+// return the canonical Instagram permalink so the card can deep-link to it.
+function extractIgUrl(input) {
+  const t = (input || "").trim();
+  if (!t) return "";
+  if (t.startsWith("<")) {
+    const permalink = t.match(/data-instgrm-permalink="([^"]+)"/i);
+    if (permalink) return normalizeIgUrl(permalink[1]);
+    const href = t.match(/href="([^"]+instagram\.com[^"]+)"/i);
+    if (href) return normalizeIgUrl(href[1]);
+    return "";
+  }
+  return normalizeIgUrl(t);
+}
+
+// Detect Reel vs Post vs Story from the URL for the small badge.
+function detectIgKind(url) {
+  const u = (url || "").toLowerCase();
+  if (u.includes("/reel/") || u.includes("/reels/")) return "Reel";
+  if (u.includes("/tv/")) return "IGTV";
+  if (u.includes("/stories/")) return "Story";
+  return "Post";
 }
 
 function displayHandle(raw) {
@@ -67,74 +58,140 @@ function handleHref(raw) {
   return `https://www.instagram.com/${displayHandle(s)}/`;
 }
 
+// ---------- Card ------------------------------------------------------------
+
 function InfluencerCard({ item, product, index }) {
-  const html = itemToEmbedHtml(item);
+  const igUrl = extractIgUrl(item?.input);
+  const kind = detectIgKind(igUrl);
+  const thumbnail = item?.thumbnail || "";
   const handle = displayHandle(item?.handle);
-  const href = handleHref(item?.handle);
+  const handleUrl = handleHref(item?.handle);
+
+  // Media area is wrapped in an <a> so the whole thumbnail (or play icon) opens
+  // the Reel/Post on Instagram in a new tab.
+  const mediaProps = igUrl
+    ? { href: igUrl, target: "_blank", rel: "noreferrer" }
+    : { role: "presentation", "aria-hidden": "true" };
+  const MediaTag = igUrl ? "a" : "div";
 
   return (
     <article
       data-testid={`influencer-card-${index}`}
-      className="influencer-card group relative flex flex-col overflow-hidden"
+      className="influencer-card group relative flex flex-col overflow-hidden w-full max-w-[380px] md:w-[380px]"
       style={{
         background: "linear-gradient(180deg, #23121e 0%, #1a0a17 100%)",
         border: "1px solid rgba(212,175,55,0.28)",
-        borderRadius: "10px",
+        borderRadius: "12px",
         boxShadow:
-          "0 20px 40px -18px rgba(0,0,0,0.65), 0 0 0 1px rgba(163,99,80,0.10), inset 0 0 32px -14px rgba(212,175,55,0.10)",
+          "0 24px 44px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(163,99,80,0.10), inset 0 0 32px -14px rgba(212,175,55,0.10)",
       }}
     >
-      {/* Ornamental gold hairlines top / bottom */}
+      {/* Ornamental gold hairline */}
       <div
-        className="absolute inset-x-4 top-0 h-px pointer-events-none"
+        className="absolute inset-x-6 top-0 h-px pointer-events-none z-10"
         style={{
           background:
             "linear-gradient(90deg, transparent, rgba(212,175,55,0.55), transparent)",
         }}
       />
 
-      {/* Embed slot — top-aligned crop so profile header + reel are always visible;
-          IG likes/comments footer is cropped below the frame. */}
-      <div className="ig-embed-frame relative w-full flex items-start justify-center bg-black/40 overflow-hidden">
+      {/* Media area — 9:16 vertical (reel-like) so all cards match perfectly */}
+      <MediaTag
+        {...mediaProps}
+        data-testid={`influencer-card-${index}-media`}
+        aria-label={igUrl ? `Watch on Instagram — ${kind}` : undefined}
+        className="relative block w-full bg-black overflow-hidden group/media"
+        style={{ aspectRatio: "9 / 16" }}
+      >
+        {thumbnail ? (
+          <img
+            src={api.resolveImage(thumbnail)}
+            alt={item?.caption || `Instagram ${kind} by @${handle || "creator"}`}
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-[900ms] ease-out group-hover/media:scale-[1.04]"
+            loading="lazy"
+          />
+        ) : (
+          // Fallback placeholder when no thumbnail was uploaded
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3"
+            style={{
+              background:
+                "radial-gradient(circle at 50% 40%, rgba(163,99,80,0.35), transparent 55%), linear-gradient(180deg, #2a1125 0%, #16070f 100%)",
+            }}
+          >
+            <Instagram size={44} strokeWidth={1.2} className="text-[#D4AF37]/40" />
+            <span className="text-[10px] uppercase tracking-[0.28em] text-white/40">
+              Upload cover in Admin
+            </span>
+          </div>
+        )}
+
+        {/* Cinematic dark gradient to lift overlays */}
         <div
-          className="ig-embed-slot w-full flex justify-center"
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-        {/* Subtle warm glow */}
-        <div
-          className="pointer-events-none absolute inset-0"
+          className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "radial-gradient(circle at 50% 100%, rgba(163,99,80,0.14), transparent 55%)",
+              "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, transparent 30%, transparent 55%, rgba(0,0,0,0.6) 100%)",
           }}
         />
 
-        {/* Shop this look pill — only when a catalog product is linked */}
+        {/* Instagram Reel badge */}
+        <div className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/55 backdrop-blur-sm border border-white/15">
+          <Instagram size={11} strokeWidth={1.8} className="text-white" />
+          <span className="text-[9px] uppercase tracking-[0.24em] text-white/90 font-medium">
+            {kind}
+          </span>
+        </div>
+
+        {/* Central play button — grows on hover */}
+        {igUrl && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span
+              className="w-16 h-16 md:w-[72px] md:h-[72px] rounded-full flex items-center justify-center transition-all duration-500 group-hover/media:scale-110"
+              style={{
+                background:
+                  "radial-gradient(circle at 40% 35%, rgba(255,255,255,0.98), rgba(240,225,190,0.95))",
+                boxShadow:
+                  "0 12px 32px -8px rgba(0,0,0,0.7), 0 0 0 6px rgba(212,175,55,0.18), 0 0 0 12px rgba(212,175,55,0.08)",
+              }}
+            >
+              <Play
+                size={26}
+                strokeWidth={0}
+                className="text-[#2a1125] ml-1"
+                fill="#2a1125"
+              />
+            </span>
+          </div>
+        )}
+
+        {/* Shop-this-look pill (only when a catalog product is linked) */}
         {product && (
           <Link
             to={`/product/${product.id}`}
             data-testid={`influencer-card-${index}-shop-btn`}
             aria-label={`Shop this look — ${product.name}`}
-            className="absolute z-10 bottom-4 right-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-full transition-all duration-300 hover:-translate-y-0.5"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute z-20 bottom-3 right-3 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full transition-all duration-300 hover:-translate-y-0.5"
             style={{
               background: "linear-gradient(180deg, #D4AF37 0%, #B5952F 100%)",
               color: "#2a1125",
               boxShadow:
-                "0 8px 20px -6px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,235,180,0.4), inset 0 1px 0 rgba(255,255,255,0.35)",
+                "0 10px 22px -8px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,235,180,0.45), inset 0 1px 0 rgba(255,255,255,0.35)",
             }}
           >
-            <ShoppingBag size={13} strokeWidth={2} />
-            <span className="text-[10px] uppercase tracking-[0.24em] font-medium">
+            <ShoppingBag size={12} strokeWidth={2} />
+            <span className="text-[10px] uppercase tracking-[0.22em] font-medium">
               Shop this look
             </span>
           </Link>
         )}
-      </div>
+      </MediaTag>
 
-      {/* Caption footer */}
+      {/* Footer */}
       <div className="px-5 py-4 border-t border-[#D4AF37]/15 bg-black/30 flex items-center gap-3">
-        <span className="w-8 h-8 flex items-center justify-center rounded-full border border-[#D4AF37]/40 text-[#D4AF37] flex-shrink-0">
-          <Instagram size={14} strokeWidth={1.6} />
+        <span className="w-9 h-9 flex items-center justify-center rounded-full border border-[#D4AF37]/40 text-[#D4AF37] flex-shrink-0">
+          <Instagram size={15} strokeWidth={1.6} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]/80">
@@ -142,7 +199,7 @@ function InfluencerCard({ item, product, index }) {
           </div>
           {handle ? (
             <a
-              href={href}
+              href={handleUrl}
               target="_blank"
               rel="noreferrer"
               data-testid={`influencer-card-${index}-handle`}
@@ -177,16 +234,17 @@ function InfluencerCard({ item, product, index }) {
   );
 }
 
+// ---------- Section ---------------------------------------------------------
+
 export default function InfluencerPromotions() {
   const { hp } = useSettings();
   const P = hp?.influencer_promotions || {};
-  const containerRef = useRef(null);
 
   const validItems = (P.items || []).filter(
-    (it) => (it?.input || "").trim().length > 0,
+    (it) => (it?.input || "").trim().length > 0 || (it?.thumbnail || "").trim().length > 0,
   );
 
-  // Fetch products once so we can resolve product_id → product for "Shop this look".
+  // Lazy-load products only when at least one item links to the catalog.
   const [products, setProducts] = useState([]);
   const needsProducts = validItems.some((it) => (it?.product_id || "").trim());
   useEffect(() => {
@@ -202,25 +260,6 @@ export default function InfluencerPromotions() {
     [products],
   );
 
-  const embedsSignature = validItems.map((i) => i.input).join("|");
-  useEffect(() => {
-    if (validItems.length === 0) return undefined;
-    let cancelled = false;
-    ensureInstagramScript().then(() => {
-      if (cancelled) return;
-      setTimeout(() => {
-        try {
-          window?.instgrm?.Embeds?.process?.();
-        } catch {
-          /* noop */
-        }
-      }, 80);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [embedsSignature, validItems.length]);
-
   if (P.enabled === false) return null;
   if (validItems.length === 0) return null;
 
@@ -232,29 +271,8 @@ export default function InfluencerPromotions() {
       data-testid="influencer-promotions-section"
       className="border-t border-white/10"
     >
-      {/* Scoped CSS overrides for Instagram embeds — normalize widths and hide
-          Instagram's min-width blowout on mobile. */}
-      <style>{`
-        .influencer-card .ig-embed-frame {
-          height: 560px;
-        }
-        @media (max-width: 767px) {
-          .influencer-card .ig-embed-frame {
-            height: 500px;
-          }
-        }
-        .influencer-card .instagram-media,
-        .influencer-card iframe.instagram-media-rendered {
-          min-width: 0 !important;
-          max-width: 100% !important;
-          width: 100% !important;
-          margin: 0 auto !important;
-          border-radius: 0 !important;
-          box-shadow: none !important;
-        }
-      `}</style>
-
       <div className="max-w-7xl mx-auto px-6 py-16 md:py-20">
+        {/* Header */}
         <div className="text-center mb-8 md:mb-10">
           {P.eyebrow && <div className="eyebrow mb-3">{P.eyebrow}</div>}
           {(titlePre || titleHi) && (
@@ -276,14 +294,15 @@ export default function InfluencerPromotions() {
           )}
         </div>
 
+        {/* Cards — flex-wrap + justify-center so 1/2/3+ items are always
+            centered without leaving empty grid columns on the right. */}
         <div
-          ref={containerRef}
           data-testid="influencer-promotions-grid"
-          className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 items-stretch max-w-md mx-auto lg:max-w-none"
+          className="flex flex-wrap justify-center gap-6 md:gap-8"
         >
           {validItems.map((it, i) => (
             <InfluencerCard
-              key={`${it.input}-${i}`}
+              key={`${it.input || it.thumbnail}-${i}`}
               item={it}
               product={it?.product_id ? productById[it.product_id] || null : null}
               index={i}
@@ -291,6 +310,7 @@ export default function InfluencerPromotions() {
           ))}
         </div>
 
+        {/* View More CTA */}
         {P.view_more_link && (
           <div className="mt-10 md:mt-12 flex justify-center">
             <a

@@ -216,7 +216,7 @@ export const HOMEPAGE_DEFAULTS = {
     // plain Reel / Post URL (e.g. https://www.instagram.com/reel/XYZ/) — the
     // renderer auto-detects and normalizes both.
     items: [],
-    // item shape: { input: string, handle: string, caption: string, product_id: string }
+    // item shape: { input: string, handle: string, caption: string, product_id: string, thumbnail: string }
   },
 };
 

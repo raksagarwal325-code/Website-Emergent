@@ -697,13 +697,18 @@ function SectionEditor({ sectionKey, data, patch }) {
           </div>
 
           <div className="eyebrow mb-1 mt-6">Influencer posts / reels</div>
+          <p className="text-[11px] text-white/40 mb-2">
+            Upload a custom cover thumbnail for each card (recommended — gives full brand control).
+            Card click opens the Instagram Reel/Post in a new tab.
+          </p>
           <ListEditor
             items={data.items || []}
             onChange={(v)=>set("items",v)}
-            defaultItem={{ input: "", handle: "", caption: "", product_id: "" }}
+            defaultItem={{ input: "", handle: "", caption: "", product_id: "", thumbnail: "" }}
             testId="hp-influencer-item"
             fields={[
-              { name: "input", label: "Instagram Reel/Post URL — or full <blockquote…> embed code", type: "textarea" },
+              { name: "thumbnail", label: "Cover thumbnail (vertical 9:16 works best, e.g. a still from the Reel)", type: "image" },
+              { name: "input", label: "Instagram Reel/Post URL (opens in new tab when card is clicked)", type: "textarea" },
               { name: "handle", label: "Creator handle (e.g. @designstudio) — optional" },
               { name: "caption", label: "Short caption / context — optional", type: "textarea" },
               { name: "product_id", label: "Shop this look — link a product from the catalog (optional)", type: "singleProduct" },
