@@ -20,6 +20,7 @@ import Craft from "@/pages/Craft";
 import FAQ from "@/pages/FAQ";
 import Gallery from "@/pages/Gallery";
 import GalleryProject from "@/pages/GalleryProject";
+import StyledBy from "@/pages/StyledBy";
 import LegalPage from "@/pages/LegalPage";
 import FloatingActions from "@/components/FloatingActions";
 import MobileReachStrip from "@/components/MobileReachStrip";
@@ -51,6 +52,7 @@ function App() {
               <Route path="/faq" element={<FAQ />} />
               <Route path="/gallery" element={<Gallery />} />
               <Route path="/gallery/:slug" element={<GalleryProject />} />
+              <Route path="/styled-by" element={<StyledBy />} />
               <Route path="/product/:id" element={<ProductDetail />} />
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/cart" element={<Cart />} />
