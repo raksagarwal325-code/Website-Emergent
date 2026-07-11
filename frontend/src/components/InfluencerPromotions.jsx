@@ -38,14 +38,15 @@ function normalizeIgUrl(raw) {
   }
 }
 
+// Auto-detect: <blockquote…> → use as-is · URL → wrap into standard IG blockquote.
+// We deliberately drop `data-instgrm-captioned` to keep card heights tight and
+// hide Instagram's likes / comments block for a cleaner luxury look.
 function itemToEmbedHtml(item) {
   const input = (item?.input || "").trim();
   if (!input) return "";
-  // Full embed code pasted from Instagram → use as-is.
   if (input.startsWith("<")) return input;
-  // Otherwise treat as URL and wrap in the standard blockquote.
   const url = normalizeIgUrl(input);
-  return `<blockquote class="instagram-media" data-instgrm-captioned data-instgrm-permalink="${url}" data-instgrm-version="14" style="background:#000; border:0; margin:0; padding:0; width:100%; min-width:280px;"></blockquote>`;
+  return `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14" style="background:#000; border:0; margin:0 auto; padding:0; width:100%; min-width:0;"></blockquote>`;
 }
 
 function displayHandle(raw) {
@@ -70,42 +71,75 @@ function InfluencerCard({ item, index }) {
   const href = handleHref(item?.handle);
 
   return (
-    <div
+    <article
       data-testid={`influencer-card-${index}`}
-      className="group flex flex-col border border-[#D4AF37]/20 bg-black/40 hover:border-[#D4AF37]/60 transition-colors"
+      className="influencer-card group relative flex flex-col overflow-hidden"
+      style={{
+        background: "linear-gradient(180deg, #23121e 0%, #1a0a17 100%)",
+        border: "1px solid rgba(212,175,55,0.28)",
+        borderRadius: "10px",
+        boxShadow:
+          "0 20px 40px -18px rgba(0,0,0,0.65), 0 0 0 1px rgba(163,99,80,0.10), inset 0 0 32px -14px rgba(212,175,55,0.10)",
+      }}
     >
-      <div className="relative w-full bg-black overflow-hidden p-2 sm:p-3">
+      {/* Ornamental gold hairlines top / bottom */}
+      <div
+        className="absolute inset-x-4 top-0 h-px pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent, rgba(212,175,55,0.55), transparent)",
+        }}
+      />
+
+      {/* Embed slot — top-aligned crop so profile header + reel are always visible;
+          IG likes/comments footer is cropped below the frame. */}
+      <div className="ig-embed-frame relative w-full flex items-start justify-center bg-black/40 overflow-hidden">
         <div
-          className="ig-embed-slot mx-auto w-full"
-          style={{ maxWidth: 540 }}
+          className="ig-embed-slot w-full flex justify-center"
           dangerouslySetInnerHTML={{ __html: html }}
+        />
+        {/* Subtle warm glow */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(circle at 50% 100%, rgba(163,99,80,0.14), transparent 55%)",
+          }}
         />
       </div>
 
-      {(handle || item?.caption) && (
-        <div className="px-4 py-4 border-t border-white/10 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            {handle && (
-              <a
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                data-testid={`influencer-card-${index}-handle`}
-                className="inline-flex items-center gap-2 text-sm text-[#D4AF37] hover:text-[#B5952F] truncate"
-              >
-                <Instagram size={14} strokeWidth={1.6} />
-                <span className="truncate">@{handle}</span>
-              </a>
-            )}
-            {item?.caption && (
-              <div className="mt-1 text-xs text-white/60 leading-relaxed line-clamp-3">
-                {item.caption}
-              </div>
-            )}
+      {/* Caption footer */}
+      <div className="px-5 py-4 border-t border-[#D4AF37]/15 bg-black/30 flex items-center gap-3">
+        <span className="w-8 h-8 flex items-center justify-center rounded-full border border-[#D4AF37]/40 text-[#D4AF37] flex-shrink-0">
+          <Instagram size={14} strokeWidth={1.6} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]/80">
+            Styled by
           </div>
+          {handle ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              data-testid={`influencer-card-${index}-handle`}
+              className="text-sm text-[#D4AF37] hover:text-white transition-colors truncate block"
+            >
+              @{handle}
+            </a>
+          ) : (
+            <span className="text-sm text-white/60 truncate block">
+              a creator we love
+            </span>
+          )}
+          {item?.caption && (
+            <div className="mt-1 text-[11px] text-white/50 leading-snug line-clamp-2">
+              {item.caption}
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </div>
+    </article>
   );
 }
 
@@ -118,22 +152,19 @@ export default function InfluencerPromotions() {
     (it) => (it?.input || "").trim().length > 0,
   );
 
-  // Load Instagram embed.js and (re-)process embeds whenever the list changes.
   const embedsSignature = validItems.map((i) => i.input).join("|");
   useEffect(() => {
     if (validItems.length === 0) return undefined;
     let cancelled = false;
     ensureInstagramScript().then(() => {
       if (cancelled) return;
-      // process() re-scans the DOM for any un-rendered blockquotes.
-      // Wrapped in setTimeout so React commit finishes before Instagram walks it.
       setTimeout(() => {
         try {
           window?.instgrm?.Embeds?.process?.();
         } catch {
           /* noop */
         }
-      }, 60);
+      }, 80);
     });
     return () => {
       cancelled = true;
@@ -151,8 +182,30 @@ export default function InfluencerPromotions() {
       data-testid="influencer-promotions-section"
       className="border-t border-white/10"
     >
-      <div className="max-w-7xl mx-auto px-6 py-16 md:py-24">
-        <div className="text-center mb-12 md:mb-14">
+      {/* Scoped CSS overrides for Instagram embeds — normalize widths and hide
+          Instagram's min-width blowout on mobile. */}
+      <style>{`
+        .influencer-card .ig-embed-frame {
+          height: 560px;
+        }
+        @media (max-width: 767px) {
+          .influencer-card .ig-embed-frame {
+            height: 500px;
+          }
+        }
+        .influencer-card .instagram-media,
+        .influencer-card iframe.instagram-media-rendered {
+          min-width: 0 !important;
+          max-width: 100% !important;
+          width: 100% !important;
+          margin: 0 auto !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+        }
+      `}</style>
+
+      <div className="max-w-7xl mx-auto px-6 py-16 md:py-20">
+        <div className="text-center mb-8 md:mb-10">
           {P.eyebrow && <div className="eyebrow mb-3">{P.eyebrow}</div>}
           {(titlePre || titleHi) && (
             <h2
@@ -167,7 +220,7 @@ export default function InfluencerPromotions() {
             </h2>
           )}
           {P.subtitle && (
-            <p className="mt-4 text-white/60 max-w-2xl mx-auto leading-relaxed">
+            <p className="mt-3 md:mt-4 text-white/60 max-w-2xl mx-auto leading-relaxed text-sm md:text-base">
               {P.subtitle}
             </p>
           )}
@@ -176,7 +229,7 @@ export default function InfluencerPromotions() {
         <div
           ref={containerRef}
           data-testid="influencer-promotions-grid"
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8"
+          className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 items-stretch max-w-md mx-auto lg:max-w-none"
         >
           {validItems.map((it, i) => (
             <InfluencerCard key={`${it.input}-${i}`} item={it} index={i} />
@@ -184,17 +237,42 @@ export default function InfluencerPromotions() {
         </div>
 
         {P.view_more_link && (
-          <div className="mt-12 md:mt-14 flex justify-center">
+          <div className="mt-10 md:mt-12 flex justify-center">
             <a
               href={P.view_more_link}
               target="_blank"
               rel="noreferrer"
               data-testid="influencer-view-more-btn"
-              className="inline-flex items-center gap-2 border border-[#D4AF37] text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black px-8 py-4 uppercase text-xs tracking-[0.28em] transition-colors"
+              className="group inline-flex items-center gap-2.5 px-8 py-4 uppercase text-[11px] tracking-[0.32em] transition-all duration-300"
+              style={{
+                background: "linear-gradient(180deg, #3a1226 0%, #2a1125 100%)",
+                color: "#D4AF37",
+                border: "1px solid rgba(212,175,55,0.55)",
+                boxShadow:
+                  "0 12px 24px -14px rgba(0,0,0,0.7), inset 0 0 24px -10px rgba(212,175,55,0.25)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background =
+                  "linear-gradient(180deg, #D4AF37 0%, #B5952F 100%)";
+                e.currentTarget.style.color = "#2a1125";
+                e.currentTarget.style.boxShadow =
+                  "0 18px 36px -14px rgba(212,175,55,0.45), inset 0 0 24px -10px rgba(255,255,255,0.15)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background =
+                  "linear-gradient(180deg, #3a1226 0%, #2a1125 100%)";
+                e.currentTarget.style.color = "#D4AF37";
+                e.currentTarget.style.boxShadow =
+                  "0 12px 24px -14px rgba(0,0,0,0.7), inset 0 0 24px -10px rgba(212,175,55,0.25)";
+              }}
             >
-              <Instagram size={14} strokeWidth={1.6} />
-              {P.view_more_text || "View More on Instagram"}
-              <ArrowUpRight size={14} />
+              <Instagram size={14} strokeWidth={1.7} />
+              <span>{P.view_more_text || "View More on Instagram"}</span>
+              <ArrowUpRight
+                size={14}
+                strokeWidth={1.7}
+                className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+              />
             </a>
           </div>
         )}

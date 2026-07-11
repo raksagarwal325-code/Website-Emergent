@@ -207,7 +207,7 @@ export const HOMEPAGE_DEFAULTS = {
     enabled: true,
     eyebrow: "Featured Creators",
     title_pre: "As",
-    title_highlight: "Styled By.",
+    title_highlight: "Styled By",
     subtitle:
       "Real homes. Real spaces. Real stories from creators who styled Samrat Glass Emporium lights.",
     view_more_text: "View More on Instagram",
