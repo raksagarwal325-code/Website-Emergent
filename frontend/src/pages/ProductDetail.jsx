@@ -188,9 +188,9 @@ export default function ProductDetail() {
             </button>
           </div>
 
-          {/* Stock */}
+          {/* Stock / availability — inquiry-based products never say "unavailable". */}
           <div className="text-xs text-white/50 border-t border-white/10 pt-6">
-            {product.stock > 0 ? `${product.stock} in stock` : "Currently unavailable"}
+            {product.stock > 0 ? `${product.stock} in stock` : "Available on request"}
           </div>
         </div>
       </div>
@@ -275,6 +275,21 @@ export default function ProductDetail() {
 }
 
 
+// Values that mean "no real content" — we hide these spec rows entirely so
+// the page never shows "N/A · —" filler. See requirements #1 & #2.
+const EMPTY_SPEC_VALUES = new Set(["", "-", "—", "n/a", "na", "not available", "unknown", "none", "null"]);
+function isMeaningfulSpec(v) {
+  if (v == null) return false;
+  const s = String(v).trim().toLowerCase();
+  if (!s) return false;
+  return !EMPTY_SPEC_VALUES.has(s);
+}
+
+function filterSpecs(specs) {
+  if (!specs) return [];
+  return Object.entries(specs).filter(([, v]) => isMeaningfulSpec(v));
+}
+
 const TABS = [
   { key: "description", label: "Description" },
   { key: "specifications", label: "Specifications" },
@@ -284,7 +299,7 @@ const TABS = [
 
 function ProductTabs({ product, settings, waLink }) {
   const [active, setActive] = useState("description");
-  const specEntries = product?.specs ? Object.entries(product.specs) : [];
+  const specEntries = filterSpecs(product?.specs);
 
   return (
     <section className="mt-20 border-t border-white/10 pt-12" data-testid="product-tabs">
@@ -326,8 +341,10 @@ function ProductTabs({ product, settings, waLink }) {
               <ul className="space-y-2 text-sm text-white/70">
                 <li>Reference Code · <span className="text-white">{product.sku}</span></li>
                 <li>Category · <span className="text-white">{product.category}</span></li>
-                <li>Stock · <span className="text-white">{product.stock > 0 ? `${product.stock} available` : "Currently unavailable"}</span></li>
-                <li>Rating · <span className="text-white">{product.rating > 0 ? `${product.rating.toFixed(1)} / 5` : "—"}</span></li>
+                <li>Stock · <span className="text-white">{product.stock > 0 ? `${product.stock} available` : "Available on request"}</span></li>
+                {product.rating > 0 && (
+                  <li>Rating · <span className="text-white">{product.rating.toFixed(1)} / 5</span></li>
+                )}
               </ul>
             </div>
           </div>
@@ -336,9 +353,7 @@ function ProductTabs({ product, settings, waLink }) {
         {active === "specifications" && (
           <div data-testid="tab-content-specifications">
             <div className="eyebrow mb-6">Product specifications</div>
-            {specEntries.length === 0 ? (
-              <div className="text-white/50 text-sm">No specifications listed yet.</div>
-            ) : (
+            {specEntries.length > 0 && (
               <div className="border border-white/10 overflow-hidden">
                 <table className="w-full text-sm">
                   <tbody>
@@ -352,6 +367,15 @@ function ProductTabs({ product, settings, waLink }) {
                 </table>
               </div>
             )}
+            {/* Customization note — always shown (works for both fully-specced and inquiry-based pieces). */}
+            <div
+              data-testid="spec-customization-note"
+              className="mt-6 border-l-2 border-[#D4AF37] bg-white/[0.02] px-5 py-4 text-sm text-white/75 leading-relaxed"
+            >
+              <span className="text-[#D4AF37] font-serif italic">Made-to-order — </span>
+              Specifications can be customised as per requirement. Please inquire for exact size,
+              holder type, finish, and pricing.
+            </div>
           </div>
         )}
 

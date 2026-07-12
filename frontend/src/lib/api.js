@@ -97,6 +97,13 @@ export const formatProductPrice = (product, symbol = "₹") => {
   let mode = product.price_display;
   if (!mode) mode = product.fixed_price ? "fixed" : "starting_from";
 
+  // Fallback: if the price is missing or 0 (and not explicitly free), always
+  // show "Price on request" instead of a bare "₹0" or blank field.
+  const numericPrice = Number(product.price);
+  if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
+    return { onRequest: true, label: null, primary: "Price on request", compareAt: null };
+  }
+
   if (mode === "on_request") {
     return { onRequest: true, label: null, primary: "Price on request", compareAt: null };
   }
