@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "sonner";
@@ -108,6 +108,27 @@ export default function Admin() {
 function ProductsAdmin({ products, categories = [], refresh, editing, setEditing }) {
   const [form, setForm] = useState(emptyProduct);
   const [uploading, setUploading] = useState(false);
+  // Category filter for the right-hand product list. "" == show all.
+  const [catFilter, setCatFilter] = useState("");
+
+  // Baseline categories always shown in the filter/dropdown, even if the
+  // catalogue hasn't been fully populated yet. Merge with categories the
+  // backend already knows about so custom values still appear.
+  const CATEGORY_OPTIONS = useMemo(() => {
+    const defaults = [
+      "Chandelier", "Hanging Light", "Table Lamp", "Wall Light",
+      "Candle Stand", "Floor Lamp", "Sconce", "Pendant Light", "Custom Design",
+    ];
+    const merged = new Set(defaults);
+    (categories || []).forEach((c) => c && merged.add(c));
+    return Array.from(merged);
+  }, [categories]);
+
+  // Apply the category filter to the products displayed on the right.
+  const visibleProducts = useMemo(() => {
+    if (!catFilter) return products;
+    return products.filter((p) => (p.category || "") === catFilter);
+  }, [products, catFilter]);
 
   useEffect(() => {
     if (!editing) { setForm(emptyProduct); return; }
@@ -230,12 +251,12 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
             className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm"
           />
           <datalist id="product-category-suggestions">
-            {categories.map((c) => <option key={c} value={c} />)}
+            {CATEGORY_OPTIONS.map((c) => <option key={c} value={c} />)}
           </datalist>
-          {categories.length > 0 && (
+          {CATEGORY_OPTIONS.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               <span className="text-[9px] uppercase tracking-[0.24em] text-white/40 mr-1 self-center">Existing:</span>
-              {categories.map((c) => (
+              {CATEGORY_OPTIONS.map((c) => (
                 <button
                   key={c}
                   type="button"
@@ -418,19 +439,56 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
       </form>
 
       <div className="lg:col-span-7 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="eyebrow">All products ({products.length}{products.filter((x) => x.status === "draft").length > 0 ? ` · ${products.filter((x) => x.status === "draft").length} draft` : ""})</div>
-          <button data-testid="p-new-btn" onClick={() => setEditing(null)} className="inline-flex items-center gap-1 text-xs uppercase tracking-[0.24em] text-[#D4AF37] hover:text-[#B5952F]">
-            <Plus size={12} /> New
-          </button>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="eyebrow">
+            All products ({visibleProducts.length}
+            {visibleProducts.length !== products.length ? ` of ${products.length}` : ""}
+            {products.filter((x) => x.status === "draft").length > 0 ? ` · ${products.filter((x) => x.status === "draft").length} draft` : ""})
+          </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor="admin-cat-filter" className="text-[10px] uppercase tracking-[0.24em] text-white/40">
+              Category
+            </label>
+            <select
+              id="admin-cat-filter"
+              data-testid="admin-cat-filter"
+              value={catFilter}
+              onChange={(e) => setCatFilter(e.target.value)}
+              className="bg-[#0a0a0a] border border-white/15 hover:border-[#BF9972] px-3 py-1.5 text-xs uppercase tracking-[0.14em] cursor-pointer"
+            >
+              <option value="">All categories</option>
+              {CATEGORY_OPTIONS.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <button data-testid="p-new-btn" onClick={() => setEditing(null)} className="inline-flex items-center gap-1 text-xs uppercase tracking-[0.24em] text-[#D4AF37] hover:text-[#B5952F]">
+              <Plus size={12} /> New
+            </button>
+          </div>
         </div>
-        {products.map((p) => (
+
+        {/* Column header row (visible only on wider screens). */}
+        <div className="hidden md:grid grid-cols-[56px_1fr_140px_120px_60px] items-center gap-3 px-3 py-2 text-[9px] uppercase tracking-[0.24em] text-white/40 border-b border-white/10">
+          <div></div>
+          <div>Name</div>
+          <div>Category</div>
+          <div>Status · Price</div>
+          <div className="text-right">Actions</div>
+        </div>
+
+        {visibleProducts.length === 0 && (
+          <div className="text-white/40 text-sm border border-dashed border-white/10 py-8 text-center">
+            No products in this category yet.
+          </div>
+        )}
+
+        {visibleProducts.map((p) => (
           <div key={p.id} data-testid={`admin-product-${p.id}`}
-            className={`flex items-center gap-4 border p-3 ${p.status === "draft" ? "border-[#D4AF37]/50 bg-[#D4AF37]/[0.04]" : "border-white/10"}`}>
+            className={`grid grid-cols-[56px_1fr_60px] md:grid-cols-[56px_1fr_140px_120px_60px] items-center gap-3 border p-3 ${p.status === "draft" ? "border-[#D4AF37]/50 bg-[#D4AF37]/[0.04]" : "border-white/10"}`}>
             <div className="w-14 h-14 bg-[#0a0a0a] overflow-hidden flex-shrink-0">
               {p.images?.[0] && <img src={api.resolveImage(p.images[0])} alt="" className="w-full h-full object-cover" />}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0">
               <div className="font-serif truncate flex items-center gap-2">
                 {p.name}
                 {p.status === "draft" && (
@@ -439,10 +497,31 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
                   </span>
                 )}
               </div>
-              <div className="text-xs text-white/50">{p.category} · {p.status === "draft" ? "Price on request" : `₹${p.price?.toLocaleString("en-IN")}`} · {p.stock} in stock</div>
+              {/* Compact meta line — Category is now surfaced as its own column
+                  above (visible on md+), so this only echoes stock. */}
+              <div className="text-xs text-white/50 md:hidden mt-0.5">
+                {p.category || "—"} · {p.status === "draft" ? "Price on request" : `₹${p.price?.toLocaleString("en-IN")}`} · {p.stock} in stock
+              </div>
+              <div className="text-xs text-white/50 hidden md:block mt-0.5">
+                {p.stock ? `${p.stock} in stock` : "Made to order"}
+              </div>
             </div>
-            <button onClick={() => setEditing(p)} data-testid={`edit-${p.id}`} className="text-white/60 hover:text-[#D4AF37]"><Edit3 size={14} /></button>
-            <button onClick={() => remove(p.id)} data-testid={`del-${p.id}`} className="text-white/60 hover:text-red-400"><Trash2 size={14} /></button>
+            <div className="hidden md:block" data-testid={`admin-product-category-${p.id}`}>
+              <span className="text-[10px] uppercase tracking-[0.14em] px-2 py-1 border border-[#BF9972]/40 text-[#BF9972]">
+                {p.category || "Uncategorized"}
+              </span>
+            </div>
+            <div className="hidden md:block text-xs text-white/70">
+              {p.status === "draft" ? (
+                <span className="text-[#D4AF37]">Draft</span>
+              ) : (
+                <span>₹{p.price?.toLocaleString("en-IN")}</span>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => setEditing(p)} data-testid={`edit-${p.id}`} className="text-white/60 hover:text-[#D4AF37]"><Edit3 size={14} /></button>
+              <button onClick={() => remove(p.id)} data-testid={`del-${p.id}`} className="text-white/60 hover:text-red-400"><Trash2 size={14} /></button>
+            </div>
           </div>
         ))}
       </div>
