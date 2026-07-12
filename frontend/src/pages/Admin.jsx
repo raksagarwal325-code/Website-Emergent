@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { toast } from "sonner";
 import AdminHomepage from "../components/AdminHomepage";
 import AIProductGenerator from "../components/AIProductGenerator";
+import ProductNameSuggester from "../components/ProductNameSuggester";
 
 const emptyProduct = {
   name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "USD",
@@ -181,7 +182,13 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
             <button type="button" onClick={() => setEditing(null)} className="text-white/50 hover:text-white"><X size={16} /></button>
           )}
         </div>
-        <input required data-testid="p-name" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
+        <div>
+          <input required data-testid="p-name" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
+          <ProductNameSuggester
+            form={form}
+            onApply={(name) => setForm({ ...form, name })}
+          />
+        </div>
         <input required data-testid="p-sku" placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
         <div>
           <input

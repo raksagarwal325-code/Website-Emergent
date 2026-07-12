@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import html2pdf from "html2pdf.js";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { api, formatProductPrice } from "../lib/api";
 
@@ -69,7 +70,139 @@ const PLACEHOLDER_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(
 
 // --- Small building blocks -------------------------------------------------
 
-const Page = ({ children, footerText, pageNum, totalPages, watermarkSrc }) => (
+// --- Watermark artwork -----------------------------------------------------
+// Full-page chandelier line-art. Rendered as inline SVG (no image rectangle
+// possible — SVG is fully transparent). Sits behind all page content at low
+// opacity. Colour is a muted antique-bronze that reads softly against the
+// dark-wine PDF background.
+const WATERMARK_STROKE = "#BF9972";
+
+const ChandelierWatermark = () => (
+  <svg
+    viewBox="0 0 400 560"
+    xmlns="http://www.w3.org/2000/svg"
+    preserveAspectRatio="xMidYMid meet"
+    aria-hidden="true"
+    style={{ width: "100%", height: "100%", display: "block", overflow: "visible" }}
+  >
+    <g
+      fill="none"
+      stroke={WATERMARK_STROKE}
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {/* Ceiling mount + chain */}
+      <line x1="200" y1="6" x2="200" y2="30" />
+      <path d="M188 30 h24 v6 h-24 z" />
+      <line x1="200" y1="36" x2="200" y2="70" strokeDasharray="2 3" />
+      {/* Top canopy */}
+      <ellipse cx="200" cy="75" rx="26" ry="6" />
+      <path d="M180 75 Q 200 92 220 75" />
+      <line x1="200" y1="90" x2="200" y2="106" />
+
+      {/* Upper crown / capital */}
+      <path d="M170 108 Q 200 128 230 108" />
+      <ellipse cx="200" cy="118" rx="34" ry="6" />
+      <path d="M170 122 L 175 135 M 200 124 L 200 138 M 230 122 L 225 135" />
+
+      {/* Central baluster */}
+      <path d="M188 138 Q 200 148 212 138 Q 208 158 200 162 Q 192 158 188 138 Z" />
+      <line x1="200" y1="162" x2="200" y2="182" />
+
+      {/* Widest tier — decorative ring with prism droplets */}
+      <ellipse cx="200" cy="198" rx="120" ry="16" />
+      <path d="M80 200 Q 200 232 320 200" />
+      {/* Prism droplets around the widest ring */}
+      {Array.from({ length: 13 }).map((_, i) => {
+        const t = i / 12;
+        // Points along an arc across the ring
+        const x = 82 + t * 236;
+        const y = 208 + Math.sin(t * Math.PI) * 8;
+        return (
+          <g key={i}>
+            <line x1={x} y1={y} x2={x} y2={y + 12} />
+            <path d={`M ${x - 4} ${y + 12} L ${x} ${y + 22} L ${x + 4} ${y + 12} Z`} />
+          </g>
+        );
+      })}
+
+      {/* Candelabra arms — 8 arms fanning outward with candle-cups */}
+      {[-70, -45, -22, -6, 6, 22, 45, 70].map((deg, i) => {
+        const rad = (deg * Math.PI) / 180;
+        const startX = 200 + Math.sin(rad) * 30;
+        const startY = 200 + Math.cos(rad) * 6;
+        const endX = 200 + Math.sin(rad) * 130;
+        const endY = 240 - Math.cos(rad) * 30;
+        const cX = 200 + Math.sin(rad) * 90;
+        const cY = 210 - Math.cos(rad) * 10;
+        return (
+          <g key={i}>
+            <path d={`M ${startX} ${startY} Q ${cX} ${cY} ${endX} ${endY}`} />
+            {/* candle cup */}
+            <ellipse cx={endX} cy={endY} rx="6" ry="3" />
+            {/* candle */}
+            <line x1={endX} y1={endY - 3} x2={endX} y2={endY - 14} />
+            {/* flame droplet */}
+            <path d={`M ${endX - 2.5} ${endY - 14} Q ${endX} ${endY - 22} ${endX + 2.5} ${endY - 14} Q ${endX} ${endY - 11} ${endX - 2.5} ${endY - 14} Z`} />
+            {/* hanging crystal from cup */}
+            <line x1={endX} y1={endY + 3} x2={endX} y2={endY + 14} />
+            <path d={`M ${endX - 3} ${endY + 14} L ${endX} ${endY + 24} L ${endX + 3} ${endY + 14} Z`} />
+          </g>
+        );
+      })}
+
+      {/* Middle body */}
+      <path d="M180 220 Q 200 235 220 220" />
+      <ellipse cx="200" cy="240" rx="18" ry="5" />
+      <line x1="200" y1="244" x2="200" y2="260" />
+      <ellipse cx="200" cy="266" rx="28" ry="7" />
+
+      {/* Curtain of small crystal drops under middle body */}
+      {Array.from({ length: 11 }).map((_, i) => {
+        const x = 148 + i * 10.4;
+        return (
+          <g key={i}>
+            <line x1={x} y1={272} x2={x} y2={272 + 10 + (i % 3) * 6} />
+            <path
+              d={`M ${x - 2.5} ${282 + (i % 3) * 6} L ${x} ${290 + (i % 3) * 6} L ${x + 2.5} ${282 + (i % 3) * 6} Z`}
+            />
+          </g>
+        );
+      })}
+
+      {/* Lower orb / pendant */}
+      <line x1="200" y1="298" x2="200" y2="320" />
+      <ellipse cx="200" cy="330" rx="22" ry="7" />
+      <path d="M180 332 Q 200 360 220 332" />
+      <ellipse cx="200" cy="360" rx="8" ry="3" />
+      <line x1="200" y1="363" x2="200" y2="380" />
+      {/* Grand teardrop finial */}
+      <path d="M200 380 Q 188 402 200 430 Q 212 402 200 380 Z" />
+      <line x1="200" y1="430" x2="200" y2="440" />
+      <circle cx="200" cy="444" r="3" />
+
+      {/* Framing decorative arc + brand mark */}
+      <path d="M50 505 Q 200 480 350 505" strokeDasharray="1 4" />
+      <text
+        x="200"
+        y="530"
+        textAnchor="middle"
+        fontFamily="Georgia, 'Times New Roman', serif"
+        fontSize="14"
+        letterSpacing="6"
+        fill={WATERMARK_STROKE}
+        stroke="none"
+        opacity="0.9"
+      >
+        SAMRAT GLASS EMPORIUM
+      </text>
+      <path d="M110 545 L 290 545" strokeDasharray="1 3" />
+    </g>
+  </svg>
+);
+
+const Page = ({ children, footerText, pageNum, totalPages, showWatermark = true }) => (
   <section
     className="pdf-page"
     style={{
@@ -80,39 +213,31 @@ const Page = ({ children, footerText, pageNum, totalPages, watermarkSrc }) => (
       background:
         "linear-gradient(180deg, #1e0d1a 0%, #16070f 100%)",
       color: "#f5efe7",
-      // No page-break CSS here — html2pdf slices the canvas by pixel height,
-      // and our elements are already exactly 297mm tall so one <Page> == one
-      // A4 page. Adding page-break-after here causes double-breaks.
+      // No page-break CSS here — we render each <Page> as its own canvas
+      // and append it to jsPDF, so no CSS-driven pagination is needed.
     }}
   >
-    {/* Full-page background watermark — behind ALL content on every page. */}
-    {watermarkSrc && (
+    {/* Full-page background watermark — behind ALL content on every page.
+        Inline SVG (transparent, no rectangular background). */}
+    {showWatermark && (
       <div
         aria-hidden
         style={{
           position: "absolute",
           left: "50%",
-          top: "52%",
+          top: "54%",
           transform: "translate(-50%, -50%)",
-          width: "68%",
-          maxHeight: "78%",
+          width: "62%",
+          maxHeight: "82%",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           pointerEvents: "none",
           zIndex: 0,
+          opacity: 0.08,
         }}
       >
-        <img
-          src={watermarkSrc}
-          alt=""
-          style={{
-            width: "100%",
-            height: "auto",
-            objectFit: "contain",
-            opacity: 0.06,
-          }}
-        />
+        <ChandelierWatermark />
       </div>
     )}
 
@@ -291,30 +416,52 @@ export default function Catalogue() {
     if (!docRef.current || generating) return;
     setGenerating(true);
     try {
-      const filename = `Samrat-Glass-Emporium-Catalogue-${new Date().toISOString().slice(0, 10)}.pdf`;
-      await html2pdf()
-        .set({
-          margin: 0,
-          filename,
-          image: { type: "jpeg", quality: 0.94 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            allowTaint: false,
-            backgroundColor: "#16070f",
-            logging: false,
-            windowWidth: 794, // 210mm at 96dpi
-          },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait", compress: true },
-          pagebreak: { mode: ["css"], avoid: [".pdf-card", ".pdf-toc-row"] },
+      // Pre-flight: wait for every <img> inside the document to finish decoding
+      // so html2canvas never snapshots a half-loaded image.
+      const imgs = Array.from(docRef.current.querySelectorAll("img"));
+      await Promise.all(
+        imgs.map((img) => {
+          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+          return new Promise((resolve) => {
+            const done = () => resolve();
+            img.addEventListener("load", done, { once: true });
+            img.addEventListener("error", done, { once: true });
+            if (typeof img.decode === "function") img.decode().then(done, done);
+            setTimeout(done, 4000);
+          });
         })
-        .from(docRef.current)
-        .save();
+      );
+
+      // Render EACH .pdf-page individually. This avoids Chrome's ~16384px
+      // canvas size limit (a single 29-page catalogue at scale 2 would be
+      // ~65000px tall and silently fail to render as one giant canvas).
+      const pageEls = Array.from(docRef.current.querySelectorAll(".pdf-page"));
+      const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+      const A4_W = 210;
+      const A4_H = 297;
+      for (let i = 0; i < pageEls.length; i++) {
+        setProgress(`Rendering page ${i + 1} / ${pageEls.length}…`);
+        const canvas = await html2canvas(pageEls[i], {
+          scale: 1.5,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: "#16070f",
+          logging: false,
+          imageTimeout: 15000,
+          removeContainer: true,
+        });
+        const imgData = canvas.toDataURL("image/jpeg", 0.88);
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, "JPEG", 0, 0, A4_W, A4_H, undefined, "FAST");
+      }
+      const filename = `Samrat-Glass-Emporium-Catalogue-${new Date().toISOString().slice(0, 10)}.pdf`;
+      pdf.save(filename);
     } catch (e) {
       console.error(e);
       alert("Could not generate PDF. Please try again.");
     } finally {
       setGenerating(false);
+      setProgress("");
     }
   };
 
@@ -393,7 +540,7 @@ export default function Catalogue() {
       <div className="pdf-doc" ref={docRef} style={{ width: "210mm", margin: "0 auto" }}>
 
         {/* ========== 1. COVER PAGE ========== */}
-        <Page pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl}
+        <Page pageNum={nextPage()} totalPages={totalPages}
           footerText={new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}>
           <div style={{ position: "absolute", inset: "16mm", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
             {/* Top row */}
@@ -450,7 +597,7 @@ export default function Catalogue() {
         </Page>
 
         {/* ========== 2. TABLE OF CONTENTS ========== */}
-        <Page pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText="Contents">
+        <Page pageNum={nextPage()} totalPages={totalPages} footerText="Contents">
           <SectionTitle eyebrow="Contents" title="Table of Contents" />
           <div style={{ marginTop: "10mm" }}>
             <TocRow label="About Us" page={pageOfAbout} />
@@ -463,7 +610,7 @@ export default function Catalogue() {
         </Page>
 
         {/* ========== 3. ABOUT US ========== */}
-        <Page pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText="About Us">
+        <Page pageNum={nextPage()} totalPages={totalPages} footerText="About Us">
           <SectionTitle eyebrow="Our Story" title="Since 1981 · Firozabad" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "5mm", fontSize: "11pt", lineHeight: 1.75, color: "rgba(245,239,231,0.82)" }}>
             <p>Established in 1981 in Firozabad, the City of Glass, Samrat Glass Emporium is a trusted manufacturer of handcrafted decorative lighting. We create a wide range of hanging chandeliers, hanging lights, wall lights, table lamps, floor lamps, sconces, and customised decorative lighting solutions.</p>
@@ -483,7 +630,7 @@ export default function Catalogue() {
         </Page>
 
         {/* ========== 4. REASONS WHY WE ARE BETTER ========== */}
-        <Page pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText="Why Choose Us">
+        <Page pageNum={nextPage()} totalPages={totalPages} footerText="Why Choose Us">
           <SectionTitle eyebrow="Why Choose Us" title="Reasons We Are Better" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4mm 8mm", marginTop: "6mm" }}>
             {[
@@ -513,7 +660,7 @@ export default function Catalogue() {
           return (
             <React.Fragment key={cat}>
               {/* Category divider */}
-              <Page pageNum={dividerPageNum} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText={cat}>
+              <Page pageNum={dividerPageNum} totalPages={totalPages} footerText={cat}>
                 <div style={{ position: "absolute", inset: "16mm", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
                   <div style={{ fontSize: "9pt", letterSpacing: "0.32em", textTransform: "uppercase", color: "#BF9972", marginBottom: "5mm" }}>
                     Collection
@@ -533,7 +680,7 @@ export default function Catalogue() {
               {Array.from({ length: Math.ceil(list.length / 2) }, (_, gi) => {
                 const pairs = list.slice(gi * 2, gi * 2 + 2);
                 return (
-                  <Page key={`${cat}-${gi}`} pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText={cat}>
+                  <Page key={`${cat}-${gi}`} pageNum={nextPage()} totalPages={totalPages} footerText={cat}>
                     <div style={{ fontSize: "8.5pt", letterSpacing: "0.28em", textTransform: "uppercase", color: "#BF9972", marginBottom: "5mm" }}>
                       {cat}
                     </div>
@@ -550,7 +697,7 @@ export default function Catalogue() {
         })}
 
         {/* ========== 6. CONTACT PAGE ========== */}
-        <Page pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText="Contact & Inquiry">
+        <Page pageNum={nextPage()} totalPages={totalPages} footerText="Contact & Inquiry">
           <SectionTitle eyebrow="Get in touch" title="Let's Light Your Space" align="center" />
           <div style={{ marginTop: "8mm", padding: "9mm", border: "1px solid rgba(191,153,114,0.35)", background: "linear-gradient(180deg, rgba(163,99,80,0.08), transparent 60%)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8mm", fontSize: "10.5pt", lineHeight: 1.7 }}>
@@ -691,6 +838,11 @@ function ProductCard({ product: p, imgDataUrl, settings, waLink }) {
         <img
           src={src}
           alt={p.name}
+          onError={(e) => {
+            if (e.currentTarget.src !== PLACEHOLDER_SVG) {
+              e.currentTarget.src = PLACEHOLDER_SVG;
+            }
+          }}
           style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
         />
       </div>

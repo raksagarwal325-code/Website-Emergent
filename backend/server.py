@@ -827,6 +827,16 @@ TONE & VOICE
 · **DO NOT overuse** the words *exquisite, timeless, captivating, mesmerizing, enchanting*. Use each at most once across the whole draft.
 · Every physical detail you're not 100% sure of MUST be softened with phrases like "appears to feature", "seems to be", or LEFT BLANK for admin review.
 
+PRODUCT NAME RULES (STRICT — obey every rule)
+· The name MUST feel specific, searchable and visibly different from any other name in the catalogue.
+· Follow this format: **[Distinctive Design Feature] + [Material / Finish / Colour] + [Product Type]**.
+· Length: 3–7 words, Title Case, no numerals, no brand name.
+· **BANNED generic words** (do NOT use unless the design genuinely, visibly supports it): *Maharaja, Royal, Regent, Premium, Luxury, Elegant, Classic, Grand, Heritage, Majestic, Imperial, Palatial, Signature, Deluxe, Opulent, Splendid, Prestige, Vintage*. Prefer specific visual words instead.
+· Draw the "distinctive design feature" from what is actually visible: glass shape (bell / lotus / tulip / lantern / drum / dome / globe / teardrop / conical), shade shape (scallop / pleated / bell / drum / fluted), number of arms/lights (three-arm, six-arm, eight-light, multi-tier), colour (amber, ruby-red, cobalt-blue, sea-green, smoke-grey, milk-white, honey-gold), finish (antique-brass, brushed-nickel, aged-bronze, matte-black, gilt-gold, copper, chrome), pattern (etched floral, cut-glass diamond, pinecone, honeycomb, blossom, scroll, filigree, prism, quilted, ribbed), crystal drops (teardrop, prism, pearl, pear-drop, faceted-bead), texture (frosted, cut-glass, faceted, hammered, ribbed, quilted, mercury), motif (crown, lotus, lily, tulip, floral, star, blossom, pineapple, diamond-crest, scroll), product type (Chandelier, Hanging Light, Pendant Light, Wall Light, Wall Sconce, Table Lamp, Floor Lamp, Lantern, Candle Stand).
+· Prefer *unusual, evocative* first words that describe what you SEE: `Diamond Crest`, `Pinecone`, `Scallop Crown`, `Lotus Drop`, `Pearl Draped`, `Amber Bell`, `Frosted Blossom`, `Etched Vine`, `Cascade`, `Sunburst`, `Prism Cluster`, `Lantern Row`, `Fluted Column`.
+· Good examples: `Diamond Crest Clear-Cut Crystal Chandelier`, `Scallop Crown Cut-Glass Chandelier`, `Amber Bell Crystal Hanging Light`, `Ruby Red Multi-Arm Crystal Chandelier`, `Lotus Drop Clear Glass Chandelier`, `Pinecone Cut-Glass Crystal Chandelier`, `Pearl Draped Candle-Style Chandelier`, `Frosted Floral Brass Table Lamp`, `Etched Blossom Glass Table Lamp`, `Antique Brass Lantern Hanging Light`, `Fabric Shade Gold Wall Light`, `Crystal Lily Pendant Light`.
+· Bad examples (DO NOT produce): `Maharaja Regent Chandelier`, `Royal Premium Chandelier`, `Luxury Grand Chandelier`, `Heritage Signature Lamp`, `Classic Elegant Pendant`.
+
 STRICT RULES
 · DO NOT invent exact dimensions (height, width, diameter), weight, wattage, or price. Leave those fields blank.
 · DO NOT invent the socket/holder type (B22 / E27 / E14 / GU10) unless it is unambiguously visible in the fitting. If uncertain, leave blank.
@@ -845,7 +855,7 @@ Follow this exact order — plain text, no markdown, blank line between sections
 
 OUTPUT FORMAT — strictly this JSON schema (no prose before/after, no code fences):
 {
-  "name": "…",                     // Premium product name, 3–6 words, Title Case
+  "name": "…",                     // Specific 3–7 word Title Case name following the PRODUCT NAME RULES above
   "seo_name": "…",                 // SEO title, 60–70 chars, "<name> · <category> · Samrat Glass Emporium"
   "category": "…",                 // From the allowed list above
   "short_description": "…",        // 1 sentence, ≤ 160 chars, evocative but restrained
@@ -976,6 +986,220 @@ async def ai_generate_product(payload: AIGenerateProductRequest):
     # Strip mongo _id before returning
     draft.pop("_id", None)
     return draft
+
+
+# --- AI product-name suggestions -------------------------------------------
+
+_NAME_SYSTEM_PROMPT = """You are the head naming curator for **Samrat Glass Emporium**, a Firozabad Indian luxury lighting brand.
+
+You will be shown ONE product photograph and asked to invent FIVE distinct, high-quality product names.
+
+STRICT RULES — read every rule twice.
+
+1. FORMAT of every name: **[Distinctive Design Feature] + [Material / Finish / Colour] + [Product Type]**.
+2. Length: 3–7 words, Title Case. No numerals, no brand name, no punctuation other than hyphens between compound words.
+3. Every name MUST be based on features that are *visible* in the photo — glass shape, shade shape, arm/light count, colour, finish, pattern, crystal drops, cut-glass texture, scallop shade, bell shape, lotus shape, crown top, prism drops, brass/chrome/bronze finish, and product type (Chandelier / Hanging Light / Pendant Light / Wall Light / Table Lamp / Floor Lamp / Lantern / Candle Stand).
+4. BANNED generic words (do NOT use unless the piece genuinely, visibly justifies it): *Maharaja, Royal, Regent, Premium, Luxury, Elegant, Classic, Grand, Heritage, Majestic, Imperial, Palatial, Signature, Deluxe, Opulent, Splendid, Prestige, Vintage*. Prefer specific visual words.
+5. The FIVE names must be visibly different from each other — pick five different distinguishing features (e.g. one leads with colour, one with drop shape, one with arm-count, one with finish, one with silhouette).
+6. Each name MUST be unique against the caller-supplied "existing catalogue names" list. If a name would collide (case-insensitive, ignoring punctuation), invent a different one.
+7. Alongside each name, write a short one-sentence rationale (≤ 20 words) explaining which VISIBLE feature justifies the name.
+
+GOOD EXAMPLES
+· Diamond Crest Clear-Cut Crystal Chandelier — "twelve diamond-cut crystal points form a crown along the top rim"
+· Amber Bell Crystal Hanging Light — "hand-blown amber bell-shaped glass over a single hanging drop"
+· Pinecone Cut-Glass Crystal Chandelier — "central baluster is stacked with pinecone-shaped cut-glass beads"
+· Fabric Shade Gold Wall Light — "ivory pleated fabric shade paired with a gilt-gold bracket"
+
+BAD EXAMPLES (DO NOT PRODUCE) — because they are generic and could apply to almost any piece:
+· Maharaja Regent Chandelier
+· Royal Premium Chandelier
+· Luxury Grand Chandelier
+· Heritage Classic Pendant
+
+OUTPUT — strict JSON only, no code fences, no prose:
+{
+  "suggestions": [
+    { "name": "…", "rationale": "…" },
+    { "name": "…", "rationale": "…" },
+    { "name": "…", "rationale": "…" },
+    { "name": "…", "rationale": "…" },
+    { "name": "…", "rationale": "…" }
+  ]
+}
+"""
+
+
+class AINameSuggestRequest(BaseModel):
+    image_url: Optional[str] = None
+    image_path: Optional[str] = None
+    product_id: Optional[str] = None
+    exclude_names: Optional[List[str]] = None  # additional names to avoid
+
+
+def _normalize_name(s: str) -> str:
+    """Case-insensitive, punctuation-insensitive key for name uniqueness checks."""
+    import re as _re
+    return _re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+
+async def _existing_name_index(extra: Optional[List[str]] = None) -> set:
+    """All currently used product names (normalized) — including drafts."""
+    cursor = db.products.find({}, {"_id": 0, "name": 1})
+    names = set()
+    async for doc in cursor:
+        n = _normalize_name(doc.get("name", ""))
+        if n:
+            names.add(n)
+    for extra_name in (extra or []):
+        n = _normalize_name(extra_name)
+        if n:
+            names.add(n)
+    return names
+
+
+async def _ai_name_batch(image_bytes: bytes, mime: str, existing: set) -> List[dict]:
+    """Ask Gemini for a batch of 5 name suggestions, given the image and the
+    list of names to avoid."""
+    import base64
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent, TextDelta, StreamDone
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY is not configured")
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"ai-name-{uuid.uuid4().hex[:12]}",
+        system_message=_NAME_SYSTEM_PROMPT,
+    ).with_model("gemini", "gemini-3-flash-preview")
+
+    # Provide a small, current sample of existing names so the model can steer
+    # away from close variants. Cap at 60 to keep the prompt lean.
+    sample = list(existing)[:60]
+    user_text = (
+        "Analyze this Samrat Glass Emporium product photograph and produce 5 unique product names.\n"
+        "Existing catalogue names (avoid duplicates, case-insensitive):\n"
+        + ("\n".join(f"- {n}" for n in sample) if sample else "(none yet)")
+    )
+    user_msg = UserMessage(
+        text=user_text,
+        file_contents=[ImageContent(image_base64=base64.b64encode(image_bytes).decode("ascii"))],
+    )
+
+    parts: List[str] = []
+    async for ev in chat.stream_message(user_msg):
+        if isinstance(ev, TextDelta):
+            parts.append(ev.content)
+        elif isinstance(ev, StreamDone):
+            break
+    raw = "".join(parts).strip()
+
+    import re as _re
+    m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+    if not m:
+        raise HTTPException(status_code=502, detail=f"AI returned no JSON. Raw: {raw[:200]}")
+    try:
+        parsed = json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=502, detail=f"AI JSON parse failed: {e}") from e
+
+    items = parsed.get("suggestions") or []
+    cleaned: List[dict] = []
+    for item in items:
+        name = (item.get("name") or "").strip()
+        rationale = (item.get("rationale") or "").strip()
+        if not name:
+            continue
+        # Enforce our length policy — trim over-long names to 7 words.
+        words = name.split()
+        if len(words) > 7:
+            name = " ".join(words[:7])
+        cleaned.append({"name": name, "rationale": rationale[:220]})
+    return cleaned
+
+
+@api.post("/ai/name-suggestions")
+async def ai_name_suggestions(payload: AINameSuggestRequest):
+    """Return exactly 5 unique, catalogue-safe product name suggestions.
+    Each name is checked against every existing product name (case-insensitive,
+    punctuation-insensitive) and any name the caller explicitly asks to avoid.
+    If the model returns fewer than 5 unique names, we call it again with an
+    updated avoid-list until we have 5 or run out of retries.
+    """
+
+    # Resolve the source image bytes.
+    image_bytes: Optional[bytes] = None
+    mime = "image/jpeg"
+
+    # 1. If a product_id is provided, load its primary image (and existing name).
+    self_name: Optional[str] = None
+    if payload.product_id:
+        prod = await db.products.find_one({"id": payload.product_id})
+        if not prod:
+            raise HTTPException(404, "Product not found")
+        self_name = prod.get("name")
+        if not payload.image_path and not payload.image_url:
+            imgs = prod.get("images") or []
+            if imgs:
+                first = imgs[0]
+                if isinstance(first, str) and first.startswith("/api/files/"):
+                    payload.image_path = first.removeprefix("/api/files/")
+                else:
+                    payload.image_url = first
+
+    # 2. Try storage path first, then external URL.
+    if payload.image_path:
+        try:
+            image_bytes, mime = get_object(payload.image_path)
+        except Exception:
+            image_bytes = None
+    if not image_bytes and payload.image_url:
+        url = payload.image_url
+        if url.startswith("/api/files/"):
+            try:
+                image_bytes, mime = get_object(url.removeprefix("/api/files/"))
+            except Exception:
+                image_bytes = None
+        if not image_bytes:
+            try:
+                r = requests.get(url, timeout=20)
+                r.raise_for_status()
+                image_bytes = r.content
+                mime = r.headers.get("content-type", mime).split(";")[0].strip()
+            except Exception as e:
+                raise HTTPException(400, f"Could not load image: {e}") from e
+    if not image_bytes:
+        raise HTTPException(400, "No image provided")
+
+    # Build the "avoid" set — every catalogue name, plus the product's own
+    # current name (so the model has to actually change it), plus any names
+    # the caller has explicitly rejected.
+    avoid = await _existing_name_index([self_name] if self_name else None)
+    for n in (payload.exclude_names or []):
+        key = _normalize_name(n)
+        if key:
+            avoid.add(key)
+
+    picked: List[dict] = []
+    picked_keys: set = set()
+
+    # Up to 3 batches — each batch = 5 raw suggestions, we keep only the unique
+    # ones and pad again if the model reused something. Cap total AI calls to
+    # keep this responsive.
+    for _attempt in range(3):
+        batch = await _ai_name_batch(image_bytes, mime, avoid | picked_keys)
+        for item in batch:
+            key = _normalize_name(item["name"])
+            if not key or key in avoid or key in picked_keys:
+                continue
+            picked.append(item)
+            picked_keys.add(key)
+            if len(picked) >= 5:
+                break
+        if len(picked) >= 5:
+            break
+
+    return {"suggestions": picked[:5]}
 
 
 class AIBulkRequest(BaseModel):
