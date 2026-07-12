@@ -1,6 +1,30 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import html2pdf from "html2pdf.js";
+import QRCode from "qrcode";
 import { api, formatProductPrice } from "../lib/api";
+
+// Format an Indian mobile number as +91 XXXXX XXXXX (13-char pretty form).
+function formatIndianPhone(raw) {
+  if (!raw) return "";
+  const digits = String(raw).replace(/[^0-9]/g, "");
+  // Handle 10-digit local, 11-digit (0-prefixed), or 12-digit (91-prefixed).
+  const last10 = digits.slice(-10);
+  if (last10.length !== 10) return raw;
+  return `+91 ${last10.slice(0, 5)} ${last10.slice(5)}`;
+}
+
+// Values a spec might carry that should be treated as "empty" and hidden.
+const EMPTY_SPEC_TOKENS = new Set([
+  "", "-", "—", "n/a", "na", "not available", "unknown", "none",
+  "null", "undefined", "tbd", "to be decided", "to be confirmed",
+  "unconfirmed", "not confirmed", "not specified", "not set", "0", "nil",
+]);
+function isMeaningfulSpec(value) {
+  if (value == null) return false;
+  const v = String(value).trim().toLowerCase();
+  if (!v) return false;
+  return !EMPTY_SPEC_TOKENS.has(v);
+}
 
 // --- Helpers ---------------------------------------------------------------
 
@@ -45,7 +69,7 @@ const PLACEHOLDER_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(
 
 // --- Small building blocks -------------------------------------------------
 
-const Page = ({ children, footerText, pageNum, totalPages }) => (
+const Page = ({ children, footerText, pageNum, totalPages, watermarkSrc }) => (
   <section
     className="pdf-page"
     style={{
@@ -61,7 +85,38 @@ const Page = ({ children, footerText, pageNum, totalPages }) => (
       // A4 page. Adding page-break-after here causes double-breaks.
     }}
   >
-    <div style={{ padding: "16mm 16mm 22mm 16mm", height: "100%", boxSizing: "border-box", position: "relative" }}>
+    {/* Full-page background watermark — behind ALL content on every page. */}
+    {watermarkSrc && (
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "52%",
+          transform: "translate(-50%, -50%)",
+          width: "68%",
+          maxHeight: "78%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+      >
+        <img
+          src={watermarkSrc}
+          alt=""
+          style={{
+            width: "100%",
+            height: "auto",
+            objectFit: "contain",
+            opacity: 0.06,
+          }}
+        />
+      </div>
+    )}
+
+    <div style={{ padding: "16mm 16mm 22mm 16mm", height: "100%", boxSizing: "border-box", position: "relative", zIndex: 1 }}>
       {children}
     </div>
     {/* Footer band */}
@@ -74,6 +129,8 @@ const Page = ({ children, footerText, pageNum, totalPages }) => (
         paddingTop: "3mm",
         fontSize: "8.5pt", letterSpacing: "0.14em", textTransform: "uppercase",
         color: "rgba(245,239,231,0.5)",
+        zIndex: 2,
+        background: "linear-gradient(180deg, transparent, rgba(13,5,16,0.7))",
       }}
     >
       <span style={{ color: "#BF9972" }}>Samrat Glass Emporium</span>
@@ -114,6 +171,8 @@ export default function Catalogue() {
   // Product image dataURL map keyed by product id
   const [imgMap, setImgMap] = useState({});
   const [logoDataUrl, setLogoDataUrl] = useState(null);
+  // Data URLs for QR codes on the contact page
+  const [qrCodes, setQrCodes] = useState({});
   const docRef = useRef(null);
 
   useEffect(() => {
@@ -133,6 +192,43 @@ export default function Catalogue() {
       // Logo — served from the frontend at /logo.jpeg — usually same-origin.
       const logoUrl = await urlToDataUrl("/logo.jpeg");
       if (!cancelled) setLogoDataUrl(logoUrl);
+
+      // Build QR codes for the contact page (WhatsApp, website, Maps, IG).
+      const digits = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
+      const waUrl = digits ? `https://wa.me/${digits}` : "";
+      const siteUrl =
+        settings?.website_url ||
+        settings?.website ||
+        (typeof window !== "undefined" ? window.location.origin : "");
+      const mapsUrl = settings?.google_cid
+        ? `https://maps.google.com/?cid=${settings.google_cid}`
+        : settings?.google_place_id
+          ? `https://www.google.com/maps/place/?q=place_id:${settings.google_place_id}`
+          : "";
+      const igUrl =
+        settings?.instagram_url ||
+        settings?.instagram ||
+        (settings?.homepage_content?.footer?.social?.instagram || "");
+      const qrOpts = {
+        margin: 1,
+        width: 340,
+        color: { dark: "#0d0510", light: "#f5efe7" },
+      };
+      const [waQr, siteQr, mapsQr, igQr] = await Promise.all([
+        waUrl ? QRCode.toDataURL(waUrl, qrOpts).catch(() => null) : null,
+        siteUrl ? QRCode.toDataURL(siteUrl, qrOpts).catch(() => null) : null,
+        mapsUrl ? QRCode.toDataURL(mapsUrl, qrOpts).catch(() => null) : null,
+        igUrl ? QRCode.toDataURL(igUrl, qrOpts).catch(() => null) : null,
+      ]);
+      if (!cancelled) {
+        setQrCodes({
+          whatsapp: waQr && { url: waUrl, dataUrl: waQr, label: "WhatsApp", caption: formatIndianPhone(digits) },
+          website: siteQr && { url: siteUrl, dataUrl: siteQr, label: "Website · Catalogue", caption: (siteUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "") },
+          maps: mapsQr && { url: mapsUrl, dataUrl: mapsQr, label: "Showroom · Google Maps", caption: "Firozabad, UP" },
+          instagram: igQr && { url: igUrl, dataUrl: igQr, label: "Instagram", caption: "@samratglassemporium" },
+        });
+      }
+
       // Products — route through the /api/proxy-image proxy so cross-origin
       // CDN URLs are served as same-origin (avoids CORS-tainted canvases).
       const entries = await Promise.all(
@@ -149,7 +245,7 @@ export default function Catalogue() {
       setProgress("");
     })();
     return () => { cancelled = true; };
-  }, [ready, products]);
+  }, [ready, products, settings]);
 
   // Group products by category — used for TOC + divider pages.
   const groups = useMemo(() => {
@@ -297,7 +393,7 @@ export default function Catalogue() {
       <div className="pdf-doc" ref={docRef} style={{ width: "210mm", margin: "0 auto" }}>
 
         {/* ========== 1. COVER PAGE ========== */}
-        <Page pageNum={nextPage()} totalPages={totalPages}
+        <Page pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl}
           footerText={new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}>
           <div style={{ position: "absolute", inset: "16mm", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
             {/* Top row */}
@@ -335,7 +431,7 @@ export default function Catalogue() {
             <div style={{ borderTop: "1px solid rgba(191,153,114,0.4)", paddingTop: "6mm", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8mm", fontSize: "10pt", lineHeight: 1.6 }}>
               <div>
                 <ContactLabel>WhatsApp / Phone</ContactLabel>
-                <div style={{ color: "#f5efe7" }}>{settings.whatsapp_number || "—"}</div>
+                <div style={{ color: "#f5efe7" }}>{formatIndianPhone(settings.whatsapp_number) || "—"}</div>
                 <ContactLabel style={{ marginTop: "4mm" }}>Email</ContactLabel>
                 <div style={{ color: "#f5efe7" }}>{settings.admin_email || "—"}</div>
                 <ContactLabel style={{ marginTop: "4mm" }}>GSTIN</ContactLabel>
@@ -354,7 +450,7 @@ export default function Catalogue() {
         </Page>
 
         {/* ========== 2. TABLE OF CONTENTS ========== */}
-        <Page pageNum={nextPage()} totalPages={totalPages} footerText="Contents">
+        <Page pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText="Contents">
           <SectionTitle eyebrow="Contents" title="Table of Contents" />
           <div style={{ marginTop: "10mm" }}>
             <TocRow label="About Us" page={pageOfAbout} />
@@ -367,7 +463,7 @@ export default function Catalogue() {
         </Page>
 
         {/* ========== 3. ABOUT US ========== */}
-        <Page pageNum={nextPage()} totalPages={totalPages} footerText="About Us">
+        <Page pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText="About Us">
           <SectionTitle eyebrow="Our Story" title="Since 1981 · Firozabad" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "5mm", fontSize: "11pt", lineHeight: 1.75, color: "rgba(245,239,231,0.82)" }}>
             <p>Established in 1981 in Firozabad, the City of Glass, Samrat Glass Emporium is a trusted manufacturer of handcrafted decorative lighting. We create a wide range of hanging chandeliers, hanging lights, wall lights, table lamps, floor lamps, sconces, and customised decorative lighting solutions.</p>
@@ -387,7 +483,7 @@ export default function Catalogue() {
         </Page>
 
         {/* ========== 4. REASONS WHY WE ARE BETTER ========== */}
-        <Page pageNum={nextPage()} totalPages={totalPages} footerText="Why Choose Us">
+        <Page pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText="Why Choose Us">
           <SectionTitle eyebrow="Why Choose Us" title="Reasons We Are Better" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4mm 8mm", marginTop: "6mm" }}>
             {[
@@ -417,7 +513,7 @@ export default function Catalogue() {
           return (
             <React.Fragment key={cat}>
               {/* Category divider */}
-              <Page pageNum={dividerPageNum} totalPages={totalPages} footerText={cat}>
+              <Page pageNum={dividerPageNum} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText={cat}>
                 <div style={{ position: "absolute", inset: "16mm", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
                   <div style={{ fontSize: "9pt", letterSpacing: "0.32em", textTransform: "uppercase", color: "#BF9972", marginBottom: "5mm" }}>
                     Collection
@@ -437,7 +533,7 @@ export default function Catalogue() {
               {Array.from({ length: Math.ceil(list.length / 2) }, (_, gi) => {
                 const pairs = list.slice(gi * 2, gi * 2 + 2);
                 return (
-                  <Page key={`${cat}-${gi}`} pageNum={nextPage()} totalPages={totalPages} footerText={cat}>
+                  <Page key={`${cat}-${gi}`} pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText={cat}>
                     <div style={{ fontSize: "8.5pt", letterSpacing: "0.28em", textTransform: "uppercase", color: "#BF9972", marginBottom: "5mm" }}>
                       {cat}
                     </div>
@@ -454,21 +550,22 @@ export default function Catalogue() {
         })}
 
         {/* ========== 6. CONTACT PAGE ========== */}
-        <Page pageNum={nextPage()} totalPages={totalPages} footerText="Contact & Inquiry">
+        <Page pageNum={nextPage()} totalPages={totalPages} watermarkSrc={logoDataUrl} footerText="Contact & Inquiry">
           <SectionTitle eyebrow="Get in touch" title="Let's Light Your Space" align="center" />
-          <div style={{ marginTop: "10mm", padding: "10mm", border: "1px solid rgba(191,153,114,0.35)", background: "linear-gradient(180deg, rgba(163,99,80,0.08), transparent 60%)" }}>
+          <div style={{ marginTop: "8mm", padding: "9mm", border: "1px solid rgba(191,153,114,0.35)", background: "linear-gradient(180deg, rgba(163,99,80,0.08), transparent 60%)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8mm", fontSize: "10.5pt", lineHeight: 1.7 }}>
               <div>
                 <ContactLabel>WhatsApp / Phone</ContactLabel>
-                <div style={{ color: "#D4AF37", fontFamily: "Georgia, serif", fontSize: "14pt" }}>{settings.whatsapp_number || "—"}</div>
+                <div style={{ color: "#D4AF37", fontFamily: "Georgia, serif", fontSize: "14pt" }}>{formatIndianPhone(settings.whatsapp_number) || "—"}</div>
                 <ContactLabel style={{ marginTop: "5mm" }}>Email</ContactLabel>
                 <div style={{ color: "#f5efe7" }}>{settings.admin_email || "—"}</div>
                 <ContactLabel style={{ marginTop: "5mm" }}>GSTIN</ContactLabel>
                 <div style={{ color: "#f5efe7" }}>{settings.gstin || "—"}</div>
-                {settings.business_hours && (<>
-                  <ContactLabel style={{ marginTop: "5mm" }}>Business Hours</ContactLabel>
-                  <div style={{ color: "#f5efe7" }}>{settings.business_hours}</div>
-                </>)}
+                <ContactLabel style={{ marginTop: "5mm" }}>Business Hours</ContactLabel>
+                <div style={{ color: "#f5efe7", lineHeight: 1.6 }}>
+                  Mon – Sat: 10:30 AM – 8:00 PM<br />
+                  Sunday: Closed
+                </div>
               </div>
               <div>
                 <ContactLabel>Showroom</ContactLabel>
@@ -480,7 +577,50 @@ export default function Catalogue() {
               </div>
             </div>
           </div>
-          <div style={{ marginTop: "10mm", textAlign: "center", color: "rgba(245,239,231,0.55)", fontSize: "9pt", lineHeight: 1.8 }}>
+
+          {/* QR codes row */}
+          {Object.values(qrCodes).some(Boolean) && (
+            <div style={{ marginTop: "8mm" }}>
+              <div style={{ textAlign: "center", fontSize: "8.5pt", letterSpacing: "0.28em", textTransform: "uppercase", color: "#BF9972", marginBottom: "4mm" }}>
+                Scan to connect
+              </div>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${Object.values(qrCodes).filter(Boolean).length}, 1fr)`,
+                gap: "5mm",
+              }}>
+                {["whatsapp", "website", "maps", "instagram"].map((key) => {
+                  const qr = qrCodes[key];
+                  if (!qr) return null;
+                  return (
+                    <div key={key} style={{
+                      textAlign: "center",
+                      padding: "4mm 3mm",
+                      border: "1px solid rgba(191,153,114,0.32)",
+                      background: "rgba(13,5,16,0.5)",
+                    }}>
+                      <div style={{
+                        width: "26mm", height: "26mm", margin: "0 auto 3mm",
+                        padding: "2mm", background: "#f5efe7", borderRadius: "1mm",
+                      }}>
+                        <img src={qr.dataUrl} alt={qr.label} style={{ width: "100%", height: "100%", display: "block" }} />
+                      </div>
+                      <div style={{ fontSize: "7.5pt", letterSpacing: "0.22em", textTransform: "uppercase", color: "#D4AF37" }}>
+                        {qr.label}
+                      </div>
+                      {qr.caption && (
+                        <div style={{ fontSize: "8pt", color: "rgba(245,239,231,0.7)", marginTop: "1.5mm", wordBreak: "break-word" }}>
+                          {qr.caption}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: "8mm", textAlign: "center", color: "rgba(245,239,231,0.55)", fontSize: "9pt", lineHeight: 1.8 }}>
             <div style={{ fontFamily: "Georgia, serif", fontStyle: "italic", fontSize: "13pt", color: "#BF9972", marginBottom: "3mm" }}>
               &ldquo;Every piece tells a story of Firozabad — carry one home.&rdquo;
             </div>
@@ -525,7 +665,10 @@ function TocRow({ label, sub, page }) {
 function ProductCard({ product: p, imgDataUrl, settings, waLink }) {
   const fp = formatProductPrice(p);
   const src = imgDataUrl || PLACEHOLDER_SVG;
-  const specEntries = p.specs ? Object.entries(p.specs).filter(([, v]) => v != null && String(v).trim() !== "").slice(0, 6) : [];
+  const specEntries = p.specs
+    ? Object.entries(p.specs).filter(([, v]) => isMeaningfulSpec(v)).slice(0, 6)
+    : [];
+  const prettyPhone = formatIndianPhone(settings.whatsapp_number);
 
   return (
     <article
@@ -557,7 +700,7 @@ function ProductCard({ product: p, imgDataUrl, settings, waLink }) {
         <div style={{ fontSize: "8pt", letterSpacing: "0.24em", textTransform: "uppercase", color: "#BF9972" }}>
           {p.category || "Uncategorized"}
         </div>
-        <h3 style={{ fontFamily: "Georgia, serif", fontSize: "16pt", lineHeight: 1.2, margin: "1.5mm 0 0", color: "#f5efe7" }}>
+        <h3 style={{ fontFamily: "Georgia, serif", fontSize: "16pt", lineHeight: 1.25, margin: "1.5mm 0 0", color: "#f5efe7" }}>
           {p.name}
         </h3>
         {p.sku && (
@@ -581,31 +724,39 @@ function ProductCard({ product: p, imgDataUrl, settings, waLink }) {
 
         {/* Short description */}
         {p.short_description && (
-          <p style={{ fontSize: "9.5pt", lineHeight: 1.55, color: "rgba(245,239,231,0.72)", marginTop: "3mm" }}>
+          <p style={{ fontSize: "10.5pt", lineHeight: 1.7, color: "rgba(245,239,231,0.78)", marginTop: "3mm" }}>
             {p.short_description}
           </p>
         )}
 
         {/* Specifications */}
         {specEntries.length > 0 && (
-          <dl style={{ marginTop: "3mm", display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "3mm", rowGap: "1mm", fontSize: "8.5pt", lineHeight: 1.4 }}>
+          <dl style={{ marginTop: "3mm", display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "3mm", rowGap: "1.4mm", fontSize: "9.5pt", lineHeight: 1.55 }}>
             {specEntries.map(([k, v]) => (
               <React.Fragment key={k}>
-                <dt style={{ color: "rgba(245,239,231,0.5)", textTransform: "uppercase", letterSpacing: "0.14em", fontSize: "7.5pt" }}>{k}</dt>
-                <dd style={{ color: "rgba(245,239,231,0.85)", margin: 0 }}>{String(v)}</dd>
+                <dt style={{ color: "rgba(245,239,231,0.55)", textTransform: "uppercase", letterSpacing: "0.14em", fontSize: "8pt" }}>{k}</dt>
+                <dd style={{ color: "rgba(245,239,231,0.9)", margin: 0 }}>{String(v)}</dd>
               </React.Fragment>
             ))}
           </dl>
         )}
 
-        {/* CTA row */}
-        <div style={{ marginTop: "auto", paddingTop: "3mm", display: "flex", gap: "2mm", flexWrap: "wrap", fontSize: "8pt", letterSpacing: "0.2em", textTransform: "uppercase" }}>
-          {waLink && (
-            <span style={{ background: "#25D366", color: "#000", padding: "1.5mm 3mm", fontWeight: 600 }}>
-              WhatsApp · {settings.whatsapp_number}
+        {/* CTA row — premium gold/copper WhatsApp button (replaces bright green). */}
+        <div style={{ marginTop: "auto", paddingTop: "3.5mm", display: "flex", gap: "2mm", flexWrap: "wrap", fontSize: "8pt", letterSpacing: "0.2em", textTransform: "uppercase" }}>
+          {waLink && prettyPhone && (
+            <span style={{
+              background: "linear-gradient(135deg, #D4AF37 0%, #BF9972 55%, #A36350 100%)",
+              color: "#1a0a17",
+              padding: "1.8mm 3.5mm",
+              fontWeight: 600,
+              border: "1px solid rgba(212,175,55,0.9)",
+              boxShadow: "0 0 0 1px rgba(13,5,16,0.35) inset",
+              letterSpacing: "0.22em",
+            }}>
+              WhatsApp · {prettyPhone}
             </span>
           )}
-          <span style={{ border: "1px solid rgba(212,175,55,0.6)", color: "#D4AF37", padding: "1.5mm 3mm" }}>
+          <span style={{ border: "1px solid rgba(212,175,55,0.6)", color: "#D4AF37", padding: "1.8mm 3.5mm" }}>
             samratglassemporium.com
           </span>
         </div>
