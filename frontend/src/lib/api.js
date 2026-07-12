@@ -47,6 +47,8 @@ export const api = {
   stats: () => client.get("/stats").then(r => r.data),
   googleReviews: () => client.get("/google/reviews").then(r => r.data),
   pullInstagramCover: (url) => client.post("/admin/instagram/cover", { url }).then(r => r.data),
+  requestCatalogue: (name, phone, source = "contact_page") =>
+    client.post("/catalogue-request", { name, phone, source }).then(r => r.data),
   resolveImage: (u, opts = {}) => {
     if (!u) return "";
     if (u.startsWith("/api/")) return `${BACKEND_URL}${u}`;

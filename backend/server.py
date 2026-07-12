@@ -356,6 +356,43 @@ async def list_contact():
     return await db.contact_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
 
+class CatalogueRequest(BaseModel):
+    name: str
+    phone: str
+    source: str = "contact_page"
+
+
+@api.post("/catalogue-request")
+async def create_catalogue_request(payload: CatalogueRequest):
+    """Store a name + phone lead every time someone requests the PDF catalogue
+    via the "Send catalogue on WhatsApp" flow. Also visible under Admin →
+    Inquiries so the shop owner can follow up if the visitor never actually
+    sends the WhatsApp message."""
+    record = {
+        "id": str(uuid.uuid4()),
+        "name": (payload.name or "").strip()[:120],
+        "phone": (payload.phone or "").strip()[:32],
+        "source": (payload.source or "contact_page")[:64],
+        "created_at": now_iso(),
+        "type": "catalogue_request",
+    }
+    if not record["name"] or not record["phone"]:
+        raise HTTPException(status_code=400, detail="Name and phone are required")
+    # Reuse the inquiries collection so the shop owner sees these leads in the
+    # same admin table as regular inquiries.
+    await db.inquiries.insert_one({
+        **record,
+        "customer_name": record["name"],
+        "customer_email": "",
+        "customer_phone": record["phone"],
+        "message": f"Requested the PDF catalogue via WhatsApp from {record['source']}",
+        "items": [],
+        "total": 0.0,
+        "status": "new",
+    })
+    return {"success": True, "id": record["id"]}
+
+
 # --- Settings ---
 @api.get("/settings", response_model=Settings)
 async def get_settings():
