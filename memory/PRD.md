@@ -76,6 +76,7 @@ INR pricing with en-IN formatting.
 - Instagram feed on Home page
 
 ## Changelog
+- 2026-02-13: **Global "Currently unavailable" verbiage removed.** Verified via grep across `/app/frontend/src/` — zero occurrences. `ProductDetail.jsx` shows "Available on request" when `stock === 0`; `ProductCard.jsx` / `Catalog.jsx` / `Cart.jsx` intentionally don't render stock badges (inquiry-based catalog). Live-verified on 0-stock product `/product/23afd515-…` — screenshot confirms clean "Price on request" + "Available on request" copy.
 - 2026-02-12: **AI description style upgraded to Samrat Catalogue voice.** New `_AI_PROMPT_SYSTEM` enforces a 4-part description: (1) elegant introduction, (2) visible design details (hedged), (3) ideal usage spaces drawn from a curated list (living/dining/bedroom/hotel/villa/temple/restaurant/showroom/luxury villa/banquet), (4) a mandatory `Key Features:` heading with 4-6 `• `-prefixed bullets. Explicitly forbids overusing *exquisite/timeless/captivating/mesmerizing/enchanting* (max once each). Tags now mix category + material-look + use-case (12-14 comma-separated phrases). Existing product detail page already renders newlines via `whitespace-pre-wrap` — no frontend change needed. Verified live: real chandelier image produced clean 4-section output with 6 bullets, hedged material language, zero fabricated specs.
 - 2026-02-12: **Product detail page cleaner rules.** Details in previous entry.
 - 2026-02-12: **AI Product Details Generator (Gemini 3 Flash + vision).** Full details in previous entry.
