@@ -1,6 +1,7 @@
 """Product Catalog API - Lumière."""
 import csv
 import io
+import json
 import logging
 import os
 import uuid
@@ -64,6 +65,10 @@ class Product(BaseModel):
     review_count: int = 0
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
+    # "published" — visible on the public site (catalog, home).
+    # "draft"     — hidden from the public site; awaiting admin review
+    #               (e.g. AI-generated products default to this).
+    status: str = "published"
 
 
 class ProductCreate(BaseModel):
@@ -83,6 +88,7 @@ class ProductCreate(BaseModel):
     badge: str = ""
     fixed_price: bool = False
     price_display: str = "starting_from"
+    status: str = "published"
 
 
 class Review(BaseModel):
@@ -229,8 +235,16 @@ async def list_products(
     max_price: Optional[float] = None,
     featured: Optional[bool] = None,
     sort: str = "newest",
+    status: Optional[str] = None,  # "draft" | "published" | None (=published only for public)
+    include_drafts: bool = False,   # convenience flag for the admin UI
 ):
     query = {}
+    # Public callers get only published products by default; admin passes
+    # include_drafts=1 (or an explicit status) to see the "Needs Review" pile.
+    if not include_drafts and not status:
+        query["status"] = {"$ne": "draft"}
+    elif status:
+        query["status"] = status
     if q:
         query["$or"] = [
             {"name": {"$regex": q, "$options": "i"}},
@@ -793,6 +807,188 @@ async def pull_instagram_cover(payload: InstagramCoverRequest):
         "url": f"/api/files/{result['path']}",
         "source_url": canonical,
     }
+
+
+# --- AI product-details generator ------------------------------------------
+
+class AIGenerateProductRequest(BaseModel):
+    image_url: str  # Either an absolute URL or a /api/files/... path
+    image_path: Optional[str] = None  # storage path if we already have one
+
+# Prompt engineering — keep the tone Indian-luxury and instruct the model to
+# NEVER invent physical measurements, wattage, holder types, or prices.
+_AI_PROMPT_SYSTEM = """You are a senior copywriter for **Samrat Glass Emporium**, a Firozabad-based Indian luxury decorative lighting brand (chandeliers, hanging lights, wall lights, table lamps, floor lamps, sconces).
+
+Your job: analyze ONE product photograph and produce a JSON draft the shop owner can review and refine.
+
+TONE
+· Premium, warm, quietly confident. Indian-hospitality voice — never salesy.
+· Short crisp sentences. SEO-conscious phrasing.
+· Every physical detail you're not 100% sure of MUST be softened with phrases like "appears to feature", "seems to be", or LEFT BLANK for admin review.
+
+STRICT RULES
+· DO NOT invent exact dimensions (height, width, diameter), weight, wattage, or price. Leave those fields blank.
+· DO NOT invent the SKU-linked holder type (B22 / E27 / GU10) unless it is unambiguously visible in the socket. If uncertain, leave blank.
+· DO NOT claim materials you cannot see. If it looks like crystal, say "cut-glass / crystal-look" — never certify.
+· Tags MUST be a comma-separated list of 8–14 lowercase phrases, mixing category, material, style, use-case (e.g. `chandelier, crystal chandelier, decorative light, fancy light, handcrafted light, Firozabad glass, luxury lighting, hanging light, living room lighting`).
+· SKU MUST follow the pattern `SGE-<CAT>-<3 uppercase letters>` where `<CAT>` is a 2-3 letter code (`CH` chandelier, `TL` table lamp, `WL` wall light, `HL` hanging light, `FL` floor lamp, `SC` sconce, `CS` candle stand). Example: `SGE-CH-VNX`. The 3-letter suffix must be memorable / evocative of the piece.
+· Category MUST be one of: Chandelier, Hanging Light, Wall Light, Table Lamp, Floor Lamp, Sconce, Candle Stand, Wall Sconce.
+
+OUTPUT FORMAT — strictly this JSON schema (no prose before/after, no code fences):
+{
+  "name": "…",                     // Premium product name, 3–6 words, Title Case
+  "seo_name": "…",                 // SEO-friendly title, 60–70 chars, "<name> · <category> · Samrat Glass Emporium"
+  "category": "…",                 // From the allowed list above
+  "short_description": "…",        // 1 sentence, ≤ 160 chars, evocative
+  "description": "…",              // 3–5 short paragraphs (~500-800 chars total)
+  "tags": "chandelier, crystal chandelier, …",   // comma-separated string
+  "sku": "SGE-CH-XYZ",             // per pattern above
+  "specs": {
+    "Material": "",                // fill only if certain, else ""
+    "Finish": "",
+    "Glass Type": "",
+    "Product Type": "",
+    "Holder Type": "",
+    "Suitable For": "",            // e.g. "Living rooms, hotel lobbies, foyer entrances"
+    "Style": "",                   // e.g. "Contemporary Indian" / "Traditional" / "Art Deco"
+    "Color": "",                   // dominant visible color(s)
+    "Package Includes": "",        // safe default: "1 × decorative light fixture with mounting hardware"
+    "Care Instructions": "",       // safe default: "Wipe gently with a soft dry cloth. Avoid abrasive cleaners."
+    "Customization Available": ""  // safe default: "Yes — sizes and finishes can be customised on request."
+  }
+}
+"""
+
+
+async def _generate_product_json(image_bytes: bytes, mime: str) -> dict:
+    """Send the image to Gemini 3 Flash and coerce the response into our JSON schema."""
+    import base64
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY is not configured")
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"ai-product-{uuid.uuid4().hex[:12]}",
+        system_message=_AI_PROMPT_SYSTEM,
+    ).with_model("gemini", "gemini-3-flash-preview")
+
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    user_msg = UserMessage(
+        text="Analyze this Samrat Glass Emporium product photograph and produce the JSON draft.",
+        file_contents=[ImageContent(image_base64=b64)],
+    )
+
+    # Collect the streamed tokens into one final string, then parse.
+    from emergentintegrations.llm.chat import TextDelta, StreamDone
+    parts = []
+    async for ev in chat.stream_message(user_msg):
+        if isinstance(ev, TextDelta):
+            parts.append(ev.content)
+        elif isinstance(ev, StreamDone):
+            break
+    raw = "".join(parts).strip()
+
+    # Some models still wrap output in ```json … ``` fences — strip those.
+    import re
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not m:
+        raise HTTPException(status_code=502, detail=f"AI returned no JSON. Raw: {raw[:200]}")
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=502, detail=f"AI JSON parse failed: {e}") from e
+    return data
+
+
+@api.post("/ai/generate-product")
+async def ai_generate_product(payload: AIGenerateProductRequest):
+    """Analyze one product image and CREATE a draft product row that the admin
+    can review / edit / publish. Returns the fully-populated draft."""
+
+    # Load the image bytes — either from our object storage (preferred) or via
+    # HTTP if the client passed an external URL.
+    image_bytes = None
+    mime = "image/jpeg"
+    if payload.image_path:
+        try:
+            image_bytes, mime = get_object(payload.image_path)
+        except Exception:
+            image_bytes = None
+    if not image_bytes:
+        url = payload.image_url
+        if url.startswith("/api/files/"):
+            try:
+                image_bytes, mime = get_object(url.removeprefix("/api/files/"))
+            except Exception:
+                image_bytes = None
+        if not image_bytes:
+            try:
+                r = requests.get(url, timeout=20)
+                r.raise_for_status()
+                image_bytes = r.content
+                mime = r.headers.get("content-type", mime).split(";")[0].strip()
+            except Exception as e:
+                raise HTTPException(400, f"Could not load image: {e}") from e
+
+    ai = await _generate_product_json(image_bytes, mime)
+
+    # Build the draft product row — everything AI leaves blank stays blank so
+    # the admin sees it as "Needs Review" and fills in the truth.
+    now = now_iso()
+    draft = {
+        "id": str(uuid.uuid4()),
+        "name": (ai.get("name") or "New Product · Needs Review")[:140],
+        "sku": (ai.get("sku") or f"SGE-DRAFT-{uuid.uuid4().hex[:5].upper()}")[:32],
+        "category": ai.get("category") or "Chandelier",
+        "price": 0.0,
+        "compare_at_price": None,
+        "currency": "INR",
+        "short_description": (ai.get("short_description") or "")[:220],
+        "description": ai.get("description") or "",
+        "images": [payload.image_url] if payload.image_url else [],
+        "tags": [t.strip() for t in (ai.get("tags") or "").split(",") if t.strip()],
+        "specs": {k: (v or "") for k, v in (ai.get("specs") or {}).items()},
+        "stock": 0,
+        "featured": False,
+        "badge": "Needs Review",
+        "fixed_price": False,
+        "price_display": "on_request",
+        "rating": 0.0,
+        "review_count": 0,
+        "status": "draft",
+        "seo_name": ai.get("seo_name") or "",
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.products.insert_one(draft)
+    # Strip mongo _id before returning
+    draft.pop("_id", None)
+    return draft
+
+
+class AIBulkRequest(BaseModel):
+    images: List[str]  # list of /api/files/... URLs or absolute URLs
+
+
+@api.post("/ai/generate-products-bulk")
+async def ai_generate_products_bulk(payload: AIBulkRequest):
+    """Fan out over N images. Each success creates a draft; each failure is
+    reported per-image so the admin can retry just the bad ones."""
+    if not payload.images:
+        raise HTTPException(400, "No images provided")
+    results = []
+    for url in payload.images[:20]:  # safety cap to prevent runaway costs
+        try:
+            draft = await ai_generate_product(AIGenerateProductRequest(image_url=url))
+            results.append({"image": url, "success": True, "product": draft})
+        except HTTPException as e:
+            results.append({"image": url, "success": False, "error": e.detail})
+        except Exception as e:
+            results.append({"image": url, "success": False, "error": str(e)})
+    return {"results": results, "total": len(payload.images), "created": sum(1 for r in results if r["success"])}
 
 
 @api.get("/files/{path:path}")

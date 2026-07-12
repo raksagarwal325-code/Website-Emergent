@@ -49,6 +49,10 @@ export const api = {
   pullInstagramCover: (url) => client.post("/admin/instagram/cover", { url }).then(r => r.data),
   requestCatalogue: (name, phone, source = "contact_page") =>
     client.post("/catalogue-request", { name, phone, source }).then(r => r.data),
+  aiGenerateProduct: (image_url) =>
+    client.post("/ai/generate-product", { image_url }).then(r => r.data),
+  aiGenerateProductsBulk: (images) =>
+    client.post("/ai/generate-products-bulk", { images }).then(r => r.data),
   resolveImage: (u, opts = {}) => {
     if (!u) return "";
     if (u.startsWith("/api/")) return `${BACKEND_URL}${u}`;

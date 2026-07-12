@@ -3,10 +3,11 @@ import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare
 import { api } from "../lib/api";
 import { toast } from "sonner";
 import AdminHomepage from "../components/AdminHomepage";
+import AIProductGenerator from "../components/AIProductGenerator";
 
 const emptyProduct = {
   name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "USD",
-  short_description: "", description: "", images: [], tags: [], specs: {}, stock: 0, featured: false, badge: "", fixed_price: false, price_display: "starting_from",
+  short_description: "", description: "", images: [], tags: [], specs: {}, stock: 0, featured: false, badge: "", fixed_price: false, price_display: "starting_from", status: "published",
 };
 
 export default function Admin() {
@@ -21,7 +22,7 @@ export default function Admin() {
 
   const refresh = async () => {
     const [p, i, m, s, st, cats] = await Promise.all([
-      api.listProducts().catch(() => []),
+      api.listProducts({ include_drafts: 1 }).catch(() => []),
       api.listInquiries().catch(() => []),
       api.listContact().catch(() => []),
       api.getSettings().catch(() => null),
@@ -131,6 +132,7 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
         stock: parseInt(form.stock) || 0,
         price_display: form.price_display || "starting_from",
         fixed_price: form.price_display === "fixed", // legacy sync
+        status: form.status || "published",
       };
       if (editing) await api.updateProduct(editing.id, payload);
       else await api.createProduct(payload);
@@ -162,6 +164,15 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
   const setTag = (v) => setForm({ ...form, tags: v.split(",").map((s) => s.trim()).filter(Boolean) });
 
   return (
+    <div className="space-y-8">
+      {/* AI drafts — visible for both create and edit flows */}
+      {!editing && (
+        <AIProductGenerator
+          onDone={refresh}
+          setEditingProduct={(draft) => { setEditing(draft); refresh(); }}
+        />
+      )}
+
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
       <form onSubmit={submit} className="lg:col-span-5 border border-white/10 p-6 space-y-4">
         <div className="flex items-center justify-between">
@@ -297,6 +308,28 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
           Featured
         </label>
 
+        {/* Publish status — controls whether the product is visible on the public site. */}
+        <div>
+          <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">Publish status</span>
+          <div className="flex gap-3">
+            {[["published", "Published (visible on site)"], ["draft", "Draft (Needs Review — hidden)"]].map(([val, label]) => (
+              <label key={val} className="inline-flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  data-testid={`p-status-${val}`}
+                  name="p-status"
+                  checked={(form.status || "published") === val}
+                  onChange={() => setForm({ ...form, status: val, badge: val === "published" && form.badge === "Needs Review" ? "" : form.badge })}
+                />
+                <span className={val === "draft" ? "text-[#D4AF37]" : "text-white/85"}>{label}</span>
+              </label>
+            ))}
+          </div>
+          {form.status === "draft" && (
+            <p className="text-[10px] text-[#BF9972] mt-1">This product is currently hidden from the public site. Switch to Published when ready.</p>
+          )}
+        </div>
+
         <div>
           <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">Signature Badge (optional, shown on the product card)</span>
           <input
@@ -350,25 +383,34 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
 
       <div className="lg:col-span-7 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="eyebrow">All products ({products.length})</div>
+          <div className="eyebrow">All products ({products.length}{products.filter((x) => x.status === "draft").length > 0 ? ` · ${products.filter((x) => x.status === "draft").length} draft` : ""})</div>
           <button data-testid="p-new-btn" onClick={() => setEditing(null)} className="inline-flex items-center gap-1 text-xs uppercase tracking-[0.24em] text-[#D4AF37] hover:text-[#B5952F]">
             <Plus size={12} /> New
           </button>
         </div>
         {products.map((p) => (
-          <div key={p.id} data-testid={`admin-product-${p.id}`} className="flex items-center gap-4 border border-white/10 p-3">
+          <div key={p.id} data-testid={`admin-product-${p.id}`}
+            className={`flex items-center gap-4 border p-3 ${p.status === "draft" ? "border-[#D4AF37]/50 bg-[#D4AF37]/[0.04]" : "border-white/10"}`}>
             <div className="w-14 h-14 bg-[#0a0a0a] overflow-hidden flex-shrink-0">
               {p.images?.[0] && <img src={api.resolveImage(p.images[0])} alt="" className="w-full h-full object-cover" />}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-serif truncate">{p.name}</div>
-              <div className="text-xs text-white/50">{p.category} · ₹{p.price?.toLocaleString("en-IN")} · {p.stock} in stock</div>
+              <div className="font-serif truncate flex items-center gap-2">
+                {p.name}
+                {p.status === "draft" && (
+                  <span className="text-[9px] uppercase tracking-widest bg-[#D4AF37] text-black px-2 py-0.5 flex-shrink-0" data-testid={`draft-badge-${p.id}`}>
+                    Needs Review
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-white/50">{p.category} · {p.status === "draft" ? "Price on request" : `₹${p.price?.toLocaleString("en-IN")}`} · {p.stock} in stock</div>
             </div>
             <button onClick={() => setEditing(p)} data-testid={`edit-${p.id}`} className="text-white/60 hover:text-[#D4AF37]"><Edit3 size={14} /></button>
             <button onClick={() => remove(p.id)} data-testid={`del-${p.id}`} className="text-white/60 hover:text-red-400"><Trash2 size={14} /></button>
           </div>
         ))}
       </div>
+    </div>
     </div>
   );
 }
