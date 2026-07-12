@@ -55,6 +55,10 @@ export const api = {
     client.post("/ai/generate-products-bulk", { images }).then(r => r.data),
   aiNameSuggestions: (opts) =>
     client.post("/ai/name-suggestions", opts).then(r => r.data),
+  aiRegenerateDetails: (opts) =>
+    client.post("/ai/regenerate-details", opts).then(r => r.data),
+  aiRegenerateFromName: (opts) =>
+    client.post("/ai/regenerate-from-name", opts).then(r => r.data),
   resolveImage: (u, opts = {}) => {
     if (!u) return "";
     if (u.startsWith("/api/")) return `${BACKEND_URL}${u}`;

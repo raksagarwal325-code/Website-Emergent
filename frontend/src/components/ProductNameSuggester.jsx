@@ -4,19 +4,25 @@ import { api } from "../lib/api";
 import { toast } from "sonner";
 
 /**
- * Sits directly under the Name input inside the Admin product form.
+ * "Regenerate Name Only" tool. Sits under the Name input on the Admin product
+ * form. Offers:
+ *   • Inline chips for quick selection.
+ *   • "See all rationales" opens a modal with 5 cards + Apply.
+ *   • Optional checkbox: "Update related fields based on new name" — when
+ *     ticked, applying a name also triggers `/api/ai/regenerate-from-name` and
+ *     merges category, seo_name, short_description, description, tags into
+ *     the working draft. Product is flipped to Draft status so nothing is
+ *     silently published.
  *
- *   • Inline "chips" for quick selection.
- *   • "See all rationales" opens a modal with 5 named cards, full reasoning
- *     and per-card Apply buttons.
- *
- * The backend guarantees the 5 suggestions are unique against the current
- * catalogue, so no client-side dedupe is needed.
+ * The backend enforces uniqueness against the whole catalogue so no
+ * client-side dedupe is required here.
  */
-export default function ProductNameSuggester({ form, onApply }) {
+export default function ProductNameSuggester({ form, onApply, onFieldsMerge }) {
   const [loading, setLoading] = useState(false);
+  const [merging, setMerging] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [alsoRelated, setAlsoRelated] = useState(false);
 
   const canSuggest = Boolean(
     (form && (form.id || (form.images && form.images.length > 0)))
@@ -30,13 +36,9 @@ export default function ProductNameSuggester({ form, onApply }) {
     }
     setLoading(true);
     try {
-      // If we already have a product_id, backend will pull the primary image.
-      // Otherwise, send the first image_url from the working draft.
       const opts = {};
       if (form.id) opts.product_id = form.id;
       else if (form.images && form.images.length > 0) opts.image_url = form.images[0];
-      // Include the current in-progress name in the avoid list so the AI has
-      // to actually change it (unless the field is empty).
       if (form.name && form.name.trim()) opts.exclude_names = [form.name.trim()];
       const { suggestions: s } = await api.aiNameSuggestions(opts);
       if (!s || s.length === 0) {
@@ -51,10 +53,36 @@ export default function ProductNameSuggester({ form, onApply }) {
     }
   };
 
-  const apply = (name) => {
+  const apply = async (name) => {
     onApply(name);
     setModalOpen(false);
-    toast.success(`Name updated to "${name}"`);
+
+    // Optionally regenerate related fields based on the chosen name.
+    if (alsoRelated) {
+      setMerging(true);
+      try {
+        const opts = { name };
+        if (form.id) opts.product_id = form.id;
+        else if (form.images && form.images.length > 0) opts.image_url = form.images[0];
+        const { ai } = await api.aiRegenerateFromName(opts);
+        // Only fields covered by this endpoint.
+        const merge = {
+          seo_name: ai.seo_name,
+          category: ai.category,
+          short_description: ai.short_description,
+          description: ai.description,
+          tags: ai.tags,
+        };
+        onFieldsMerge?.(merge, { setDraft: true });
+        toast.success(`Name updated & related fields regenerated · marked as Draft`);
+      } catch (err) {
+        toast.error(err?.response?.data?.detail || "Related fields could not be regenerated.");
+      } finally {
+        setMerging(false);
+      }
+    } else {
+      toast.success(`Name updated to "${name}"`);
+    }
   };
 
   return (
@@ -73,7 +101,7 @@ export default function ProductNameSuggester({ form, onApply }) {
           ) : (
             <Sparkles size={12} />
           )}
-          {suggestions.length > 0 ? "Regenerate Names" : "Suggest Names"}
+          Regenerate Name Only
         </button>
         {suggestions.length > 0 && (
           <button
@@ -92,6 +120,26 @@ export default function ProductNameSuggester({ form, onApply }) {
         )}
       </div>
 
+      {/* "Update related fields" toggle — visible once we have suggestions. */}
+      {(suggestions.length > 0 || merging) && (
+        <label className="mt-2 flex items-start gap-2 text-[11px] text-white/70 cursor-pointer select-none max-w-md">
+          <input
+            type="checkbox"
+            data-testid="ai-name-related-toggle"
+            checked={alsoRelated}
+            onChange={(e) => setAlsoRelated(e.target.checked)}
+            className="mt-0.5 accent-[#D4AF37]"
+          />
+          <span>
+            <span className="text-white/85">Update related fields based on new name</span>
+            <span className="block text-white/45">
+              When applying a name, also regenerate category, description and tags to match.
+              Product will be marked as <span className="text-[#D4AF37]">Draft</span>.
+            </span>
+          </span>
+        </label>
+      )}
+
       {/* Inline chips */}
       {suggestions.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5" data-testid="ai-name-chips">
@@ -100,13 +148,21 @@ export default function ProductNameSuggester({ form, onApply }) {
               key={s.name}
               type="button"
               onClick={() => apply(s.name)}
+              disabled={merging}
               title={s.rationale}
-              className="group inline-flex items-center gap-1 max-w-full px-2.5 py-1 border border-white/15 hover:border-[#D4AF37] hover:bg-[#D4AF37]/5 text-[11px] text-white/80 hover:text-[#D4AF37] transition"
+              className="group inline-flex items-center gap-1 max-w-full px-2.5 py-1 border border-white/15 hover:border-[#D4AF37] hover:bg-[#D4AF37]/5 text-[11px] text-white/80 hover:text-[#D4AF37] transition disabled:opacity-50"
             >
               <Check size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
               <span className="truncate">{s.name}</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {merging && (
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-[#D4AF37]">
+          <RefreshCw size={12} className="animate-spin" />
+          Regenerating related fields…
         </div>
       )}
 

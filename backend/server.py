@@ -1202,6 +1202,197 @@ async def ai_name_suggestions(payload: AINameSuggestRequest):
     return {"suggestions": picked[:5]}
 
 
+# --- Full-details regeneration (no DB write) -------------------------------
+
+
+class AIRegenerateRequest(BaseModel):
+    image_url: Optional[str] = None
+    image_path: Optional[str] = None
+    product_id: Optional[str] = None
+
+
+async def _resolve_product_image(payload: AIRegenerateRequest) -> tuple[bytes, str]:
+    """Resolve the payload into (image_bytes, mime). Raises HTTPException on
+    failure. Consolidates the same lookup logic used elsewhere in this file:
+    payload.image_path → payload.image_url → product primary image."""
+    image_bytes = None
+    mime = "image/jpeg"
+    if payload.product_id and not (payload.image_path or payload.image_url):
+        prod = await db.products.find_one({"id": payload.product_id})
+        if not prod:
+            raise HTTPException(404, "Product not found")
+        imgs = prod.get("images") or []
+        if imgs:
+            first = imgs[0]
+            if isinstance(first, str) and first.startswith("/api/files/"):
+                payload.image_path = first.removeprefix("/api/files/")
+            else:
+                payload.image_url = first
+    if payload.image_path:
+        try:
+            image_bytes, mime = get_object(payload.image_path)
+        except Exception:
+            image_bytes = None
+    if not image_bytes and payload.image_url:
+        url = payload.image_url
+        if url.startswith("/api/files/"):
+            try:
+                image_bytes, mime = get_object(url.removeprefix("/api/files/"))
+            except Exception:
+                image_bytes = None
+        if not image_bytes:
+            try:
+                r = requests.get(url, timeout=20)
+                r.raise_for_status()
+                image_bytes = r.content
+                mime = r.headers.get("content-type", mime).split(";")[0].strip()
+            except Exception as e:
+                raise HTTPException(400, f"Could not load image: {e}") from e
+    if not image_bytes:
+        raise HTTPException(400, "No image provided")
+    return image_bytes, mime
+
+
+@api.post("/ai/regenerate-details")
+async def ai_regenerate_details(payload: AIRegenerateRequest):
+    """Return a FULL AI-generated product JSON (name, seo_name, category,
+    short_description, description, tags, specs, sku) for review.
+
+    This endpoint does NOT persist anything — the admin sees a side-by-side
+    diff and picks which fields to actually apply. If the product_id belongs
+    to an existing product, the model is also given the current catalogue
+    names so it doesn't propose a duplicate name.
+    """
+    image_bytes, mime = await _resolve_product_image(payload)
+    ai = await _generate_product_json(image_bytes, mime)
+
+    # If we're regenerating for an existing product, make sure the AI-picked
+    # name doesn't collide with any OTHER product's name in the catalogue.
+    if payload.product_id:
+        existing = await _existing_name_index()
+        proposed = _normalize_name(ai.get("name", ""))
+        # A collision only counts if it maps to a DIFFERENT product row.
+        if proposed:
+            collided_doc = await db.products.find_one(
+                {"id": {"$ne": payload.product_id}, "name": {"$regex": f"^{ai.get('name', '')}$", "$options": "i"}},
+                {"_id": 0, "id": 1, "name": 1},
+            )
+            if collided_doc:
+                # Ask the batch helper for one uniquely-cleared alternative.
+                batch = await _ai_name_batch(image_bytes, mime, existing)
+                for item in batch:
+                    key = _normalize_name(item["name"])
+                    if key and key != proposed and key not in existing:
+                        ai["name"] = item["name"]
+                        break
+    return {"ai": ai}
+
+
+# --- "Update related fields based on new name" -----------------------------
+
+
+class AIRelatedRequest(BaseModel):
+    name: str
+    image_url: Optional[str] = None
+    image_path: Optional[str] = None
+    product_id: Optional[str] = None
+
+
+_RELATED_SYSTEM_PROMPT = """You are the catalogue copywriter for **Samrat Glass Emporium**.
+
+The shop owner has just fixed the product NAME to a specific value. Your job is
+to rewrite the OTHER fields so they align with that name AND with what is
+actually visible in the product photograph.
+
+RULES
+· The provided `name` is FIXED — do not change it. Use it verbatim in `seo_name`
+  and reference its distinctive feature in `short_description` and `description`.
+· `category` MUST be one of: Chandelier, Hanging Light, Wall Light, Table Lamp,
+  Floor Lamp, Sconce, Candle Stand, Wall Sconce.
+· `short_description` is 1 sentence, ≤ 160 chars, restrained tone.
+· `description` follows this structure (plain text, blank line between
+  sections):
+  1. Introduction paragraph (2–3 sentences).
+  2. Design details paragraph (2–3 sentences, only what is visible).
+  3. Ideal spaces paragraph (1–2 sentences).
+  4. `Key Features:` on its own line followed by 4–6 bullets prefixed with
+     `• ` (bullet + space).
+· `tags` is a comma-separated string of 8–14 lowercase phrases, mixing
+  category, material-look, style, use-case.
+· DO NOT overuse *exquisite, timeless, captivating, mesmerizing, enchanting* —
+  each at most once across the whole draft.
+· DO NOT invent physical measurements, wattage, holder types, or prices.
+
+OUTPUT — strict JSON only, no prose or code fences:
+{
+  "seo_name": "…",
+  "category": "…",
+  "short_description": "…",
+  "description": "…",
+  "tags": "…"
+}
+"""
+
+
+@api.post("/ai/regenerate-from-name")
+async def ai_regenerate_from_name(payload: AIRelatedRequest):
+    """Given a *fixed* product name and its image, regenerate the related
+    fields (seo_name, category, short_description, description, tags) so they
+    align with that name and the visible design in the photo."""
+    if not payload.name or not payload.name.strip():
+        raise HTTPException(400, "Missing product name")
+
+    image_bytes, mime = await _resolve_product_image(
+        AIRegenerateRequest(
+            image_url=payload.image_url,
+            image_path=payload.image_path,
+            product_id=payload.product_id,
+        )
+    )
+
+    import base64
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent, TextDelta, StreamDone
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY is not configured")
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"ai-related-{uuid.uuid4().hex[:12]}",
+        system_message=_RELATED_SYSTEM_PROMPT,
+    ).with_model("gemini", "gemini-3-flash-preview")
+
+    user_msg = UserMessage(
+        text=(
+            f"Fixed product name: {payload.name.strip()}\n"
+            "Regenerate the JSON with seo_name, category, short_description, "
+            "description, tags aligned with that name."
+        ),
+        file_contents=[ImageContent(image_base64=base64.b64encode(image_bytes).decode("ascii"))],
+    )
+    parts: List[str] = []
+    async for ev in chat.stream_message(user_msg):
+        if isinstance(ev, TextDelta):
+            parts.append(ev.content)
+        elif isinstance(ev, StreamDone):
+            break
+    raw = "".join(parts).strip()
+
+    import re as _re
+    m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+    if not m:
+        raise HTTPException(status_code=502, detail=f"AI returned no JSON. Raw: {raw[:200]}")
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=502, detail=f"AI JSON parse failed: {e}") from e
+
+    # Force the name to be exactly what the caller specified.
+    data["name"] = payload.name.strip()
+    return {"ai": data}
+
+
 class AIBulkRequest(BaseModel):
     images: List[str]  # list of /api/files/... URLs or absolute URLs
 
