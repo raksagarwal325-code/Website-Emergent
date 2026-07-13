@@ -132,4 +132,27 @@ export const formatLuxuryPrice = (product, symbol = "₹") => {
   return p.label ? `${p.label} ${p.primary}` : p.primary;
 };
 
+// --- SKU sorting ------------------------------------------------------------
+// Natural sort keyed on the trailing numeric segment of the SKU. Splits on
+// dashes/underscores so `SGE-CH-001` → prefix `SGE-CH`, num 1. Non-numeric
+// tails (e.g. `SGE-HL-DMC`) get num = +Infinity so they always sort AFTER
+// numbered SKUs within the same prefix, per the owner's spec.
+export function skuSortKey(sku) {
+  if (!sku) return { prefix: "\uFFFF", num: Number.POSITIVE_INFINITY, tail: "" };
+  const parts = String(sku).split(/[-_]/);
+  const last = parts.length > 1 ? parts[parts.length - 1] : "";
+  const prefix = parts.slice(0, Math.max(1, parts.length - 1)).join("-").toUpperCase();
+  const num = /^\d+$/.test(last) ? parseInt(last, 10) : Number.POSITIVE_INFINITY;
+  return { prefix, num, tail: last.toUpperCase() };
+}
+
+export function compareBySku(a, b, dir = "asc") {
+  const A = skuSortKey(a?.sku);
+  const B = skuSortKey(b?.sku);
+  const mult = dir === "desc" ? -1 : 1;
+  if (A.prefix !== B.prefix) return mult * A.prefix.localeCompare(B.prefix);
+  if (A.num !== B.num) return mult * (A.num - B.num);
+  return mult * A.tail.localeCompare(B.tail);
+}
+
 export default api;

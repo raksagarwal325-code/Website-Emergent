@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
-import { api, formatProductPrice } from "../lib/api";
+import { api, formatProductPrice, compareBySku } from "../lib/api";
 
 // Format an Indian mobile number as +91 XXXXX XXXXX (13-char pretty form).
 function formatIndianPhone(raw) {
@@ -372,13 +372,18 @@ export default function Catalogue() {
     return () => { cancelled = true; };
   }, [ready, products, settings]);
 
-  // Group products by category — used for TOC + divider pages.
+  // Group products by category — used for TOC + divider pages. Within each
+  // category the products are ordered by SKU ascending (natural sort, so
+  // SGE-HL-009 comes before SGE-HL-010) to match the Admin catalogue.
   const groups = useMemo(() => {
     const map = new Map();
     for (const p of products) {
       const cat = (p.category || "Uncategorized").trim();
       if (!map.has(cat)) map.set(cat, []);
       map.get(cat).push(p);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => compareBySku(a, b, "asc"));
     }
     // Preserve stable order (alphabetical)
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon } from "lucide-react";
 import { api } from "../lib/api";
+import { compareBySku } from "../lib/api";
 import { toast } from "sonner";
 import AdminHomepage from "../components/AdminHomepage";
 import AIProductGenerator from "../components/AIProductGenerator";
@@ -112,6 +113,8 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
   const [catFilter, setCatFilter] = useState("");
   // Free-text search — matches product name, SKU, or category (case-insensitive).
   const [search, setSearch] = useState("");
+  // Sort order for the list. Default = SKU low→high per owner's request.
+  const [sortMode, setSortMode] = useState("sku_asc");
 
   // Baseline categories always shown in the filter/dropdown, even if the
   // catalogue hasn't been fully populated yet. Merge with categories the
@@ -129,7 +132,7 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
   // Apply the category filter + search to the products displayed on the right.
   const visibleProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return products.filter((p) => {
+    const filtered = products.filter((p) => {
       if (catFilter && (p.category || "") !== catFilter) return false;
       if (!q) return true;
       return (
@@ -138,7 +141,34 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
         (p.category || "").toLowerCase().includes(q)
       );
     });
-  }, [products, catFilter, search]);
+    // Sort — copy the array so we don't mutate the parent state.
+    const sorted = [...filtered];
+    switch (sortMode) {
+      case "sku_desc":
+        sorted.sort((a, b) => compareBySku(a, b, "desc"));
+        break;
+      case "newest":
+        sorted.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+        break;
+      case "oldest":
+        sorted.sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+        break;
+      case "name_asc":
+        sorted.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        break;
+      case "category":
+        sorted.sort((a, b) => {
+          const c = (a.category || "").localeCompare(b.category || "");
+          return c !== 0 ? c : compareBySku(a, b, "asc");
+        });
+        break;
+      case "sku_asc":
+      default:
+        sorted.sort((a, b) => compareBySku(a, b, "asc"));
+        break;
+    }
+    return sorted;
+  }, [products, catFilter, search, sortMode]);
 
   useEffect(() => {
     if (!editing) { setForm(emptyProduct); return; }
@@ -478,6 +508,23 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
               {CATEGORY_OPTIONS.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
+            </select>
+            <label htmlFor="admin-sort-select" className="text-[10px] uppercase tracking-[0.24em] text-white/40">
+              Sort
+            </label>
+            <select
+              id="admin-sort-select"
+              data-testid="admin-sort-select"
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value)}
+              className="bg-[#0a0a0a] border border-white/15 hover:border-[#BF9972] px-3 py-1.5 text-xs uppercase tracking-[0.14em] cursor-pointer"
+            >
+              <option value="sku_asc">SKU · Low to High</option>
+              <option value="sku_desc">SKU · High to Low</option>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="name_asc">Name · A–Z</option>
+              <option value="category">Category</option>
             </select>
             <button data-testid="p-new-btn" onClick={() => setEditing(null)} className="inline-flex items-center gap-1 text-xs uppercase tracking-[0.24em] text-[#D4AF37] hover:text-[#B5952F]">
               <Plus size={12} /> New
