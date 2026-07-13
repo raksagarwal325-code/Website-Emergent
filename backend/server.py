@@ -1320,6 +1320,15 @@ RULES
      `• ` (bullet + space).
 · `tags` is a comma-separated string of 8–14 lowercase phrases, mixing
   category, material-look, style, use-case.
+· `specs` MUST contain the following marketing-only fields (leave any of them
+  blank rather than invent):
+    - "Style"          e.g. "Traditional Indian Regal", "Contemporary Luxe"
+    - "Suitable For"   e.g. "Living Rooms, Dining Halls, Hotel Lobbies"
+    - "Color"          the dominant visible finish/colour, e.g. "Antique Bronze"
+    - "Product Type"   e.g. "Multi-Arm Crystal Chandelier"
+  DO NOT include Material, Finish, Glass Type, Holder Type, Height, Width,
+  Wattage, Package Includes, or any dimensional/technical field — those stay
+  owner-authored.
 · DO NOT overuse *exquisite, timeless, captivating, mesmerizing, enchanting* —
   each at most once across the whole draft.
 · DO NOT invent physical measurements, wattage, holder types, or prices.
@@ -1330,7 +1339,13 @@ OUTPUT — strict JSON only, no prose or code fences:
   "category": "…",
   "short_description": "…",
   "description": "…",
-  "tags": "…"
+  "tags": "…",
+  "specs": {
+    "Style": "…",
+    "Suitable For": "…",
+    "Color": "…",
+    "Product Type": "…"
+  }
 }
 """
 

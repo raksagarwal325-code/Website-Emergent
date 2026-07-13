@@ -300,15 +300,23 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
           <input required data-testid="p-name" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
           <ProductNameSuggester
             form={form}
-            onApply={(name) => setForm({ ...form, name })}
+            onApply={(name) => setForm((f) => ({ ...f, name }))}
             onFieldsMerge={(patch, { setDraft }) => {
               const next = { ...patch };
               if (typeof next.tags === "string") {
                 next.tags = next.tags.split(",").map((t) => t.trim()).filter(Boolean);
               }
+              // Preserve owner-authored specs (Material, Finish, Height, Width,
+              // Wattage, Package Includes, etc.). Only patch the marketing-only
+              // keys the AI is allowed to touch.
+              const specsPatch = next.specs;
+              delete next.specs;
               setForm((f) => ({
                 ...f,
                 ...next,
+                specs: specsPatch
+                  ? { ...(f.specs || {}), ...specsPatch }
+                  : (f.specs || {}),
                 ...(setDraft ? { status: "draft" } : {}),
               }));
             }}

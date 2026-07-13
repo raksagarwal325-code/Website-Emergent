@@ -1,0 +1,35 @@
+{
+  "summary": "Verified bug-fix for 'Update related fields based on new name' checkbox in Admin → Edit Product. CASE A (checkbox OFF): only Name updated, all other fields including specs untouched, toast reads 'Name updated to \"...\"'. CASE B (checkbox ON): short_description, description, tags all changed; marketing specs Style / Suitable For / Color / Product Type were updated inside the specs table; protected specs Material, Finish, Package Includes, Holder Type were NOT wiped (additive merge working); SKU / price / stock preserved; status flipped to 'draft'; toast text is EXACT match: 'Name and related fields updated. Please review before publishing.' Persistence verified — after Save + re-open Edit, all merged fields (name, short_description, description, tags, category, plus Style/Suitable For/Color/Product Type specs) survived a MongoDB round-trip.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/inquiries (GET)", "issue": "ResponseValidationError 500 when an inquiry document has empty customer_email. Fires on every Admin refresh() call. Pre-existing, unrelated to this bug-fix task, but noisy in logs and appeared as a console 500 during Save (Admin refresh runs after update). Suggest making customer_email Optional[EmailStr] or using a lax string type."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL cleanup (not blocking this task): loosen customer_email validation on /api/inquiries response model so legacy rows with blank email don't crash the endpoint."
+  ],
+  "critical_code_review_comments": [
+    "ProductNameSuggester.jsx apply(): correctly gates on `alsoRelated` — when OFF it only fires onApply(name) + 'Name updated to' toast; when ON it calls api.aiRegenerateFromName and passes a merge object that includes seo_name, category, short_description, description, tags, and a scoped specsPatch containing only {Style, Suitable For, Color, Product Type} — SKU/price/stock/material/finish/height/width/wattage/package fields are never in the patch, so the frontend cannot overwrite them.",
+    "Admin.jsx onFieldsMerge (line 304-322): correctly uses functional setForm and merges specs additively via `{ ...(f.specs || {}), ...specsPatch }` — this is exactly the regression guard the task described. Owner-authored specs Material/Finish/Height/Width/Wattage/Package Includes were preserved in my run (verified against a real draft product).",
+    "Toast text on the success path is a plain string literal — matches the test's exact-text assertion.",
+    "Unrelated observation: /api/inquiries GET currently returns 500 for legacy rows with empty customer_email. Doesn't affect the name-regen flow itself, but the Admin refresh() after Save logs a 500 in console — worth cleaning up separately."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only task)",
+    "frontend": "100% (all acceptance criteria for the bug-fix passed)"
+  },
+  "test_credentials": "N/A — /admin has no login gate",
+  "seed_data_creation": "Used existing draft product 'The Amarya Etched Glass Grand Chandelier' (SGE-CH-AMR, id 19549c1f-5c2e-44e8-b12f-47726449e7fb). After the test its name is now 'Fern Etched Hurricane Brass Chandelier' and its short_description/description/tags/marketing specs reflect the AI-regenerated content. Status stayed draft. No new products were created and no protected specs were lost.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The name-regen bug is fully fixed. Test evidence: (1) CASE A only mutated form.name and toasted 'Name updated to \"<chip>\"'; (2) CASE B mutated short_desc/desc/tags/marketing-specs (Style, Suitable For, Color, Product Type) additively while preserving Material/Finish/Package Includes/Holder Type, SKU, price, stock; (3) toast text exact match; (4) status flipped to draft; (5) all changes survived Save → re-open Edit (MongoDB persistence verified). If regressions come back, first place to look is Admin.jsx line 314-321 (specs merge) and ProductNameSuggester.jsx line 79-85 (specsPatch whitelist).",
+  "rca of the issue": "Verified fix. Root cause was two-fold and both fixes are confirmed in code + runtime: (1) backend /api/ai/regenerate-from-name now includes specs {Style, Suitable For, Color, Product Type} in its response — confirmed by observing marketing spec updates in the form after chip apply; (2) Admin.jsx onFieldsMerge uses functional setter and merges specs additively (`{ ...(f.specs || {}), ...specsPatch }`) instead of replacing the whole specs object — confirmed by seeing Material/Finish/Package Includes/Holder Type still present after the merge."
+}

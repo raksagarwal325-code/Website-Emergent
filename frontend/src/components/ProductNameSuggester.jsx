@@ -65,7 +65,9 @@ export default function ProductNameSuggester({ form, onApply, onFieldsMerge }) {
         if (form.id) opts.product_id = form.id;
         else if (form.images && form.images.length > 0) opts.image_url = form.images[0];
         const { ai } = await api.aiRegenerateFromName(opts);
-        // Only fields covered by this endpoint.
+        // Marketing-only fields — never overwrite SKU, price, stock, material,
+        // holder type, height, width, wattage, package includes, or any
+        // confirmed technical spec on the product.
         const merge = {
           seo_name: ai.seo_name,
           category: ai.category,
@@ -73,8 +75,16 @@ export default function ProductNameSuggester({ form, onApply, onFieldsMerge }) {
           description: ai.description,
           tags: ai.tags,
         };
+        // Style / Suitable For / Color / Product Type live inside specs.
+        const aiSpecs = ai.specs || {};
+        const specsPatch = {};
+        for (const key of ["Style", "Suitable For", "Color", "Product Type"]) {
+          const v = aiSpecs[key];
+          if (v && String(v).trim()) specsPatch[key] = String(v).trim();
+        }
+        if (Object.keys(specsPatch).length > 0) merge.specs = specsPatch;
         onFieldsMerge?.(merge, { setDraft: true });
-        toast.success(`Name updated & related fields regenerated · marked as Draft`);
+        toast.success("Name and related fields updated. Please review before publishing.");
       } catch (err) {
         toast.error(err?.response?.data?.detail || "Related fields could not be regenerated.");
       } finally {
