@@ -27,7 +27,7 @@ export default function Cart() {
     }
     setSubmitting(true);
     try {
-    const items = cart.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price }));
+    const items = cart.map((i) => ({ product_id: i.product_id, sku: i.sku || "", name: i.name, quantity: i.quantity, price: i.price }));
       await api.createInquiry({ ...form, items });
       toast.success("Inquiry sent. We'll be in touch shortly.");
       clearCart();
@@ -41,7 +41,10 @@ export default function Cart() {
 
   const waNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
   const waMsg = cart.length > 0
-    ? encodeURIComponent("Hello, I would like to enquire about:\n" + cart.map((i) => `- ${i.name} (x${i.quantity})`).join("\n"))
+    ? encodeURIComponent(
+        "Hello, I would like to enquire about:\n" +
+        cart.map((i) => `- ${i.name}${i.sku ? ` (SKU: ${i.sku})` : ""} (x${i.quantity})`).join("\n")
+      )
     : "";
   const waLink = waNumber ? `https://wa.me/${waNumber}?text=${waMsg}` : "#";
 

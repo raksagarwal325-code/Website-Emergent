@@ -113,6 +113,7 @@ class ReviewCreate(BaseModel):
 class InquiryItem(BaseModel):
     product_id: str
     name: str
+    sku: Optional[str] = None
     quantity: int = 1
     price: float
 

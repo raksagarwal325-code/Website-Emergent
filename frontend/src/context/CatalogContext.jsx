@@ -24,7 +24,7 @@ export function CatalogProvider({ children }) {
       if (found) {
         return prev.map((i) => i.product_id === product.id ? { ...i, quantity: i.quantity + qty } : i);
       }
-      return [...prev, { product_id: product.id, name: product.name, price: product.price, image: product.images?.[0], quantity: qty }];
+      return [...prev, { product_id: product.id, sku: product.sku || "", name: product.name, price: product.price, image: product.images?.[0], quantity: qty }];
     });
   };
   const removeFromCart = (id) => setCart((prev) => prev.filter((i) => i.product_id !== id));

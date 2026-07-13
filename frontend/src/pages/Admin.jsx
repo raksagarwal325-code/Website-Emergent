@@ -110,6 +110,8 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
   const [uploading, setUploading] = useState(false);
   // Category filter for the right-hand product list. "" == show all.
   const [catFilter, setCatFilter] = useState("");
+  // Free-text search — matches product name, SKU, or category (case-insensitive).
+  const [search, setSearch] = useState("");
 
   // Baseline categories always shown in the filter/dropdown, even if the
   // catalogue hasn't been fully populated yet. Merge with categories the
@@ -124,11 +126,19 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
     return Array.from(merged);
   }, [categories]);
 
-  // Apply the category filter to the products displayed on the right.
+  // Apply the category filter + search to the products displayed on the right.
   const visibleProducts = useMemo(() => {
-    if (!catFilter) return products;
-    return products.filter((p) => (p.category || "") === catFilter);
-  }, [products, catFilter]);
+    const q = search.trim().toLowerCase();
+    return products.filter((p) => {
+      if (catFilter && (p.category || "") !== catFilter) return false;
+      if (!q) return true;
+      return (
+        (p.name || "").toLowerCase().includes(q) ||
+        (p.sku || "").toLowerCase().includes(q) ||
+        (p.category || "").toLowerCase().includes(q)
+      );
+    });
+  }, [products, catFilter, search]);
 
   useEffect(() => {
     if (!editing) { setForm(emptyProduct); return; }
@@ -445,7 +455,15 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
             {visibleProducts.length !== products.length ? ` of ${products.length}` : ""}
             {products.filter((x) => x.status === "draft").length > 0 ? ` · ${products.filter((x) => x.status === "draft").length} draft` : ""})
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              data-testid="admin-product-search"
+              type="text"
+              placeholder="Search name or SKU…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-1.5 text-xs w-52"
+            />
             <label htmlFor="admin-cat-filter" className="text-[10px] uppercase tracking-[0.24em] text-white/40">
               Category
             </label>
@@ -497,6 +515,11 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
                   </span>
                 )}
               </div>
+              {p.sku && (
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[#BF9972]/80 mt-1" data-testid={`admin-product-sku-${p.id}`}>
+                  SKU · {p.sku}
+                </div>
+              )}
               {/* Compact meta line — Category is now surfaced as its own column
                   above (visible on md+), so this only echoes stock. */}
               <div className="text-xs text-white/50 md:hidden mt-0.5">
@@ -619,7 +642,14 @@ function InquiriesAdmin({ inquiries, refresh }) {
               <div className="mt-4 space-y-2">
                 {inq.items.map((i, k) => (
                   <div key={k} className="flex justify-between text-sm border-t border-white/5 pt-2">
-                    <span>{i.name} × {i.quantity}</span>
+                    <span>
+                      {i.name} × {i.quantity}
+                      {i.sku && (
+                        <span className="ml-2 text-[10px] uppercase tracking-[0.18em] text-[#BF9972]/80">
+                          · SKU {i.sku}
+                        </span>
+                      )}
+                    </span>
                     <span className="text-white/60">₹{(i.price * i.quantity).toLocaleString("en-IN")}</span>
                   </div>
                 ))}
