@@ -1,0 +1,38 @@
+{
+  "summary": "Verified the product image cropping fix (object-cover → object-contain) across all 4 requested surfaces: /catalog grid cards, /product/<id> main image + thumbnails, /favorites cards, /cart line-item thumbs. All show FULL uncropped images on dark #0e0510/#0a0a0a letterbox. Aspect-[4/5] container preserved. However, while testing /favorites, discovered a REGRESSION introduced in this iteration: Favorites.jsx was refactored to call formatProductPrice(p) but the import statement was NOT updated — only formatPrice is imported. This caused a React runtime crash ('formatProductPrice is not defined') and the Favorites page rendered an empty grid whenever any product was favorited. Applied trivial 1-line import fix to unblock verification of the image change; retested and Favorites now renders both favorited products with full uncropped images.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Favorites.jsx (page /favorites)",
+        "issue": "REGRESSION introduced in this iteration: formatProductPrice() called on line 38 but not imported (only formatPrice imported). Causes React error boundary trip → empty favorites grid. Testing agent applied 1-line import fix to verify image-crop change. Main agent should confirm the fix and future-proof to avoid similar oversight.",
+        "selector": "[data-testid^='fav-card-']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/catalog_cards.png",
+    "/app/test_reports/product_detail.png",
+    "/app/test_reports/favorites_after_fix.png",
+    "/app/test_reports/cart.png"
+  ],
+  "action_items": [
+    "Acknowledge / keep the import fix applied by testing agent in /app/frontend/src/pages/Favorites.jsx (added formatProductPrice to named import list). Without this the Favorites page crashes for any user with favorited products.",
+    "No other action needed for the image-cropping fix — it is working correctly on all 4 surfaces (catalog cards, product detail main+thumbs, favorites cards, cart thumbs)."
+  ],
+  "critical_code_review_comments": [
+    "Favorites.jsx line 5 import was missed during the price refactor — only formatPrice imported although formatProductPrice is now used at line 38. This is exactly the kind of ReferenceError that a simple eslint no-undef rule would catch — recommend enabling it.",
+    "Verified `product-image` class + `max-w-full max-h-full w-auto h-auto object-contain object-center` combo works correctly. Container aspect-[4/5] with p-4/p-6/p-2 padding produces a clean dark letterbox on #0a0a0a and #0e0510 backgrounds.",
+    "Sample measurements (natural → rendered): 840x1871 → 370x823 on detail (contains vertically), 144x320 on card (contains horizontally); 1051x1496 → 225x320. All aspect ratios preserved, no cropping observed."
+  ],
+  "updated_files": ["/app/frontend/src/pages/Favorites.jsx (added formatProductPrice to imports)"],
+  "success_rate": {"backend": "N/A (frontend-only test)", "frontend": "100% after import fix (catalog + detail + thumbs + favorites + cart image rendering all verified)"},
+  "seed_data_creation": "None — used existing catalog products (2 hanging-light products for favorites, 1 for cart, 1 for detail).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Image-cropping fix (object-contain) is confirmed working across public catalog cards, product detail main + thumbs, favorites, cart. Only regression was the missing formatProductPrice import in Favorites.jsx which testing agent fixed inline. Screenshots stored under /app/test_reports/. No need to re-test unless main agent modifies the image-container CSS again.",
+  "rca of the issue": "Favorites.jsx bug RCA: main agent refactored the price display block to use formatProductPrice() (to handle price-on-request cases consistently) but forgot to add it to the destructured import from '../lib/api'. Reproduction: favorite any product → navigate to /favorites → React catches error and renders nothing (only console shows 'formatProductPrice is not defined'). Mitigation applied: `import { api, formatPrice, formatProductPrice } from '../lib/api';`"
+}

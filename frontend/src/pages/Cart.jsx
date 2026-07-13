@@ -68,8 +68,8 @@ export default function Cart() {
           <div className="lg:col-span-7 space-y-4">
             {cart.map((i) => (
               <div key={i.product_id} data-testid={`cart-item-${i.product_id}`} className="flex gap-5 border border-white/10 p-5">
-                <div className="w-24 h-24 overflow-hidden bg-[#0a0a0a] flex-shrink-0">
-                  {i.image && <img src={api.resolveImage(i.image)} alt={i.name} className="w-full h-full object-cover" />}
+                <div className="w-24 h-24 overflow-hidden bg-[#0a0a0a] flex items-center justify-center p-2 flex-shrink-0">
+                  {i.image && <img src={api.resolveImage(i.image)} alt={i.name} className="max-w-full max-h-full w-auto h-auto object-contain object-center" />}
                 </div>
                 <div className="flex-1">
                   <div className="font-serif text-lg">{i.name}</div>

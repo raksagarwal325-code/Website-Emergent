@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Heart } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
-import { api, formatPrice } from "../lib/api";
+import { api, formatPrice, formatProductPrice } from "../lib/api";
 
 export default function Favorites() {
   const { favorites, toggleFavorite } = useCatalog();
@@ -27,8 +27,8 @@ export default function Favorites() {
           {favorites.map((p) => (
             <div key={p.id} data-testid={`fav-card-${p.id}`} className="group border border-white/5 hover:border-white/25 transition-all">
               <Link to={`/product/${p.id}`} className="block">
-                <div className="aspect-[4/5] overflow-hidden bg-[#0a0a0a]">
-                  <img src={api.resolveImage(p.image)} alt={p.name} className="product-image w-full h-full object-cover" />
+                <div className="aspect-[4/5] overflow-hidden bg-[#0a0a0a] flex items-center justify-center p-4">
+                  <img src={api.resolveImage(p.image)} alt={p.name} className="product-image max-w-full max-h-full w-auto h-auto object-contain object-center" />
                 </div>
                 <div className="p-5 space-y-1">
                   <div className="eyebrow">{p.category}</div>

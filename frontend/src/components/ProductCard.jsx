@@ -80,9 +80,9 @@ export default function ProductCard({ product, index = 0 }) {
       </button>
 
       <Link to={`/product/${product.id}`} className="block" data-testid={`product-link-${product.id}`}>
-        <div className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center relative">
+        <div className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center relative p-4">
           {img ? (
-            <img src={img} alt={product.name} className="product-image w-full h-full object-cover opacity-95 group-hover:opacity-100" loading="lazy" />
+            <img src={img} alt={product.name} className="product-image max-w-full max-h-full w-auto h-auto object-contain object-center opacity-95 group-hover:opacity-100" loading="lazy" />
           ) : (
             <ProductPlaceholder name={product.name} />
           )}
