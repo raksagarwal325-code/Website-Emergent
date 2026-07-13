@@ -1308,8 +1308,14 @@ actually visible in the product photograph.
 RULES
 · The provided `name` is FIXED — do not change it. Use it verbatim in `seo_name`
   and reference its distinctive feature in `short_description` and `description`.
-· `category` MUST be one of: Chandelier, Hanging Light, Wall Light, Table Lamp,
-  Floor Lamp, Sconce, Candle Stand, Wall Sconce.
+· `category` MUST be one of: Chandelier, Hanging Light, Pendant Light,
+  Wall Light, Wall Sconce, Sconce, Table Lamp, Floor Lamp, Candle Stand,
+  Custom Design.
+· If the product NAME itself contains one of these category keywords
+  (Chandelier / Hanging Light / Pendant Light / Wall Light / Wall Sconce /
+  Sconce / Table Lamp / Floor Lamp / Candle Stand), you MUST set `category`
+  to that exact keyword — do NOT keep the previous category. Example: name
+  "Linear Rod Satin Brass Pendant Light" → category "Pendant Light".
 · `short_description` is 1 sentence, ≤ 160 chars, restrained tone.
 · `description` follows this structure (plain text, blank line between
   sections):

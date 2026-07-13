@@ -3,6 +3,30 @@ import { Sparkles, X, Check, Info, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "sonner";
 
+// Extract a category from a product name when the name obviously names its
+// type (e.g. "…Pendant Light" → "Pendant Light"). Match longer phrases first
+// so "Hanging Light" wins over the ambiguous single word "Light".
+const CATEGORY_KEYWORDS = [
+  "Pendant Light",
+  "Hanging Light",
+  "Wall Sconce",
+  "Wall Light",
+  "Table Lamp",
+  "Floor Lamp",
+  "Candle Stand",
+  "Chandelier",
+  "Sconce",
+  "Lantern",
+];
+function categoryFromName(name) {
+  if (!name) return "";
+  const lower = String(name).toLowerCase();
+  for (const kw of CATEGORY_KEYWORDS) {
+    if (lower.includes(kw.toLowerCase())) return kw === "Lantern" ? "Hanging Light" : kw;
+  }
+  return "";
+}
+
 /**
  * "Regenerate Name Only" tool. Sits under the Name input on the Admin product
  * form. Offers:
@@ -65,12 +89,16 @@ export default function ProductNameSuggester({ form, onApply, onFieldsMerge }) {
         if (form.id) opts.product_id = form.id;
         else if (form.images && form.images.length > 0) opts.image_url = form.images[0];
         const { ai } = await api.aiRegenerateFromName(opts);
+        // If the chosen name obviously names its product type
+        // (e.g. "…Pendant Light"), force the category to that keyword.
+        // This overrides any category the AI may have kept from before.
+        const forcedCategory = categoryFromName(name);
         // Marketing-only fields — never overwrite SKU, price, stock, material,
         // holder type, height, width, wattage, package includes, or any
         // confirmed technical spec on the product.
         const merge = {
           seo_name: ai.seo_name,
-          category: ai.category,
+          category: forcedCategory || ai.category,
           short_description: ai.short_description,
           description: ai.description,
           tags: ai.tags,

@@ -1,0 +1,37 @@
+{
+  "summary": "Re-tested the 'Update related fields based on new name' bug with an explicit focus on the client-side category-from-name override (categoryFromName helper in ProductNameSuggester.jsx). Two runs: (A) real AI on a draft Chandelier — AI returned 5 Chandelier-named chips in every attempt so the override branch never fired, but rest of merge (name, short_desc, desc, tags, marketing specs, protected specs, SKU/price/stock, toast text, draft status, MongoDB persistence) all worked. (B) Same flow with /api/ai/name-suggestions and /api/ai/regenerate-from-name mocked so that the applied chip name is 'Linear Rod Satin Brass Pendant Light' while AI still returns category='Chandelier' — the client-side override correctly forced category to 'Pendant Light', wrote it to the form, flipped status to draft, and MongoDB persisted the new category after Save + re-open. Case B (checkbox OFF): only name changed, category untouched, /api/ai/regenerate-from-name NOT called, toast exactly 'Name updated to \"<chip>\"'. The fix is functional end-to-end.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/inquiries (GET)", "issue": "Still returns 500 (ResponseValidationError on rows with empty customer_email). Same pre-existing issue reported in iteration_18. Fires on every Admin refresh() and shows up as a console 500 in this run too. Not blocking the name-regen fix."},
+      {"endpoint": "/api/ai/name-suggestions", "issue": "First call returned 502 (transient ingress error); subsequent retries succeeded. Consider client-side retry or clearer 'AI busy' toast so admins don't have to guess."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "DATA CLEANUP (recommended, not part of this fix): draft product id 977683b0-e097-4c74-9ffc-ea1aa4f2d362 (SKU SGE-CH-FLD, name 'Linear Rod Satin Brass Pendant Light') is stuck with category='Chandelier' from a save that happened BEFORE the fix landed. The fix works going forward but does not retro-correct rows saved earlier. Either (a) the main agent should re-open that product in Admin, apply a Pendant-Light-named chip (now that the override works) and Save; or (b) add a one-shot backend migration that re-derives category from name for drafts where the name obviously names its product type. This is the exact row the user was pointing at.",
+    "OPTIONAL: loosen customer_email validation on /api/inquiries so the Admin refresh() call doesn't log a 500 every time (carried over from iteration_18)."
+  ],
+  "critical_code_review_comments": [
+    "ProductNameSuggester.jsx line 9-28: CATEGORY_KEYWORDS list is well-ordered — longer, more specific phrases ('Pendant Light', 'Hanging Light', 'Wall Sconce', 'Wall Light', 'Table Lamp', 'Floor Lamp', 'Candle Stand') come before shorter ambiguous ones ('Sconce', 'Lantern'), so the .includes() scan matches the specific keyword first. Lantern → 'Hanging Light' remap is correct.",
+    "ProductNameSuggester.jsx line 80-124 apply(): forcedCategory = categoryFromName(name) OR-fallback to ai.category — verified at runtime by mocking ai.category='Chandelier' and confirming the form category snapped to 'Pendant Light' instead. Override wins as intended.",
+    "Admin.jsx line 304-322 onFieldsMerge: functional setForm + additive specs merge still correct. Protected owner-authored specs (Material, Finish, Glass Type, Holder Type, Package Includes, Care Instructions, Customization Available) were preserved in both runs; marketing specs (Style, Suitable For, Color, Product Type) were updated/added.",
+    "There is currently no server-side safeguard that mirrors categoryFromName(). If some future caller of /api/ai/regenerate-from-name (or a direct product PATCH) sends a name like 'Linear Rod Satin Brass Pendant Light' with category='Chandelier', the DB will accept it. The user's stale row 977683b0 was created that way. Consider mirroring the helper on the backend for the /api/ai/regenerate-from-name response (or on the product update path) so historical bad rows can be corrected uniformly."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only task)",
+    "frontend": "100% (all acceptance criteria for CASE A override, protected-fields regression guard, additive specs merge, toast text, draft status, MongoDB persistence, and CASE B control all passed)"
+  },
+  "test_credentials": "N/A — /admin has no login gate",
+  "seed_data_creation": "CASE A / override run mutated draft product ceea0022-73ef-430c-a3b3-74ab8dec1100 (SKU SGE-CH-AUR). Its name is now 'Linear Rod Satin Brass Pendant Light', category='Pendant Light', short_desc/desc/tags contain 'MOCKED_' markers (from route-mocked AI), and marketing specs Style/Suitable For/Color/Product Type are set to mocked values. Status is draft. CASE B run set draft product c7731f20-2095-458b-be54-6ee512333b00 (SKU SGE-CH-DMP) name to 'Test Case-B Pendant Light Fixture' (only name changed, no save yet since the modal auto-closed but the form wasn't Saved on Case B; the DB row is unchanged for that product). The pre-existing bad row 977683b0 (SGE-CH-FLD) was NOT touched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fix verified via mocked-AI path because the real AI could not be coaxed into producing a non-Chandelier chip for a chandelier photograph within 3 attempts. If a future run needs to prove the override on live AI, either (a) start from a product whose photo actually looks like a pendant/table lamp/wall sconce, or (b) mock /api/ai/name-suggestions and /api/ai/regenerate-from-name as this run did. The categoryFromName helper is a pure client-side function so mocked-input testing is a valid proof. Legacy row 977683b0 still holds the exact user-reported symptom (name says Pendant Light, category says Chandelier) — leave for main agent to clean up.",
+  "rca of the issue": "User's original complaint traces to two independent facts: (1) The AI /api/ai/regenerate-from-name can and does return category='Chandelier' even when the newly-suggested name explicitly names a different product type (e.g. 'Linear Rod Satin Brass Pendant Light'). Iteration_18's fix only wired the AI response into the form; there was no client-side override, so the AI's stale category won. (2) A prior save (before this iteration) persisted this bad row to MongoDB (product 977683b0). The current fix (categoryFromName helper + `merge.category = forcedCategory || ai.category` in ProductNameSuggester.jsx apply()) is the correct mitigation for future saves: any applied name that ends in one of the ten known category keywords is snapped to that category on the client before onFieldsMerge writes to the form. Runtime proof: mocked AI category='Chandelier' + applied chip 'Linear Rod Satin Brass Pendant Light' → form.category='Pendant Light' → Save → re-open Edit → category still 'Pendant Light' (MongoDB round-trip verified). No further code change required for the fix itself; a one-off cleanup of legacy row 977683b0 is the only remaining task."
+}
