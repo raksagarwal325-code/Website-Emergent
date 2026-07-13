@@ -170,6 +170,41 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
     return sorted;
   }, [products, catFilter, search, sortMode]);
 
+  // Category → SKU prefix used across the catalogue. Falls back to the
+  // uppercase first two letters of the category name for anything we
+  // haven't pre-mapped (unlikely once the 9 defaults cover everything).
+  const CATEGORY_PREFIX = {
+    "Chandelier": "CH",
+    "Hanging Light": "HL",
+    "Table Lamp": "TL",
+    "Wall Light": "WL",
+    "Candle Stand": "CS",
+    "Floor Lamp": "FL",
+    "Sconce": "SC",
+    "Pendant Light": "PL",
+    "Custom Design": "CD",
+  };
+
+  // Compute the next available SKU for the currently-selected category so
+  // the owner can slot a new product into sequence without opening the list.
+  const nextSuggestedSku = useMemo(() => {
+    const cat = (form.category || "").trim();
+    if (!cat) return "";
+    const prefix = CATEGORY_PREFIX[cat] || cat.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase();
+    if (!prefix) return "";
+    const re = new RegExp(`^SGE-${prefix}-(\\d+)$`, "i");
+    let max = 0;
+    for (const p of products) {
+      const m = re.exec(p.sku || "");
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > max) max = n;
+      }
+    }
+    const nextNum = String(max + 1).padStart(3, "0");
+    return `SGE-${prefix}-${nextNum}`;
+  }, [products, form.category]);
+
   useEffect(() => {
     if (!editing) { setForm(emptyProduct); return; }
     // Backfill price_display from legacy fixed_price when older products don't have it set.
@@ -279,7 +314,23 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
             }}
           />
         </div>
-        <input required data-testid="p-sku" placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
+        <div>
+          <input required data-testid="p-sku" placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
+          {nextSuggestedSku && (
+            <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-white/40">
+              <span>Next available:</span>
+              <button
+                type="button"
+                data-testid="p-sku-suggest"
+                onClick={() => setForm({ ...form, sku: nextSuggestedSku })}
+                title="Click to use this SKU"
+                className="text-[#BF9972] hover:text-[#D4AF37] underline underline-offset-4 decoration-dotted normal-case tracking-[0.14em]"
+              >
+                {nextSuggestedSku}
+              </button>
+            </div>
+          )}
+        </div>
         <div>
           <input
             required
