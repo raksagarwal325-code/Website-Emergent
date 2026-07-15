@@ -421,8 +421,10 @@ async def list_products(
 
 
 @api.get("/products/categories")
-async def list_categories():
-    cats = await db.products.distinct("category")
+async def list_categories(admin: Optional["_AdminUser"] = Depends(maybe_admin)):
+    # Public callers must not see categories that only exist on draft rows.
+    query = {} if admin else {"status": {"$ne": "draft"}}
+    cats = await db.products.distinct("category", query)
     return sorted(cats)
 
 
