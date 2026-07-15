@@ -64,9 +64,14 @@ export default function Catalog() {
   }, [q, category, sort, priceRange]);
 
   const canLoadMore = page < totalPages && !loading;
+  // Synchronous guard so a rapid double-click can't fire two identical
+  // "next page" requests before setLoadingMore's re-render lands.
+  const loadMoreInFlightRef = useRef(false);
 
   const loadMore = async () => {
     if (loadingMore || !canLoadMore) return;
+    if (loadMoreInFlightRef.current) return;
+    loadMoreInFlightRef.current = true;
     setLoadingMore(true);
     const nextPage = page + 1;
     const myKey = requestKeyRef.current;
@@ -89,6 +94,7 @@ export default function Catalog() {
       setTotalPages(res?.total_pages || totalPages);
       setTotal(res?.total ?? total);
     } finally {
+      loadMoreInFlightRef.current = false;
       if (myKey === requestKeyRef.current) setLoadingMore(false);
     }
   };

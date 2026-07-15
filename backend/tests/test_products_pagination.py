@@ -141,7 +141,6 @@ def test_search_q_matches_name_or_sku():
 def test_price_range_filter():
     # Ask for a very tight price band around 0 — every 0-priced product should surface.
     r = requests.get(f"{API}/products", params={"max_price": 0, "limit": 48}, timeout=30).json()
-    assert r["status_code"] if False else True  # smoke
     for p in r["items"]:
         assert (p.get("price") or 0) <= 0
 
