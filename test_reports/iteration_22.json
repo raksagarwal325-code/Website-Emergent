@@ -1,0 +1,60 @@
+{
+  "summary": "Verified draft-product isolation delta on top of iteration_21. Ran full /app/backend/tests suite (21/21 PASS) — includes 5 new draft-isolation tests plus 16 prior security tests. Additionally ran manual curl checks against the real ingress (REACT_APP_BACKEND_URL) with a synthetic seeded draft + admin session; every guarantee held. Backend-only testing as requested; frontend not touched.",
+  "test_matrix_results": {
+    "anon_list_include_drafts_1_limit_500": "200 OK, 128 items, drafts=0 ✅",
+    "anon_list_status_draft": "200 OK, 128 items, drafts=0 (server silently strips filter) ✅",
+    "anon_list_combined_include_drafts_and_status_draft": "200 OK, 128 items, drafts=0 ✅",
+    "anon_get_draft_by_id": "404 (not 200, not 403 — no existence leak) ✅",
+    "anon_get_published_by_id": "200 (regression guard passed) ✅",
+    "admin_list_include_drafts": "200 OK, drafts present (7 drafts in seed data + 1 synthetic) ✅",
+    "admin_get_draft_by_id": "200 OK, body contains status='draft' ✅",
+    "anon_default_list_no_params": "200 OK, 128 items, drafts=0, only published ✅"
+  },
+  "pytest_run": {
+    "command": "cd /app/backend && python -m pytest tests/test_authz_ssrf_ratelimit.py -o addopts= -q",
+    "result": "21 passed in 6.54s",
+    "junit_xml": "/app/test_reports/pytest/pytest_iteration22.xml"
+  },
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/products/categories",
+        "issue": "Uses db.products.distinct('category') across ALL rows including drafts. Currently the draft category ('Chandelier') already appears among published products, so no practical leak. However, if an admin creates a draft in a novel category not yet used by any published product, that category name will leak to the public categories list. Recommend filtering to {'status': {'$ne': 'draft'}} for anon callers here as well."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "additional_leak_audit": {
+    "audited_routes": [
+      "GET /api/products (list) — HARDENED, forces status!=draft when admin is None",
+      "GET /api/products/{id} — HARDENED, returns 404 for anon on drafts",
+      "GET /api/products/categories — MINOR (distinct across all statuses, see minor issue above)",
+      "GET /api/reviews?product_id=<draft_id> — safe (returns [] identically for drafts and unknown ids, no enumeration signal)",
+      "GET /api/export/products.csv — admin-gated, safe",
+      "GET /api/stats — admin-gated, safe",
+      "GET /api/inquiries — admin-gated, safe"
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_authz_ssrf_ratelimit.py",
+    "/app/test_reports/pytest/pytest_iteration22.xml"
+  ],
+  "action_items": [
+    "Optional (LOW): Filter /api/products/categories by status!=draft for anonymous callers so draft-only categories do not surface. Non-blocking for the current requirement (existing draft categories overlap with published)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:378 GET /api/products correctly gates draft visibility on admin=None and also handles the elif chain to only honor include_drafts/status for admins. Good defense-in-depth.",
+    "server.py:429 GET /api/products/{product_id} returns 404 (not 403) for anon on drafts — correct choice; prevents existence oracle.",
+    "auth.py maybe_admin returning None cleanly (vs raising) is a clean pattern that lets the same handler serve both anon and admin cases.",
+    "server.py:1224 _existing_name_index intentionally includes drafts for uniqueness — correct behaviour, admin-only path.",
+    "server.py:425 list_categories still runs distinct over ALL products — see minor issue."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (21/21 pytest + 8/8 manual curl matrix)", "frontend": "not tested (backend-only per request)"},
+  "test_credentials": "Synthetic admin session seeded directly into MongoDB user_sessions collection using ADMIN_EMAILS=raks.agarwal325@gmail.com from /app/backend/.env. All synthetic seed data cleaned up after test.",
+  "seed_data_creation": "Ephemeral synthetic draft product id='draft_f3be5650626c' + admin session token created for manual curl verification, then deleted. Pre-existing seed drafts (7 rows) left untouched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration_22 confirms 100% pass on tests/test_authz_ssrf_ratelimit.py (21 tests). Draft isolation is enforced at both list and single-item read paths. Only minor open item: /api/products/categories does not filter by status — flag only, not required by the current spec. Frontend not tested in this iteration."
+}

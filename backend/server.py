@@ -56,6 +56,15 @@ async def require_admin(request: Request):
     return _AdminUser(**user)
 
 
+async def maybe_admin(request: Request) -> Optional["_AdminUser"]:
+    """Non-raising variant — returns the admin user if the caller carries a
+    valid allowlisted session, otherwise None. Used by public read endpoints
+    that expose extra data (e.g. draft products) only when an admin is
+    signed in but still work for anonymous visitors."""
+    user = await _auth.load_admin(db, request)
+    return _AdminUser(**user) if user else None
+
+
 # --- Simple in-memory rate limiter (per client IP) -------------------------
 _RL_WINDOWS: dict[tuple[str, str], list[float]] = {}
 def rate_limit(bucket: str, limit: int, window_sec: int):
@@ -368,11 +377,15 @@ async def list_products(
     sort: str = "newest",
     status: Optional[str] = None,  # "draft" | "published" | None (=published only for public)
     include_drafts: bool = False,   # convenience flag for the admin UI
+    admin: Optional["_AdminUser"] = Depends(maybe_admin),
 ):
     query = {}
-    # Public callers get only published products by default; admin passes
-    # include_drafts=1 (or an explicit status) to see the "Needs Review" pile.
-    if not include_drafts and not status:
+    # SECURITY — only signed-in admins may request drafts. If a public caller
+    # tries to bypass the filter via ?include_drafts=1 or ?status=draft we
+    # silently ignore those params and still exclude drafts.
+    if admin is None:
+        query["status"] = {"$ne": "draft"}
+    elif not include_drafts and not status:
         query["status"] = {"$ne": "draft"}
     elif status:
         query["status"] = status
@@ -414,9 +427,13 @@ async def list_categories():
 
 
 @api.get("/products/{product_id}", response_model=Product)
-async def get_product(product_id: str):
+async def get_product(product_id: str, admin: Optional["_AdminUser"] = Depends(maybe_admin)):
     doc = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not doc:
+        raise HTTPException(404, "Product not found")
+    # SECURITY — draft products are only visible to signed-in admins. To
+    # anonymous callers, respond with 404 (don't leak existence via 403).
+    if doc.get("status") == "draft" and admin is None:
         raise HTTPException(404, "Product not found")
     return doc
 

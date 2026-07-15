@@ -176,6 +176,68 @@ def test_public_endpoints_open():
 
 
 # --------------------------------------------------------------------------
+# 5b) DRAFT ISOLATION — public callers must never see draft products
+# --------------------------------------------------------------------------
+
+
+async def _seed_draft() -> str:
+    """Insert a synthetic draft product; return its id."""
+    db = _mongo()
+    pid = f"draft_{uuid.uuid4().hex[:12]}"
+    await db.products.insert_one({
+        "id": pid, "name": "Hidden Draft", "sku": "DRAFT-1", "category": "Chandelier",
+        "price": 1, "images": [], "status": "draft", "featured": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return pid
+
+
+@pytest.fixture(scope="module")
+def draft_product_id():
+    return asyncio.get_event_loop().run_until_complete(_seed_draft())
+
+
+def test_anon_cannot_list_drafts_via_include_flag(draft_product_id):
+    """Passing ?include_drafts=1 as anonymous MUST NOT leak drafts."""
+    with httpx.Client(base_url=API, timeout=15) as c:
+        r = c.get("/products", params={"include_drafts": 1, "limit": 500})
+        assert r.status_code == 200
+        assert not any(p.get("status") == "draft" for p in r.json())
+
+
+def test_anon_cannot_list_drafts_via_status_filter(draft_product_id):
+    """Passing ?status=draft as anonymous MUST NOT leak drafts."""
+    with httpx.Client(base_url=API, timeout=15) as c:
+        r = c.get("/products", params={"status": "draft", "limit": 500})
+        assert r.status_code == 200
+        assert not any(p.get("status") == "draft" for p in r.json())
+
+
+def test_anon_cannot_read_specific_draft(draft_product_id):
+    """GET /products/{draft_id} for anon must be 404 (never 200, never 403 — no leak)."""
+    with httpx.Client(base_url=API, timeout=15) as c:
+        r = c.get(f"/products/{draft_product_id}")
+        assert r.status_code == 404
+
+
+def test_admin_can_list_drafts(admin_token, draft_product_id):
+    hdr = {**CSRF, "Authorization": f"Bearer {admin_token}"}
+    with httpx.Client(base_url=API, timeout=15) as c:
+        r = c.get("/products", params={"include_drafts": 1, "limit": 500}, headers=hdr)
+        assert r.status_code == 200
+        ids = {p.get("id") for p in r.json()}
+        assert draft_product_id in ids
+
+
+def test_admin_can_read_specific_draft(admin_token, draft_product_id):
+    hdr = {**CSRF, "Authorization": f"Bearer {admin_token}"}
+    with httpx.Client(base_url=API, timeout=15) as c:
+        r = c.get(f"/products/{draft_product_id}", headers=hdr)
+        assert r.status_code == 200
+        assert r.json().get("status") == "draft"
+
+
+# --------------------------------------------------------------------------
 # 6) SSRF-safe proxy — admin, but blocks bad targets
 # --------------------------------------------------------------------------
 
