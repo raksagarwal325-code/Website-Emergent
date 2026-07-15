@@ -14,6 +14,7 @@ import Favorites from "@/pages/Favorites";
 import Cart from "@/pages/Cart";
 import Contact from "@/pages/Contact";
 import Admin from "@/pages/Admin";
+import AdminAuthGate from "@/components/AdminAuthGate";
 import Catalogue from "@/pages/Catalogue";
 import About from "@/pages/About";
 import Craft from "@/pages/Craft";
@@ -57,7 +58,7 @@ function App() {
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/contact" element={<Contact />} />
-              <Route path="/admin" element={<Admin />} />
+              <Route path="/admin" element={<AdminAuthGate><Admin /></AdminAuthGate>} />
               <Route path="/catalogue" element={<Catalogue />} />
               <Route path="/legal/:slug" element={<LegalPage />} />
             </Routes>

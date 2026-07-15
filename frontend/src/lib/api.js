@@ -3,9 +3,21 @@ import axios from "axios";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
 
-const client = axios.create({ baseURL: API });
+// Cookie-based admin sessions: `withCredentials: true` sends the HttpOnly
+// session cookie back on every request. The `X-Requested-With: fetch` header
+// is our CSRF guard — browsers block cross-origin requests carrying custom
+// headers unless CORS explicitly allows them (server.py restricts CORS to the
+// site's own origin), so state-changing calls can only originate from our UI.
+const client = axios.create({
+  baseURL: API,
+  withCredentials: true,
+  headers: { "X-Requested-With": "fetch" },
+});
 
 export const api = {
+  authMe: () => client.get("/auth/me").then(r => r.data),
+  authSession: (session_id) => client.post("/auth/session", { session_id }).then(r => r.data),
+  authLogout: () => client.post("/auth/logout").then(r => r.data),
   listProducts: (params = {}) => client.get("/products", { params }).then(r => r.data),
   getProduct: (id) => client.get(`/products/${id}`).then(r => r.data),
   createProduct: (data) => client.post("/products", data).then(r => r.data),
