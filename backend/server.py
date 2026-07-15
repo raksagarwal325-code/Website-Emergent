@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from starlette.middleware.cors import CORSMiddleware
 
 ROOT_DIR = Path(__file__).parent
@@ -260,14 +260,25 @@ class InquiryItem(BaseModel):
 class Inquiry(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    customer_name: str
-    customer_email: EmailStr
+    customer_name: str = ""
+    customer_email: Optional[EmailStr] = None
     customer_phone: str = ""
     message: str = ""
     items: List[InquiryItem] = []
     total: float = 0.0
     status: str = "new"
     created_at: str = Field(default_factory=now_iso)
+
+    @field_validator("customer_email", mode="before")
+    @classmethod
+    def _blank_email_to_none(cls, v):
+        # Legacy rows / catalogue-request leads store customer_email as "".
+        # Coerce blanks to None so EmailStr validation doesn't blow up on GET.
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
 
 
 class InquiryCreate(BaseModel):

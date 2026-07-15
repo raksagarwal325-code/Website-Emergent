@@ -17,7 +17,7 @@
   "retest_needed": false,
   "full_testing_deferred": true,
   "evidence": {
-    "url_loaded": "https://product-showcase-859.preview.emergentagent.com/?v=<random>",
+    "url_loaded": "https://glass-product-hub.preview.emergentagent.com/?v=<random>",
     "emergent_badge_outerHTML": "NULL (element not in DOM)",
     "text_near_1981_innerText": "SINCE 1981 · HANDCRAFTED IN FIROZABAD ... 1981 FOUNDED 1000+ DESIGNS Pan-India DELIVERY",
     "founded_in_textContent": true,

@@ -14,5 +14,5 @@
   "success_rate": {"backend": "n/a", "frontend": "100%"},
   "retest_needed": false,
   "full_testing_deferred": true,
-  "notes": "Served bundle: https://product-showcase-859.preview.emergentagent.com/static/js/bundle.js. Cache-bust query params used on both /admin and / navigations. No console errors. Note: ?tab=homepage query param does not auto-switch tab in Admin — test clicks the Homepage tab explicitly (not a regression, just an observation)."
+  "notes": "Served bundle: https://glass-product-hub.preview.emergentagent.com/static/js/bundle.js. Cache-bust query params used on both /admin and / navigations. No console errors. Note: ?tab=homepage query param does not auto-switch tab in Admin — test clicks the Homepage tab explicitly (not a regression, just an observation)."
 }
