@@ -19,6 +19,35 @@ export const api = {
   authSession: (session_id) => client.post("/auth/session", { session_id }).then(r => r.data),
   authLogout: () => client.post("/auth/logout").then(r => r.data),
   listProducts: (params = {}) => client.get("/products", { params }).then(r => r.data),
+  /**
+   * Fetch every page of /products so callers that need the full catalogue
+   * (Admin, catalogue PDF, gallery cross-references, styled-by page, etc.)
+   * can still get a flat array of items. The public cap is 48/page, admins
+   * get 5000/page — either way we page until total_pages is reached.
+   */
+  listAllProducts: async (params = {}) => {
+    const collected = [];
+    const seen = new Set();
+    let page = 1;
+    const per = params.limit || 48;
+    // Hard safety cap so a runaway loop can never happen.
+    for (let i = 0; i < 200; i++) {
+      const res = await client
+        .get("/products", { params: { ...params, page, limit: per } })
+        .then((r) => r.data);
+      const items = res?.items || [];
+      for (const p of items) {
+        if (p?.id && !seen.has(p.id)) {
+          seen.add(p.id);
+          collected.push(p);
+        }
+      }
+      const totalPages = res?.total_pages || 1;
+      if (page >= totalPages || items.length === 0) break;
+      page += 1;
+    }
+    return collected;
+  },
   getProduct: (id) => client.get(`/products/${id}`).then(r => r.data),
   createProduct: (data) => client.post("/products", data).then(r => r.data),
   updateProduct: (id, data) => client.put(`/products/${id}`, data).then(r => r.data),

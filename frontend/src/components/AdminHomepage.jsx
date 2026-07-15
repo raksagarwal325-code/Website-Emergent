@@ -49,7 +49,7 @@ const ProductPicker = ({ label, value, onChange, "data-testid": tid }) => {
   const [products, setProducts] = useState([]);
   const [q, setQ] = useState("");
   const selected = Array.isArray(value) ? value : [];
-  useEffect(() => { api.listProducts().then(setProducts).catch(() => {}); }, []);
+  useEffect(() => { api.listAllProducts().then(setProducts).catch(() => {}); }, []);
   const filtered = products.filter((p) => {
     if (!q.trim()) return true;
     const needle = q.toLowerCase();
@@ -90,7 +90,7 @@ const SingleProductPicker = ({ label, value, onChange, "data-testid": tid }) => 
   const [products, setProducts] = useState([]);
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
-  useEffect(() => { api.listProducts().then(setProducts).catch(() => {}); }, []);
+  useEffect(() => { api.listAllProducts().then(setProducts).catch(() => {}); }, []);
   const selected = products.find((p) => p.id === value);
   const filtered = products.filter((p) => {
     if (!q.trim()) return true;

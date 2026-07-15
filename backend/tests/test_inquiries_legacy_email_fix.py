@@ -111,7 +111,7 @@ def test_get_inquiries_requires_admin():
 def test_post_inquiries_valid_email_creates_and_persists():
     # Grab a real published product so the new server-side price/name lookup
     # succeeds. `product_id` must exist in the products collection.
-    prods = requests.get(f"{API}/products?limit=1", timeout=30).json()
+    prods = requests.get(f"{API}/products?limit=1", timeout=30).json().get("items", [])
     assert isinstance(prods, list) and prods, "No products seeded for test"
     prod = prods[0]
     real_price = float(prod.get("price") or 0)

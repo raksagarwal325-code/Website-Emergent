@@ -28,7 +28,7 @@ STATE_CHANGE_HEADERS = {"X-Requested-With": "fetch"}
 def _fetch_a_product():
     r = requests.get(f"{API}/products?limit=5", timeout=30)
     assert r.status_code == 200, r.text
-    prods = r.json()
+    prods = r.json().get("items", [])
     assert isinstance(prods, list) and prods, "no seeded products"
     return prods[0]
 
@@ -67,7 +67,7 @@ def test_client_price_is_ignored_server_uses_db_price():
 
 def test_multiple_items_total_is_sum_of_server_prices():
     r = requests.get(f"{API}/products?limit=3", timeout=30)
-    prods = r.json()
+    prods = r.json().get("items", [])
     assert isinstance(prods, list) and len(prods) >= 2, "need >=2 products"
     a, b = prods[0], prods[1]
     payload = {

@@ -34,7 +34,7 @@ export default function AtelierShowcase() {
   const [productsLoaded, setProductsLoaded] = useState(false);
   useEffect(() => {
     let alive = true;
-    api.listProducts()
+    api.listAllProducts()
       .then((rows) => { if (alive) { setProducts(rows); setProductsLoaded(true); } })
       .catch(() => { if (alive) setProductsLoaded(true); });
     return () => { alive = false; };

@@ -386,7 +386,7 @@ async def recalc_product_rating(product_id: str):
 
 
 # --- Product routes ---
-@api.get("/products", response_model=List[Product])
+@api.get("/products")
 async def list_products(
     q: Optional[str] = None,
     category: Optional[str] = None,
@@ -397,6 +397,8 @@ async def list_products(
     sort: str = "newest",
     status: Optional[str] = None,  # "draft" | "published" | None (=published only for public)
     include_drafts: bool = False,   # convenience flag for the admin UI
+    page: int = Query(1, ge=1),
+    limit: int = Query(24, ge=1),
     admin: Optional["_AdminUser"] = Depends(maybe_admin),
 ):
     query = {}
@@ -436,8 +438,33 @@ async def list_products(
         "newest": [("created_at", -1)],
         "name": [("name", 1)],
     }
-    cursor = db.products.find(query, {"_id": 0}).sort(sort_map.get(sort, sort_map["newest"]))
-    return await cursor.to_list(1000)
+
+    # Public callers are capped at 48 per page. Signed-in admins have a much
+    # higher ceiling so Admin dashboard and catalogue PDF can still fetch the
+    # complete list in one call if they choose to.
+    public_cap = 48
+    admin_cap = 5000
+    cap = admin_cap if admin is not None else public_cap
+    effective_limit = min(limit, cap)
+
+    total = await db.products.count_documents(query)
+    total_pages = (total + effective_limit - 1) // effective_limit if total else 0
+    skip = (page - 1) * effective_limit
+
+    cursor = (
+        db.products.find(query, {"_id": 0})
+        .sort(sort_map.get(sort, sort_map["newest"]))
+        .skip(skip)
+        .limit(effective_limit)
+    )
+    items = await cursor.to_list(effective_limit)
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": effective_limit,
+        "total_pages": total_pages,
+    }
 
 
 @api.get("/products/categories")

@@ -63,7 +63,7 @@ export default function GalleryProject() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
   }, [slug]);
-  useEffect(() => { api.listProducts().then(setAllProducts).catch(() => {}); }, []);
+  useEffect(() => { api.listAllProducts().then(setAllProducts).catch(() => {}); }, []);
 
   const linkedProducts = useMemo(() => {
     if (!project) return [];

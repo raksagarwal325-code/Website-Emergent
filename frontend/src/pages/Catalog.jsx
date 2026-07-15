@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Search, SlidersHorizontal, Download } from "lucide-react";
 import { api } from "../lib/api";
 import ProductCard from "../components/ProductCard";
@@ -6,34 +6,92 @@ import SEO from "../components/SEO";
 import { Slider } from "../components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 
+const PAGE_SIZE = 24;
+
 export default function Catalog() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("newest");
   const [priceRange, setPriceRange] = useState([0, 60000]);
   const [showFilters, setShowFilters] = useState(true);
+  // Tracks the current filter-signature so an in-flight response from a
+  // stale filter set can't overwrite the current results.
+  const requestKeyRef = useRef(0);
 
   useEffect(() => {
     api.categories().then(setCategories).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    setLoading(true);
-    const params = { sort };
+  // Build the params object once so the effect + Load More share the same shape.
+  const buildParams = (nextPage) => {
+    const params = { sort, page: nextPage, limit: PAGE_SIZE };
     if (q) params.q = q;
     if (category !== "all") params.category = category;
     if (priceRange[0] > 0) params.min_price = priceRange[0];
     if (priceRange[1] < 60000) params.max_price = priceRange[1];
+    return params;
+  };
+
+  // Reset to page 1 whenever any filter, search, sort or price range changes.
+  useEffect(() => {
+    setLoading(true);
+    setPage(1);
+    const myKey = ++requestKeyRef.current;
     const t = setTimeout(() => {
-      api.listProducts(params).then((data) => { setProducts(data); setLoading(false); }).catch(() => setLoading(false));
+      api
+        .listProducts(buildParams(1))
+        .then((res) => {
+          if (myKey !== requestKeyRef.current) return; // stale response — discard
+          const items = res?.items || [];
+          setProducts(items);
+          setTotal(res?.total || items.length);
+          setTotalPages(res?.total_pages || 1);
+          setLoading(false);
+        })
+        .catch(() => {
+          if (myKey === requestKeyRef.current) setLoading(false);
+        });
     }, 250);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, category, sort, priceRange]);
 
-  const total = products.length;
+  const canLoadMore = page < totalPages && !loading;
+
+  const loadMore = async () => {
+    if (loadingMore || !canLoadMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    const myKey = requestKeyRef.current;
+    try {
+      const res = await api.listProducts(buildParams(nextPage));
+      if (myKey !== requestKeyRef.current) return; // filters changed mid-flight
+      const items = res?.items || [];
+      setProducts((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        const merged = [...prev];
+        for (const p of items) {
+          if (p?.id && !seen.has(p.id)) {
+            seen.add(p.id);
+            merged.push(p);
+          }
+        }
+        return merged;
+      });
+      setPage(nextPage);
+      setTotalPages(res?.total_pages || totalPages);
+      setTotal(res?.total ?? total);
+    } finally {
+      if (myKey === requestKeyRef.current) setLoadingMore(false);
+    }
+  };
 
   const handleExportPdf = () => {
     window.print();
@@ -146,7 +204,13 @@ export default function Catalog() {
         {/* Product grid */}
         <div className={showFilters ? "lg:col-span-9" : "lg:col-span-12"}>
           <div className="flex items-center justify-between mb-6 text-xs text-white/50 uppercase tracking-widest">
-            <span data-testid="results-count">{loading ? "Loading…" : `${total} pieces`}</span>
+            <span data-testid="results-count">
+              {loading
+                ? "Loading…"
+                : total === 0
+                  ? "0 pieces"
+                  : `Showing ${products.length} of ${total} piece${total === 1 ? "" : "s"}`}
+            </span>
           </div>
           {total === 0 && !loading ? (
             <div className="py-24 text-center text-white/40 border border-white/10">
@@ -154,9 +218,23 @@ export default function Catalog() {
               <div className="text-sm">Try adjusting your filters.</div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-8">
-              {products.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
-            </div>
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-8">
+                {products.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
+              </div>
+              {canLoadMore && (
+                <div className="mt-12 flex justify-center no-print">
+                  <button
+                    data-testid="load-more-btn"
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="inline-flex items-center gap-2 border border-[#D4AF37]/50 hover:border-[#D4AF37] hover:text-[#D4AF37] px-10 py-4 text-xs uppercase tracking-[0.28em] text-white/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loadingMore ? "Loading…" : `Load more (${total - products.length} left)`}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

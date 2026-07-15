@@ -25,7 +25,7 @@ export default function Admin() {
 
   const refresh = async () => {
     const [p, i, m, s, st, cats] = await Promise.all([
-      api.listProducts({ include_drafts: 1 }).catch(() => []),
+      api.listAllProducts({ include_drafts: 1, limit: 5000 }).catch(() => []),
       api.listInquiries().catch(() => []),
       api.listContact().catch(() => []),
       api.getSettings().catch(() => null),

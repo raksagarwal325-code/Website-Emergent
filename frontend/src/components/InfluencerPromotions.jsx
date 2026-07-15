@@ -40,7 +40,7 @@ export default function InfluencerPromotions() {
   useEffect(() => {
     if (!needsProducts) return undefined;
     let alive = true;
-    api.listProducts()
+    api.listAllProducts()
       .then((rows) => { if (alive) setProducts(rows); })
       .catch(() => {});
     return () => { alive = false; };

@@ -202,7 +202,7 @@ def test_anon_cannot_list_drafts_via_include_flag(draft_product_id):
     with httpx.Client(base_url=API, timeout=15) as c:
         r = c.get("/products", params={"include_drafts": 1, "limit": 500})
         assert r.status_code == 200
-        assert not any(p.get("status") == "draft" for p in r.json())
+        assert not any(p.get("status") == "draft" for p in r.json().get("items", []))
 
 
 def test_anon_cannot_list_drafts_via_status_filter(draft_product_id):
@@ -210,7 +210,7 @@ def test_anon_cannot_list_drafts_via_status_filter(draft_product_id):
     with httpx.Client(base_url=API, timeout=15) as c:
         r = c.get("/products", params={"status": "draft", "limit": 500})
         assert r.status_code == 200
-        assert not any(p.get("status") == "draft" for p in r.json())
+        assert not any(p.get("status") == "draft" for p in r.json().get("items", []))
 
 
 def test_anon_cannot_read_specific_draft(draft_product_id):
@@ -225,7 +225,7 @@ def test_admin_can_list_drafts(admin_token, draft_product_id):
     with httpx.Client(base_url=API, timeout=15) as c:
         r = c.get("/products", params={"include_drafts": 1, "limit": 500}, headers=hdr)
         assert r.status_code == 200
-        ids = {p.get("id") for p in r.json()}
+        ids = {p.get("id") for p in r.json().get("items", [])}
         assert draft_product_id in ids
 
 

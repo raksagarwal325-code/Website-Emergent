@@ -20,7 +20,9 @@ export default function Home() {
   const { settings, hp } = useSettings();
 
   useEffect(() => {
-    api.listProducts({ featured: true }).then(setFeatured).catch(() => {});
+    api.listProducts({ featured: true, limit: 48 })
+      .then((res) => setFeatured(res?.items || []))
+      .catch(() => {});
   }, []);
 
   const waNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");

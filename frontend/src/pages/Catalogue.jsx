@@ -301,7 +301,7 @@ export default function Catalogue() {
   const docRef = useRef(null);
 
   useEffect(() => {
-    Promise.all([api.listProducts(), api.getSettings()]).then(([p, s]) => {
+    Promise.all([api.listAllProducts(), api.getSettings()]).then(([p, s]) => {
       setProducts(p);
       setSettings(s);
       setReady(true);
