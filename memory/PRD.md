@@ -76,6 +76,8 @@ INR pricing with en-IN formatting.
 - Instagram feed on Home page
 
 ## Changelog
+- 2026-02-15: **P1 bug fix — `GET /api/inquiries` 500 error on legacy blank-email rows.** Root cause: `/api/catalogue-request` writes `customer_email=""` into the `inquiries` collection, and the response model `Inquiry.customer_email: EmailStr` blew up on read. Fix: relaxed the field to `Optional[EmailStr] = None` and added a `field_validator(mode="before")` that coerces empty/whitespace strings to `None` **before** EmailStr validation runs. `InquiryCreate` (POST payload) still enforces `EmailStr` so new submissions cannot omit or blank the email. Verified by testing agent (iteration_23): new pytest suite `tests/test_inquiries_legacy_email_fix.py` (6 tests) + regression `tests/test_authz_ssrf_ratelimit.py` (21 tests) = **27/27 passing**. Also updated `/app/memory/test_credentials.md` to align the direct-mongo test-session email with `ADMIN_EMAILS`.
+
 - 2026-02-14: **SECURITY LOCKDOWN — Emergent Google Auth + SSRF-safe proxy + rate limits + CSRF guard.** App previously had NO admin auth. Verified 100% by testing agent (iteration_21) — 16/16 pytests pass, all manual curl + frontend gate checks green.
   - **Auth**: `/app/backend/auth.py` — Emergent OAuth session-id → HttpOnly Secure SameSite=None cookie (`session_token`), 7-day TTL, MongoDB `user_sessions` store. `ADMIN_EMAILS` env var (comma-separated, exact match, case-insensitive) — currently `owner@samratglassemporium.com`. Every request re-checks the allowlist so removing an email revokes access instantly.
   - **Endpoints**: `POST /api/auth/session` (exchange, rate-limited 20/300s), `GET /api/auth/me`, `POST /api/auth/logout`.
