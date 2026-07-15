@@ -11,7 +11,7 @@ from typing import List, Optional
 
 import requests
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -32,6 +32,136 @@ APP_NAME = os.environ.get("APP_NAME", "catalog-app")
 
 app = FastAPI(title="Lumière Catalog API")
 api = APIRouter(prefix="/api")
+
+# --- Auth wiring (Emergent Google Auth, cookie session) --------------------
+import auth as _auth  # noqa: E402  (imported after api created)
+
+
+class _AdminUser(BaseModel):
+    user_id: str
+    email: str
+
+
+async def require_admin(request: Request):
+    """FastAPI dep — 401 if no session, 403 if session's email not allowlisted.
+    Also enforces the CSRF guard (X-Requested-With: fetch) on unsafe methods.
+    """
+    _auth.require_csrf(request)
+    user = await _auth.load_admin(db, request)
+    if user is None:
+        # Distinguish anonymous vs allowlist-mismatch based on cookie presence.
+        if request.cookies.get("session_token") or request.headers.get("Authorization"):
+            raise HTTPException(status_code=403, detail="Not authorized for admin.")
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    return _AdminUser(**user)
+
+
+# --- Simple in-memory rate limiter (per client IP) -------------------------
+_RL_WINDOWS: dict[tuple[str, str], list[float]] = {}
+def rate_limit(bucket: str, limit: int, window_sec: int):
+    """Return a FastAPI dep that raises 429 if a given client IP exceeds
+    `limit` requests within `window_sec` for the named bucket."""
+    def _dep(request: Request):
+        ip = (request.client.host if request.client else "?") or "?"
+        key = (bucket, ip)
+        import time as _t
+        now = _t.time()
+        hist = _RL_WINDOWS.get(key, [])
+        hist = [t for t in hist if now - t < window_sec]
+        if len(hist) >= limit:
+            raise HTTPException(status_code=429, detail="Too many requests, please slow down.")
+        hist.append(now)
+        _RL_WINDOWS[key] = hist
+    return _dep
+
+
+class _SessionExchange(BaseModel):
+    session_id: str
+
+
+@api.post("/auth/session")
+async def auth_session(payload: _SessionExchange, response: Response, _rl = Depends(rate_limit("auth", 20, 300))):
+    """Exchange an Emergent OAuth session_id (URL-fragment token) for a
+    HttpOnly cookie session. Rejects non-allowlisted emails with 403."""
+    data = await _auth.exchange_session_id(db, payload.session_id)
+    _auth.set_session_cookie(response, data["session_token"])
+    return {
+        "user_id": data["user_id"],
+        "email": data["email"],
+        "name": data.get("name"),
+        "picture": data.get("picture"),
+    }
+
+
+@api.get("/auth/me")
+async def auth_me(request: Request):
+    user = await _auth.load_admin(db, request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    row = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "user_id": 1, "email": 1, "name": 1, "picture": 1})
+    return row or user
+
+
+@api.post("/auth/logout")
+async def auth_logout(request: Request, response: Response):
+    token = request.cookies.get("session_token")
+    if token:
+        await db.user_sessions.delete_one({"session_token": token})
+    _auth.clear_session_cookie(response)
+    return {"ok": True}
+
+
+# --- SSRF-safe image proxy (real implementation) ---------------------------
+@api.get("/proxy-image-secure")
+async def _proxy_image_secure(url: str, admin: _AdminUser = Depends(require_admin)):
+    """Admin-only: fetch an image through the server for the Catalogue PDF
+    generator so we don't hit CORS-tainted canvases. Restricted with a host
+    allowlist, HTTPS-only, size cap, timeout, and IP-family checks after DNS."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise HTTPException(400, "Invalid URL")
+    if parsed.scheme != "https":
+        raise HTTPException(400, "Only HTTPS allowed")
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise HTTPException(400, "Invalid host")
+    if host not in _ALLOWED_IMAGE_HOSTS and not any(host.endswith("." + h) for h in _ALLOWED_IMAGE_HOSTS):
+        raise HTTPException(400, "Host not allowed")
+    # DNS-resolve and block anything that isn't a public unicast address.
+    try:
+        infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+    except Exception:
+        raise HTTPException(400, "Cannot resolve host")
+    for family, _, _, _, sockaddr in infos:
+        ip = sockaddr[0]
+        if not _is_public_ip(ip):
+            raise HTTPException(400, "Blocked destination")
+    try:
+        with requests.get(url, timeout=10, stream=True, allow_redirects=False) as r:
+            if 300 <= r.status_code < 400:
+                raise HTTPException(400, "Redirects not permitted")
+            r.raise_for_status()
+            ct = (r.headers.get("Content-Type") or "").lower().split(";")[0].strip()
+            if not ct.startswith("image/"):
+                raise HTTPException(400, "Not an image")
+            cl = r.headers.get("Content-Length")
+            if cl and int(cl) > _MAX_IMAGE_BYTES:
+                raise HTTPException(400, "Image too large")
+            chunks = []
+            got = 0
+            for chunk in r.iter_content(64 * 1024):
+                got += len(chunk)
+                if got > _MAX_IMAGE_BYTES:
+                    raise HTTPException(400, "Image too large")
+                chunks.append(chunk)
+            body = b"".join(chunks)
+            return Response(content=body, media_type=ct, headers={"Cache-Control": "public, max-age=86400"})
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(400, "Image fetch failed")
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -292,14 +422,14 @@ async def get_product(product_id: str):
 
 
 @api.post("/products", response_model=Product)
-async def create_product(payload: ProductCreate):
+async def create_product(payload: ProductCreate, admin: _AdminUser = Depends(require_admin)):
     product = Product(**payload.model_dump())
     await db.products.insert_one(product.model_dump())
     return product
 
 
 @api.put("/products/{product_id}", response_model=Product)
-async def update_product(product_id: str, payload: ProductCreate):
+async def update_product(product_id: str, payload: ProductCreate, admin: _AdminUser = Depends(require_admin)):
     existing = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not existing:
         raise HTTPException(404, "Product not found")
@@ -311,7 +441,7 @@ async def update_product(product_id: str, payload: ProductCreate):
 
 
 @api.delete("/products/{product_id}")
-async def delete_product(product_id: str):
+async def delete_product(product_id: str, admin: _AdminUser = Depends(require_admin)):
     res = await db.products.delete_one({"id": product_id})
     if res.deleted_count == 0:
         raise HTTPException(404, "Product not found")
@@ -327,7 +457,7 @@ async def list_reviews(product_id: str):
 
 
 @api.post("/reviews", response_model=Review)
-async def create_review(payload: ReviewCreate):
+async def create_review(payload: ReviewCreate, _rl = Depends(rate_limit("reviews", 5, 300))):
     if not 1 <= payload.rating <= 5:
         raise HTTPException(400, "Rating must be 1-5")
     review = Review(**payload.model_dump())
@@ -338,7 +468,7 @@ async def create_review(payload: ReviewCreate):
 
 # --- Inquiries (Cart submissions) ---
 @api.post("/inquiries", response_model=Inquiry)
-async def create_inquiry(payload: InquiryCreate):
+async def create_inquiry(payload: InquiryCreate, _rl = Depends(rate_limit("inquiries", 10, 300))):
     total = sum(i.price * i.quantity for i in payload.items)
     inquiry = Inquiry(**payload.model_dump(), total=total)
     await db.inquiries.insert_one(inquiry.model_dump())
@@ -346,12 +476,12 @@ async def create_inquiry(payload: InquiryCreate):
 
 
 @api.get("/inquiries", response_model=List[Inquiry])
-async def list_inquiries():
+async def list_inquiries(admin: _AdminUser = Depends(require_admin)):
     return await db.inquiries.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
 
 @api.patch("/inquiries/{inquiry_id}")
-async def update_inquiry_status(inquiry_id: str, status: str = Query(...)):
+async def update_inquiry_status(inquiry_id: str, status: str = Query(...), admin: _AdminUser = Depends(require_admin)):
     res = await db.inquiries.update_one({"id": inquiry_id}, {"$set": {"status": status}})
     if res.matched_count == 0:
         raise HTTPException(404, "Inquiry not found")
@@ -360,14 +490,14 @@ async def update_inquiry_status(inquiry_id: str, status: str = Query(...)):
 
 # --- Contact ---
 @api.post("/contact", response_model=ContactMessage)
-async def create_contact(payload: ContactCreate):
+async def create_contact(payload: ContactCreate, _rl = Depends(rate_limit("contact", 10, 300))):
     msg = ContactMessage(**payload.model_dump())
     await db.contact_messages.insert_one(msg.model_dump())
     return msg
 
 
 @api.get("/contact", response_model=List[ContactMessage])
-async def list_contact():
+async def list_contact(admin: _AdminUser = Depends(require_admin)):
     return await db.contact_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
 
@@ -378,7 +508,7 @@ class CatalogueRequest(BaseModel):
 
 
 @api.post("/catalogue-request")
-async def create_catalogue_request(payload: CatalogueRequest):
+async def create_catalogue_request(payload: CatalogueRequest, _rl = Depends(rate_limit("catreq", 10, 300))):
     """Store a name + phone lead every time someone requests the PDF catalogue
     via the "Send catalogue on WhatsApp" flow. Also visible under Admin →
     Inquiries so the shop owner can follow up if the visitor never actually
@@ -422,7 +552,7 @@ async def get_settings():
 
 
 @api.put("/settings", response_model=Settings)
-async def update_settings(payload: SettingsUpdate):
+async def update_settings(payload: SettingsUpdate, admin: _AdminUser = Depends(require_admin)):
     doc = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or Settings().model_dump()
     updates = {k: v for k, v in payload.model_dump(exclude_none=True).items()}
     doc.update(updates)
@@ -430,16 +560,47 @@ async def update_settings(payload: SettingsUpdate):
     return doc
 
 
-@api.get("/proxy-image")
-async def proxy_image(url: str):
+import ipaddress
+import socket
+from urllib.parse import urlparse
+
+# --- SSRF-safe image proxy -------------------------------------------------
+# Only allow HTTPS, only allow images, only allow a fixed set of trusted image
+# hosts, block loopback / private / metadata IP ranges (even if DNS resolves
+# to them), cap download size, hard timeout, and never leak internal detail.
+_ALLOWED_IMAGE_HOSTS: set[str] = {
+    "images.unsplash.com", "plus.unsplash.com",
+    "cdn.pixabay.com", "images.pexels.com",
+    "customer-assets.emergentagent.com",
+    "d3adwkbyhxyrtq.cloudfront.net",
+    "d33sy5i8bnduwe.cloudfront.net",
+    "instagram.com", "cdninstagram.com",
+    "scontent.cdninstagram.com",
+    "res.cloudinary.com",
+}
+_MAX_IMAGE_BYTES = 15 * 1024 * 1024
+
+
+def _is_public_ip(ip: str) -> bool:
     try:
-        r = requests.get(url, timeout=15, stream=True)
-        r.raise_for_status()
-        ct = r.headers.get("Content-Type", "image/jpeg")
-        return Response(content=r.content, media_type=ct, headers={"Cache-Control": "public, max-age=86400"})
-    except Exception as e:
-        logger.error(f"Proxy image failed: {e}")
-        raise HTTPException(404, "Image not found")
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return not (addr.is_private or addr.is_loopback or addr.is_link_local
+                or addr.is_multicast or addr.is_reserved or addr.is_unspecified)
+
+
+@api.get("/proxy-image")
+async def proxy_image(url: str, admin: _AdminUser = Depends(require_admin)):
+    """Admin-only alias for the SSRF-safe proxy — kept at the historic path
+    so existing catalogue-PDF calls keep working. All safety checks live in
+    the shared helper below."""
+    return await _proxy_image_secure(url=url, admin=admin)
+
+
+# Real implementation with admin gate + SSRF checks — declared later with
+# require_admin dependency after auth wiring below.
+
 
 
 # --- Google Reviews ---
@@ -536,7 +697,7 @@ MAX_VIDEO_BYTES = 100 * 1024 * 1024
 
 
 @api.post("/upload")
-async def upload_image(file: UploadFile = File(...)):
+async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends(require_admin)):
     ct = (file.content_type or "").lower()
     is_image = ct.startswith("image/")
     is_video = ct.startswith("video/")
@@ -603,8 +764,6 @@ async def upload_image(file: UploadFile = File(...)):
 def _canonical_instagram_url(raw: str) -> Optional[str]:
     """Return a canonical Reel/Post/TV permalink (no query params, no fragment)
     or None if the input is not a supported Instagram URL."""
-    from urllib.parse import urlparse
-
     try:
         u = urlparse((raw or "").strip())
     except Exception:
@@ -712,7 +871,7 @@ class InstagramCoverRequest(BaseModel):
 
 
 @api.post("/admin/instagram/cover")
-async def pull_instagram_cover(payload: InstagramCoverRequest):
+async def pull_instagram_cover(payload: InstagramCoverRequest, admin: _AdminUser = Depends(require_admin)):
     """Auto-pull an Instagram Reel/Post cover thumbnail, cache it in object
     storage and return a stable /api/files/... URL the admin can use as the
     card cover. Manual upload remains the default path.
@@ -924,7 +1083,7 @@ async def _generate_product_json(image_bytes: bytes, mime: str) -> dict:
 
 
 @api.post("/ai/generate-product")
-async def ai_generate_product(payload: AIGenerateProductRequest):
+async def ai_generate_product(payload: AIGenerateProductRequest, admin: _AdminUser = Depends(require_admin)):
     """Analyze one product image and CREATE a draft product row that the admin
     can review / edit / publish. Returns the fully-populated draft."""
 
@@ -1120,7 +1279,7 @@ async def _ai_name_batch(image_bytes: bytes, mime: str, existing: set) -> List[d
 
 
 @api.post("/ai/name-suggestions")
-async def ai_name_suggestions(payload: AINameSuggestRequest):
+async def ai_name_suggestions(payload: AINameSuggestRequest, admin: _AdminUser = Depends(require_admin)):
     """Return exactly 5 unique, catalogue-safe product name suggestions.
     Each name is checked against every existing product name (case-insensitive,
     punctuation-insensitive) and any name the caller explicitly asks to avoid.
@@ -1255,7 +1414,7 @@ async def _resolve_product_image(payload: AIRegenerateRequest) -> tuple[bytes, s
 
 
 @api.post("/ai/regenerate-details")
-async def ai_regenerate_details(payload: AIRegenerateRequest):
+async def ai_regenerate_details(payload: AIRegenerateRequest, admin: _AdminUser = Depends(require_admin)):
     """Return a FULL AI-generated product JSON (name, seo_name, category,
     short_description, description, tags, specs, sku) for review.
 
@@ -1357,7 +1516,7 @@ OUTPUT — strict JSON only, no prose or code fences:
 
 
 @api.post("/ai/regenerate-from-name")
-async def ai_regenerate_from_name(payload: AIRelatedRequest):
+async def ai_regenerate_from_name(payload: AIRelatedRequest, admin: _AdminUser = Depends(require_admin)):
     """Given a *fixed* product name and its image, regenerate the related
     fields (seo_name, category, short_description, description, tags) so they
     align with that name and the visible design in the photo."""
@@ -1420,7 +1579,7 @@ class AIBulkRequest(BaseModel):
 
 
 @api.post("/ai/generate-products-bulk")
-async def ai_generate_products_bulk(payload: AIBulkRequest):
+async def ai_generate_products_bulk(payload: AIBulkRequest, admin: _AdminUser = Depends(require_admin)):
     """Fan out over N images. Each success creates a draft; each failure is
     reported per-image so the admin can retry just the bad ones."""
     if not payload.images:
@@ -1458,8 +1617,7 @@ async def watermark_preview(
     file: UploadFile = File(...),
     opacity: float = Form(0.15),
     size_pct: float = Form(0.30),
-    adaptive_tone: bool = Form(True),
-):
+    adaptive_tone: bool = Form(True), admin: _AdminUser = Depends(require_admin)):
     """Return a watermarked preview PNG for the given file & settings.
     Does NOT persist anything. Used by the Admin settings panel."""
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -1478,7 +1636,7 @@ async def watermark_preview(
 
 
 @api.post("/watermark/reprocess")
-async def watermark_reprocess():
+async def watermark_reprocess(admin: _AdminUser = Depends(require_admin)):
     """Regenerate the public watermarked variant for every uploaded image
     using the ORIGINAL bytes and the current watermark settings.
 
@@ -1525,7 +1683,7 @@ async def watermark_reprocess():
 
 # --- Export CSV ---
 @api.get("/export/products.csv")
-async def export_csv():
+async def export_csv(admin: _AdminUser = Depends(require_admin)):
     products = await db.products.find({}, {"_id": 0}).to_list(2000)
     output = io.StringIO()
     if not products:
@@ -1545,7 +1703,7 @@ async def export_csv():
 
 
 @api.get("/stats")
-async def stats():
+async def stats(admin: _AdminUser = Depends(require_admin)):
     return {
         "products": await db.products.count_documents({}),
         "inquiries": await db.inquiries.count_documents({}),
