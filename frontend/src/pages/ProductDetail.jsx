@@ -11,6 +11,7 @@ import SeenInProjects from "../components/SeenInProjects";
 export default function ProductDetail() {
   const { id } = useParams();
   const [product, setProduct] = useState(null);
+  const [notFound, setNotFound] = useState(false);
   const [reviews, setReviews] = useState([]);
   const [settings, setSettings] = useState(null);
   const [selectedImg, setSelectedImg] = useState(0);
@@ -18,10 +19,53 @@ export default function ProductDetail() {
   const { addToCart, toggleFavorite, isFavorite } = useCatalog();
 
   useEffect(() => {
-    api.getProduct(id).then((p) => { setProduct(p); setSelectedImg(0); }).catch(() => {});
+    setNotFound(false);
+    setProduct(null);
+    api
+      .getProduct(id)
+      .then((p) => {
+        setProduct(p);
+        setSelectedImg(0);
+      })
+      .catch((err) => {
+        const status = err?.response?.status ?? err?.status;
+        if (status === 404) setNotFound(true);
+      });
     api.listReviews(id).then(setReviews).catch(() => {});
     api.getSettings().then(setSettings).catch(() => {});
   }, [id]);
+
+  if (notFound) {
+    return (
+      <div
+        data-testid="product-not-found"
+        className="max-w-3xl mx-auto px-6 py-24 text-center"
+      >
+        <div className="eyebrow mb-6">Error · 404</div>
+        <h1 className="font-serif text-4xl sm:text-5xl leading-tight">Product not found</h1>
+        <p className="mt-6 text-white/60 max-w-xl mx-auto leading-relaxed">
+          This piece may have been renamed, discontinued, or the link is
+          incorrect. Browse the full catalogue to find something similar.
+        </p>
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to="/catalog"
+            data-testid="product-notfound-catalog-btn"
+            className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] transition-colors"
+          >
+            <ShoppingBag size={14} /> Browse Catalogue
+          </Link>
+          <Link
+            to="/"
+            data-testid="product-notfound-home-btn"
+            className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.28em]"
+          >
+            <ArrowLeft size={14} /> Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (!product) {
     return <div className="max-w-7xl mx-auto px-6 py-24 text-white/40">Loading…</div>;

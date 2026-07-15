@@ -23,6 +23,7 @@ import Gallery from "@/pages/Gallery";
 import GalleryProject from "@/pages/GalleryProject";
 import StyledBy from "@/pages/StyledBy";
 import LegalPage from "@/pages/LegalPage";
+import NotFound from "@/pages/NotFound";
 import FloatingActions from "@/components/FloatingActions";
 import MobileReachStrip from "@/components/MobileReachStrip";
 
@@ -61,6 +62,7 @@ function App() {
               <Route path="/admin" element={<AdminAuthGate><Admin /></AdminAuthGate>} />
               <Route path="/catalogue" element={<Catalogue />} />
               <Route path="/legal/:slug" element={<LegalPage />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </main>
           <Footer />

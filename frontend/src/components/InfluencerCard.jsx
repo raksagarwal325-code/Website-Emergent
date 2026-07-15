@@ -76,10 +76,9 @@ export function InfluencerCard({ item, product, index = 0, animate = true }) {
   const handle = displayHandle(item?.handle);
   const href = handleHref(item?.handle);
 
-  const mediaProps = igUrl
+  const mediaLinkProps = igUrl
     ? { href: igUrl, target: "_blank", rel: "noreferrer" }
-    : { role: "presentation", "aria-hidden": "true" };
-  const MediaTag = igUrl ? "a" : "div";
+    : null;
 
   const motionProps = animate
     ? {
@@ -117,11 +116,11 @@ export function InfluencerCard({ item, product, index = 0, animate = true }) {
         }}
       />
 
-      {/* Media area — 9:16 */}
-      <MediaTag
-        {...mediaProps}
+      {/* Media area — 9:16. Uses a div wrapper so the Instagram link and the
+          "Shop this look" product link stay as siblings — nesting an <a>
+          inside another <a> triggers a React DOM validation warning. */}
+      <div
         data-testid={`influencer-card-${index}-media`}
-        aria-label={igUrl ? `Watch on Instagram — ${kind}` : undefined}
         className="relative block w-full bg-black overflow-hidden group/media"
         style={{ aspectRatio: "9 / 16" }}
       >
@@ -186,6 +185,18 @@ export function InfluencerCard({ item, product, index = 0, animate = true }) {
           </div>
         )}
 
+        {/* Instagram media click-target — full-cover overlay, sibling to the
+            "Shop this look" pill. Kept at a lower z-index so the pill sits
+            above and receives its own clicks. */}
+        {mediaLinkProps && (
+          <a
+            {...mediaLinkProps}
+            aria-label={`Watch on Instagram — ${kind}`}
+            data-testid={`influencer-card-${index}-media-link`}
+            className="absolute inset-0 z-10"
+          />
+        )}
+
         {/* Shop this look pill */}
         {product && (
           <Link
@@ -207,7 +218,7 @@ export function InfluencerCard({ item, product, index = 0, animate = true }) {
             </span>
           </Link>
         )}
-      </MediaTag>
+      </div>
 
       {/* Footer */}
       <div className="px-5 py-4 border-t border-[#D4AF37]/15 bg-black/30 flex items-center gap-3">

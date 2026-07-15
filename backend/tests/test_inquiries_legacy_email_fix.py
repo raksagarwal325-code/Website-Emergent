@@ -9,6 +9,7 @@ Also verifies:
 """
 
 import os
+import subprocess
 import uuid
 import requests
 import pytest
@@ -20,6 +21,60 @@ API = f"{BASE_URL}/api"
 
 ADMIN_COOKIES = {"session_token": "test_admin_session"}
 STATE_CHANGE_HEADERS = {"X-Requested-With": "fetch"}
+
+
+def _mongo():
+    mongo_url = "mongodb://localhost:27017"
+    db_name = "samrat_glass_emporium"
+    with open("/app/backend/.env") as f:
+        for line in f:
+            if line.startswith("MONGO_URL="):
+                mongo_url = line.split("=", 1)[1].strip().strip('"').strip("'")
+            elif line.startswith("DB_NAME="):
+                db_name = line.split("=", 1)[1].strip().strip('"').strip("'")
+    return mongo_url, db_name
+
+
+def _run_mongo(script):
+    mongo_url, db_name = _mongo()
+    return subprocess.run(
+        ["mongosh", f"{mongo_url}/{db_name}", "--quiet", "--eval", script],
+        check=False, capture_output=True, timeout=20,
+    )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _seed_and_cleanup():
+    # Seed the three legacy inquiry rows expected by the tests.
+    seed = """
+    db.inquiries.insertMany([
+      {id:"TEST_legacy_blank_email", customer_name:"Legacy Test", customer_email:"",
+       customer_phone:"999", message:"", items:[], total:0, status:"new",
+       created_at:new Date().toISOString()},
+      {id:"TEST_legacy_null_email", customer_name:"Legacy Null", customer_email:null,
+       customer_phone:"888", message:"", items:[], total:0, status:"new",
+       created_at:new Date().toISOString()},
+      {id:"TEST_legacy_whitespace_email", customer_name:"Legacy WS", customer_email:"   ",
+       customer_phone:"777", message:"", items:[], total:0, status:"new",
+       created_at:new Date().toISOString()}
+    ]);
+    // Ensure admin test session exists (matches ADMIN_EMAILS).
+    db.users.updateOne({user_id:"user_test"},
+      {$set:{user_id:"user_test", email:"raks.agarwal325@gmail.com", name:"Test Admin",
+             created_at:new Date().toISOString()}}, {upsert:true});
+    db.user_sessions.updateOne({session_token:"test_admin_session"},
+      {$set:{session_token:"test_admin_session", user_id:"user_test",
+             email:"raks.agarwal325@gmail.com",
+             expires_at:new Date(Date.now()+86400000).toISOString(),
+             created_at:new Date().toISOString()}}, {upsert:true});
+    """
+    _run_mongo(seed)
+    yield
+    _run_mongo(
+        'db.inquiries.deleteMany({id:{$in:['
+        '"TEST_legacy_blank_email","TEST_legacy_null_email","TEST_legacy_whitespace_email"]}});'
+        'db.inquiries.deleteMany({customer_name:{$regex:"^TEST_"}});'
+    )
 
 
 # ---------- 1. GET /api/inquiries must return 200, no 500 on legacy rows ----------
@@ -54,18 +109,26 @@ def test_get_inquiries_requires_admin():
 
 # ---------- 2. POST /api/inquiries with valid email works ----------
 def test_post_inquiries_valid_email_creates_and_persists():
+    # Grab a real published product so the new server-side price/name lookup
+    # succeeds. `product_id` must exist in the products collection.
+    prods = requests.get(f"{API}/products?limit=1", timeout=30).json()
+    assert isinstance(prods, list) and prods, "No products seeded for test"
+    prod = prods[0]
+    real_price = float(prod.get("price") or 0)
+
     email = f"TEST_valid_{uuid.uuid4().hex[:8]}@example.com"
     payload = {
         "customer_name": "Valid Test",
         "customer_email": email,
         "customer_phone": "+919000000001",
         "message": "valid inquiry",
+        # Client tries to manipulate price/name/sku — must be ignored.
         "items": [{
-            "product_id": "prod_x",
-            "name": "Test Product",
-            "sku": "SKU-1",
+            "product_id": prod["id"],
+            "name": "SPOOFED NAME",
+            "sku": "SPOOFED-SKU",
             "quantity": 2,
-            "price": 100.0,
+            "price": 1.0,
         }],
     }
     r = requests.post(
@@ -78,7 +141,14 @@ def test_post_inquiries_valid_email_creates_and_persists():
     body = r.json()
     assert body["customer_email"] == email
     assert body["customer_name"] == "Valid Test"
-    assert body["total"] == 200.0
+    # Server must compute total from the real product price, not the client's 1.0.
+    assert body["total"] == real_price * 2, (
+        f"Total should be server-computed real_price*qty={real_price * 2}, got {body['total']}"
+    )
+    # Server must overwrite name/sku from the DB.
+    assert body["items"][0]["name"] == prod["name"]
+    assert body["items"][0]["sku"] == prod.get("sku")
+    assert body["items"][0]["price"] == real_price
     assert "id" in body
     created_id = body["id"]
 
@@ -155,8 +225,3 @@ def test_catalogue_request_creates_row_visible_in_inquiries():
 
 
 # ---------- Cleanup at module teardown ----------
-@pytest.fixture(scope="module", autouse=True)
-def _cleanup_after_module():
-    yield
-    # Best-effort cleanup via mongosh isn't available in pytest; rely on TEST_ prefix filtering
-    # by admin routes if any. The seeded legacy rows and TEST_* names are ephemeral test data.

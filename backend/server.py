@@ -257,6 +257,15 @@ class InquiryItem(BaseModel):
     price: float
 
 
+class InquiryItemInput(BaseModel):
+    """Client input for a cart line. Only product_id + quantity are trusted;
+    name/sku/price are always resolved server-side from the products collection
+    (see create_inquiry). Extra fields (name/sku/price) are ignored."""
+    model_config = ConfigDict(extra="ignore")
+    product_id: str
+    quantity: int = Field(default=1, ge=1, le=100)
+
+
 class Inquiry(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -286,7 +295,7 @@ class InquiryCreate(BaseModel):
     customer_email: EmailStr
     customer_phone: str = ""
     message: str = ""
-    items: List[InquiryItem] = []
+    items: List[InquiryItemInput] = []
 
 
 class ContactMessage(BaseModel):
@@ -499,8 +508,35 @@ async def create_review(payload: ReviewCreate, _rl = Depends(rate_limit("reviews
 # --- Inquiries (Cart submissions) ---
 @api.post("/inquiries", response_model=Inquiry)
 async def create_inquiry(payload: InquiryCreate, _rl = Depends(rate_limit("inquiries", 10, 300))):
-    total = sum(i.price * i.quantity for i in payload.items)
-    inquiry = Inquiry(**payload.model_dump(), total=total)
+    # SECURITY: never trust client-supplied name/sku/price. Look every item up
+    # by product_id and use the DB values so a manipulated request body cannot
+    # change the persisted total.
+    server_items: List[InquiryItem] = []
+    total = 0.0
+    for it in payload.items:
+        doc = await db.products.find_one({"id": it.product_id}, {"_id": 0})
+        if not doc:
+            raise HTTPException(status_code=400, detail=f"Product not found: {it.product_id}")
+        if str(doc.get("status", "published")).lower() == "draft":
+            raise HTTPException(status_code=400, detail=f"Product not available: {it.product_id}")
+        price = float(doc.get("price") or 0)
+        server_items.append(InquiryItem(
+            product_id=doc["id"],
+            name=doc.get("name", ""),
+            sku=doc.get("sku"),
+            quantity=it.quantity,
+            price=price,
+        ))
+        total += price * it.quantity
+
+    inquiry = Inquiry(
+        customer_name=payload.customer_name,
+        customer_email=payload.customer_email,
+        customer_phone=payload.customer_phone,
+        message=payload.message,
+        items=server_items,
+        total=total,
+    )
     await db.inquiries.insert_one(inquiry.model_dump())
     return inquiry
 

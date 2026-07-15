@@ -5,7 +5,6 @@ import ProductCard from "../components/ProductCard";
 import SEO from "../components/SEO";
 import { Slider } from "../components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { toast } from "sonner";
 
 export default function Catalog() {
   const [products, setProducts] = useState([]);
@@ -35,11 +34,6 @@ export default function Catalog() {
   }, [q, category, sort, priceRange]);
 
   const total = products.length;
-
-  const handleExportCsv = () => {
-    window.open(api.exportCsvUrl(), "_blank");
-    toast.success("Downloading CSV…");
-  };
 
   const handleExportPdf = () => {
     window.print();
@@ -97,9 +91,6 @@ export default function Catalog() {
           </Select>
         </div>
         <div className="flex gap-2">
-          <button data-testid="export-csv-btn" onClick={handleExportCsv} className="inline-flex items-center gap-2 border border-white/15 hover:border-[#D4AF37] px-4 py-3 text-xs uppercase tracking-[0.2em] text-white/80">
-            <Download size={14} /> CSV
-          </button>
           <a href="/catalogue?print=1" target="_blank" rel="noreferrer" data-testid="export-pdf-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/50 hover:border-[#D4AF37] hover:text-[#D4AF37] px-4 py-3 text-xs uppercase tracking-[0.2em] text-white/80">
             <Download size={14} /> Catalogue PDF
           </a>
