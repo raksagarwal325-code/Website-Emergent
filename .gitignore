@@ -100,3 +100,10 @@ frontend/node_modules/.cache/default-development/9.pack
 .pw-browsers/chromium-1187/chrome-linux/chrome
 frontend/node_modules/.cache/default-development/11.pack
 frontend/node_modules/.cache/default-development/18.pack
+.env
+.env.*
+*.env
+credentials.json
+*.key
+.credentials
+frontend/node_modules/.cache/default-development/0.pack
