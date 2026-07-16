@@ -914,7 +914,7 @@ function ProductCard({ product: p, imgDataUrl, settings, waLink }) {
             </span>
           )}
           <span style={{ border: "1px solid rgba(212,175,55,0.6)", color: "#D4AF37", padding: "1.8mm 3.5mm" }}>
-            samratglassemporium.com
+            samratglass.com
           </span>
         </div>
       </div>

@@ -4,7 +4,7 @@ export const HOMEPAGE_DEFAULTS = {
   hero: {
     eyebrow: "Since 1981 · Handcrafted in Firozabad",
     headline_line1: "Fancy lights that",
-    headline_line2: "turn houses into homes.",
+    headline_line2: "turns houses into homes.",
     description:
       "A curated catalog of crystal chandeliers, pendant lights, wall sconces, table lamps & decorative lighting — hand-blown and hand-assembled by our artisans in Firozabad.",
     primary_cta_text: "Explore Catalog",

@@ -5,6 +5,11 @@ import { useEffect } from "react";
  * Sets document.title + updates <meta> tags for description, OpenGraph, and Twitter cards.
  * Falls back to the site-wide defaults declared in /public/index.html on unmount.
  */
+// Canonical URLs must always resolve against the official production domain,
+// never the Emergent preview host (which changes per environment and shouldn't
+// be indexed).
+const PRODUCTION_ORIGIN = "https://samratglass.com";
+
 const setMeta = (selector, attrName, name, content) => {
   if (!content) return;
   let el = document.head.querySelector(`meta[${selector}]`);
@@ -36,7 +41,11 @@ export default function SEO({
 }) {
   useEffect(() => {
     if (title) document.title = title;
-    const url = (typeof window !== "undefined" && window.location.origin) + (path || (typeof window !== "undefined" && window.location.pathname) || "");
+    const routePath =
+      path ||
+      (typeof window !== "undefined" && window.location.pathname) ||
+      "";
+    const url = `${PRODUCTION_ORIGIN}${routePath}`;
     setCanonical(url);
     setMeta('name="description"', "name", "description", description);
     setMeta('property="og:title"', "property", "og:title", title);

@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin
 Disallow: /catalogue
 
-Sitemap: https://samratglassemporium.com/sitemap.xml
+Sitemap: https://samratglass.com/sitemap.xml
