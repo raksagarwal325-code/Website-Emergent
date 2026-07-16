@@ -16,6 +16,9 @@ export default function ProductDetail() {
   const [settings, setSettings] = useState(null);
   const [selectedImg, setSelectedImg] = useState(0);
   const [reviewForm, setReviewForm] = useState({ author: "", rating: 5, title: "", body: "" });
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [reviewError, setReviewError] = useState("");
   const { addToCart, toggleFavorite, isFavorite } = useCatalog();
 
   useEffect(() => {
@@ -85,18 +88,43 @@ export default function ProductDetail() {
 
   const handleSubmitReview = async (e) => {
     e.preventDefault();
-    if (!reviewForm.author || !reviewForm.body) {
-      toast.error("Name and review body required");
+    if (reviewSubmitting) return; // prevent duplicate submissions
+    setReviewError("");
+    const author = (reviewForm.author || "").trim();
+    const body = (reviewForm.body || "").trim();
+    if (author.length < 2 || author.length > 60) {
+      setReviewError("Please enter your name (2–60 characters).");
       return;
     }
+    if (body.length < 10 || body.length > 1000) {
+      setReviewError("Review must be between 10 and 1000 characters.");
+      return;
+    }
+    setReviewSubmitting(true);
     try {
-      const r = await api.createReview({ ...reviewForm, product_id: product.id });
-      setReviews([r, ...reviews]);
+      await api.createReview({
+        product_id: product.id,
+        author,
+        rating: reviewForm.rating,
+        title: (reviewForm.title || "").trim(),
+        body,
+      });
+      // Reviews go through moderation — do NOT add to the list or refetch
+      // the product rating. Just confirm the submission.
       setReviewForm({ author: "", rating: 5, title: "", body: "" });
-      toast.success("Thank you for your review");
-      api.getProduct(id).then(setProduct);
-    } catch {
-      toast.error("Could not submit review");
+      setReviewSubmitted(true);
+      toast.success("Thank you. Your review has been submitted for approval.");
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      const msg = typeof detail === "string"
+        ? detail
+        : Array.isArray(detail) && detail[0]?.msg
+          ? detail[0].msg
+          : "Could not submit review. Please try again.";
+      setReviewError(msg);
+      toast.error(msg);
+    } finally {
+      setReviewSubmitting(false);
     }
   };
 
@@ -257,44 +285,98 @@ export default function ProductDetail() {
               <span className="text-white/40">({product.review_count} reviews)</span>
             </div>
 
-            <form onSubmit={handleSubmitReview} className="mt-8 space-y-4">
-              <input
-                data-testid="review-author"
-                placeholder="Your name"
-                value={reviewForm.author}
-                onChange={(e) => setReviewForm({ ...reviewForm, author: e.target.value })}
-                className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm"
-              />
-              <div className="flex items-center gap-2">
-                {[1,2,3,4,5].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    data-testid={`review-star-${n}`}
-                    onClick={() => setReviewForm({ ...reviewForm, rating: n })}
-                    className={`p-1 ${n <= reviewForm.rating ? "text-[#D4AF37]" : "text-white/25"}`}
-                  ><Star size={20} fill={n <= reviewForm.rating ? "#D4AF37" : "none"} /></button>
-                ))}
+            {reviewSubmitted ? (
+              <div
+                role="status"
+                data-testid="review-submitted-thanks"
+                className="mt-8 border border-[#D4AF37]/50 bg-[#D4AF37]/[0.06] p-6 text-sm text-white/85 leading-relaxed"
+              >
+                Thank you. Your review has been submitted for approval.
+                It will appear here once our team has verified it.
               </div>
-              <input
-                data-testid="review-title"
-                placeholder="Title (optional)"
-                value={reviewForm.title}
-                onChange={(e) => setReviewForm({ ...reviewForm, title: e.target.value })}
-                className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm"
-              />
-              <textarea
-                data-testid="review-body"
-                placeholder="Your thoughts…"
-                rows="4"
-                value={reviewForm.body}
-                onChange={(e) => setReviewForm({ ...reviewForm, body: e.target.value })}
-                className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm resize-none"
-              />
-              <button data-testid="submit-review-btn" className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] hover:text-[#D4AF37] px-6 py-3 text-xs uppercase tracking-[0.28em]">
-                Submit review
-              </button>
-            </form>
+            ) : (
+              <form onSubmit={handleSubmitReview} className="mt-8 space-y-4" noValidate>
+                <label htmlFor="review-author-input" className="sr-only">Your name</label>
+                <input
+                  id="review-author-input"
+                  data-testid="review-author"
+                  placeholder="Your name"
+                  value={reviewForm.author}
+                  onChange={(e) => setReviewForm({ ...reviewForm, author: e.target.value })}
+                  maxLength={60}
+                  required
+                  aria-required="true"
+                  aria-invalid={reviewError ? "true" : undefined}
+                  className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/60 px-4 py-3 text-sm"
+                />
+                <div
+                  role="radiogroup"
+                  aria-label="Rate this product from 1 to 5 stars"
+                  className="flex items-center gap-2"
+                >
+                  {[1,2,3,4,5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      role="radio"
+                      aria-checked={reviewForm.rating === n}
+                      aria-label={`Rate ${n} star${n === 1 ? "" : "s"}`}
+                      data-testid={`review-star-${n}`}
+                      onClick={() => setReviewForm({ ...reviewForm, rating: n })}
+                      className={`p-1 rounded transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/70 ${n <= reviewForm.rating ? "text-[#D4AF37]" : "text-white/25 hover:text-white/50"}`}
+                    >
+                      <Star size={20} fill={n <= reviewForm.rating ? "#D4AF37" : "none"} />
+                    </button>
+                  ))}
+                </div>
+                <label htmlFor="review-title-input" className="sr-only">Title (optional)</label>
+                <input
+                  id="review-title-input"
+                  data-testid="review-title"
+                  placeholder="Title (optional)"
+                  value={reviewForm.title}
+                  onChange={(e) => setReviewForm({ ...reviewForm, title: e.target.value })}
+                  maxLength={100}
+                  className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/60 px-4 py-3 text-sm"
+                />
+                <label htmlFor="review-body-input" className="sr-only">Your review</label>
+                <textarea
+                  id="review-body-input"
+                  data-testid="review-body"
+                  placeholder="Your thoughts (10–1000 characters)…"
+                  rows="4"
+                  value={reviewForm.body}
+                  onChange={(e) => setReviewForm({ ...reviewForm, body: e.target.value })}
+                  maxLength={1000}
+                  required
+                  aria-required="true"
+                  aria-invalid={reviewError ? "true" : undefined}
+                  className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/60 px-4 py-3 text-sm resize-none"
+                />
+                {reviewError && (
+                  <div
+                    data-testid="review-error"
+                    role="alert"
+                    aria-live="assertive"
+                    className="text-xs text-red-300 border border-red-500/30 bg-red-500/10 px-3 py-2"
+                  >
+                    {reviewError}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  data-testid="submit-review-btn"
+                  disabled={reviewSubmitting}
+                  aria-busy={reviewSubmitting ? "true" : "false"}
+                  className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] hover:text-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/70 px-6 py-3 text-xs uppercase tracking-[0.28em] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {reviewSubmitting ? "Submitting…" : "Submit review"}
+                </button>
+                <p className="text-[10px] uppercase tracking-[0.22em] text-white/40">
+                  Reviews are reviewed by our team before appearing.
+                </p>
+              </form>
+            )}
           </div>
 
           <div className="md:col-span-7 space-y-6">

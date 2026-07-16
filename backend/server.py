@@ -238,15 +238,65 @@ class Review(BaseModel):
     rating: int
     title: str = ""
     body: str = ""
+    # Moderation state. All new PUBLIC submissions default to "pending".
+    # Only admins can transition to "approved" or "rejected".
+    status: str = "pending"
     created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
 
 
 class ReviewCreate(BaseModel):
+    # SECURITY — reject unknown fields (e.g. status) so a client cannot
+    # smuggle in `status: "approved"` and self-publish.
+    model_config = ConfigDict(extra="forbid")
     product_id: str
     author: str
     rating: int
     title: str = ""
     body: str = ""
+
+    @field_validator("author", mode="before")
+    @classmethod
+    def _clean_author(cls, v):
+        s = (v or "").strip() if isinstance(v, (str, bytes)) else v
+        if isinstance(s, str):
+            # Collapse any run of internal whitespace to a single space.
+            import re as _re
+            s = _re.sub(r"\s+", " ", s)
+        if not isinstance(s, str) or not (2 <= len(s) <= 60):
+            raise ValueError("Author name must be 2 to 60 characters")
+        return s
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _clean_title(cls, v):
+        s = (v or "").strip() if isinstance(v, (str, bytes)) else ""
+        if isinstance(s, str):
+            import re as _re
+            s = _re.sub(r"\s+", " ", s)
+        if len(s) > 100:
+            raise ValueError("Title must be at most 100 characters")
+        return s
+
+    @field_validator("body", mode="before")
+    @classmethod
+    def _clean_body(cls, v):
+        s = (v or "").strip() if isinstance(v, (str, bytes)) else v
+        if isinstance(s, str):
+            import re as _re
+            # Normalize interior whitespace but keep newlines readable.
+            s = _re.sub(r"[ \t]+", " ", s)
+            s = _re.sub(r"\n{3,}", "\n\n", s)
+        if not isinstance(s, str) or not (10 <= len(s) <= 1000):
+            raise ValueError("Review body must be 10 to 1000 characters")
+        return s
+
+    @field_validator("rating")
+    @classmethod
+    def _rating_1_to_5(cls, v):
+        if not isinstance(v, int) or not (1 <= v <= 5):
+            raise ValueError("Rating must be an integer from 1 to 5")
+        return v
 
 
 class InquiryItem(BaseModel):
@@ -373,9 +423,13 @@ class SettingsUpdate(BaseModel):
 
 # --- Helpers ---
 async def recalc_product_rating(product_id: str):
-    reviews = await db.reviews.find({"product_id": product_id}, {"_id": 0}).to_list(1000)
+    """Only APPROVED reviews contribute to a product's rating and review_count.
+    Pending and rejected reviews are ignored so moderation can't be bypassed."""
+    reviews = await db.reviews.find(
+        {"product_id": product_id, "status": "approved"}, {"_id": 0}
+    ).to_list(1000)
     if not reviews:
-        await db.products.update_one({"id": product_id}, {"$set": {"rating": 0.0, "review_count": 0}})
+        await db.products.update_one({"id": product_id}, {"$set": {"rating": 0.0, "review_count": 0, "updated_at": now_iso()}})
         return
     total = sum(r["rating"] for r in reviews)
     avg = round(total / len(reviews), 2)
@@ -518,18 +572,119 @@ async def delete_product(product_id: str, admin: _AdminUser = Depends(require_ad
 # --- Reviews ---
 @api.get("/reviews", response_model=List[Review])
 async def list_reviews(product_id: str):
-    docs = await db.reviews.find({"product_id": product_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # PUBLIC endpoint — only expose approved reviews. Pending/rejected content
+    # must never leak to visitors.
+    docs = await db.reviews.find(
+        {"product_id": product_id, "status": "approved"}, {"_id": 0},
+    ).sort("created_at", -1).to_list(500)
     return docs
 
 
 @api.post("/reviews", response_model=Review)
-async def create_review(payload: ReviewCreate, _rl = Depends(rate_limit("reviews", 5, 300))):
-    if not 1 <= payload.rating <= 5:
-        raise HTTPException(400, "Rating must be 1-5")
-    review = Review(**payload.model_dump())
+async def create_review(payload: ReviewCreate, _rl = Depends(rate_limit("reviews", 3, 600))):
+    # SECURITY — every submission goes into moderation regardless of what the
+    # client sends. The product must exist AND be published: drafts and
+    # missing product ids are rejected with 400 so review-farming can't be
+    # aimed at unlisted rows.
+    prod = await db.products.find_one({"id": payload.product_id}, {"_id": 0, "id": 1, "status": 1})
+    if not prod:
+        raise HTTPException(status_code=400, detail="Product not found")
+    if str(prod.get("status", "published")).lower() != "published":
+        raise HTTPException(status_code=400, detail="Product is not available for reviews")
+
+    review = Review(
+        product_id=payload.product_id,
+        author=payload.author,
+        rating=payload.rating,
+        title=payload.title,
+        body=payload.body,
+        status="pending",  # always pending — client's status is ignored
+    )
     await db.reviews.insert_one(review.model_dump())
-    await recalc_product_rating(payload.product_id)
+    # Do NOT recalculate the product rating here — pending reviews must
+    # never affect the public rating until an admin approves them.
     return review
+
+
+# --- Admin review moderation ------------------------------------------------
+@api.get("/admin/reviews", response_model=List[Review])
+async def admin_list_reviews(
+    status: Optional[str] = Query(None, pattern="^(pending|approved|rejected)$"),
+    product_id: Optional[str] = None,
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Admin-only. List reviews filtered by moderation status. When `status`
+    is omitted every review across all statuses is returned so the admin can
+    switch tabs on the client side."""
+    query: dict = {}
+    if status:
+        query["status"] = status
+    if product_id:
+        query["product_id"] = product_id
+    return await db.reviews.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+
+
+@api.get("/admin/reviews/counts")
+async def admin_review_counts(admin: _AdminUser = Depends(require_admin)):
+    """Admin-only. Return the number of reviews in each moderation bucket so
+    the dashboard can render badges (Pending: N)."""
+    counts = {"pending": 0, "approved": 0, "rejected": 0}
+    for st in list(counts.keys()):
+        counts[st] = await db.reviews.count_documents({"status": st})
+    return counts
+
+
+async def _set_review_status(review_id: str, new_status: str) -> dict:
+    prev = await db.reviews.find_one({"id": review_id}, {"_id": 0})
+    if not prev:
+        raise HTTPException(status_code=404, detail="Review not found")
+    if prev.get("status") == new_status:
+        # Idempotent — return the review as-is without touching updated_at
+        # so the audit trail remains meaningful.
+        return prev
+    await db.reviews.update_one(
+        {"id": review_id},
+        {"$set": {"status": new_status, "updated_at": now_iso()}},
+    )
+    await recalc_product_rating(prev["product_id"])
+    updated = await db.reviews.find_one({"id": review_id}, {"_id": 0})
+    return updated
+
+
+@api.post("/admin/reviews/{review_id}/approve", response_model=Review)
+async def admin_approve_review(review_id: str, admin: _AdminUser = Depends(require_admin)):
+    return await _set_review_status(review_id, "approved")
+
+
+@api.post("/admin/reviews/{review_id}/reject", response_model=Review)
+async def admin_reject_review(review_id: str, admin: _AdminUser = Depends(require_admin)):
+    return await _set_review_status(review_id, "rejected")
+
+
+@api.delete("/admin/reviews/{review_id}")
+async def admin_delete_review(review_id: str, admin: _AdminUser = Depends(require_admin)):
+    doc = await db.reviews.find_one({"id": review_id}, {"_id": 0, "product_id": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Review not found")
+    await db.reviews.delete_one({"id": review_id})
+    await recalc_product_rating(doc["product_id"])
+    return {"ok": True}
+
+
+@api.post("/admin/_reset-rate-limit")
+async def admin_reset_rate_limit(
+    bucket: Optional[str] = Query(None),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Admin-only debug helper — clears the in-memory rate-limit bucket for a
+    given name (or every bucket if omitted). Used by the pytest suite to
+    stay under limits without waiting out the 10-minute window."""
+    if bucket:
+        for key in [k for k in _RL_WINDOWS if k[0] == bucket]:
+            _RL_WINDOWS.pop(key, None)
+    else:
+        _RL_WINDOWS.clear()
+    return {"ok": True, "cleared": bucket or "*"}
 
 
 # --- Inquiries (Cart submissions) ---
@@ -1835,6 +1990,20 @@ async def startup():
     # Ensure settings row exists
     if not await db.settings.find_one({"id": "settings"}):
         await db.settings.insert_one(Settings().model_dump())
+
+    # One-time migration — reviews written before the moderation system was
+    # introduced don't have a `status` field. Treat them as approved so they
+    # don't disappear from public product pages. Rows that already have a
+    # status (pending/approved/rejected) are untouched.
+    try:
+        migrated = await db.reviews.update_many(
+            {"status": {"$exists": False}},
+            {"$set": {"status": "approved", "updated_at": now_iso()}},
+        )
+        if migrated.modified_count:
+            logger.info(f"Migrated {migrated.modified_count} legacy reviews → status=approved")
+    except Exception as e:
+        logger.warning(f"Review status migration skipped: {e}")
 
     # Init object storage
     try:

@@ -57,6 +57,13 @@ export const api = {
   listReviews: (product_id) => client.get(`/reviews`, { params: { product_id } }).then(r => r.data),
   createReview: (data) => client.post("/reviews", data).then(r => r.data),
 
+  // Admin-only review moderation
+  adminListReviews: (params = {}) => client.get("/admin/reviews", { params }).then(r => r.data),
+  adminReviewCounts: () => client.get("/admin/reviews/counts").then(r => r.data),
+  adminApproveReview: (id) => client.post(`/admin/reviews/${id}/approve`).then(r => r.data),
+  adminRejectReview: (id) => client.post(`/admin/reviews/${id}/reject`).then(r => r.data),
+  adminDeleteReview: (id) => client.delete(`/admin/reviews/${id}`).then(r => r.data),
+
   createInquiry: (data) => client.post("/inquiries", data).then(r => r.data),
   listInquiries: () => client.get("/inquiries").then(r => r.data),
   updateInquiryStatus: (id, status) => client.patch(`/inquiries/${id}`, null, { params: { status } }).then(r => r.data),

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon } from "lucide-react";
+import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash } from "lucide-react";
 import { api } from "../lib/api";
 import { compareBySku } from "../lib/api";
 import { toast } from "sonner";
@@ -22,17 +22,19 @@ export default function Admin() {
   const [stats, setStats] = useState(null);
   const [categories, setCategories] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [reviewCounts, setReviewCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
 
   const refresh = async () => {
-    const [p, i, m, s, st, cats] = await Promise.all([
+    const [p, i, m, s, st, cats, rc] = await Promise.all([
       api.listAllProducts({ include_drafts: 1, limit: 5000 }).catch(() => []),
       api.listInquiries().catch(() => []),
       api.listContact().catch(() => []),
       api.getSettings().catch(() => null),
       api.stats().catch(() => null),
       api.categories().catch(() => []),
+      api.adminReviewCounts().catch(() => ({ pending: 0, approved: 0, rejected: 0 })),
     ]);
-    setProducts(p); setInquiries(i); setMessages(m); setSettings(s); setStats(st); setCategories(cats);
+    setProducts(p); setInquiries(i); setMessages(m); setSettings(s); setStats(st); setCategories(cats); setReviewCounts(rc);
   };
   useEffect(() => { refresh(); }, []);
 
@@ -40,6 +42,7 @@ export default function Admin() {
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { key: "homepage", label: "Homepage", icon: HomeIcon },
     { key: "products", label: "Products", icon: Package },
+    { key: "reviews", label: "Reviews", icon: Star, badge: reviewCounts.pending },
     { key: "inquiries", label: "Inquiries", icon: MessageSquare },
     { key: "messages", label: "Messages", icon: Mail },
     { key: "settings", label: "Settings", icon: SettingsIcon },
@@ -61,6 +64,14 @@ export default function Admin() {
             className={`inline-flex items-center gap-2 px-5 py-3 text-xs uppercase tracking-[0.24em] border-b-2 transition-colors ${tab === t.key ? "border-[#D4AF37] text-[#D4AF37]" : "border-transparent text-white/60 hover:text-white"}`}
           >
             <t.icon size={14} /> {t.label}
+            {t.badge > 0 && (
+              <span
+                data-testid={`admin-tab-${t.key}-badge`}
+                className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#D4AF37] text-black text-[10px] tracking-normal px-1.5 leading-none"
+              >
+                {t.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -93,6 +104,8 @@ export default function Admin() {
       )}
 
       {tab === "inquiries" && <InquiriesAdmin inquiries={inquiries} refresh={refresh} />}
+
+      {tab === "reviews" && <ReviewsAdmin products={products} refresh={refresh} />}
 
       {tab === "messages" && <MessagesAdmin messages={messages} />}
 
@@ -770,6 +783,183 @@ function InquiriesAdmin({ inquiries, refresh }) {
     </div>
   );
 }
+
+function ReviewsAdmin({ products, refresh }) {
+  const [reviews, setReviews] = useState([]);
+  const [filter, setFilter] = useState("pending");
+  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
+  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  const productById = useMemo(() => {
+    const m = {};
+    for (const p of products || []) m[p.id] = p;
+    return m;
+  }, [products]);
+
+  const reload = async () => {
+    setLoading(true);
+    try {
+      const [list, cc] = await Promise.all([
+        api.adminListReviews({ status: filter }),
+        api.adminReviewCounts(),
+      ]);
+      setReviews(list || []);
+      setCounts(cc || { pending: 0, approved: 0, rejected: 0 });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [filter]);
+
+  const act = async (id, action) => {
+    if (busyId) return;
+    setBusyId(id);
+    try {
+      if (action === "approve") {
+        await api.adminApproveReview(id);
+        toast.success("Review approved & published");
+      } else if (action === "reject") {
+        await api.adminRejectReview(id);
+        toast.success("Review rejected");
+      } else if (action === "delete") {
+        if (!window.confirm("Permanently delete this review? This cannot be undone.")) {
+          setBusyId(null);
+          return;
+        }
+        await api.adminDeleteReview(id);
+        toast.success("Review deleted");
+      }
+      await Promise.all([reload(), refresh()]);
+    } catch {
+      toast.error("Action failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const FILTERS = [
+    ["pending", "Pending"],
+    ["approved", "Approved"],
+    ["rejected", "Rejected"],
+  ];
+
+  return (
+    <div className="space-y-4" data-testid="admin-reviews">
+      <div className="flex flex-wrap items-center gap-3 mb-2">
+        {FILTERS.map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            data-testid={`rev-filter-${k}`}
+            onClick={() => setFilter(k)}
+            className={`text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border transition-colors inline-flex items-center gap-2 ${
+              filter === k
+                ? "border-[#D4AF37] text-[#D4AF37]"
+                : "border-white/15 text-white/60 hover:border-[#BF9972] hover:text-white"
+            }`}
+          >
+            {label}
+            <span
+              data-testid={`rev-count-${k}`}
+              className={`text-[10px] tabular-nums ${filter === k ? "text-[#D4AF37]" : "text-white/40"}`}
+            >
+              {counts[k] ?? 0}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {loading && <div className="text-white/40 text-sm">Loading…</div>}
+
+      {!loading && reviews.length === 0 && (
+        <div className="text-white/50 text-sm py-12 text-center border border-white/5">
+          No {filter} reviews.
+        </div>
+      )}
+
+      {reviews.map((r) => {
+        const prod = productById[r.product_id];
+        return (
+          <div
+            key={r.id}
+            data-testid={`admin-review-${r.id}`}
+            className="border border-white/10 p-6 hover:border-white/20 transition-colors"
+          >
+            <div className="flex flex-wrap justify-between gap-4">
+              <div className="min-w-0">
+                <div className="font-serif text-lg">{r.title || "Untitled review"}</div>
+                <div className="text-white/50 text-sm mt-1">
+                  by <span className="text-white/85">{r.author}</span>
+                  <span className="mx-2 text-white/25">·</span>
+                  <span className="text-[#D4AF37]" data-testid={`admin-review-${r.id}-rating`}>
+                    {"★".repeat(r.rating)}
+                    <span className="text-white/20">{"★".repeat(5 - r.rating)}</span>
+                  </span>
+                </div>
+                {prod ? (
+                  <div className="text-xs text-white/50 mt-1">
+                    Product: <span className="text-white/80">{prod.name}</span>
+                    {prod.sku && (
+                      <span className="ml-2 text-[10px] uppercase tracking-[0.18em] text-[#BF9972]/80">
+                        · SKU {prod.sku}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-white/40 mt-1">
+                    Product id: {r.product_id}
+                  </div>
+                )}
+                <div className="text-xs text-white/40 mt-1">
+                  Submitted {new Date(r.created_at).toLocaleString()}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {r.status !== "approved" && (
+                  <button
+                    type="button"
+                    data-testid={`admin-review-${r.id}-approve`}
+                    onClick={() => act(r.id, "approve")}
+                    disabled={busyId === r.id}
+                    className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-[#D4AF37]/60 text-[#D4AF37] hover:bg-[#D4AF37]/10 disabled:opacity-50"
+                  >
+                    <Check size={12} /> Approve
+                  </button>
+                )}
+                {r.status !== "rejected" && (
+                  <button
+                    type="button"
+                    data-testid={`admin-review-${r.id}-reject`}
+                    onClick={() => act(r.id, "reject")}
+                    disabled={busyId === r.id}
+                    className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-white/25 text-white/70 hover:border-[#BF9972] hover:text-white disabled:opacity-50"
+                  >
+                    <Slash size={12} /> Reject
+                  </button>
+                )}
+                <button
+                  type="button"
+                  data-testid={`admin-review-${r.id}-delete`}
+                  onClick={() => act(r.id, "delete")}
+                  disabled={busyId === r.id}
+                  className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-red-500/40 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                >
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
+            </div>
+            <p className="mt-3 text-white/75 text-sm whitespace-pre-wrap leading-relaxed">
+              {r.body}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 
 function MessagesAdmin({ messages }) {
   const [q, setQ] = useState("");
