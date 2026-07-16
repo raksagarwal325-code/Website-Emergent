@@ -4,8 +4,9 @@ service via REACT_APP_BACKEND_URL so we exercise real routing + cookies.
 """
 
 import os
-import uuid
+import signal
 import subprocess
+import uuid
 import requests
 import pytest
 from dotenv import load_dotenv
@@ -71,25 +72,34 @@ def _post_review(payload):
 
 
 def _reset_reviews_rate_limit():
-    """Best-effort clear the in-memory `reviews` rate-limit bucket so each
-    test starts from zero. Uses the admin debug endpoint."""
+    """Signal the backend worker to clear rate-limit buckets. Used inside
+    tests that loop through many attempts (e.g. rating validation) so the
+    loop itself doesn't exhaust the 3-per-10-min ceiling."""
     try:
-        requests.post(
-            f"{API}/admin/_reset-rate-limit",
-            params={"bucket": "reviews"},
-            cookies=ADMIN_COOKIES,
-            headers=STATE_CHANGE_HEADERS,
-            timeout=10,
-        )
-    except Exception:
+        pid = None
+        try:
+            with open("/tmp/backend_worker.pid") as f:
+                pid = int(f.read().strip())
+        except (OSError, ValueError):
+            out = subprocess.run(
+                ["pgrep", "-f", "uvicorn server:app"], check=False,
+                capture_output=True, text=True,
+            )
+            for line in out.stdout.splitlines():
+                try:
+                    pid = int(line.strip())
+                    break
+                except ValueError:
+                    continue
+        if pid and pid != os.getpid():
+            os.kill(pid, signal.SIGUSR1)
+    except (ProcessLookupError, PermissionError, Exception):
         pass
 
 
-@pytest.fixture(autouse=True)
-def _clear_rate_limit_between_tests():
-    _reset_reviews_rate_limit()
-    yield
-    _reset_reviews_rate_limit()
+# Between-test reset is handled by the global conftest autouse fixture,
+# which also respects the `no_reset` marker to avoid clearing buckets for
+# tests that intentionally exhaust them.
 
 
 # ------------------ 1. New review is pending ------------------
@@ -314,6 +324,7 @@ def test_title_over_100_rejected():
 
 
 # ------------------ 8. Rate limit: 3 per 10 min per IP ------------------
+@pytest.mark.no_reset("reviews")
 def test_review_rate_limit_kicks_in_after_three_submissions():
     prod = _fetch_any_published_product()
     saw_429 = False

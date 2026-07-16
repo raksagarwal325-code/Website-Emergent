@@ -263,6 +263,7 @@ def test_proxy_image_rejects_bad_urls(admin_token, bad_url):
 # --------------------------------------------------------------------------
 
 
+@pytest.mark.no_reset("inquiries")
 def test_inquiries_rate_limited():
     body = {"customer_name": "rate", "customer_email": "r@t.com", "customer_phone": "", "message": "hi", "items": []}
     hits = 0

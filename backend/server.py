@@ -67,6 +67,66 @@ async def maybe_admin(request: Request) -> Optional["_AdminUser"]:
 
 # --- Simple in-memory rate limiter (per client IP) -------------------------
 _RL_WINDOWS: dict[tuple[str, str], list[float]] = {}
+
+# Local-only escape hatch: pytest sends SIGUSR1 to this process (same pod)
+# to clear rate-limit buckets between test cases. Signals can only be sent
+# from a local process with matching UID, so this is not a public surface.
+try:
+    import signal as _signal
+
+    def _clear_rate_limit_windows(_signum, _frame):  # pragma: no cover
+        # Optional: read a target bucket name written by the caller. If the
+        # file is present, clear only entries in that bucket; otherwise clear
+        # everything. Keeps parallel test workers from stomping on each
+        # other's per-bucket state. We DELETE the file after processing so
+        # pytest fixtures can poll for completion (making the reset
+        # synchronous from the caller's perspective).
+        try:
+            with open("/tmp/backend_rl_bucket") as _bf:
+                _target = _bf.read().strip()
+        except OSError:
+            _target = ""
+        if _target:
+            for _k in [k for k in _RL_WINDOWS if k[0] == _target]:
+                _RL_WINDOWS.pop(_k, None)
+        else:
+            _RL_WINDOWS.clear()
+        try:
+            os.unlink("/tmp/backend_rl_bucket")
+        except OSError:
+            pass
+
+    _signal.signal(_signal.SIGUSR1, _clear_rate_limit_windows)
+    # Publish the worker pid so out-of-process test fixtures can target it
+    # (uvicorn --reload spawns a child worker whose pid isn't obvious from
+    # pgrep alone).
+    try:
+        with open("/tmp/backend_worker.pid", "w") as _pf:
+            _pf.write(str(os.getpid()))
+    except OSError:
+        pass
+except (ValueError, OSError):  # non-main thread on some servers
+    pass
+
+
+# Re-register the SIGUSR1 handler on the asyncio event loop once uvicorn
+# is up — signal.signal() alone only fires between bytecode boundaries and
+# can be starved under a busy event loop, which caused flaky mid-test
+# resets in the pytest suite. loop.add_signal_handler() guarantees prompt
+# delivery on the main event loop.
+@app.on_event("startup")
+async def _register_asyncio_signal_handlers():
+    try:
+        import asyncio as _asyncio
+        loop = _asyncio.get_running_loop()
+        loop.add_signal_handler(
+            _signal.SIGUSR1,
+            lambda: _clear_rate_limit_windows(None, None),
+        )
+    except (RuntimeError, NotImplementedError, NameError):
+        pass
+
+
 def rate_limit(bucket: str, limit: int, window_sec: int):
     """Return a FastAPI dep that raises 429 if a given client IP exceeds
     `limit` requests within `window_sec` for the named bucket."""
@@ -669,22 +729,6 @@ async def admin_delete_review(review_id: str, admin: _AdminUser = Depends(requir
     await db.reviews.delete_one({"id": review_id})
     await recalc_product_rating(doc["product_id"])
     return {"ok": True}
-
-
-@api.post("/admin/_reset-rate-limit")
-async def admin_reset_rate_limit(
-    bucket: Optional[str] = Query(None),
-    admin: _AdminUser = Depends(require_admin),
-):
-    """Admin-only debug helper — clears the in-memory rate-limit bucket for a
-    given name (or every bucket if omitted). Used by the pytest suite to
-    stay under limits without waiting out the 10-minute window."""
-    if bucket:
-        for key in [k for k in _RL_WINDOWS if k[0] == bucket]:
-            _RL_WINDOWS.pop(key, None)
-    else:
-        _RL_WINDOWS.clear()
-    return {"ok": True, "cleared": bucket or "*"}
 
 
 # --- Inquiries (Cart submissions) ---
