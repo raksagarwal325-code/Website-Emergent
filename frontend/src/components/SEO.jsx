@@ -1,0 +1,54 @@
+import { useEffect } from "react";
+
+/**
+ * Lightweight per-page meta manager (no external deps).
+ * Sets document.title + updates <meta> tags for description, OpenGraph, and Twitter cards.
+ * Falls back to the site-wide defaults declared in /public/index.html on unmount.
+ */
+const setMeta = (selector, attrName, name, content) => {
+  if (!content) return;
+  let el = document.head.querySelector(`meta[${selector}]`);
+  if (!el) {
+    el = document.createElement("meta");
+    el.setAttribute(attrName, name);
+    document.head.appendChild(el);
+  }
+  el.setAttribute("content", content);
+};
+
+const setCanonical = (href) => {
+  if (!href) return;
+  let el = document.head.querySelector('link[rel="canonical"]');
+  if (!el) {
+    el = document.createElement("link");
+    el.setAttribute("rel", "canonical");
+    document.head.appendChild(el);
+  }
+  el.setAttribute("href", href);
+};
+
+export default function SEO({
+  title,
+  description,
+  image,
+  path,
+  type = "website",
+}) {
+  useEffect(() => {
+    if (title) document.title = title;
+    const url = (typeof window !== "undefined" && window.location.origin) + (path || (typeof window !== "undefined" && window.location.pathname) || "");
+    setCanonical(url);
+    setMeta('name="description"', "name", "description", description);
+    setMeta('property="og:title"', "property", "og:title", title);
+    setMeta('property="og:description"', "property", "og:description", description);
+    setMeta('property="og:image"', "property", "og:image", image);
+    setMeta('property="og:type"', "property", "og:type", type);
+    setMeta('property="og:url"', "property", "og:url", url);
+    setMeta('property="og:site_name"', "property", "og:site_name", "Samrat Glass Emporium");
+    setMeta('name="twitter:card"', "name", "twitter:card", image ? "summary_large_image" : "summary");
+    setMeta('name="twitter:title"', "name", "twitter:title", title);
+    setMeta('name="twitter:description"', "name", "twitter:description", description);
+    setMeta('name="twitter:image"', "name", "twitter:image", image);
+  }, [title, description, image, path, type]);
+  return null;
+}

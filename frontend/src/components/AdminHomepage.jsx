@@ -1,0 +1,1108 @@
+import React, { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { ChevronDown, ChevronUp, Plus, Trash2, Upload, ArrowUp, ArrowDown, Instagram, RefreshCw } from "lucide-react";
+import { api } from "../lib/api";
+import { HOMEPAGE_DEFAULTS, mergeHomepage } from "../lib/homepageDefaults";
+import { useSettings } from "../context/SettingsContext";
+
+const SECTIONS = [
+  { key: "hero", label: "Hero Section" },
+  { key: "trusted_by", label: "Trusted By Strip" },
+  { key: "collage", label: "1000+ Light Options" },
+  { key: "featured", label: "Pieces of the Season" },
+  { key: "google_reviews_fallback", label: "Google Reviews Fallback" },
+  { key: "manual_reviews", label: "Manual Reviews / Testimonials" },
+  { key: "about", label: "About Page" },
+  { key: "craft", label: "The Craft Page" },
+  { key: "craft_video", label: "Craft Video · Instagram Reel" },
+  { key: "gallery", label: "Project Gallery" },
+  { key: "faq", label: "FAQ Page" },
+  { key: "reasons", label: "Reasons Why We Are Better" },
+  { key: "atelier", label: "The Atelier Section" },
+  { key: "influencer_promotions", label: "Influencer Promotions (As Styled By)" },
+  { key: "footer", label: "Footer Content" },
+  { key: "founder_teaser", label: "Meet the Founder Teaser (Home)" },
+];
+
+// Reusable inputs -----
+const Text = ({ label, value, onChange, "data-testid": tid, normalize, ...rest }) => (
+  <label className="block">
+    <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+    <input value={value ?? ""} onChange={(e) => onChange(e.target.value)}
+      onBlur={normalize ? (e) => { const v = normalize(e.target.value); if (v !== e.target.value) onChange(v); } : undefined}
+      data-testid={tid} {...rest}
+      className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-sm text-white" />
+  </label>
+);
+
+const TextArea = ({ label, value, onChange, rows = 4, "data-testid": tid, normalize }) => (
+  <label className="block">
+    <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+    <textarea value={value ?? ""} onChange={(e) => onChange(e.target.value)}
+      onBlur={normalize ? (e) => { const v = normalize(e.target.value); if (v !== e.target.value) onChange(v); } : undefined}
+      rows={rows} data-testid={tid}
+      className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-sm text-white resize-none" />
+  </label>
+);
+
+const ProductPicker = ({ label, value, onChange, "data-testid": tid }) => {
+  const [products, setProducts] = useState([]);
+  const [q, setQ] = useState("");
+  const selected = Array.isArray(value) ? value : [];
+  useEffect(() => { api.listAllProducts().then(setProducts).catch(() => {}); }, []);
+  const filtered = products.filter((p) => {
+    if (!q.trim()) return true;
+    const needle = q.toLowerCase();
+    return `${p.name} ${p.sku} ${p.category}`.toLowerCase().includes(needle);
+  });
+  const toggle = (id) => onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  return (
+    <div data-testid={tid}>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search products by name, SKU, category…"
+        className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-xs mb-2"
+      />
+      <div className="max-h-52 overflow-y-auto border border-white/10 divide-y divide-white/5 bg-[#0a0510]">
+        {filtered.length === 0 && <div className="text-white/40 text-xs px-3 py-3">No products match.</div>}
+        {filtered.map((p) => {
+          const on = selected.includes(p.id);
+          return (
+            <button key={p.id} type="button" onClick={() => toggle(p.id)} data-testid={`${tid}-opt-${p.id}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${on ? "bg-[#D4AF37]/10" : "hover:bg-white/[0.02]"}`}>
+              <span className={`w-3.5 h-3.5 border ${on ? "bg-[#D4AF37] border-[#D4AF37]" : "border-white/25"} flex-shrink-0 flex items-center justify-center text-black text-[8px]`}>{on ? "✓" : ""}</span>
+              <span className="flex-1 min-w-0">
+                <span className="text-sm text-white truncate block">{p.name}</span>
+                <span className="text-[10px] uppercase tracking-widest text-white/40">{p.category} · {p.sku}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {selected.length > 0 && <div className="mt-1 text-[10px] uppercase tracking-widest text-[#D4AF37]">{selected.length} linked</div>}
+    </div>
+  );
+};
+
+const SingleProductPicker = ({ label, value, onChange, "data-testid": tid }) => {
+  const [products, setProducts] = useState([]);
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  useEffect(() => { api.listAllProducts().then(setProducts).catch(() => {}); }, []);
+  const selected = products.find((p) => p.id === value);
+  const filtered = products.filter((p) => {
+    if (!q.trim()) return true;
+    const needle = q.toLowerCase();
+    return `${p.name} ${p.sku} ${p.category}`.toLowerCase().includes(needle);
+  });
+  return (
+    <div data-testid={tid}>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+      {selected ? (
+        <div className="flex items-center gap-2 border border-[#D4AF37]/40 bg-black/30 px-3 py-2">
+          <span className="flex-1 min-w-0">
+            <span className="text-sm text-[#D4AF37] truncate block">{selected.name}</span>
+            <span className="text-[10px] uppercase tracking-widest text-white/40">{selected.category} · {selected.sku}</span>
+          </span>
+          <button type="button" onClick={() => { onChange(""); setOpen(true); }} className="text-[10px] uppercase tracking-widest text-white/50 hover:text-red-400">
+            Change
+          </button>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setOpen((v) => !v)}
+          className="w-full text-left border border-dashed border-white/20 hover:border-[#D4AF37]/60 text-white/50 text-xs px-3 py-2">
+          {open ? "Search below…" : "Link a product from catalog"}
+        </button>
+      )}
+      {(!selected || open) && (
+        <div className="mt-2">
+          <input value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Search products by name, SKU, category…"
+            className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-xs mb-2" />
+          <div className="max-h-52 overflow-y-auto border border-white/10 divide-y divide-white/5 bg-[#0a0510]">
+            {filtered.length === 0 && <div className="text-white/40 text-xs px-3 py-3">No products match.</div>}
+            {filtered.map((p) => (
+              <button key={p.id} type="button" onClick={() => { onChange(p.id); setOpen(false); setQ(""); }}
+                data-testid={`${tid}-opt-${p.id}`}
+                className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${p.id === value ? "bg-[#D4AF37]/10" : "hover:bg-white/[0.02]"}`}>
+                <span className="flex-1 min-w-0">
+                  <span className="text-sm text-white truncate block">{p.name}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-white/40">{p.category} · {p.sku}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const MultiImagePicker = ({ label, value, onChange, "data-testid": tid }) => {
+  const [busy, setBusy] = useState(false);
+  const list = Array.isArray(value) ? value : [];
+  const upload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      const { url } = await api.upload(file);
+      onChange([...list, url]);
+      toast.success("Uploaded");
+    } catch (e) { toast.error(e?.response?.data?.detail || e?.message || "Upload failed"); }
+    finally { setBusy(false); e.target.value = ""; }
+  };
+  const removeAt = (i) => onChange(list.filter((_, j) => j !== i));
+  const moveLeft = (i) => {
+    if (i <= 0) return;
+    const next = [...list]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; onChange(next);
+  };
+  return (
+    <div data-testid={tid}>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+      <div className="flex flex-wrap gap-2">
+        {list.map((u, i) => (
+          <div key={i} className="relative w-20 h-20 border border-white/10 bg-black group">
+            <img src={api.resolveImage(u)} alt="" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-black/60 flex items-center justify-center gap-1 transition-opacity">
+              {i > 0 && (
+                <button type="button" onClick={() => moveLeft(i)} className="text-white/80 text-[9px] uppercase tracking-widest">←</button>
+              )}
+              <button type="button" onClick={() => removeAt(i)} className="text-red-300 text-[9px] uppercase tracking-widest">×</button>
+            </div>
+            {i === 0 && <span className="absolute top-0 left-0 text-[8px] uppercase tracking-widest bg-[#D4AF37] text-black px-1">Cover</span>}
+          </div>
+        ))}
+        <label className="w-20 h-20 border border-dashed border-white/20 hover:border-[#D4AF37] text-white/60 hover:text-[#D4AF37] flex flex-col items-center justify-center gap-1 cursor-pointer text-[9px] uppercase tracking-widest">
+          <Upload size={13} />
+          {busy ? "…" : "Add"}
+          <input type="file" accept="image/*" onChange={upload} className="hidden" />
+        </label>
+      </div>
+    </div>
+  );
+};
+
+const ImagePicker = ({ label, value, onChange, "data-testid": tid }) => {
+  const [busy, setBusy] = useState(false);
+  const upload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      const { url } = await api.upload(file);
+      onChange(url);
+      toast.success("Uploaded");
+    } catch { toast.error("Upload failed"); }
+    finally { setBusy(false); e.target.value = ""; }
+  };
+  return (
+    <div>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+      <div className="flex gap-2 items-start">
+        {value && (
+          <div className="relative w-16 h-16 border border-white/10 bg-black flex-shrink-0">
+            <img src={api.resolveImage(value)} alt="" className="w-full h-full object-contain" />
+          </div>
+        )}
+        <div className="flex-1 space-y-2">
+          <input value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder="/path or https://..." data-testid={tid}
+            className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-xs text-white" />
+          <div className="flex gap-2">
+            <label className="inline-flex items-center gap-1 border border-white/15 hover:border-[#D4AF37] px-3 py-1.5 text-[10px] uppercase tracking-widest cursor-pointer">
+              <Upload size={11} /> {busy ? "Uploading…" : "Upload"}
+              <input type="file" accept="image/*" onChange={upload} className="hidden" />
+            </label>
+            {value && (
+              <button type="button" onClick={() => onChange("")} className="border border-white/15 hover:border-red-500 hover:text-red-400 px-3 py-1.5 text-[10px] uppercase tracking-widest text-white/60">Clear</button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// List editor for arrays of objects (used for stats, reasons, atelier images, quick_links, hero trust) -----
+const VideoPicker = ({ label, value, onChange, "data-testid": tid }) => {
+  const [busy, setBusy] = useState(false);
+  const upload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      const { url } = await api.upload(file);
+      onChange(url);
+      toast.success("Video uploaded");
+    } catch (err) {
+      toast.error(err?.message || err?.response?.data?.detail || "Upload failed");
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
+  };
+  return (
+    <div>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+      <div className="flex gap-2 items-start">
+        {value && (
+          <div className="relative w-20 h-28 border border-white/10 bg-black flex-shrink-0 overflow-hidden">
+            <video src={api.resolveImage(value)} className="w-full h-full object-cover" muted playsInline preload="metadata" />
+          </div>
+        )}
+        <div className="flex-1 space-y-2 min-w-0">
+          <input value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder="/path or https://... (mp4)"
+            data-testid={tid}
+            className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-xs text-white" />
+          <div className="flex gap-2 flex-wrap">
+            <label className="inline-flex items-center gap-1 border border-white/15 hover:border-[#D4AF37] px-3 py-1.5 text-[10px] uppercase tracking-widest cursor-pointer">
+              <Upload size={11} /> {busy ? "Uploading…" : "Upload video"}
+              <input type="file" accept="video/*" onChange={upload} className="hidden" />
+            </label>
+            {value && (
+              <button type="button" onClick={() => onChange("")} className="border border-white/15 hover:border-red-500 hover:text-red-400 px-3 py-1.5 text-[10px] uppercase tracking-widest text-white/60">Clear</button>
+            )}
+          </div>
+          <p className="text-[10px] text-white/40">Max 100MB · MP4 recommended for widest browser support.</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Normalizers for the Influencer Promotions editor ---------------------
+// Strip Instagram's tracking params (?utm_source=, &igsh=, &igshid=…) and
+// normalize to a clean permalink like https://www.instagram.com/reel/XYZ/
+const normalizeIgUrlInput = (raw) => {
+  const t = (raw || "").trim();
+  if (!t) return t;
+  // Only touch strings that look like an IG URL — otherwise leave as-is so
+  // pasted embed codes (starting with "<") aren't destroyed.
+  if (!/instagram\.com/i.test(t)) return t;
+  try {
+    const u = new URL(t);
+    if (!u.hostname.toLowerCase().endsWith("instagram.com")) return t;
+    const path = u.pathname.endsWith("/") ? u.pathname : `${u.pathname}/`;
+    return `${u.protocol}//${u.hostname}${path}`;
+  } catch {
+    return t;
+  }
+};
+
+// Convert either a bare handle, a full profile URL, or "@handle" input into
+// the canonical "@handle" form the card expects.
+const normalizeIgHandle = (raw) => {
+  let s = (raw || "").trim();
+  if (!s) return s;
+  // Strip surrounding quotes if user pasted from spreadsheet
+  s = s.replace(/^["']|["']$/g, "");
+  // Full profile URL → username
+  s = s.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "");
+  s = s.replace(/^\/+/, "");
+  s = s.replace(/\/.*$/, ""); // drop trailing path
+  s = s.replace(/[?#].*$/, ""); // drop query / fragment
+  s = s.replace(/^@+/, "");
+  if (!s) return "";
+  return `@${s}`;
+};
+
+// Instagram cover picker — combines manual upload with an "Auto-pull from
+// Instagram" backend call. Falls back gracefully when IG blocks the scrape.
+const InstagramCoverPicker = ({ label, value, onChange, sourceUrl, "data-testid": tid }) => {
+  const [busy, setBusy] = useState(false);
+  const [action, setAction] = useState(null); // "pull" | "upload"
+  const [status, setStatus] = useState(null); // { kind, message }
+
+  const pull = async () => {
+    const url = (sourceUrl || "").trim();
+    if (!url) {
+      setStatus({ kind: "error", message: "Please paste the Instagram Reel/Post URL in the field above first." });
+      return;
+    }
+    setBusy(true);
+    setAction("pull");
+    setStatus(null);
+    try {
+      const res = await api.pullInstagramCover(url);
+      if (res?.success && res?.url) {
+        onChange(res.url);
+        setStatus({ kind: "success", message: "Cover pulled successfully." });
+        toast.success("Cover pulled from Instagram");
+      } else {
+        const msg = res?.message || "Could not pull cover. Please upload manually.";
+        setStatus({ kind: "error", message: msg });
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e?.message || "Could not pull cover. Please upload manually.";
+      setStatus({ kind: "error", message: msg });
+    } finally {
+      setBusy(false);
+      setAction(null);
+    }
+  };
+
+  const upload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setAction("upload");
+    try {
+      const { url } = await api.upload(file);
+      onChange(url);
+      toast.success("Uploaded");
+      setStatus(null);
+    } catch (err) {
+      toast.error(err?.message || "Upload failed");
+    } finally {
+      setBusy(false);
+      setAction(null);
+      e.target.value = "";
+    }
+  };
+
+  const hasCover = !!value;
+  return (
+    <div>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
+      <div className="flex gap-2 items-start">
+        {value && (
+          <div className="relative w-16 h-20 border border-[#D4AF37]/30 bg-black flex-shrink-0 overflow-hidden">
+            <img src={api.resolveImage(value)} alt="" className="w-full h-full object-cover" />
+          </div>
+        )}
+        <div className="flex-1 space-y-2 min-w-0">
+          <input
+            value={value || ""}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="/path or https://... (auto-filled after pulling from Instagram)"
+            data-testid={tid}
+            className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-xs text-white"
+          />
+          <div className="flex gap-2 flex-wrap">
+            <label className="inline-flex items-center gap-1.5 border border-white/15 hover:border-[#D4AF37] px-3 py-1.5 text-[10px] uppercase tracking-widest cursor-pointer">
+              <Upload size={11} /> {busy && action === "upload" ? "Uploading…" : "Upload manually"}
+              <input type="file" accept="image/*" onChange={upload} className="hidden" disabled={busy} />
+            </label>
+            <button
+              type="button"
+              onClick={pull}
+              disabled={busy}
+              data-testid={`${tid}-pull-btn`}
+              className="inline-flex items-center gap-1.5 border border-[#D4AF37]/50 hover:border-[#D4AF37] hover:bg-[#D4AF37]/10 text-[#D4AF37] px-3 py-1.5 text-[10px] uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {hasCover ? <RefreshCw size={11} /> : <Instagram size={11} />}
+              {busy && action === "pull"
+                ? "Pulling…"
+                : hasCover
+                ? "Refresh cover from Instagram"
+                : "Auto-pull cover from Instagram"}
+            </button>
+            {value && (
+              <button
+                type="button"
+                onClick={() => { onChange(""); setStatus(null); }}
+                className="border border-white/15 hover:border-red-500 hover:text-red-400 px-3 py-1.5 text-[10px] uppercase tracking-widest text-white/60"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {status ? (
+            <div
+              data-testid={`${tid}-status`}
+              className={
+                status.kind === "success"
+                  ? "text-[11px] text-emerald-400"
+                  : status.kind === "info"
+                  ? "text-[11px] text-[#BF9972]"
+                  : "text-[11px] text-red-400"
+              }
+            >
+              {status.message}
+            </div>
+          ) : (
+            <p className="text-[10px] text-white/35 leading-relaxed">
+              Instagram may not provide covers automatically for all public reels/posts.
+              If auto-pull fails, upload a 9:16 screenshot manually. The saved cover is
+              cached on our server so Instagram is never called on public page loads.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+function ListEditor({ items, onChange, fields, defaultItem, testId }) {
+  const update = (i, patch) => onChange(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
+  const remove = (i) => onChange(items.filter((_, j) => j !== i));
+  const add = () => onChange([...(items || []), defaultItem]);
+  return (
+    <div className="space-y-3">
+      {(items || []).map((it, i) => (
+        <div key={i} className="border border-white/10 p-3 space-y-2 relative" data-testid={`${testId}-${i}`}>
+          <button type="button" onClick={() => remove(i)} className="absolute top-2 right-2 text-white/40 hover:text-red-400" aria-label="Remove"><Trash2 size={12} /></button>
+          {fields.map((f) => (
+            f.type === "image" ? (
+              <ImagePicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
+            ) : f.type === "gallery" ? (
+              <MultiImagePicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
+            ) : f.type === "productPicker" ? (
+              <ProductPicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
+            ) : f.type === "singleProduct" ? (
+              <SingleProductPicker key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} data-testid={`${testId}-${i}-${f.name}`} />
+            ) : f.type === "igCover" ? (
+              <InstagramCoverPicker
+                key={f.name}
+                label={f.label}
+                value={it[f.name]}
+                onChange={(v) => update(i, { [f.name]: v })}
+                sourceUrl={it[f.sourceField || "input"]}
+                data-testid={`${testId}-${i}-${f.name}`}
+              />
+            ) : f.type === "textarea" ? (
+              <TextArea key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} normalize={f.normalize} data-testid={`${testId}-${i}-${f.name}`} />
+            ) : (
+              <Text key={f.name} label={f.label} value={it[f.name]} onChange={(v) => update(i, { [f.name]: v })} normalize={f.normalize} data-testid={`${testId}-${i}-${f.name}`}
+                type={f.type || "text"} min={f.min} max={f.max} />
+            )
+          ))}
+        </div>
+      ))}
+      <button type="button" onClick={add} className="inline-flex items-center gap-1 border border-[#D4AF37]/40 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/80 px-3 py-2 text-[10px] uppercase tracking-widest">
+        <Plus size={11} /> Add
+      </button>
+    </div>
+  );
+}
+
+// Section renderers -----
+function SectionEditor({ sectionKey, data, patch }) {
+  const set = (k, v) => patch({ ...data, [k]: v });
+  switch (sectionKey) {
+    case "hero":
+      return (
+        <div className="space-y-4">
+          <Text label="Small label (eyebrow)" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-hero-eyebrow" />
+          <Text label="Main headline (line 1)" value={data.headline_line1} onChange={(v)=>set("headline_line1",v)} data-testid="hp-hero-h1" />
+          <Text label="Highlight (line 2, italic gradient)" value={data.headline_line2} onChange={(v)=>set("headline_line2",v)} data-testid="hp-hero-h2" />
+          <TextArea label="Description" value={data.description} onChange={(v)=>set("description",v)} data-testid="hp-hero-desc" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Primary CTA text" value={data.primary_cta_text} onChange={(v)=>set("primary_cta_text",v)} data-testid="hp-hero-cta1" />
+            <Text label="Primary CTA link" value={data.primary_cta_link} onChange={(v)=>set("primary_cta_link",v)} data-testid="hp-hero-cta1-link" />
+            <Text label="Secondary CTA text" value={data.secondary_cta_text} onChange={(v)=>set("secondary_cta_text",v)} data-testid="hp-hero-cta2" />
+            <Text label="Secondary CTA link (blank = WhatsApp)" value={data.secondary_cta_link} onChange={(v)=>set("secondary_cta_link",v)} data-testid="hp-hero-cta2-link" />
+          </div>
+          <div>
+            <div className="eyebrow mb-2 mt-2">Trust points</div>
+            <ListEditor items={data.trust || []} onChange={(v)=>set("trust",v)} defaultItem={{value:"",label:""}}
+              fields={[{name:"value",label:"Value"},{name:"label",label:"Label"}]} testId="hp-hero-trust" />
+          </div>
+        </div>
+      );
+    case "trusted_by":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">This strip sits directly below the hero. It stays completely hidden on the site until you add at least one client/venue below.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Eyebrow label" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-trusted-eyebrow" />
+            <Text label="Tagline (italic, optional)" value={data.tagline} onChange={(v)=>set("tagline",v)} data-testid="hp-trusted-tagline" />
+          </div>
+          <div>
+            <div className="eyebrow mb-2 mt-2">Clients &amp; venues</div>
+            <ListEditor items={data.items || []} onChange={(v)=>set("items",v)} defaultItem={{name:"",logo:""}}
+              fields={[{name:"name",label:"Client / venue name"},{name:"logo",label:"Logo (optional, transparent PNG best)",type:"image"}]} testId="hp-trusted-item" />
+          </div>
+        </div>
+      );
+    case "collage":
+      return (
+        <div className="space-y-4">
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} />
+          <Text label="Title (gradient)" value={data.title} onChange={(v)=>set("title",v)} />
+          <Text label="Highlight (white, appears on next line)" value={data.highlight} onChange={(v)=>set("highlight",v)} />
+          <Text label="Subtitle (italic terracotta)" value={data.subtitle} onChange={(v)=>set("subtitle",v)} />
+          <TextArea label="Description" value={data.description} onChange={(v)=>set("description",v)} />
+          <div>
+            <div className="eyebrow mb-2 mt-2">Stat cards (4 recommended)</div>
+            <ListEditor items={data.stats || []} onChange={(v)=>set("stats",v)} defaultItem={{value:"",label:""}}
+              fields={[{name:"value",label:"Value"},{name:"label",label:"Label"}]} testId="hp-collage-stat" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Primary CTA text" value={data.primary_cta_text} onChange={(v)=>set("primary_cta_text",v)} />
+            <Text label="Primary CTA link" value={data.primary_cta_link} onChange={(v)=>set("primary_cta_link",v)} />
+            <Text label="Secondary CTA text" value={data.secondary_cta_text} onChange={(v)=>set("secondary_cta_text",v)} />
+            <Text label="Secondary CTA link (blank = WhatsApp)" value={data.secondary_cta_link} onChange={(v)=>set("secondary_cta_link",v)} />
+          </div>
+        </div>
+      );
+    case "featured":
+      return (
+        <div className="space-y-4">
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} />
+          <Text label="Section title" value={data.title} onChange={(v)=>set("title",v)} />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="View-all text" value={data.view_all_text} onChange={(v)=>set("view_all_text",v)} />
+            <Text label="View-all link" value={data.view_all_link} onChange={(v)=>set("view_all_link",v)} />
+          </div>
+          <Text label="Max cards to show" type="number" value={data.limit} onChange={(v)=>set("limit", parseInt(v)||8)} />
+          <p className="text-[11px] text-white/40">Which products appear is controlled by the &quot;Featured&quot; toggle on each product (Admin → Products → Edit).</p>
+        </div>
+      );
+    case "google_reviews_fallback":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">These only render if the live Places API is not configured. Once Place ID + API key are set in Settings, live reviews replace these.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Fallback rating (e.g. 4.8)" value={data.fallback_rating} onChange={(v)=>set("fallback_rating",v)} />
+            <Text label="Fallback review count" value={data.fallback_total} onChange={(v)=>set("fallback_total",v)} />
+          </div>
+          <Text label="Write-review URL override (optional)" value={data.write_review_override} onChange={(v)=>set("write_review_override",v)} />
+        </div>
+      );
+    case "manual_reviews":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">
+            Add hand-picked customer testimonials here. They appear in the same slider on the homepage alongside live Google reviews (your curated ones show first). Great for reviews you received on WhatsApp, email, or before Google reviews existed.
+          </p>
+          <div>
+            <div className="eyebrow mb-2 mt-2">Testimonials</div>
+            <ListEditor
+              items={data.items || []}
+              onChange={(v)=>set("items",v)}
+              defaultItem={{author_name:"", rating:5, text:"", relative_time_description:""}}
+              testId="hp-manual-review"
+              fields={[
+                {name:"author_name", label:"Customer name"},
+                {name:"rating", label:"Rating (1–5)", type:"number", min:1, max:5},
+                {name:"relative_time_description", label:"When (e.g. Last week, 2 months ago) — optional"},
+                {name:"text", label:"Review text", type:"textarea"},
+              ]}
+            />
+          </div>
+        </div>
+      );
+    case "about": {
+      const founder = data.founder || {};
+      const setFounder = (k, v) => set("founder", { ...founder, [k]: v });
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">Controls the <span className="text-white/70">/about</span> page — hero, story, founder callout, stats and the closing CTA.</p>
+
+          <div className="eyebrow mb-1 mt-4">Hero</div>
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-about-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Title (white part)" value={data.title_pre} onChange={(v)=>set("title_pre",v)} data-testid="hp-about-title-pre" />
+            <Text label="Title (gold gradient part)" value={data.title_highlight} onChange={(v)=>set("title_highlight",v)} data-testid="hp-about-title-highlight" />
+          </div>
+          <TextArea label="Tagline (italic, copper)" value={data.tagline} onChange={(v)=>set("tagline",v)} rows={2} data-testid="hp-about-tagline" />
+
+          <div className="eyebrow mb-1 mt-6">Story paragraphs</div>
+          <ListEditor items={data.story_paragraphs || []} onChange={(v)=>set("story_paragraphs",v)}
+            defaultItem={{text:""}}
+            fields={[{name:"text", label:"Paragraph", type:"textarea"}]}
+            testId="hp-about-para" />
+
+          <div className="eyebrow mb-1 mt-6">Founder callout</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Eyebrow" value={founder.eyebrow} onChange={(v)=>setFounder("eyebrow",v)} data-testid="hp-about-founder-eyebrow" />
+            <Text label="Circle initial (1 letter)" value={founder.initial} onChange={(v)=>setFounder("initial",(v||"").slice(0,1))} data-testid="hp-about-founder-initial" />
+          </div>
+          <Text label="Founder name" value={founder.name} onChange={(v)=>setFounder("name",v)} data-testid="hp-about-founder-name" />
+          <ImagePicker label="Founder photo (shown instead of the initial circle if set)" value={founder.image} onChange={(v)=>setFounder("image",v)} data-testid="hp-about-founder-image" />
+          <TextArea label="Founder description" value={founder.description} onChange={(v)=>setFounder("description",v)} rows={4} data-testid="hp-about-founder-desc" />
+          <TextArea label="Founder quote (shown as an italic pull-quote below the photo — leave blank to hide)" value={founder.quote} onChange={(v)=>setFounder("quote",v)} rows={3} data-testid="hp-about-founder-quote" />
+          <Text label="Signature line (e.g. — Mr. Sunil Kumar Agarwal · Founder, Since 1981)" value={founder.signature} onChange={(v)=>setFounder("signature",v)} data-testid="hp-about-founder-signature" />
+
+          <div className="eyebrow mb-1 mt-6">Stats (4 tiles)</div>
+          <ListEditor items={data.stats || []} onChange={(v)=>set("stats",v)}
+            defaultItem={{value:"", label:""}}
+            fields={[{name:"value", label:"Value"}, {name:"label", label:"Label"}]}
+            testId="hp-about-stat" />
+
+          <div className="eyebrow mb-1 mt-6">Closing CTA</div>
+          <Text label="Heading" value={data.cta_heading} onChange={(v)=>set("cta_heading",v)} data-testid="hp-about-cta-heading" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Primary CTA text" value={data.cta_primary_text} onChange={(v)=>set("cta_primary_text",v)} data-testid="hp-about-cta1" />
+            <Text label="Primary CTA link" value={data.cta_primary_link} onChange={(v)=>set("cta_primary_link",v)} data-testid="hp-about-cta1-link" />
+            <Text label="Secondary CTA text" value={data.cta_secondary_text} onChange={(v)=>set("cta_secondary_text",v)} data-testid="hp-about-cta2" />
+            <Text label="Secondary CTA link" value={data.cta_secondary_link} onChange={(v)=>set("cta_secondary_link",v)} data-testid="hp-about-cta2-link" />
+          </div>
+        </div>
+      );
+    }
+    case "craft":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">Controls the <span className="text-white/70">/craft</span> page — hero, the 5 process steps, closing quote, and CTAs. Icons for each step stay fixed (Design · Flame · Scissors · Wrench · Award) mapped by position.</p>
+
+          <div className="eyebrow mb-1 mt-4">Hero</div>
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-craft-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Headline (white)" value={data.headline_pre} onChange={(v)=>set("headline_pre",v)} data-testid="hp-craft-h1" />
+            <Text label="Headline (gold italic)" value={data.headline_highlight} onChange={(v)=>set("headline_highlight",v)} data-testid="hp-craft-h2" />
+          </div>
+          <TextArea label="Intro paragraph" value={data.intro} onChange={(v)=>set("intro",v)} rows={3} data-testid="hp-craft-intro" />
+
+          <div className="eyebrow mb-1 mt-6">Process steps (add / remove / reorder)</div>
+          <ListEditor items={data.items || []} onChange={(v)=>set("items",v)}
+            defaultItem={{num:"", kicker:"", title:"", body:"", visual:""}}
+            fields={[
+              {name:"num", label:"Number label (e.g. 01)"},
+              {name:"kicker", label:"Kicker caption (small caps)"},
+              {name:"title", label:"Step title"},
+              {name:"body", label:"Description", type:"textarea"},
+              {name:"visual", label:"Step visual (still frame or photo — 1:1 works best)", type:"image"},
+            ]}
+            testId="hp-craft-item" />
+
+          <div className="eyebrow mb-1 mt-6">Closing quote</div>
+          <Text label="Eyebrow above the quote" value={data.closer_eyebrow} onChange={(v)=>set("closer_eyebrow",v)} data-testid="hp-craft-closer-eyebrow" />
+          <TextArea label="Founder quote" value={data.founder_quote} onChange={(v)=>set("founder_quote",v)} rows={3} data-testid="hp-craft-quote" />
+          <Text label="Founder credit (e.g. — Mr. Sunil Kumar Agarwal, Founder)" value={data.founder_credit} onChange={(v)=>set("founder_credit",v)} data-testid="hp-craft-credit" />
+
+          <div className="eyebrow mb-1 mt-6">Closing CTA</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Primary CTA text" value={data.cta_primary_text} onChange={(v)=>set("cta_primary_text",v)} data-testid="hp-craft-cta1" />
+            <Text label="Primary CTA link" value={data.cta_primary_link} onChange={(v)=>set("cta_primary_link",v)} data-testid="hp-craft-cta1-link" />
+            <Text label="Secondary CTA text" value={data.cta_secondary_text} onChange={(v)=>set("cta_secondary_text",v)} data-testid="hp-craft-cta2" />
+            <Text label="Secondary CTA link" value={data.cta_secondary_link} onChange={(v)=>set("cta_secondary_link",v)} data-testid="hp-craft-cta2-link" />
+          </div>
+        </div>
+      );
+    case "gallery":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">Controls the <span className="text-white/70">/gallery</span> page — real client installations (homes, hotels, weddings). Leaving items empty hides project cards and shows a &ldquo;coming soon&rdquo; message.</p>
+
+          <div className="eyebrow mb-1 mt-4">Header</div>
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-gallery-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Title (white)" value={data.title_pre} onChange={(v)=>set("title_pre",v)} data-testid="hp-gallery-title-pre" />
+            <Text label="Title (gold italic)" value={data.title_highlight} onChange={(v)=>set("title_highlight",v)} data-testid="hp-gallery-title-highlight" />
+          </div>
+          <TextArea label="Tagline" value={data.tagline} onChange={(v)=>set("tagline",v)} rows={2} data-testid="hp-gallery-tagline" />
+
+          <div className="eyebrow mb-1 mt-6">Projects</div>
+          <ListEditor items={data.items || []} onChange={(v)=>set("items",v)}
+            defaultItem={{title:"", location:"", note:"", images:[], products:[]}}
+            fields={[
+              {name:"title", label:"Project title (e.g. Wedding Banquet · The Leela Palace)"},
+              {name:"location", label:"Location (e.g. Jaipur, Rajasthan)"},
+              {name:"note", label:"Short story about the project", type:"textarea"},
+              {name:"images", label:"Project images (first is the cover; up to 4 more show as thumbnails)", type:"gallery"},
+              {name:"products", label:"Featured products from the catalog (visitors can inquire directly)", type:"productPicker"},
+            ]}
+            testId="hp-gallery-item" />
+
+          <div className="eyebrow mb-1 mt-8">Homepage carousel</div>
+          <p className="text-[11px] text-white/40">Controls the &ldquo;Our Work in the Wild&rdquo; section on the <span className="text-white/70">Home</span> page. Hidden entirely when no projects have content.</p>
+
+          <label className="flex items-center gap-3 text-sm text-white/85 mt-2">
+            <input
+              type="checkbox"
+              checked={data.home_randomize !== false}
+              onChange={(e)=>set("home_randomize", e.target.checked)}
+              data-testid="hp-gallery-randomize"
+            />
+            Randomize project order on every page load
+          </label>
+          <label className="flex items-center gap-3 text-sm text-white/85">
+            <input
+              type="checkbox"
+              checked={data.home_autoplay !== false}
+              onChange={(e)=>set("home_autoplay", e.target.checked)}
+              data-testid="hp-gallery-autoplay"
+            />
+            Auto-slide the carousel every 4.5 seconds (pauses on hover)
+          </label>
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-[0.22em] text-white/50 mb-1">Projects per slide (desktop)</label>
+            <select
+              data-testid="hp-gallery-per-view"
+              value={String(data.home_per_view || 3)}
+              onChange={(e)=>set("home_per_view", parseInt(e.target.value))}
+              className="bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm"
+            >
+              <option value="3">3 (single row)</option>
+              <option value="6">6 (two rows)</option>
+              <option value="9">9 (three rows)</option>
+            </select>
+            <p className="text-[11px] text-white/40 mt-1">Mobile always shows 1 project at a time with swipe.</p>
+          </div>
+
+          <FeaturedGalleryPicker items={data.items || []} selectedIndices={data.home_featured_indices || []}
+            onChange={(v)=>set("home_featured_indices", v)} randomize={data.home_randomize !== false} />
+        </div>
+      );
+    case "faq":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">Controls the <span className="text-white/70">/faq</span> page. Add / remove / reorder questions freely — the page auto-hides sections that are empty.</p>
+
+          <div className="eyebrow mb-1 mt-4">Header</div>
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-faq-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Title (white)" value={data.title_pre} onChange={(v)=>set("title_pre",v)} data-testid="hp-faq-title-pre" />
+            <Text label="Title (gold italic)" value={data.title_highlight} onChange={(v)=>set("title_highlight",v)} data-testid="hp-faq-title-highlight" />
+          </div>
+          <TextArea label="Tagline (italic, under the title)" value={data.tagline} onChange={(v)=>set("tagline",v)} rows={2} data-testid="hp-faq-tagline" />
+
+          <div className="eyebrow mb-1 mt-6">Questions &amp; answers</div>
+          <ListEditor items={data.items || []} onChange={(v)=>set("items",v)}
+            defaultItem={{q:"", a:""}}
+            fields={[
+              {name:"q", label:"Question"},
+              {name:"a", label:"Answer", type:"textarea"},
+            ]}
+            testId="hp-faq-item" />
+        </div>
+      );
+    case "reasons":
+      return (
+        <div className="space-y-4">
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} />
+          <Text label="Section heading" value={data.heading} onChange={(v)=>set("heading",v)} />
+          <div>
+            <div className="eyebrow mb-2 mt-2">Reason cards</div>
+            <ListEditor items={data.items || []} onChange={(v)=>set("items",v)} defaultItem={{title:"",body:""}}
+              fields={[{name:"title",label:"Title"},{name:"body",label:"Description",type:"textarea"}]} testId="hp-reason" />
+          </div>
+        </div>
+      );
+    case "atelier":
+      return (
+        <div className="space-y-4">
+          <Text label="Small label (eyebrow)" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-atelier-eyebrow" />
+          <Text label="Headline" value={data.headline} onChange={(v)=>set("headline",v)} data-testid="hp-atelier-headline" />
+          <TextArea label="Paragraph" value={data.paragraph} onChange={(v)=>set("paragraph",v)} rows={6} data-testid="hp-atelier-paragraph" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="CTA text" value={data.cta_text} onChange={(v)=>set("cta_text",v)} data-testid="hp-atelier-cta" />
+            <Text label="CTA link" value={data.cta_link} onChange={(v)=>set("cta_link",v)} data-testid="hp-atelier-cta-link" />
+          </div>
+          <div>
+            <div className="eyebrow mb-2 mt-2">Showcase images (auto cross-fade every 6s)</div>
+            <ListEditor items={data.images || []} onChange={(v)=>set("images",v)} defaultItem={{src:"",caption:"",product_id:""}}
+              fields={[
+                {name:"src",label:"Image (falls back to the linked product's main image if left empty)",type:"image"},
+                {name:"caption",label:"Caption (blank = product name is used)"},
+                {name:"product_id",label:"Linked product (buttons on Home page will open this product)",type:"singleProduct"},
+              ]} testId="hp-atelier-img" />
+          </div>
+        </div>
+      );
+    case "craft_video":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">
+            Controls the &ldquo;Watch Our Craft in Motion&rdquo; section on <span className="text-white/70">/craft</span>,
+            the muted autoplay background on the Craft hero, and the small behind-the-scenes block on <span className="text-white/70">/about</span>.
+            Uploaded videos always take priority over Instagram Reels for reliability.
+          </p>
+
+          <label className="flex items-center gap-3 text-sm text-white/85 mt-2">
+            <input type="checkbox" checked={data.enabled !== false} onChange={(e)=>set("enabled", e.target.checked)} data-testid="hp-craftvideo-enabled" />
+            Show &ldquo;Watch Our Craft in Motion&rdquo; on the Craft page
+          </label>
+
+          <div className="eyebrow mb-1 mt-4">Section header</div>
+          <Text label="Eyebrow (small label)" value={data.section_eyebrow} onChange={(v)=>set("section_eyebrow",v)} data-testid="hp-craftvideo-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Title (white)" value={data.section_title_pre} onChange={(v)=>set("section_title_pre",v)} data-testid="hp-craftvideo-title-pre" />
+            <Text label="Title (gold italic)" value={data.section_title_highlight} onChange={(v)=>set("section_title_highlight",v)} data-testid="hp-craftvideo-title-highlight" />
+          </div>
+          <TextArea label="Caption below the video" value={data.caption} onChange={(v)=>set("caption",v)} rows={2} data-testid="hp-craftvideo-caption" />
+
+          <div className="eyebrow mb-1 mt-6">Video sources</div>
+          <VideoPicker label="Upload craft video (preferred — most reliable)" value={data.video_url} onChange={(v)=>set("video_url",v)} data-testid="hp-craftvideo-file" />
+          <Text label="Instagram Reel URL (used when no video is uploaded)" value={data.instagram_url} onChange={(v)=>set("instagram_url",v)} data-testid="hp-craftvideo-ig" />
+          <ImagePicker label="Poster / thumbnail (shown before the video plays and as the fallback still)" value={data.thumbnail_url} onChange={(v)=>set("thumbnail_url",v)} data-testid="hp-craftvideo-poster" />
+
+          <div className="eyebrow mb-1 mt-6">Behaviour</div>
+          <label className="flex items-center gap-3 text-sm text-white/85">
+            <input type="checkbox" checked={data.bg_autoplay !== false} onChange={(e)=>set("bg_autoplay", e.target.checked)} data-testid="hp-craftvideo-bg-autoplay" />
+            Play the uploaded video as a muted background loop on the Craft hero
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Fallback CTA text" value={data.cta_text} onChange={(v)=>set("cta_text",v)} data-testid="hp-craftvideo-cta-text" />
+            <Text label="Fallback CTA link (defaults to the Instagram URL)" value={data.cta_link} onChange={(v)=>set("cta_link",v)} data-testid="hp-craftvideo-cta-link" />
+          </div>
+
+          <div className="eyebrow mb-1 mt-6">About page mini block</div>
+          <label className="flex items-center gap-3 text-sm text-white/85">
+            <input type="checkbox" checked={data.about_enabled !== false} onChange={(e)=>set("about_enabled", e.target.checked)} data-testid="hp-craftvideo-about-enabled" />
+            Show the small behind-the-scenes block on the About page
+          </label>
+          <TextArea label="About-page caption" value={data.about_caption} onChange={(v)=>set("about_caption",v)} rows={2} data-testid="hp-craftvideo-about-caption" />
+        </div>
+      );
+    case "influencer_promotions":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">
+            Shown on <span className="text-white/70">Home</span> right after the &ldquo;Our Work in the Wild&rdquo; carousel.
+            Paste either a full Instagram embed code (Instagram Reel/Post → Embed → Copy Embed Code) <span className="text-white/70">or</span> just the Reel / Post URL — both work.
+            The section auto-hides when the list is empty.
+          </p>
+          <label className="flex items-center gap-3 text-sm text-white/85">
+            <input
+              type="checkbox"
+              checked={data.enabled !== false}
+              onChange={(e)=>set("enabled", e.target.checked)}
+              data-testid="hp-influencer-enabled"
+            />
+            Show this section on the Home page
+          </label>
+
+          <div className="eyebrow mb-1 mt-4">Header</div>
+          <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-influencer-eyebrow" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Title (white)" value={data.title_pre} onChange={(v)=>set("title_pre",v)} data-testid="hp-influencer-title-pre" />
+            <Text label="Title (gold italic)" value={data.title_highlight} onChange={(v)=>set("title_highlight",v)} data-testid="hp-influencer-title-highlight" />
+          </div>
+          <TextArea label="Subtitle" value={data.subtitle} onChange={(v)=>set("subtitle",v)} rows={2} data-testid="hp-influencer-subtitle" />
+
+          <div className="eyebrow mb-1 mt-6">&ldquo;View More on Instagram&rdquo; button</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Button text" value={data.view_more_text} onChange={(v)=>set("view_more_text",v)} data-testid="hp-influencer-vm-text" />
+            <Text label="Button link (Instagram profile URL — leave blank to hide the button)" value={data.view_more_link} onChange={(v)=>set("view_more_link",v)} data-testid="hp-influencer-vm-link" />
+          </div>
+
+          <div className="eyebrow mb-1 mt-6">Influencer posts / reels</div>
+          <p className="text-[11px] text-white/40 mb-2">
+            Paste the Instagram Reel/Post URL first, then click <span className="text-[#D4AF37]">Auto-pull cover</span>{" "}
+            to try and grab the cover automatically. Instagram may not provide covers for every public reel/post —
+            if auto-pull fails, upload a 9:16 screenshot manually. Card clicks open the original Reel/Post in a new tab.
+          </p>
+          <ListEditor
+            items={data.items || []}
+            onChange={(v)=>set("items",v)}
+            defaultItem={{ input: "", thumbnail: "", handle: "", caption: "", product_id: "" }}
+            testId="hp-influencer-item"
+            fields={[
+              { name: "input", label: "Instagram Reel/Post URL (paste this first — tracking params like ?utm_source= are cleaned automatically on blur)", type: "textarea", normalize: normalizeIgUrlInput },
+              { name: "thumbnail", label: "Cover thumbnail (auto-pull, or upload a vertical 9:16 screenshot)", type: "igCover", sourceField: "input" },
+              { name: "handle", label: "Creator handle (e.g. @designstudio — a full profile URL is auto-converted)", normalize: normalizeIgHandle },
+              { name: "caption", label: "Short caption / context — optional", type: "textarea" },
+              { name: "product_id", label: "Shop this look — link a product from the catalog (optional)", type: "singleProduct" },
+            ]}
+          />
+          <p className="text-[11px] text-white/40 mt-2">
+            Tip: A creator&apos;s handle can be their <span className="text-white/70">@username</span>, a full profile URL, or left blank.
+            Grid layout is fixed at 3 per row on desktop, 2 on tablets, and 1 on mobile.
+          </p>
+        </div>
+      );
+    case "footer":
+      return (
+        <div className="space-y-4">
+          <TextArea label="Brand description" value={data.description} onChange={(v)=>set("description",v)} data-testid="hp-footer-desc" />
+          <p className="text-[11px] text-white/40">Address, GSTIN, WhatsApp and Email are edited under Admin → Settings (they flow into the footer automatically).</p>
+          <div>
+            <div className="eyebrow mb-2 mt-2">Quick links</div>
+            <ListEditor items={data.quick_links || []} onChange={(v)=>set("quick_links",v)} defaultItem={{label:"",href:""}}
+              fields={[{name:"label",label:"Label"},{name:"href",label:"Link (URL or /path)"}]} testId="hp-footer-link" />
+          </div>
+        </div>
+      );
+    case "founder_teaser":
+      return (
+        <div className="space-y-4">
+          <p className="text-[11px] text-white/40">Shown on <span className="text-white/70">Home</span> just after "Reasons Why We Are Better". Uses the founder photo & name from Admin → Homepage → About.</p>
+          <label className="flex items-center gap-3 text-sm text-white/80">
+            <input
+              type="checkbox"
+              checked={data.enabled !== false}
+              onChange={(e)=>set("enabled", e.target.checked)}
+              data-testid="hp-founder-teaser-enabled"
+            />
+            Show this section on the Home page
+          </label>
+          <Text label="Eyebrow (small label above title)" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-founder-teaser-eyebrow" />
+          <Text label="Title" value={data.title} onChange={(v)=>set("title",v)} data-testid="hp-founder-teaser-title" />
+          <TextArea label="Body copy" value={data.body} onChange={(v)=>set("body",v)} rows={4} data-testid="hp-founder-teaser-body" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="CTA button text" value={data.cta_text} onChange={(v)=>set("cta_text",v)} data-testid="hp-founder-teaser-cta-text" />
+            <Text label="CTA link" value={data.cta_link} onChange={(v)=>set("cta_link",v)} data-testid="hp-founder-teaser-cta-link" />
+          </div>
+        </div>
+      );
+    default: return null;
+  }
+}
+
+// Main homepage editor -----
+export default function AdminHomepage() {
+  const { settings, refresh } = useSettings();
+  const [state, setState] = useState(null);
+  const [open, setOpen] = useState({ hero: true });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (settings) setState(mergeHomepage(settings.homepage_content));
+  }, [settings]);
+
+  if (!state) return <div className="text-white/50 text-sm py-12">Loading homepage content…</div>;
+
+  const patchSection = (k) => (nextData) => setState({ ...state, [k]: nextData });
+
+  const resetSection = (k) => {
+    setState({ ...state, [k]: JSON.parse(JSON.stringify(HOMEPAGE_DEFAULTS[k])) });
+    toast.success(`${SECTIONS.find(s=>s.key===k)?.label} reset — click Save to publish`);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.updateSettings({ homepage_content: state });
+      toast.success("Homepage saved — refresh the site to see changes");
+      await refresh();
+    } catch { toast.error("Save failed"); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div data-testid="admin-homepage-editor" className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border border-[#D4AF37]/30 p-5" style={{background:"linear-gradient(90deg, rgba(163,99,80,0.14), transparent)"}}>
+        <div>
+          <div className="eyebrow mb-1">Homepage Editor</div>
+          <div className="font-serif text-xl">Edit every section of the homepage &amp; footer.</div>
+          <div className="text-white/50 text-xs mt-1">Changes are live for all visitors as soon as you save.</div>
+        </div>
+        <button data-testid="hp-save-btn" onClick={save} disabled={saving} className="bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-60">
+          {saving ? "Saving…" : "Save Changes"}
+        </button>
+      </div>
+
+      {SECTIONS.map(({ key, label }) => (
+        <div key={key} className="border border-white/10" data-testid={`hp-section-${key}`}>
+          <button type="button" onClick={() => setOpen({ ...open, [key]: !open[key] })}
+            className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.02]">
+            <div className="text-sm font-serif text-white">{label}</div>
+            {open[key] ? <ChevronUp size={16} className="text-[#D4AF37]" /> : <ChevronDown size={16} className="text-white/50" />}
+          </button>
+          {open[key] && (
+            <div className="border-t border-white/10 p-5">
+              <SectionEditor sectionKey={key} data={state[key] || HOMEPAGE_DEFAULTS[key]} patch={patchSection(key)} />
+              <div className="mt-6 pt-4 border-t border-white/5 flex justify-end">
+                <button type="button" onClick={() => resetSection(key)} className="text-[10px] uppercase tracking-widest text-white/40 hover:text-red-400">Reset section to defaults</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+
+      <div className="pt-4 flex justify-end">
+        <button data-testid="hp-save-btn-bottom" onClick={save} disabled={saving} className="bg-[#D4AF37] text-black px-8 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-60">
+          {saving ? "Saving…" : "Save Changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+function FeaturedGalleryPicker({ items, selectedIndices, onChange, randomize }) {
+  const rows = items.map((p, idx) => ({
+    idx,
+    title: (p?.title || "").trim() || "Untitled project",
+    hasCover: (p?.images || []).some(Boolean),
+    location: p?.location || "",
+  }));
+  const selected = selectedIndices.filter((i) => i >= 0 && i < items.length);
+  const isPicked = (i) => selected.includes(i);
+
+  const toggle = (i) => {
+    if (isPicked(i)) onChange(selected.filter((x) => x !== i));
+    else onChange([...selected, i]);
+  };
+  const move = (pos, delta) => {
+    const next = selected.slice();
+    const to = pos + delta;
+    if (to < 0 || to >= next.length) return;
+    [next[pos], next[to]] = [next[to], next[pos]];
+    onChange(next);
+  };
+  const clear = () => onChange([]);
+
+  if (rows.length === 0) {
+    return (
+      <div className="text-[11px] text-white/40 italic border border-white/10 p-4 bg-black/20">
+        Add gallery projects above first, then choose which ones to feature on the homepage.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="text-xs uppercase tracking-[0.24em] text-[#BF9972] mb-1">Featured on homepage</div>
+        <p className="text-[11px] text-white/40">
+          Pick which projects appear in the homepage carousel. Leave empty to show all projects
+          (latest first). {randomize ? "Order is randomized on every page load — the list below defines the shuffle pool." : "Order below is respected 1:1."}
+        </p>
+      </div>
+
+      {selected.length > 0 && (
+        <div className="border border-[#D4AF37]/25 p-3 space-y-2 bg-black/20" data-testid="hp-gallery-featured-selected">
+          <div className="text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]">Selected ({selected.length})</div>
+          {selected.map((idx, pos) => {
+            const row = rows.find((r) => r.idx === idx);
+            if (!row) return null;
+            return (
+              <div key={idx} className="flex items-center justify-between gap-2 text-sm border border-white/8 px-2 py-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] text-white/40 w-5">{pos + 1}.</span>
+                  <span className="truncate text-white/85">{row.title}</span>
+                  {row.location && <span className="text-white/40 text-[11px] truncate">· {row.location}</span>}
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button type="button" onClick={() => move(pos, -1)} disabled={randomize || pos === 0}
+                    className="p-1 text-white/60 hover:text-[#D4AF37] disabled:opacity-30" title="Move up"
+                    data-testid={`hp-gallery-featured-up-${idx}`}>
+                    <ArrowUp size={14} />
+                  </button>
+                  <button type="button" onClick={() => move(pos, 1)} disabled={randomize || pos === selected.length - 1}
+                    className="p-1 text-white/60 hover:text-[#D4AF37] disabled:opacity-30" title="Move down"
+                    data-testid={`hp-gallery-featured-down-${idx}`}>
+                    <ArrowDown size={14} />
+                  </button>
+                  <button type="button" onClick={() => toggle(idx)}
+                    className="p-1 text-white/60 hover:text-red-400" title="Remove"
+                    data-testid={`hp-gallery-featured-remove-${idx}`}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          <button type="button" onClick={clear} className="text-[10px] uppercase tracking-[0.22em] text-white/50 hover:text-red-400">
+            Clear all selections
+          </button>
+        </div>
+      )}
+
+      <div>
+        <div className="text-[10px] uppercase tracking-[0.22em] text-white/50 mb-1">All projects</div>
+        <div className="border border-white/10 max-h-64 overflow-y-auto divide-y divide-white/5">
+          {rows.map((r) => (
+            <label
+              key={r.idx}
+              className={`flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-white/5 ${isPicked(r.idx) ? "bg-[#D4AF37]/10" : ""}`}
+              data-testid={`hp-gallery-featured-toggle-${r.idx}`}
+            >
+              <input type="checkbox" checked={isPicked(r.idx)} onChange={() => toggle(r.idx)} />
+              <span className={`truncate ${isPicked(r.idx) ? "text-[#D4AF37]" : "text-white/85"}`}>{r.title}</span>
+              {!r.hasCover && <span className="text-[10px] text-red-400/70">no cover image</span>}
+              {r.location && <span className="text-white/35 text-[11px] truncate">· {r.location}</span>}
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
