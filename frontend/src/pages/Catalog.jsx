@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Search, SlidersHorizontal, Download } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Search, SlidersHorizontal, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
 import ProductCard from "../components/ProductCard";
 import SEO from "../components/SEO";
@@ -8,12 +9,35 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 const PAGE_SIZE = 24;
 
+// Build a compact, ellipsized list of page tokens for the pagination bar.
+// Example for current=5, total=20 -> [1, "…", 4, 5, 6, "…", 20]
+function buildPageTokens(current, total) {
+  if (total <= 1) return [1];
+  const tokens = [];
+  const push = (v) => {
+    if (tokens[tokens.length - 1] !== v) tokens.push(v);
+  };
+  const window = 1; // pages around current
+  const first = 1;
+  const last = total;
+  const start = Math.max(first + 1, current - window);
+  const end = Math.min(last - 1, current + window);
+  push(first);
+  if (start > first + 1) push("…");
+  for (let i = start; i <= end; i++) push(i);
+  if (end < last - 1) push("…");
+  if (last > first) push(last);
+  return tokens;
+}
+
 export default function Catalog() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlPage = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
+
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(urlPage);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState("");
@@ -21,15 +45,17 @@ export default function Catalog() {
   const [sort, setSort] = useState("newest");
   const [priceRange, setPriceRange] = useState([0, 60000]);
   const [showFilters, setShowFilters] = useState(true);
-  // Tracks the current filter-signature so an in-flight response from a
-  // stale filter set can't overwrite the current results.
+  // Tracks the current request-signature so an in-flight response from a
+  // stale filter/page set can't overwrite the current results.
   const requestKeyRef = useRef(0);
+  // Guard so the initial URL-driven load isn't treated as a filter change.
+  const initialLoadRef = useRef(true);
 
   useEffect(() => {
     api.categories().then(setCategories).catch(() => {});
   }, []);
 
-  // Build the params object once so the effect + Load More share the same shape.
+  // Build the params object once so all fetches share the same shape.
   const buildParams = (nextPage) => {
     const params = { sort, page: nextPage, limit: PAGE_SIZE };
     if (q) params.q = q;
@@ -39,73 +65,85 @@ export default function Catalog() {
     return params;
   };
 
+  // Update the ?page= query param without reloading the route.
+  const writePageToUrl = (nextPage, { replace = false } = {}) => {
+    const params = new URLSearchParams(searchParams);
+    if (nextPage <= 1) params.delete("page");
+    else params.set("page", String(nextPage));
+    setSearchParams(params, { replace });
+  };
+
   // Reset to page 1 whenever any filter, search, sort or price range changes.
+  // The very first mount is skipped so we honour the URL's ?page= value.
+  useEffect(() => {
+    if (initialLoadRef.current) return;
+    if (page !== 1) {
+      setPage(1);
+      writePageToUrl(1, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, category, sort, priceRange]);
+
+  // Keep local `page` in sync when the URL changes (e.g., back/forward).
+  useEffect(() => {
+    if (urlPage !== page) setPage(urlPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlPage]);
+
+  // Single fetch effect — depends on all filters + the current page.
   useEffect(() => {
     setLoading(true);
-    setPage(1);
     const myKey = ++requestKeyRef.current;
     const t = setTimeout(() => {
       api
-        .listProducts(buildParams(1))
+        .listProducts(buildParams(page))
         .then((res) => {
           if (myKey !== requestKeyRef.current) return; // stale response — discard
           const items = res?.items || [];
           setProducts(items);
           setTotal(res?.total || items.length);
-          setTotalPages(res?.total_pages || 1);
+          const tp = res?.total_pages || 1;
+          setTotalPages(tp);
+          // If the requested page is beyond the available range (e.g. filters
+          // shrank the set), snap back to the last valid page.
+          if (page > tp && tp >= 1) {
+            setPage(tp);
+            writePageToUrl(tp, { replace: true });
+          }
           setLoading(false);
+          initialLoadRef.current = false;
         })
         .catch(() => {
-          if (myKey === requestKeyRef.current) setLoading(false);
+          if (myKey === requestKeyRef.current) {
+            setLoading(false);
+            initialLoadRef.current = false;
+          }
         });
     }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, category, sort, priceRange]);
+  }, [q, category, sort, priceRange, page]);
 
-  const canLoadMore = page < totalPages && !loading;
-  // Synchronous guard so a rapid double-click can't fire two identical
-  // "next page" requests before setLoadingMore's re-render lands.
-  const loadMoreInFlightRef = useRef(false);
-
-  const loadMore = async () => {
-    if (loadingMore || !canLoadMore) return;
-    if (loadMoreInFlightRef.current) return;
-    loadMoreInFlightRef.current = true;
-    setLoadingMore(true);
-    const nextPage = page + 1;
-    const myKey = requestKeyRef.current;
-    try {
-      const res = await api.listProducts(buildParams(nextPage));
-      if (myKey !== requestKeyRef.current) return; // filters changed mid-flight
-      const items = res?.items || [];
-      setProducts((prev) => {
-        const seen = new Set(prev.map((p) => p.id));
-        const merged = [...prev];
-        for (const p of items) {
-          if (p?.id && !seen.has(p.id)) {
-            seen.add(p.id);
-            merged.push(p);
-          }
-        }
-        return merged;
-      });
-      setPage(nextPage);
-      setTotalPages(res?.total_pages || totalPages);
-      setTotal(res?.total ?? total);
-    } finally {
-      loadMoreInFlightRef.current = false;
-      if (myKey === requestKeyRef.current) setLoadingMore(false);
+  const goToPage = (next) => {
+    const target = Math.min(Math.max(1, next), totalPages);
+    if (target === page) return;
+    setPage(target);
+    writePageToUrl(target);
+    // Scroll product grid back to the top after paging.
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  };
-
-  const handleExportPdf = () => {
-    window.print();
   };
 
   const clearFilters = () => {
     setQ(""); setCategory("all"); setSort("newest"); setPriceRange([0, 60000]);
   };
+
+  const pageTokens = useMemo(() => buildPageTokens(page, totalPages), [page, totalPages]);
+
+  // Human-friendly "Showing X–Y of Z" summary.
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = total === 0 ? 0 : Math.min(page * PAGE_SIZE, total);
 
   return (
     <div data-testid="page-catalog" className="max-w-7xl mx-auto px-6 py-16">
@@ -215,8 +253,13 @@ export default function Catalog() {
                 ? "Loading…"
                 : total === 0
                   ? "0 pieces"
-                  : `Showing ${products.length} of ${total} piece${total === 1 ? "" : "s"}`}
+                  : `Showing ${rangeStart}–${rangeEnd} of ${total} piece${total === 1 ? "" : "s"}`}
             </span>
+            {!loading && totalPages > 1 && (
+              <span data-testid="page-indicator" className="hidden sm:inline">
+                Page {page} of {totalPages}
+              </span>
+            )}
           </div>
           {total === 0 && !loading ? (
             <div className="py-24 text-center text-white/40 border border-white/10">
@@ -228,17 +271,70 @@ export default function Catalog() {
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-8">
                 {products.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
               </div>
-              {canLoadMore && (
-                <div className="mt-12 flex justify-center no-print">
+
+              {/* Numbered pagination — replaces the previous Load More button. */}
+              {totalPages > 1 && (
+                <nav
+                  data-testid="pagination"
+                  aria-label="Catalog pagination"
+                  className="mt-12 flex flex-wrap items-center justify-center gap-2 no-print"
+                >
                   <button
-                    data-testid="load-more-btn"
-                    onClick={loadMore}
-                    disabled={loadingMore}
-                    className="inline-flex items-center gap-2 border border-[#D4AF37]/50 hover:border-[#D4AF37] hover:text-[#D4AF37] px-10 py-4 text-xs uppercase tracking-[0.28em] text-white/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                    data-testid="pagination-prev"
+                    onClick={() => goToPage(page - 1)}
+                    disabled={page <= 1 || loading}
+                    aria-label="Previous page"
+                    className="inline-flex items-center gap-1 border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] px-4 py-2.5 text-[11px] uppercase tracking-[0.24em] text-white/80 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-white/15 disabled:hover:text-white/80"
                   >
-                    {loadingMore ? "Loading…" : `Load more (${total - products.length} left)`}
+                    <ChevronLeft size={14} />
+                    <span className="hidden sm:inline">Previous</span>
                   </button>
-                </div>
+
+                  {pageTokens.map((tok, idx) => {
+                    if (tok === "…") {
+                      return (
+                        <span
+                          key={`ellipsis-${idx}`}
+                          aria-hidden="true"
+                          className="w-9 h-9 flex items-center justify-center text-white/40 text-sm select-none"
+                        >
+                          …
+                        </span>
+                      );
+                    }
+                    const isActive = tok === page;
+                    return (
+                      <button
+                        key={tok}
+                        data-testid={`pagination-page-${tok}`}
+                        onClick={() => goToPage(tok)}
+                        disabled={loading}
+                        aria-label={`Go to page ${tok}`}
+                        aria-current={isActive ? "page" : undefined}
+                        className={
+                          "min-w-[36px] h-9 px-3 text-[12px] tracking-[0.14em] border transition-colors " +
+                          (isActive
+                            ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/5"
+                            : "border-white/15 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]") +
+                          " disabled:cursor-not-allowed"
+                        }
+                      >
+                        {tok}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    data-testid="pagination-next"
+                    onClick={() => goToPage(page + 1)}
+                    disabled={page >= totalPages || loading}
+                    aria-label="Next page"
+                    className="inline-flex items-center gap-1 border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] px-4 py-2.5 text-[11px] uppercase tracking-[0.24em] text-white/80 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-white/15 disabled:hover:text-white/80"
+                  >
+                    <span className="hidden sm:inline">Next</span>
+                    <ChevronRight size={14} />
+                  </button>
+                </nav>
               )}
             </>
           )}
