@@ -1,17 +1,37 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { MessageCircle, Mail, MapPin, Phone, FileText, Truck, CreditCard } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "sonner";
 import GoogleReviews from "../components/GoogleReviews";
 import CatalogueOnWhatsApp from "../components/CatalogueOnWhatsApp";
 import SEO from "../components/SEO";
+import { ENQUIRY_TYPES, resolveEnquiryType } from "../lib/enquiryTypes";
 
 export default function Contact() {
-  const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
+  const location = useLocation();
+  const initialType = useMemo(
+    () => resolveEnquiryType(new URLSearchParams(location.search).get("type")),
+    [location.search],
+  );
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    subject: "",
+    message: "",
+    enquiry_type: initialType,
+  });
   const [submitting, setSubmitting] = useState(false);
   const [settings, setSettings] = useState(null);
 
   useEffect(() => { api.getSettings().then(setSettings).catch(() => {}); }, []);
+
+  // If the visitor navigates between /contact?type=bulk and /contact?type=trade
+  // without a full page reload, keep the select in sync (but don't clobber a
+  // change the user has made — we only reset the enquiry_type field).
+  useEffect(() => {
+    setForm((f) => (f.enquiry_type === initialType ? f : { ...f, enquiry_type: initialType }));
+  }, [initialType]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -23,7 +43,7 @@ export default function Contact() {
     try {
       await api.createContact(form);
       toast.success("Message received. We'll respond shortly.");
-      setForm({ name: "", email: "", subject: "", message: "" });
+      setForm({ name: "", email: "", subject: "", message: "", enquiry_type: initialType });
     } catch {
       toast.error("Could not send message");
     } finally {
@@ -101,6 +121,22 @@ export default function Contact() {
           </div>
           <input required data-testid="contact-name" placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
           <input required type="email" data-testid="contact-email-input" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
+
+          <div>
+            <label htmlFor="enquiry-type" className="block text-[10px] uppercase tracking-[0.24em] text-white/50 mb-2">Enquiry type</label>
+            <select
+              id="enquiry-type"
+              data-testid="contact-enquiry-type"
+              value={form.enquiry_type}
+              onChange={(e) => setForm({ ...form, enquiry_type: e.target.value })}
+              className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm"
+            >
+              {ENQUIRY_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+
           <input data-testid="contact-subject" placeholder="Subject (e.g., custom chandelier for hall)" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
           <textarea required data-testid="contact-message" placeholder="Tell us about your requirement, ceiling height, or bulk quantity…" rows="7" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm resize-none" />
           <button disabled={submitting} data-testid="contact-submit-btn" className="bg-[#D4AF37] text-black px-10 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-50">

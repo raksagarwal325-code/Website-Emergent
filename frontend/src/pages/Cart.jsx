@@ -6,7 +6,7 @@ import { api, formatPrice } from "../lib/api";
 import { toast } from "sonner";
 
 export default function Cart() {
-  const { cart, removeFromCart, updateQty, clearCart, cartTotal } = useCatalog();
+  const { cart, removeFromCart, updateQty, clearCart, cartTotal, hasOnRequestItems, hasPricedItems, isItemOnRequest } = useCatalog();
   const [form, setForm] = useState({ customer_name: "", customer_email: "", customer_phone: "", message: "" });
   const [settings, setSettings] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -66,14 +66,18 @@ export default function Cart() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           <div className="lg:col-span-7 space-y-4">
-            {cart.map((i) => (
+            {cart.map((i) => {
+              const onRequest = isItemOnRequest(i);
+              return (
               <div key={i.product_id} data-testid={`cart-item-${i.product_id}`} className="flex gap-5 border border-white/10 p-5">
                 <div className="w-24 h-24 overflow-hidden bg-[#0a0a0a] flex items-center justify-center p-2 flex-shrink-0">
                   {i.image && <img src={api.resolveImage(i.image)} alt={i.name} className="max-w-full max-h-full w-auto h-auto object-contain object-center" />}
                 </div>
                 <div className="flex-1">
                   <div className="font-serif text-lg">{i.name}</div>
-                  <div className="text-white/60 text-sm mt-1">{formatPrice(i.price)}</div>
+                  <div data-testid={`cart-item-unit-price-${i.product_id}`} className="text-white/60 text-sm mt-1">
+                    {onRequest ? "Price on request" : formatPrice(i.price)}
+                  </div>
                   <div className="flex items-center gap-3 mt-3">
                     <button data-testid={`qty-minus-${i.product_id}`} onClick={() => updateQty(i.product_id, i.quantity - 1)} className="w-8 h-8 border border-white/15 hover:border-[#D4AF37]"><Minus size={12} className="mx-auto" /></button>
                     <span data-testid={`qty-${i.product_id}`} className="text-sm w-6 text-center">{i.quantity}</span>
@@ -82,14 +86,31 @@ export default function Cart() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[#D4AF37] font-serif">{formatPrice(i.price * i.quantity)}</div>
+                  <div data-testid={`cart-item-line-total-${i.product_id}`} className="text-[#D4AF37] font-serif">
+                    {onRequest ? "Price on request" : formatPrice(i.price * i.quantity)}
+                  </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
-            <div className="flex items-center justify-between pt-4 text-white/80">
-              <button onClick={clearCart} data-testid="clear-basket-btn" className="text-xs uppercase tracking-[0.28em] text-white/50 hover:text-red-400">Clear basket</button>
-              <div className="text-lg">Total: <span data-testid="cart-total" className="text-[#D4AF37] font-serif text-2xl">{formatPrice(cartTotal)}</span></div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 text-white/80">
+              <button onClick={clearCart} data-testid="clear-basket-btn" className="text-xs uppercase tracking-[0.28em] text-white/50 hover:text-red-400 self-start">Clear basket</button>
+              <div className="text-right sm:text-right">
+                <div className="text-lg">
+                  Total:{" "}
+                  {hasPricedItems ? (
+                    <span data-testid="cart-total" className="text-[#D4AF37] font-serif text-2xl">{formatPrice(cartTotal)}</span>
+                  ) : (
+                    <span data-testid="cart-total-on-request" className="text-[#D4AF37] font-serif text-2xl">Price on request</span>
+                  )}
+                </div>
+                {hasPricedItems && hasOnRequestItems && (
+                  <div data-testid="cart-mixed-note" className="text-white/60 text-xs mt-2">
+                    Some products are priced on request.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

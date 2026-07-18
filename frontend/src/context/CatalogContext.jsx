@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { isItemOnRequest, computeCartTotals } from "../lib/cartPricing";
 
 const CatalogContext = createContext(null);
 
@@ -24,7 +25,15 @@ export function CatalogProvider({ children }) {
       if (found) {
         return prev.map((i) => i.product_id === product.id ? { ...i, quantity: i.quantity + qty } : i);
       }
-      return [...prev, { product_id: product.id, sku: product.sku || "", name: product.name, price: product.price, image: product.images?.[0], quantity: qty }];
+      return [...prev, {
+        product_id: product.id,
+        sku: product.sku || "",
+        name: product.name,
+        price: product.price,
+        price_display: product.price_display || (product.fixed_price ? "fixed" : "starting_from"),
+        image: product.images?.[0],
+        quantity: qty,
+      }];
     });
   };
   const removeFromCart = (id) => setCart((prev) => prev.filter((i) => i.product_id !== id));
@@ -39,10 +48,19 @@ export function CatalogProvider({ children }) {
   };
   const isFavorite = (id) => favorites.some((p) => p.id === id);
 
-  const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  // A cart line is "price on request" when the stored price is missing/0/non-numeric
+  // OR the product was configured with price_display === "on_request". These items
+  // must NOT contribute ₹0 to the visible monetary total. Logic lives in
+  // ../lib/cartPricing so it can be unit-tested without a React runtime.
+  const { cartTotal, hasPricedItems, hasOnRequestItems } = computeCartTotals(cart);
 
   return (
-    <CatalogContext.Provider value={{ cart, favorites, addToCart, removeFromCart, updateQty, clearCart, toggleFavorite, isFavorite, cartTotal }}>
+    <CatalogContext.Provider value={{
+      cart, favorites,
+      addToCart, removeFromCart, updateQty, clearCart,
+      toggleFavorite, isFavorite,
+      cartTotal, hasOnRequestItems, hasPricedItems, isItemOnRequest,
+    }}>
       {children}
     </CatalogContext.Provider>
   );

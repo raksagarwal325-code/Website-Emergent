@@ -48,6 +48,7 @@ _BUCKET_BY_MODULE = {
     "test_reviews_moderation": "reviews",
     "test_inquiries_price_security": "inquiries",
     "test_inquiries_legacy_email_fix": "inquiries",
+    "test_contact_enquiry_type": "contact",
     "test_products_pagination": None,  # no rate-limited endpoint used
     "test_authz_ssrf_ratelimit": "",   # exercises multiple buckets
 }
