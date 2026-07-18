@@ -6,6 +6,32 @@
         <meta name="theme-color" content="#2A1125" />
         <meta name="description" content="Samrat Glass Emporium — premium handcrafted chandeliers, crystal lighting and decorative glass lamps from Firozabad. Since 1981." />
 
+        <!-- Google tag (gtag.js) — loaded ONCE. SPA page_view tracking is
+             done manually from src/lib/analytics.js, so send_page_view is off.
+             Honors browser Do Not Track. Excluding /admin is handled by the
+             analytics utility (this snippet loads GA, but no page_views or
+             events fire from admin pages). -->
+        <script>
+          (function () {
+            try {
+              var dnt = (navigator && (navigator.doNotTrack === '1' || navigator.msDoNotTrack === '1'))
+                        || (window && window.doNotTrack === '1');
+              if (dnt) { window.__GA_DNT__ = true; return; }
+              if (window.__GA_LOADED__) return;
+              window.__GA_LOADED__ = true;
+              window.__GA_ID__ = 'G-7N4W2XVR2S';
+              window.dataLayer = window.dataLayer || [];
+              window.gtag = function () { window.dataLayer.push(arguments); };
+              gtag('js', new Date());
+              gtag('config', 'G-7N4W2XVR2S', { send_page_view: false, anonymize_ip: true });
+              var s = document.createElement('script');
+              s.async = true;
+              s.src = 'https://www.googletagmanager.com/gtag/js?id=G-7N4W2XVR2S';
+              document.head.appendChild(s);
+            } catch (e) { /* analytics must never break the app */ }
+          })();
+        </script>
+
         <!-- Open Graph / Facebook / WhatsApp preview -->
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Samrat Glass Emporium" />

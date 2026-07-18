@@ -29,6 +29,20 @@ export const LEGAL_PAGES = {
         ],
       },
       {
+        heading: "Analytics & Website Usage (Google Analytics 4)",
+        text:
+          "We use Google Analytics 4 (GA4) to understand how visitors use this website — which pages are viewed, which products are opened, when items are added to the inquiry basket, favourites or WhatsApp is clicked, and which catalogue actions are used. This helps us improve product discovery, page performance, and the overall experience. GA4 stores anonymised usage data on Google's infrastructure with IP anonymisation enabled.",
+        bullets: [
+          "Data collected: page URL, referrer, page title, approximate location (city/region), device type, browser, screen size, anonymised IP, and interaction events (product views, add-to-cart, wishlist, WhatsApp click, catalogue download, contact/inquiry submissions).",
+          "Data NOT collected by analytics: your name, email, phone number, address, inquiry message content, or any content you type into a form.",
+          "Purpose: aggregated site analytics, product performance measurement, and improving customer experience — not for advertising or profile-building.",
+          "Legal basis: our legitimate interest in operating and improving this website.",
+          "Retention: GA4 default (up to 14 months from the last user activity), after which data is auto-deleted.",
+          "Your choices: we honour your browser's Do Not Track setting — if enabled, no analytics scripts load. You can also install any standard analytics-blocking extension without affecting site functionality.",
+          "Google's privacy information: https://policies.google.com/privacy · How Google uses data: https://policies.google.com/technologies/partner-sites · Google Analytics opt-out: https://tools.google.com/dlpage/gaoptout",
+        ],
+      },
+      {
         heading: "How We Use Your Information",
         bullets: [
           "To respond to product inquiries",

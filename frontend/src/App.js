@@ -26,6 +26,7 @@ import LegalPage from "@/pages/LegalPage";
 import NotFound from "@/pages/NotFound";
 import FloatingActions from "@/components/FloatingActions";
 import MobileReachStrip from "@/components/MobileReachStrip";
+import AnalyticsRouteTracker from "@/components/AnalyticsRouteTracker";
 
 function App() {
   React.useEffect(() => {
@@ -44,6 +45,7 @@ function App() {
       <CatalogProvider>
         <SettingsProvider>
         <BrowserRouter>
+          <AnalyticsRouteTracker />
           <Header />
           <main className="flex-1">
             <Routes>

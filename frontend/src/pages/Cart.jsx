@@ -4,6 +4,7 @@ import { Trash2, Plus, Minus, MessageCircle } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
 import { api, formatPrice } from "../lib/api";
 import { toast } from "sonner";
+import { trackGenerateLead, trackWhatsAppClick } from "../lib/analytics";
 
 export default function Cart() {
   const { cart, removeFromCart, updateQty, clearCart, cartTotal, hasOnRequestItems, hasPricedItems, isItemOnRequest } = useCatalog();
@@ -29,6 +30,7 @@ export default function Cart() {
     try {
     const items = cart.map((i) => ({ product_id: i.product_id, sku: i.sku || "", name: i.name, quantity: i.quantity, price: i.price }));
       await api.createInquiry({ ...form, items });
+      trackGenerateLead({ source: "inquiry_basket", cart_size: cart.length });
       toast.success("Inquiry sent. We'll be in touch shortly.");
       clearCart();
       setForm({ customer_name: "", customer_email: "", customer_phone: "", message: "" });
@@ -124,7 +126,14 @@ export default function Cart() {
               {submitting ? "Sending…" : "Send inquiry"}
             </button>
             {waNumber && (
-              <a data-testid="wa-basket-btn" href={waLink} target="_blank" rel="noreferrer" className="w-full inline-flex items-center justify-center gap-2 border border-white/25 py-4 uppercase text-xs tracking-[0.28em] hover:border-[#D4AF37]">
+              <a
+                data-testid="wa-basket-btn"
+                href={waLink}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => trackWhatsAppClick({ source: "inquiry_basket", page: "/cart" })}
+                className="w-full inline-flex items-center justify-center gap-2 border border-white/25 py-4 uppercase text-xs tracking-[0.28em] hover:border-[#D4AF37]"
+              >
                 <MessageCircle size={14} /> Enquire on WhatsApp
               </a>
             )}

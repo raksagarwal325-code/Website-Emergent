@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Download, MessageCircle, FileText, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { trackCatalogueDownload, trackWhatsAppClick, trackGenerateLead } from "../lib/analytics";
 
 // Normalize an Indian mobile — accepts 10 digits, +91 prefix, or a paste with
 // spaces / hyphens / brackets. Returns { ok, digits, e164 }.
@@ -38,6 +39,7 @@ export default function CatalogueOnWhatsApp({ businessWhatsAppNumber }) {
     setSubmitting(true);
     try {
       await api.requestCatalogue(name.trim(), `+${parsed.e164}`, "contact_page");
+      trackGenerateLead({ source: "catalogue_request" });
       // Build the deep links.
       const catalogueUrl = `${window.location.origin}/catalogue?print=1`;
       // wa.me link — opens WhatsApp on visitor's device with a message pre-filled
@@ -83,6 +85,7 @@ export default function CatalogueOnWhatsApp({ businessWhatsAppNumber }) {
             target="_blank"
             rel="noreferrer"
             data-testid="catalogue-wa-download-btn"
+            onClick={() => trackCatalogueDownload("whatsapp_flow")}
             className="inline-flex items-center justify-center gap-2 bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]"
           >
             <Download size={14} /> Download PDF now
@@ -93,6 +96,7 @@ export default function CatalogueOnWhatsApp({ businessWhatsAppNumber }) {
               target="_blank"
               rel="noreferrer"
               data-testid="catalogue-wa-open-btn"
+              onClick={() => trackWhatsAppClick({ source: "catalogue_request", page: "/contact" })}
               className="inline-flex items-center justify-center gap-2 bg-[#25D366] text-black px-6 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#1EB554]"
             >
               <MessageCircle size={14} /> Open in WhatsApp
