@@ -101,12 +101,22 @@ try:
     _signal.signal(_signal.SIGUSR1, _clear_rate_limit_windows)
     # Publish the worker pid so out-of-process test fixtures can target it
     # (uvicorn --reload spawns a child worker whose pid isn't obvious from
-    # pgrep alone).
-    try:
-        with open("/tmp/backend_worker.pid", "w") as _pf:
-            _pf.write(str(os.getpid()))
-    except OSError:
-        pass
+    # pgrep alone). Guard: skip this write when server.py is imported by a
+    # test runner (pytest / TestClient) — otherwise the test process's own
+    # PID clobbers the file the real backend wrote at startup, and the
+    # rate-limit-reset fixture in conftest.py stops finding the right worker.
+    import sys as _sys
+    _is_pytest = (
+        "PYTEST_CURRENT_TEST" in os.environ
+        or "pytest" in _sys.modules
+        or any("pytest" in (a or "") for a in _sys.argv)
+    )
+    if not _is_pytest:
+        try:
+            with open("/tmp/backend_worker.pid", "w") as _pf:
+                _pf.write(str(os.getpid()))
+        except OSError:
+            pass
 except (ValueError, OSError):  # non-main thread on some servers
     pass
 
