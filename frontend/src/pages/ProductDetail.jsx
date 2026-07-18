@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import SEO from "../components/SEO";
 import SchemaLD from "../components/SchemaLD";
 import SeenInProjects from "../components/SeenInProjects";
+import { trackViewItem } from "../lib/analytics";
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -29,6 +30,7 @@ export default function ProductDetail() {
       .then((p) => {
         setProduct(p);
         setSelectedImg(0);
+        trackViewItem(p);
       })
       .catch((err) => {
         const status = err?.response?.status ?? err?.status;

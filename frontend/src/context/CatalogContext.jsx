@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { isItemOnRequest, computeCartTotals } from "../lib/cartPricing";
+import {
+  trackAddToCart,
+  trackAddToWishlist,
+  trackRemoveFromCart,
+} from "../lib/analytics";
 
 const CatalogContext = createContext(null);
 
@@ -35,14 +40,20 @@ export function CatalogProvider({ children }) {
         quantity: qty,
       }];
     });
+    trackAddToCart(product, qty);
   };
-  const removeFromCart = (id) => setCart((prev) => prev.filter((i) => i.product_id !== id));
+  const removeFromCart = (id) => setCart((prev) => {
+    const item = prev.find((i) => i.product_id === id);
+    if (item) trackRemoveFromCart(item);
+    return prev.filter((i) => i.product_id !== id);
+  });
   const updateQty = (id, qty) => setCart((prev) => prev.map((i) => i.product_id === id ? { ...i, quantity: Math.max(1, qty) } : i));
   const clearCart = () => setCart([]);
 
   const toggleFavorite = (product) => {
     setFavorites((prev) => {
       if (prev.find((p) => p.id === product.id)) return prev.filter((p) => p.id !== product.id);
+      trackAddToWishlist(product);
       return [...prev, { id: product.id, name: product.name, price: product.price, image: product.images?.[0], category: product.category }];
     });
   };

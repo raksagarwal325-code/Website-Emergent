@@ -5,6 +5,7 @@ import ProductCard from "../components/ProductCard";
 import SEO from "../components/SEO";
 import { Slider } from "../components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { trackSearch } from "../lib/analytics";
 
 const PAGE_SIZE = 24;
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { ArrowUp } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
+import { trackWhatsAppClick } from "../lib/analytics";
 
 const WA_PREFILLED = "Hi Rakshit ji, I am interested in Samrat Glass Emporium products. Please share more details.";
 
@@ -59,6 +60,7 @@ export default function FloatingActions() {
           rel="noreferrer"
           aria-label="Chat with us on WhatsApp"
           data-testid="floating-whatsapp-btn"
+          onClick={() => trackWhatsAppClick({ source: "floating_button", page: location.pathname })}
           className="group h-14 w-14 rounded-full flex items-center justify-center text-white shadow-2xl relative overflow-hidden"
           style={{ background: "#25D366" }}
         >

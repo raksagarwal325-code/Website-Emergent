@@ -7,6 +7,7 @@ import GoogleReviews from "../components/GoogleReviews";
 import CatalogueOnWhatsApp from "../components/CatalogueOnWhatsApp";
 import SEO from "../components/SEO";
 import { ENQUIRY_TYPES, resolveEnquiryType } from "../lib/enquiryTypes";
+import { trackGenerateLead } from "../lib/analytics";
 
 export default function Contact() {
   const location = useLocation();
@@ -42,6 +43,7 @@ export default function Contact() {
     setSubmitting(true);
     try {
       await api.createContact(form);
+      trackGenerateLead({ source: "contact_form", enquiry_type: form.enquiry_type });
       toast.success("Message received. We'll respond shortly.");
       setForm({ name: "", email: "", subject: "", message: "", enquiry_type: initialType });
     } catch {
