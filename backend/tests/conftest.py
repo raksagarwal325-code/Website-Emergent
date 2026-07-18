@@ -84,13 +84,40 @@ def _run_mongo(script):
 
 
 def _backend_worker_pid():
+    # Prefer a pinned pid captured at session start (before tests could
+    # import server.py in-process, which stomps /tmp/backend_worker.pid).
     try:
-        with open("/tmp/backend_worker.pid") as f:
+        with open("/tmp/backend_worker_real.pid") as f:
             pid = int(f.read().strip())
-            if pid != os.getpid():
+            if pid != os.getpid() and os.path.exists(f"/proc/{pid}"):
                 return pid
     except (OSError, ValueError):
         pass
+    try:
+        with open("/tmp/backend_worker.pid") as f:
+            pid = int(f.read().strip())
+            if pid != os.getpid() and os.path.exists(f"/proc/{pid}"):
+                return pid
+    except (OSError, ValueError):
+        pass
+    # Fallback A: whichever process holds :8001 (real backend).
+    try:
+        out = subprocess.run(
+            ["ss", "-tlnp"], check=False, capture_output=True, text=True, timeout=5,
+        )
+        for line in out.stdout.splitlines():
+            if ":8001 " in line:
+                m = line.split("pid=")
+                if len(m) > 1:
+                    try:
+                        p = int(m[1].split(",", 1)[0])
+                        if p != os.getpid():
+                            return p
+                    except ValueError:
+                        pass
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+    # Fallback B: pgrep for uvicorn (dev mode) — usually not present here.
     out = subprocess.run(
         ["pgrep", "-f", "uvicorn server:app"], check=False,
         capture_output=True, text=True,
@@ -183,6 +210,26 @@ def _hold_active_for(bucket: str) -> bool:
 
 @pytest.fixture(scope="session", autouse=True)
 def _ensure_admin_session_globally():
+    # Pin the real backend worker pid BEFORE any test module (e.g. test_mailer)
+    # imports `server` in-process — which would otherwise overwrite
+    # /tmp/backend_worker.pid with the pytest process's own PID and break
+    # the SIGUSR1-based rate-limit reset used by the HTTP tests.
+    try:
+        out = subprocess.run(
+            ["ss", "-tlnp"], check=False, capture_output=True, text=True, timeout=5,
+        )
+        for line in out.stdout.splitlines():
+            if ":8001 " in line and "pid=" in line:
+                try:
+                    p = int(line.split("pid=", 1)[1].split(",", 1)[0])
+                    if p != os.getpid():
+                        with open("/tmp/backend_worker_real.pid", "w") as _pf:
+                            _pf.write(str(p))
+                        break
+                except (ValueError, OSError):
+                    pass
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
     _run_mongo(
         'db.users.updateOne({user_id:"user_test"},'
         '{$set:{user_id:"user_test", email:"raks.agarwal325@gmail.com", name:"Test Admin",'

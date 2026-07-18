@@ -1,4 +1,5 @@
 """Product Catalog API - Lumière."""
+import asyncio
 import csv
 import io
 import json
@@ -9,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Literal, Optional
 
+import mailer
 import requests
 from dotenv import load_dotenv
 from fastapi import APIRouter, Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
@@ -99,12 +101,22 @@ try:
     _signal.signal(_signal.SIGUSR1, _clear_rate_limit_windows)
     # Publish the worker pid so out-of-process test fixtures can target it
     # (uvicorn --reload spawns a child worker whose pid isn't obvious from
-    # pgrep alone).
-    try:
-        with open("/tmp/backend_worker.pid", "w") as _pf:
-            _pf.write(str(os.getpid()))
-    except OSError:
-        pass
+    # pgrep alone). Guard: skip this write when server.py is imported by a
+    # test runner (pytest / TestClient) — otherwise the test process's own
+    # PID clobbers the file the real backend wrote at startup, and the
+    # rate-limit-reset fixture in conftest.py stops finding the right worker.
+    import sys as _sys
+    _is_pytest = (
+        "PYTEST_CURRENT_TEST" in os.environ
+        or "pytest" in _sys.modules
+        or any("pytest" in (a or "") for a in _sys.argv)
+    )
+    if not _is_pytest:
+        try:
+            with open("/tmp/backend_worker.pid", "w") as _pf:
+                _pf.write(str(os.getpid()))
+        except OSError:
+            pass
 except (ValueError, OSError):  # non-main thread on some servers
     pass
 
@@ -681,6 +693,19 @@ async def create_review(payload: ReviewCreate, _rl = Depends(rate_limit("reviews
     await db.reviews.insert_one(review.model_dump())
     # Do NOT recalculate the product rating here — pending reviews must
     # never affect the public rating until an admin approves them.
+    # Fire-and-forget admin notification. `mailer.notify_admin_pending_review`
+    # never raises — a failure or timeout must NEVER roll back the review.
+    try:
+        prod_name = ""
+        prod_doc = await db.products.find_one({"id": review.product_id}, {"_id": 0, "name": 1})
+        if prod_doc:
+            prod_name = prod_doc.get("name") or ""
+        asyncio.create_task(mailer.notify_admin_pending_review({
+            **review.model_dump(),
+            "product_name": prod_name,
+        }))
+    except Exception:  # pragma: no cover — belt-and-braces
+        pass
     return review
 
 
@@ -782,6 +807,15 @@ async def create_inquiry(payload: InquiryCreate, _rl = Depends(rate_limit("inqui
         total=total,
     )
     await db.inquiries.insert_one(inquiry.model_dump())
+    # Fire-and-forget: admin ping + customer acknowledgement. Both are
+    # best-effort — the mailer helper catches every failure internally so
+    # the persisted inquiry is never rolled back.
+    try:
+        inq_dict = inquiry.model_dump()
+        asyncio.create_task(mailer.notify_admin_inquiry(inq_dict))
+        asyncio.create_task(mailer.ack_customer_inquiry(inq_dict))
+    except Exception:  # pragma: no cover
+        pass
     return inquiry
 
 
@@ -803,6 +837,15 @@ async def update_inquiry_status(inquiry_id: str, status: str = Query(...), admin
 async def create_contact(payload: ContactCreate, _rl = Depends(rate_limit("contact", 10, 300))):
     msg = ContactMessage(**payload.model_dump())
     await db.contact_messages.insert_one(msg.model_dump())
+    # Fire-and-forget: admin ping + customer acknowledgement. Failures are
+    # swallowed inside mailer helpers — a broken email path must not fail
+    # the already-persisted contact submission.
+    try:
+        msg_dict = msg.model_dump()
+        asyncio.create_task(mailer.notify_admin_contact(msg_dict))
+        asyncio.create_task(mailer.ack_customer_contact(msg_dict))
+    except Exception:  # pragma: no cover
+        pass
     return msg
 
 
