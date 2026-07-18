@@ -45,6 +45,7 @@ function App() {
       <CatalogProvider>
         <SettingsProvider>
         <BrowserRouter>
+          <AnalyticsRouteTracker />
           <Header />
           <main className="flex-1">
             <Routes>
