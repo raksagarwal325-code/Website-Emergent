@@ -963,10 +963,15 @@ function ReviewsAdmin({ products, refresh }) {
 
 function MessagesAdmin({ messages }) {
   const [q, setQ] = useState("");
+  const _enqLabel = (v) => (
+    v === "bulk" ? "Custom Lighting / Bulk"
+    : v === "trade" ? "Architect / Interior"
+    : "General"
+  );
   const filtered = messages.filter((m) => {
     if (!q.trim()) return true;
     const needle = q.toLowerCase();
-    return `${m.name || ""} ${m.email || ""} ${m.subject || ""} ${m.message || ""}`.toLowerCase().includes(needle);
+    return `${m.name || ""} ${m.email || ""} ${m.subject || ""} ${m.message || ""} ${_enqLabel(m.enquiry_type)}`.toLowerCase().includes(needle);
   });
   return (
     <div className="space-y-4">
@@ -993,7 +998,21 @@ function MessagesAdmin({ messages }) {
           <div key={m.id} className="border border-white/10 p-6 hover:border-white/20 transition-colors" data-testid={`msg-${m.id}`}>
             <div className="flex flex-wrap justify-between items-start gap-4">
               <div>
-                <div className="font-serif text-lg">{m.subject || "No subject"}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="font-serif text-lg">{m.subject || "No subject"}</div>
+                  <span
+                    data-testid={`msg-enquiry-type-${m.id}`}
+                    className={`text-[10px] uppercase tracking-[0.24em] px-2 py-0.5 border ${
+                      m.enquiry_type === "bulk"
+                        ? "border-[#D4AF37] text-[#D4AF37]"
+                        : m.enquiry_type === "trade"
+                        ? "border-[#B87333] text-[#E5B579]"
+                        : "border-white/25 text-white/60"
+                    }`}
+                  >
+                    {_enqLabel(m.enquiry_type)}
+                  </span>
+                </div>
                 <div className="text-white/50 text-sm mt-1">from {m.name} · <span className="text-white/70">{m.email}</span></div>
                 <div className="text-xs text-white/40 mt-1">{new Date(m.created_at).toLocaleString()}</div>
               </div>

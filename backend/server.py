@@ -7,7 +7,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -408,6 +408,12 @@ class InquiryCreate(BaseModel):
     items: List[InquiryItemInput] = []
 
 
+# Allowed enquiry types on the /contact form. Kept in one place so backend
+# validation, admin UI badges and frontend query-param resolution agree.
+EnquiryType = Literal["general", "bulk", "trade"]
+_ALLOWED_ENQUIRY_TYPES = {"general", "bulk", "trade"}
+
+
 class ContactMessage(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -415,6 +421,7 @@ class ContactMessage(BaseModel):
     email: EmailStr
     subject: str = ""
     message: str
+    enquiry_type: EnquiryType = "general"
     created_at: str = Field(default_factory=now_iso)
 
 
@@ -423,6 +430,17 @@ class ContactCreate(BaseModel):
     email: EmailStr
     subject: str = ""
     message: str
+    enquiry_type: EnquiryType = "general"
+
+    @field_validator("enquiry_type", mode="before")
+    @classmethod
+    def _coerce_enquiry_type(cls, v):
+        # Safety net for older clients or hand-crafted payloads: anything not
+        # in the allow-list quietly falls back to "general" rather than 422.
+        if v is None:
+            return "general"
+        v = str(v).strip().lower()
+        return v if v in _ALLOWED_ENQUIRY_TYPES else "general"
 
 
 class Settings(BaseModel):
