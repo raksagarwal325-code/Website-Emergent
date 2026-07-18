@@ -2,6 +2,5 @@ User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /catalogue
-Disallow: /favorites
 
 Sitemap: https://samratglass.com/api/sitemap.xml
