@@ -38,6 +38,7 @@ export default function SEO({
   image,
   path,
   type = "website",
+  noindex = false,
 }) {
   useEffect(() => {
     if (title) document.title = title;
@@ -58,6 +59,23 @@ export default function SEO({
     setMeta('name="twitter:title"', "name", "twitter:title", title);
     setMeta('name="twitter:description"', "name", "twitter:description", description);
     setMeta('name="twitter:image"', "name", "twitter:image", image);
-  }, [title, description, image, path, type]);
+    // Per-page robots directive. `noindex` pages must set noindex,follow so
+    // link equity still flows to indexable products but the page itself is
+    // kept out of the SERP. On unmount we REMOVE the tag so subsequent pages
+    // don't inherit it (default: indexable).
+    const robotsEl = document.head.querySelector('meta[name="robots"]');
+    if (noindex) {
+      if (robotsEl) {
+        robotsEl.setAttribute("content", "noindex,follow");
+      } else {
+        const el = document.createElement("meta");
+        el.setAttribute("name", "robots");
+        el.setAttribute("content", "noindex,follow");
+        document.head.appendChild(el);
+      }
+    } else if (robotsEl) {
+      robotsEl.remove();
+    }
+  }, [title, description, image, path, type, noindex]);
   return null;
 }

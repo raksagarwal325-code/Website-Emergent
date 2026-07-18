@@ -3,12 +3,17 @@ import { Link } from "react-router-dom";
 import { Heart } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
+import SEO from "../components/SEO";
 
 export default function Favorites() {
   const { favorites, toggleFavorite } = useCatalog();
 
   return (
     <div data-testid="page-favorites" className="max-w-7xl mx-auto px-6 py-16">
+      {/* /favorites is a personal, per-visitor page — noindex,follow so
+          Google doesn't index empty/stale favourite states while still
+          following the outbound product links. */}
+      <SEO title="Favorites — Samrat Glass Emporium" description="Your saved pieces from the Samrat Glass Emporium catalog." path="/favorites" noindex />
       <div className="mb-12">
         <div className="eyebrow mb-3">Saved</div>
         <h1 className="font-serif text-4xl sm:text-5xl">Favorites</h1>

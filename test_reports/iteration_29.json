@@ -1,0 +1,55 @@
+{
+  "summary": "Scoped verification of two SEO/robots edits: (a) removal of aggregateRating from LocalBusiness JSON-LD in /app/frontend/public/index.html, (b) removal of 'Disallow: /favorites' from /app/frontend/public/robots.txt. All 30 assertions across static file parsing, dynamic sitemap HTTP fetch, and live Playwright navigation to /favorites and /catalog PASSED. No transactional endpoints were touched; no admin auth was attempted.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verification_details": {
+    "index_html_json_ld": {
+      "@type": "LocalBusiness",
+      "aggregateRating_removed": true,
+      "no_literal_4.9_in_block": true,
+      "no_literal_236_in_block": true,
+      "preserved_keys": ["@context","@type","@id","name","image","url","telephone","email","priceRange","description","foundingDate","address","openingHoursSpecification","sameAs"],
+      "opening_hours": {"days": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"], "opens": "10:30", "closes": "20:00", "sunday_present": false},
+      "telephone": "+91-89203-92937",
+      "name": "Samrat Glass Emporium",
+      "sameAs": ["https://www.instagram.com/samratglassemporium/","https://www.youtube.com/@samratglassemporium4394"]
+    },
+    "robots_txt": {
+      "favorites_disallow_removed": true,
+      "still_has_disallow_admin": true,
+      "still_has_disallow_catalogue": true,
+      "still_has_dynamic_sitemap": "https://samratglass.com/api/sitemap.xml"
+    },
+    "dynamic_sitemap_api": {
+      "url": "https://glass-product-hub.preview.emergentagent.com/api/sitemap.xml",
+      "status": 200,
+      "content_type": "application/xml",
+      "favorites_occurrences": 0
+    },
+    "static_sitemap_file": {"favorites_occurrences": 0},
+    "live_browser": {
+      "/favorites meta[name=robots]": "noindex,follow",
+      "/favorites gtag_loader_script_count": 1,
+      "/favorites posthog_script_count": 0,
+      "/catalog meta[name=robots]": null
+    }
+  },
+  "test_report_links": [
+    "/app/tests/verify_seo_scoped.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Note (informational, NOT part of scope): The Twitter meta description at index.html line 46 still reads '4.9\u2605 \u00b7 236+ Google reviews.' This is outside the LocalBusiness JSON-LD block and was not in scope of this task; flagging for owner awareness only in case the marketing copy should also be revisited for consistency with the removed aggregateRating."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (30/30 checks passed)"},
+  "test_credentials": "N/A - public endpoints and public files only",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 29 verified the two-line diff: aggregateRating removed from LocalBusiness JSON-LD (index.html) and 'Disallow: /favorites' removed from robots.txt. /favorites now emits meta robots noindex,follow at runtime and is not present in either static or dynamic sitemap. Verification script lives at /app/tests/verify_seo_scoped.py and can be re-run standalone (python tests/verify_seo_scoped.py). Twitter description on line 46 of index.html still says '4.9\u2605 \u00b7 236+ Google reviews' \u2014 explicitly out of scope for iteration 29; do not modify without instruction."
+}
