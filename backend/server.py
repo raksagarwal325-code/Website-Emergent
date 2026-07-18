@@ -891,6 +891,64 @@ async def create_catalogue_request(payload: CatalogueRequest, _rl = Depends(rate
     return {"success": True, "id": record["id"]}
 
 
+# --- SEO · dynamic sitemap ---------------------------------------------
+# Public, unauthenticated. Returns an XML sitemap listing every indexable
+# static page + every currently published product URL under the canonical
+# https://samratglass.com origin. Draft / unpublished products are excluded.
+# /favorites is intentionally omitted (that page is noindex,follow).
+_SITE_ORIGIN = "https://samratglass.com"
+_STATIC_SITEMAP_ENTRIES: list[tuple[str, str, str]] = [
+    ("/",                 "weekly",  "1.0"),
+    ("/catalog",          "weekly",  "0.9"),
+    ("/craft",            "monthly", "0.8"),
+    ("/about",            "monthly", "0.7"),
+    ("/gallery",          "weekly",  "0.8"),
+    ("/faq",              "monthly", "0.6"),
+    ("/contact",          "yearly",  "0.6"),
+    ("/legal/privacy",    "yearly",  "0.3"),
+    ("/legal/terms",      "yearly",  "0.3"),
+    ("/legal/shipping",   "yearly",  "0.3"),
+    ("/legal/returns",    "yearly",  "0.3"),
+    ("/legal/payment",    "yearly",  "0.3"),
+]
+
+
+@api.get("/sitemap.xml")
+async def sitemap_xml():
+    """Return the site sitemap as XML — static pages + every published
+    product. Cached briefly via HTTP headers so crawlers don't hammer the
+    endpoint on every visit."""
+    parts: list[str] = ['<?xml version="1.0" encoding="UTF-8"?>',
+                        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for path, freq, prio in _STATIC_SITEMAP_ENTRIES:
+        parts.append(
+            f"<url><loc>{_SITE_ORIGIN}{path}</loc>"
+            f"<changefreq>{freq}</changefreq><priority>{prio}</priority></url>"
+        )
+    cursor = db.products.find(
+        {"status": "published"},
+        {"_id": 0, "id": 1, "updated_at": 1},
+    )
+    async for doc in cursor:
+        pid = doc.get("id")
+        if not pid:
+            continue
+        lastmod = doc.get("updated_at") or ""
+        lastmod_tag = f"<lastmod>{lastmod[:10]}</lastmod>" if lastmod else ""
+        parts.append(
+            f"<url><loc>{_SITE_ORIGIN}/product/{pid}</loc>"
+            f"{lastmod_tag}<changefreq>weekly</changefreq><priority>0.7</priority></url>"
+        )
+    parts.append("</urlset>")
+    body = "\n".join(parts)
+    return Response(
+        content=body,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=1800"},
+    )
+
+
+
 # --- Settings ---
 @api.get("/settings", response_model=Settings)
 async def get_settings():
