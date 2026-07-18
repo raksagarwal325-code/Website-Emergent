@@ -1,0 +1,46 @@
+{
+  "summary": "Resend mailer integration verified. Full pytest suite 96/96 PASS after fixing a test-infrastructure regression introduced by test_mailer.py importing server.py in-process (clobbered /tmp/backend_worker.pid, breaking the SIGUSR1 rate-limit reset for the HTTP-based tests → cascading 429s in 18 tests). Contact/Inquiry/Review persistence + fire-and-forget mail dispatch + failure isolation + HTML escaping + secret redaction all validated. Live-URL curl regressions for enquiry_type wiring, coercion, pagination, deleted admin reset endpoint (404), and RESEND_API_KEY hygiene in public + admin responses all clean.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "N/A (test infrastructure)",
+        "issue": "server.py unconditionally writes /tmp/backend_worker.pid on module import (lines ~101-109). test_mailer.py imports `server` in-process for TestClient, so the pytest process's own PID overwrites the file; conftest._backend_worker_pid() then sees pid==os.getpid() and skips SIGUSR1 reset → HTTP tests hit 429 cascades. Worked around in the test harness (see updated_files). Long-term fix: only write the pid file when actually running as a uvicorn worker (e.g. guard on os.environ.get('UVICORN_WORKER') or check sys.argv/entrypoint) so importing server for tests doesn't stomp the shared coordination file."
+      },
+      {
+        "endpoint": "supervisor",
+        "issue": "sudo supervisorctl status shows `backend  FATAL  Exited too quickly` in this pod — but the real backend is still serving on :8001 (an orphan uvicorn worker pid=3215 owns the port; ss confirms; /api endpoints return 200). Supervisor cannot restart because 'Address already in use'. Cosmetic in this preview but will bite the next `supervisorctl restart backend`. Consider adding a preflight fuser/kill or setting reuse_port/reload_delay in the supervisor command."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_mailer.py",
+    "/app/backend/tests/test_reviews_moderation.py",
+    "/app/backend/tests/test_inquiries_price_security.py",
+    "/app/backend/tests/test_inquiries_legacy_email_fix.py",
+    "/app/backend/tests/test_contact_enquiry_type.py",
+    "/app/backend/tests/test_products_pagination.py",
+    "/app/backend/tests/test_authz_ssrf_ratelimit.py",
+    "/app/test_reports/pytest/pytest_iteration27.xml"
+  ],
+  "action_items": [
+    "server.py: gate the `/tmp/backend_worker.pid` write on a runtime marker (e.g. only when __name__ == '__main__' inside uvicorn, or when os.environ.get('UVICORN_STARTED')) so tests importing server in-process do not clobber the coordination file used by conftest.",
+    "Investigate supervisor `backend FATAL / Address already in use` in this pod — an orphan uvicorn worker (pid 3215) is holding :8001. Not urgent (traffic is served) but hot-reload / restart is broken until cleaned up."
+  ],
+  "critical_code_review_comments": [
+    "mailer.py is tight and correct: bounded 8s timeout via asyncio.wait_for, exception-safe helpers, redacts the API key from error strings, HTML-escapes every user-supplied field including inquiry items and review body. No f-string interpolation with safe=True anywhere. Good.",
+    "server.py: create_contact, create_inquiry, create_review all persist BEFORE scheduling mailer tasks, and wrap asyncio.create_task in try/except → email failure cannot fail or roll back the row. Verified persistence with fail=True DispatchRecorder (test_contact_submission_persists_even_if_email_fails).",
+    "server.py file is now 2126 lines — still worth splitting into routers (previously flagged). Even more relevant now that mailer plumbing runs through 3 endpoints."
+  ],
+  "updated_files": [
+    "/app/backend/tests/conftest.py — (a) session-scoped autouse fixture now snapshots the real backend pid from `ss -tlnp | grep :8001` into /tmp/backend_worker_real.pid BEFORE any test module imports server.py; (b) _backend_worker_pid() now prefers that pinned pid, falls back to the (possibly-clobbered) /tmp/backend_worker.pid, then to ss port-ownership, then to pgrep. Also checks /proc/<pid> existence to reject stale pids. Test-only fix; no server.py change."
+  ],
+  "success_rate": {"backend": "100% (96/96)", "frontend": "not tested (backend-only per request)"},
+  "test_credentials": "session_token=test_admin_session (seeded in mongo by conftest) + X-Requested-With: fetch header on state-changing calls. Admin allowlist: raks.agarwal325@gmail.com.",
+  "seed_data_creation": "Created TEST_CURL_CT and TEST_CURL_CT2 contact rows during live-URL smoke checks (not cleaned up — main agent may want to prune TEST_* rows before demo). test_mailer.py also created TEST_MAIL_* contact/inquiry/review rows via in-process TestClient — harmless test noise.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The suite runs at ~104s wall clock with 2 xdist workers (loadscope). If you see cascading 429s in test_reviews_moderation.py / test_inquiries_*.py, first check `cat /tmp/backend_worker.pid` — if the number is the current pytest process (or a dead pid), test_mailer.py's `import server` clobbered it. The updated conftest.py handles this via /tmp/backend_worker_real.pid + ss fallback, but if you delete the pinned file mid-session you'll reintroduce the bug. Also: the mailer tests deliberately use TestClient in-process and monkeypatch mailer._dispatch — never assert 'mailer was called' from an out-of-process HTTP test (asyncio.create_task fires the coroutine on the request loop, which TestClient tears down before the task runs).",
+  "rca of the issue": "18/96 pytest failures on initial run were ALL cascading 429 (rate-limited) errors — not the mailer feature itself. Root cause: server.py writes its PID to /tmp/backend_worker.pid at module-import time (lines 105-109). When pytest collects test_mailer.py it executes `import server` in the pytest process, which overwrites that file with the pytest PID. Later, conftest.py's autouse rate-limit reset fixture reads the file, sees pid == os.getpid(), skips the SIGUSR1 signal, and the real backend's in-memory _RL_WINDOWS never gets cleared → the 3-per-10min reviews bucket and 10-per-5min inquiries bucket saturated after the first few tests. Fix (test-only): session-start snapshot of the real backend pid from `ss -tlnp | grep :8001` into a separate file /tmp/backend_worker_real.pid that server.py cannot clobber, and preferred by _backend_worker_pid(). After fix: 96/96 PASS. Recommended permanent fix belongs in server.py (guard the pid write)."
+}
