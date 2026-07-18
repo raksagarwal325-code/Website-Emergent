@@ -167,7 +167,7 @@ async def ack_customer_contact(msg: dict) -> dict:
         "Samrat Glass Emporium. We've received your message and a member of our "
         "team will personally respond within 1 business day.</p>"
         "<p style=\"font-size:15px;line-height:1.6;color:#5a4a40\">For anything urgent, "
-        "reach us on WhatsApp at +91 98920 39293.</p>"
+        "reach us on WhatsApp at +91 89203 92937.</p>"
         "<p style=\"font-size:13px;color:#8a7a70;margin-top:24px\">— Samrat Glass Emporium, Firozabad</p>"
     )
     return await send_email(
@@ -236,7 +236,7 @@ async def ack_customer_inquiry(inq: dict) -> dict:
         f"<b>{n_items}</b> item{'s' if n_items != 1 else ''} and our team will "
         f"prepare a personalised quotation. Expect a reply within 1 business day.</p>"
         "<p style=\"font-size:15px;line-height:1.6;color:#5a4a40\">For anything urgent, "
-        "reach us on WhatsApp at +91 98920 39293.</p>"
+        "reach us on WhatsApp at +91 89203 92937.</p>"
         "<p style=\"font-size:13px;color:#8a7a70;margin-top:24px\">— Samrat Glass Emporium, Firozabad</p>"
     )
     return await send_email(
