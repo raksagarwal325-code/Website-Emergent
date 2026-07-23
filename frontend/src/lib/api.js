@@ -74,6 +74,21 @@ export const api = {
   getSettings: () => client.get("/settings").then(r => r.data),
   updateSettings: (data) => client.put("/settings", data).then(r => r.data),
 
+  // --- Hero slider ---
+  getHeroSlideshow: () => client.get("/hero-slides").then(r => r.data),
+  adminListHeroSlides: () => client.get("/admin/hero-slides").then(r => r.data),
+  adminGetHeroSettings: () => client.get("/admin/hero-settings").then(r => r.data),
+  adminUpdateHeroSettings: (data) => client.patch("/admin/hero-settings", data).then(r => r.data),
+  adminUploadHeroSlide: (file, altText = "") => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("alt_text", altText || "");
+    return client.post("/admin/hero-slides", fd, { headers: { "Content-Type": "multipart/form-data" } }).then(r => r.data);
+  },
+  adminUpdateHeroSlide: (id, data) => client.patch(`/admin/hero-slides/${id}`, data).then(r => r.data),
+  adminReorderHeroSlides: (orderIds) => client.patch(`/admin/hero-slides/reorder`, { order: orderIds }).then(r => r.data),
+  adminDeleteHeroSlide: (id) => client.delete(`/admin/hero-slides/${id}`).then(r => r.data),
+
   upload: (file) => {
     // Client-side guard so users get a friendly message before the network round-trip.
     // Server hard cap: 25MB for images, 100MB for videos.

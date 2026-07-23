@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash } from "lucide-react";
+import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images } from "lucide-react";
 import { api } from "../lib/api";
 import { compareBySku } from "../lib/api";
 import { toast } from "sonner";
@@ -7,6 +7,7 @@ import AdminHomepage from "../components/AdminHomepage";
 import AIProductGenerator from "../components/AIProductGenerator";
 import ProductNameSuggester from "../components/ProductNameSuggester";
 import ProductFullRegenerator from "../components/ProductFullRegenerator";
+import HeroSliderAdmin from "../components/admin/HeroSliderAdmin";
 
 const emptyProduct = {
   name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "USD",
@@ -41,6 +42,7 @@ export default function Admin() {
   const tabs = [
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { key: "homepage", label: "Homepage", icon: HomeIcon },
+    { key: "hero-slider", label: "Hero Slider", icon: Images },
     { key: "products", label: "Products", icon: Package },
     { key: "reviews", label: "Reviews", icon: Star, badge: reviewCounts.pending },
     { key: "inquiries", label: "Inquiries", icon: MessageSquare },
@@ -98,6 +100,7 @@ export default function Admin() {
       )}
 
       {tab === "homepage" && <AdminHomepage />}
+      {tab === "hero-slider" && <HeroSliderAdmin />}
 
       {tab === "products" && (
         <ProductsAdmin products={products} categories={categories} refresh={refresh} setEditing={setEditing} editing={editing} />
