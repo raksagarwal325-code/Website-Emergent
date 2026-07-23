@@ -949,6 +949,201 @@ async def sitemap_xml():
 
 
 
+
+# --- Hero Slider (backgrounds for the homepage hero) ------------------
+# Storage: images live in Emergent object storage. MongoDB is the source
+# of truth for the slide list, order, alt text, and enable flag.
+import hero_storage  # local module
+
+
+class HeroSlide(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    storage_path: str
+    alt_text: str = ""
+    enabled: bool = True
+    order: int = 0
+    content_type: str = "image/jpeg"
+    created_at: str = Field(default_factory=now_iso)
+
+
+class HeroSlideUpdate(BaseModel):
+    alt_text: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class HeroSettings(BaseModel):
+    display_duration: float = 6.0
+    transition_duration: float = 1.5
+
+
+@app.on_event("startup")
+async def _init_hero_storage():
+    try:
+        hero_storage.init_storage()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("hero_storage init failed: %s", e)
+
+
+def _slide_out(doc: dict) -> dict:
+    """Serialise a HeroSlide MongoDB doc into the API's public shape."""
+    return {
+        "id": doc.get("id"),
+        "image_url": f"/api/hero-slides/image/{doc.get('storage_path', '')}",
+        "alt_text": doc.get("alt_text", ""),
+        "enabled": bool(doc.get("enabled", True)),
+        "order": int(doc.get("order", 0)),
+        "created_at": doc.get("created_at", ""),
+    }
+
+
+@api.get("/hero-slides")
+async def public_hero_slides():
+    """Return only enabled slides, ordered, for the public homepage."""
+    docs = await db.hero_slides.find(
+        {"enabled": True}, {"_id": 0}
+    ).sort("order", 1).to_list(length=100)
+    settings_doc = await db.hero_settings.find_one({"_id": "singleton"}) or {}
+    return {
+        "slides": [_slide_out(d) for d in docs],
+        "settings": {
+            "display_duration": float(settings_doc.get("display_duration", 6.0)),
+            "transition_duration": float(settings_doc.get("transition_duration", 1.5)),
+        },
+    }
+
+
+@api.get("/hero-slides/image/{path:path}")
+async def hero_slide_image(path: str):
+    """Public proxy for a hero image (no auth needed — these are marketing
+    assets). 404 if the path is not a tracked slide, so callers can't scrape
+    arbitrary storage paths."""
+    if not path or ".." in path:
+        raise HTTPException(status_code=404, detail="not found")
+    doc = await db.hero_slides.find_one({"storage_path": path}, {"_id": 0, "content_type": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        data, ct = hero_storage.get_object(path)
+    except Exception:
+        raise HTTPException(status_code=502, detail="storage unavailable")
+    return Response(
+        content=data,
+        media_type=doc.get("content_type") or ct or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@api.get("/admin/hero-slides", dependencies=[Depends(require_admin)])
+async def admin_list_hero_slides():
+    docs = await db.hero_slides.find({}, {"_id": 0}).sort("order", 1).to_list(length=200)
+    return [_slide_out(d) for d in docs]
+
+
+@api.get("/admin/hero-settings", dependencies=[Depends(require_admin)])
+async def admin_get_hero_settings():
+    doc = await db.hero_settings.find_one({"_id": "singleton"}) or {}
+    return {
+        "display_duration": float(doc.get("display_duration", 6.0)),
+        "transition_duration": float(doc.get("transition_duration", 1.5)),
+    }
+
+
+@api.patch("/admin/hero-settings", dependencies=[Depends(require_admin)])
+async def admin_update_hero_settings(payload: HeroSettings):
+    if payload.display_duration < 2 or payload.display_duration > 60:
+        raise HTTPException(status_code=400, detail="display_duration out of range")
+    if payload.transition_duration < 0.2 or payload.transition_duration > 10:
+        raise HTTPException(status_code=400, detail="transition_duration out of range")
+    await db.hero_settings.update_one(
+        {"_id": "singleton"},
+        {"$set": {
+            "display_duration": float(payload.display_duration),
+            "transition_duration": float(payload.transition_duration),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.post("/admin/hero-slides", dependencies=[Depends(require_admin)])
+async def admin_upload_hero_slide(
+    file: UploadFile = File(...),
+    alt_text: str = Form(""),
+):
+    data = await file.read()
+    if len(data) > 6 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="image too large (6MB max)")
+    ct = (file.content_type or "image/jpeg").split(";")[0].strip()
+    if not ct.startswith("image/"):
+        raise HTTPException(status_code=400, detail="only images allowed")
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+    if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
+        ext = {"image/png": "png", "image/webp": "webp", "image/gif": "gif"}.get(ct, "jpg")
+    slide_id = str(uuid.uuid4())
+    path = hero_storage.image_path(slide_id, ext)
+    try:
+        hero_storage.put_object(path, data, ct)
+    except hero_storage.StorageError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    max_order = 0
+    async for d in db.hero_slides.find({}, {"_id": 0, "order": 1}).sort("order", -1).limit(1):
+        max_order = int(d.get("order", 0))
+    slide = HeroSlide(
+        id=slide_id, storage_path=path, alt_text=alt_text[:180],
+        enabled=True, order=max_order + 1, content_type=ct,
+    )
+    await db.hero_slides.insert_one(slide.model_dump())
+    return _slide_out(slide.model_dump())
+
+
+class HeroReorderPayload(BaseModel):
+    order: List[str]  # slide ids in the new visual order
+
+
+@api.patch("/admin/hero-slides/reorder", dependencies=[Depends(require_admin)])
+async def admin_reorder_hero_slides(payload: HeroReorderPayload):
+    for i, sid in enumerate(payload.order):
+        await db.hero_slides.update_one({"id": sid}, {"$set": {"order": i}})
+    return {"ok": True}
+
+
+@api.patch("/admin/hero-slides/{slide_id}", dependencies=[Depends(require_admin)])
+async def admin_update_hero_slide(slide_id: str, payload: HeroSlideUpdate):
+    update = {}
+    if payload.alt_text is not None:
+        update["alt_text"] = payload.alt_text[:180]
+    if payload.enabled is not None:
+        update["enabled"] = bool(payload.enabled)
+    if not update:
+        return {"ok": True}
+    # If disabling, ensure at least one other slide remains enabled.
+    if update.get("enabled") is False:
+        others = await db.hero_slides.count_documents({"enabled": True, "id": {"$ne": slide_id}})
+        if others < 1:
+            raise HTTPException(status_code=400, detail="at least one enabled slide is required")
+    res = await db.hero_slides.update_one({"id": slide_id}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="slide not found")
+    return {"ok": True}
+
+
+@api.delete("/admin/hero-slides/{slide_id}", dependencies=[Depends(require_admin)])
+async def admin_delete_hero_slide(slide_id: str):
+    doc = await db.hero_slides.find_one({"id": slide_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="slide not found")
+    # Enforce "at least one active image" only when the deletion would leave
+    # zero enabled slides.
+    if doc.get("enabled"):
+        others = await db.hero_slides.count_documents({"enabled": True, "id": {"$ne": slide_id}})
+        if others < 1:
+            raise HTTPException(status_code=400, detail="cannot delete the last enabled slide")
+    await db.hero_slides.delete_one({"id": slide_id})
+    # Storage is append-only per playbook — the object stays but is orphaned.
+    return {"ok": True}
+
+
 # --- Settings ---
 @api.get("/settings", response_model=Settings)
 async def get_settings():

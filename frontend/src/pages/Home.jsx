@@ -13,6 +13,7 @@ import TrustedBySection from "../components/TrustedBySection";
 import GalleryPreview from "../components/GalleryPreview";
 import InfluencerPromotions from "../components/InfluencerPromotions";
 import FounderTeaser from "../components/FounderTeaser";
+import HeroSlideshow from "../components/HeroSlideshow";
 import { useSettings } from "../context/SettingsContext";
 
 export default function Home() {
@@ -57,6 +58,11 @@ export default function Home() {
             alt=""
             className="w-full h-full object-cover"
           />
+          {/* Hero-slider background: crossfades between admin-managed
+              images. Renders on top of the CMS `hero_image` fallback so if
+              the network call fails or no slides are configured, the
+              existing hero image stays visible. */}
+          <HeroSlideshow fallbackSrc={settings?.hero_image} />
           <div className="absolute inset-0" style={{background: "linear-gradient(180deg, rgba(42,17,37,0.55) 0%, rgba(22,7,15,0.85) 60%, #16070f 100%)"}}></div>
           <div className="absolute inset-0" style={{background: "radial-gradient(circle at 80% 20%, rgba(163,99,80,0.35), transparent 45%)"}}></div>
         </motion.div>
