@@ -89,6 +89,26 @@ export const api = {
   adminReorderHeroSlides: (orderIds) => client.patch(`/admin/hero-slides/reorder`, { order: orderIds }).then(r => r.data),
   adminDeleteHeroSlide: (id) => client.delete(`/admin/hero-slides/${id}`).then(r => r.data),
 
+  // --- Category featured images ---
+  // Public map of `category -> image_url` (only categories with an admin override).
+  getCategoryFeaturedImages: () => client.get("/category-featured-images").then(r => r.data),
+  // Admin CRUD
+  adminListCategoryFeatured: () => client.get("/admin/category-featured-images").then(r => r.data),
+  adminSetCategoryFeaturedFromProduct: (category, product_id, image_url) =>
+    client
+      .put(`/admin/category-featured-images/${encodeURIComponent(category)}`, { product_id, image_url })
+      .then(r => r.data),
+  adminUploadCategoryFeatured: (category, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return client
+      .post(`/admin/category-featured-images/${encodeURIComponent(category)}/upload`, fd,
+        { headers: { "Content-Type": "multipart/form-data" } })
+      .then(r => r.data);
+  },
+  adminResetCategoryFeatured: (category) =>
+    client.delete(`/admin/category-featured-images/${encodeURIComponent(category)}`).then(r => r.data),
+
   upload: (file) => {
     // Client-side guard so users get a friendly message before the network round-trip.
     // Server hard cap: 25MB for images, 100MB for videos.

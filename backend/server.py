@@ -1144,6 +1144,188 @@ async def admin_delete_hero_slide(slide_id: str):
     return {"ok": True}
 
 
+# --- Category Featured Images ----------------------------------------------
+# Per-category "hero image" for the homepage "Shop by Category" grid.
+#
+# Two source types are supported — and ONLY these two:
+#   1. "product": pin an image URL that already belongs to a product in that
+#      category (validated against `products.images`). We store just the
+#      reference, so if the product is deleted the frontend gracefully falls
+#      back to the newest-product image.
+#   2. "upload": bytes uploaded to Emergent object storage under
+#      `samrat-glass/categories/<uuid>.<ext>` — served through a scoped proxy
+#      that only serves paths tracked by an existing override doc.
+#
+# We deliberately DO NOT accept arbitrary external URLs — that would defeat
+# the SSRF hardening applied elsewhere.
+CATEGORY_FEATURED_ALLOWED = {
+    "Chandelier",
+    "Hanging Light",
+    "Wall Light",
+    "Table Lamp",
+    "Floor Lamp",
+    "Candle Stand",
+}
+
+
+class CategoryFeaturedProductPayload(BaseModel):
+    """JSON body for pinning an image from an existing product."""
+    product_id: str
+    image_url: str
+
+
+def _cat_out(doc: dict) -> dict:
+    """Public shape for a single category override doc."""
+    src = doc.get("source_type")
+    if src == "upload":
+        image_url = f"/api/category-featured-images/image/{doc.get('storage_path', '')}"
+    else:
+        image_url = doc.get("product_image_url", "")
+    return {
+        "category": doc.get("category"),
+        "source_type": src,
+        "image_url": image_url,
+        "product_id": doc.get("product_id") if src == "product" else None,
+        "updated_at": doc.get("updated_at", ""),
+    }
+
+
+@api.get("/category-featured-images")
+async def public_category_featured_images():
+    """Return the current category→image_url override map (admin-set only).
+    Categories without an override are omitted; the frontend falls back to
+    the newest-product image for those."""
+    docs = await db.category_featured_images.find({}, {"_id": 0}).to_list(length=50)
+    return {d["category"]: _cat_out(d)["image_url"] for d in docs if d.get("category")}
+
+
+@api.get("/category-featured-images/image/{path:path}")
+async def category_featured_image_bytes(path: str):
+    """Serve an uploaded category image. Only paths tracked by an existing
+    override doc are served — arbitrary storage keys 404."""
+    if not path or ".." in path:
+        raise HTTPException(status_code=404, detail="not found")
+    doc = await db.category_featured_images.find_one(
+        {"storage_path": path, "source_type": "upload"},
+        {"_id": 0, "content_type": 1},
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        data, ct = hero_storage.get_object(path)
+    except Exception:
+        raise HTTPException(status_code=502, detail="storage unavailable")
+    return Response(
+        content=data,
+        media_type=doc.get("content_type") or ct or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@api.get("/admin/category-featured-images", dependencies=[Depends(require_admin)])
+async def admin_list_category_featured():
+    """Return every override doc, keyed by category, for the admin UI."""
+    docs = await db.category_featured_images.find({}, {"_id": 0}).to_list(length=50)
+    return [_cat_out(d) for d in docs]
+
+
+@api.put("/admin/category-featured-images/{category}",
+         dependencies=[Depends(require_admin)])
+async def admin_set_category_featured_from_product(
+    category: str, payload: CategoryFeaturedProductPayload,
+):
+    """Pin an image from an existing product in the same category.
+
+    We validate three things before saving:
+      * category is in the allow-list;
+      * product exists AND belongs to that category (case-sensitive match on
+        the canonical value); and
+      * `image_url` is a member of that product's `images` list — this is
+        what stops the admin from injecting arbitrary external URLs.
+    """
+    if category not in CATEGORY_FEATURED_ALLOWED:
+        raise HTTPException(status_code=400, detail="unknown category")
+    prod = await db.products.find_one(
+        {"id": payload.product_id},
+        {"_id": 0, "id": 1, "category": 1, "images": 1},
+    )
+    if not prod:
+        raise HTTPException(status_code=404, detail="product not found")
+    if prod.get("category") != category:
+        raise HTTPException(status_code=400,
+                            detail="product is not in this category")
+    if payload.image_url not in (prod.get("images") or []):
+        raise HTTPException(status_code=400,
+                            detail="image_url is not one of the product's images")
+    doc = {
+        "category": category,
+        "source_type": "product",
+        "product_id": payload.product_id,
+        "product_image_url": payload.image_url,
+        "updated_at": now_iso(),
+    }
+    # `$unset` clears any legacy upload fields so the record is clean.
+    await db.category_featured_images.update_one(
+        {"category": category},
+        {"$set": doc, "$unset": {"storage_path": "", "content_type": ""}},
+        upsert=True,
+    )
+    return _cat_out(doc)
+
+
+@api.post("/admin/category-featured-images/{category}/upload",
+          dependencies=[Depends(require_admin)])
+async def admin_upload_category_featured(
+    category: str, file: UploadFile = File(...),
+):
+    """Upload a custom image for one category. Same validation as the hero
+    slider (image content-type, ≤6MB) and stored under
+    samrat-glass/categories/<uuid>.<ext>."""
+    if category not in CATEGORY_FEATURED_ALLOWED:
+        raise HTTPException(status_code=400, detail="unknown category")
+    data = await file.read()
+    if len(data) > 6 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="image too large (6MB max)")
+    ct = (file.content_type or "image/jpeg").split(";")[0].strip()
+    if not ct.startswith("image/"):
+        raise HTTPException(status_code=400, detail="only images allowed")
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+    if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
+        ext = {"image/png": "png", "image/webp": "webp", "image/gif": "gif"}.get(ct, "jpg")
+    upload_id = str(uuid.uuid4())
+    slug = category.lower().replace(" ", "-")
+    path = f"{hero_storage.APP_NAME}/categories/{slug}/{upload_id}.{ext}"
+    try:
+        hero_storage.put_object(path, data, ct)
+    except hero_storage.StorageError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    doc = {
+        "category": category,
+        "source_type": "upload",
+        "storage_path": path,
+        "content_type": ct,
+        "updated_at": now_iso(),
+    }
+    await db.category_featured_images.update_one(
+        {"category": category},
+        {"$set": doc, "$unset": {"product_id": "", "product_image_url": ""}},
+        upsert=True,
+    )
+    return _cat_out(doc)
+
+
+@api.delete("/admin/category-featured-images/{category}",
+            dependencies=[Depends(require_admin)])
+async def admin_reset_category_featured(category: str):
+    """Reset a category back to the automatic newest-product fallback."""
+    if category not in CATEGORY_FEATURED_ALLOWED:
+        raise HTTPException(status_code=400, detail="unknown category")
+    await db.category_featured_images.delete_one({"category": category})
+    # Storage objects are left in place (append-only); reused key would
+    # collide with a new UUID, so this is safe.
+    return {"ok": True}
+
+
 # --- Settings ---
 @api.get("/settings", response_model=Settings)
 async def get_settings():

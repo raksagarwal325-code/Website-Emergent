@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images } from "lucide-react";
+import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { compareBySku } from "../lib/api";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import AIProductGenerator from "../components/AIProductGenerator";
 import ProductNameSuggester from "../components/ProductNameSuggester";
 import ProductFullRegenerator from "../components/ProductFullRegenerator";
 import HeroSliderAdmin from "../components/admin/HeroSliderAdmin";
+import CategoryImagesAdmin from "../components/admin/CategoryImagesAdmin";
 
 const emptyProduct = {
   name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "USD",
@@ -43,6 +44,7 @@ export default function Admin() {
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { key: "homepage", label: "Homepage", icon: HomeIcon },
     { key: "hero-slider", label: "Hero Slider", icon: Images },
+    { key: "category-images", label: "Category Images", icon: ImageIcon },
     { key: "products", label: "Products", icon: Package },
     { key: "reviews", label: "Reviews", icon: Star, badge: reviewCounts.pending },
     { key: "inquiries", label: "Inquiries", icon: MessageSquare },
@@ -101,6 +103,7 @@ export default function Admin() {
 
       {tab === "homepage" && <AdminHomepage />}
       {tab === "hero-slider" && <HeroSliderAdmin />}
+      {tab === "category-images" && <CategoryImagesAdmin />}
 
       {tab === "products" && (
         <ProductsAdmin products={products} categories={categories} refresh={refresh} setEditing={setEditing} editing={editing} />

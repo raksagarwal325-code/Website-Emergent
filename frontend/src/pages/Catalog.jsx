@@ -42,7 +42,9 @@ export default function Catalog() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState("");
-  const [category, setCategory] = useState("all");
+  // Seed the category filter from ?category=<db-name> so deep-links from the
+  // homepage "Shop by Category" tiles land with the filter already applied.
+  const [category, setCategory] = useState(() => searchParams.get("category") || "all");
   const [sort, setSort] = useState("newest");
   const [priceRange, setPriceRange] = useState([0, 60000]);
   const [showFilters, setShowFilters] = useState(true);
@@ -90,6 +92,23 @@ export default function Catalog() {
     if (urlPage !== page) setPage(urlPage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlPage]);
+  
+  // Keep the selected category in the URL for category deep-links.
+useEffect(() => {
+  const next = new URLSearchParams(searchParams);
+
+  if (category && category !== "all") {
+    next.set("category", category);
+  } else {
+    next.delete("category");
+  }
+
+  if (next.toString() !== searchParams.toString()) {
+    setSearchParams(next, { replace: true });
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [category]);
 
   // Single fetch effect — depends on all filters + the current page.
   useEffect(() => {

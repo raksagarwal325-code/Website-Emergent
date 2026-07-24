@@ -14,6 +14,7 @@ import GalleryPreview from "../components/GalleryPreview";
 import InfluencerPromotions from "../components/InfluencerPromotions";
 import FounderTeaser from "../components/FounderTeaser";
 import HeroSlideshow from "../components/HeroSlideshow";
+import CategoryShowcase from "../components/CategoryShowcase";
 import { useSettings } from "../context/SettingsContext";
 
 export default function Home() {
@@ -130,6 +131,9 @@ export default function Home() {
           </motion.div>
         </div>
       </section>
+
+      {/* Shop by Category — editorial grid, deep-links into /catalog?category= */}
+      <CategoryShowcase />
 
       {/* Trusted-by strip (hidden until admin adds at least one entry) */}
       <TrustedBySection />
