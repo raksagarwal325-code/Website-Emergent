@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, Download } from "lucide-react";
 import { api } from "../lib/api";
 import ProductCard from "../components/ProductCard";
@@ -10,6 +11,7 @@ import { trackSearch } from "../lib/analytics";
 const PAGE_SIZE = 24;
 
 export default function Catalog() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,7 +20,9 @@ export default function Catalog() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState("");
-  const [category, setCategory] = useState("all");
+  // Seed the category filter from ?category=<db-name> so deep-links from the
+  // homepage "Shop by Category" tiles land with the filter already applied.
+  const [category, setCategory] = useState(() => searchParams.get("category") || "all");
   const [sort, setSort] = useState("newest");
   const [priceRange, setPriceRange] = useState([0, 60000]);
   const [showFilters, setShowFilters] = useState(true);
@@ -44,6 +48,15 @@ export default function Catalog() {
   useEffect(() => {
     setLoading(true);
     setPage(1);
+    // Keep the URL in sync with the current category so deep-links & the
+    // browser back button stay accurate. Only `?category=` is written — the
+    // other filters remain UI-only for now.
+    const next = new URLSearchParams(searchParams);
+    if (category && category !== "all") next.set("category", category);
+    else next.delete("category");
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
     const myKey = ++requestKeyRef.current;
     const t = setTimeout(() => {
       api
