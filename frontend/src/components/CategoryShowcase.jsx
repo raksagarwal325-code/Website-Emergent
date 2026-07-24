@@ -33,23 +33,34 @@ export default function CategoryShowcase() {
 
   useEffect(() => {
     let alive = true;
-    // One request per category (6 in parallel). Newest first, published only
-    // via the public /products endpoint. If a category has zero items the
-    // tile gracefully falls back to a stock hero image.
-    Promise.all(
-      CATEGORIES.map((c) =>
-        api
-          .listProducts({ category: c.db_name, sort: "newest", limit: 1 })
-          .then((res) => {
-            const first = (res?.items || [])[0];
-            const raw = first?.images?.[0];
-            return [c.db_name, raw ? api.resolveImage(raw) : null];
-          })
-          .catch(() => [c.db_name, null]),
+    // Load admin overrides + newest-product-per-category in parallel. Admin
+    // override always wins; otherwise fall back to the newest product's first
+    // image. If a category has neither, the tile shows the stock fallback.
+    Promise.all([
+      api.getCategoryFeaturedImages().catch(() => ({})),
+      Promise.all(
+        CATEGORIES.map((c) =>
+          api
+            .listProducts({ category: c.db_name, sort: "newest", limit: 1 })
+            .then((res) => {
+              const first = (res?.items || [])[0];
+              const raw = first?.images?.[0];
+              return [c.db_name, raw ? api.resolveImage(raw) : null];
+            })
+            .catch(() => [c.db_name, null]),
+        ),
       ),
-    ).then((pairs) => {
+    ]).then(([overrides, fallbackPairs]) => {
       if (!alive) return;
-      setImages(Object.fromEntries(pairs));
+      const fallbackMap = Object.fromEntries(fallbackPairs);
+      const resolved = {};
+      for (const c of CATEGORIES) {
+        const override = overrides?.[c.db_name];
+        resolved[c.db_name] = override
+          ? api.resolveImage(override)
+          : fallbackMap[c.db_name] ?? null;
+      }
+      setImages(resolved);
     });
     return () => {
       alive = false;
