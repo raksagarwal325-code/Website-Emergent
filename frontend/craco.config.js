@@ -79,6 +79,20 @@ let webpackConfig = {
       },
     },
   },
+  // Jest resolver in CRA 5 doesn't fully honour package "exports" — v7 of
+  // react-router-dom uses that field and can't be resolved from test files
+  // without an explicit hint. Map it to its packaged entry so component
+  // render tests can pull in <MemoryRouter> etc.
+  jest: {
+    configure: {
+      moduleNameMapper: {
+        "^@/(.*)$": "<rootDir>/src/$1",
+        "^react-router-dom$": "<rootDir>/node_modules/react-router-dom/dist/index.js",
+        "^react-router/dom$": "<rootDir>/node_modules/react-router/dist/development/dom-export.js",
+        "^react-router$": "<rootDir>/node_modules/react-router/dist/development/index.js",
+      },
+    },
+  },
   webpack: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
