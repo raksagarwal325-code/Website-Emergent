@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { api } from "../lib/api";
-import { CATEGORIES } from "../lib/categories";
+import { NAV_CATEGORIES as CATEGORIES } from "../lib/categories";
 
 /**
  * "Shop by Category" — editorial category grid sitting directly under the

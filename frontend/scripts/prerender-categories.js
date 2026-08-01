@@ -264,6 +264,12 @@ async function runPrerender(options = {}) {
   if (!Array.isArray(CATEGORIES) || CATEGORIES.length === 0) {
     throw new Error(`${categoriesJson} contains no categories`);
   }
+  // Prerender only publishes pages for `published` categories. Unpublished
+  // rows exist in the data file but are excluded from crawlable output.
+  const PUBLISHED = CATEGORIES.filter((c) => c.published);
+  if (PUBLISHED.length === 0) {
+    throw new Error(`${categoriesJson} contains no published categories`);
+  }
 
   let template;
   try {
@@ -285,7 +291,7 @@ async function runPrerender(options = {}) {
 
   // --- Per-category ---
   const summaries = [];
-  for (const cat of CATEGORIES) {
+  for (const cat of PUBLISHED) {
     let products;
     try {
       products = await fetchCategoryProducts(apiBase, cat.db_name);
@@ -305,7 +311,7 @@ async function runPrerender(options = {}) {
     // Write file
     const outDir = path.join(buildDir, "category", cat.slug);
     fs.mkdirSync(outDir, { recursive: true });
-    const html = inject(template, cat, products, CATEGORIES, apiBase);
+    const html = inject(template, cat, products, PUBLISHED, apiBase);
     fs.writeFileSync(path.join(outDir, "index.html"), html, "utf8");
 
     logger.log(`[prerender]   ${cat.slug.padEnd(16)} → ${products.length} products`);

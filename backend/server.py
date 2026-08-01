@@ -897,17 +897,40 @@ async def create_catalogue_request(payload: CatalogueRequest, _rl = Depends(rate
 # https://samratglass.com origin. Draft / unpublished products are excluded.
 # /favorites is intentionally omitted (that page is noindex,follow).
 _SITE_ORIGIN = "https://samratglass.com"
+# Path to the shared single-source category catalogue. Backend and frontend
+# read from the same file so the sitemap can never drift from the pages.
+_CATEGORIES_JSON = Path(__file__).parent.parent / "frontend" / "src" / "lib" / "categories.data.json"
+
+
+def _load_seo_category_paths() -> list[tuple[str, str, str]]:
+    """Return sitemap tuples for every published + sitemap-flagged category.
+
+    Reads the shared JSON at request time (cheap, small file) so admin edits
+    that flip a `published`/`sitemap` flag take effect on the next request
+    without a service restart. Errors log and fall back to an empty list so
+    a corrupt/absent file never blows up the sitemap endpoint entirely.
+    """
+    try:
+        with open(_CATEGORIES_JSON, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        logger.warning("sitemap: could not read categories.data.json: %s", e)
+        return []
+    out: list[tuple[str, str, str]] = []
+    for c in data.get("categories") or []:
+        if not (c.get("published") and c.get("sitemap")):
+            continue
+        slug = c.get("slug") or ""
+        if not slug or "/" in slug:
+            # Invalid slug — refuse to advertise it.
+            continue
+        out.append((f"/category/{slug}", "weekly", "0.85"))
+    return out
+
+
 _STATIC_SITEMAP_ENTRIES: list[tuple[str, str, str]] = [
     ("/",                 "weekly",  "1.0"),
     ("/catalog",          "weekly",  "0.9"),
-    # SEO category landing pages — clean permanent URLs, single source of
-    # truth for the six categories exposed to search engines.
-    ("/category/chandeliers",    "weekly", "0.85"),
-    ("/category/hanging-lights", "weekly", "0.85"),
-    ("/category/wall-lights",    "weekly", "0.85"),
-    ("/category/table-lamps",    "weekly", "0.85"),
-    ("/category/floor-lamps",    "weekly", "0.85"),
-    ("/category/candle-stands",  "weekly", "0.85"),
     ("/craft",            "monthly", "0.8"),
     ("/about",            "monthly", "0.7"),
     ("/gallery",          "weekly",  "0.8"),
@@ -928,7 +951,14 @@ async def sitemap_xml():
     endpoint on every visit."""
     parts: list[str] = ['<?xml version="1.0" encoding="UTF-8"?>',
                         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
-    for path, freq, prio in _STATIC_SITEMAP_ENTRIES:
+    # Static + SEO categories (categories read from the shared JSON so this
+    # list can never fall out of sync with the pages themselves).
+    all_entries = list(_STATIC_SITEMAP_ENTRIES) + _load_seo_category_paths()
+    seen_paths: set[str] = set()
+    for path, freq, prio in all_entries:
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
         parts.append(
             f"<url><loc>{_SITE_ORIGIN}{path}</loc>"
             f"<changefreq>{freq}</changefreq><priority>{prio}</priority></url>"

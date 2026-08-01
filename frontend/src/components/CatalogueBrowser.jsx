@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, Download } from "lucide-react";
 import { api } from "../lib/api";
+import { NAV_CATEGORIES } from "../lib/categories";
 import ProductCard from "./ProductCard";
 import { Slider } from "./ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -29,7 +30,11 @@ export default function CatalogueBrowser({
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState(initialProducts);
-  const [categories, setCategories] = useState([]);
+  // Left-filter categories come from the same single-source JSON as the
+  // top navigation, so the two lists cannot drift. "All" is added
+  // client-side inside the JSX — it's a filter-only concept, never a
+  // real category, page or sitemap entry.
+  const categories = NAV_CATEGORIES.map((c) => c.db_name);
   const [loading, setLoading] = useState(initialProducts.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
@@ -46,13 +51,6 @@ export default function CatalogueBrowser({
   const [priceRange, setPriceRange] = useState([0, 60000]);
   const [showFilters, setShowFilters] = useState(true);
   const requestKeyRef = useRef(0);
-
-  useEffect(() => {
-    // Only the catalogue page needs the sidebar category list. Skip on
-    // locked pages to avoid a pointless network hit.
-    if (lockedCategory) return;
-    api.categories().then(setCategories).catch(() => {});
-  }, [lockedCategory]);
 
   // Whenever the caller changes `lockedCategory` (e.g. navigating between
   // /category/chandeliers and /category/floor-lamps), reset internal state
