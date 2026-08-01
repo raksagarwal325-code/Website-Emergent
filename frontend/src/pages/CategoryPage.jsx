@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import SEO from "../components/SEO";
 import CatalogueBrowser from "../components/CatalogueBrowser";
 import NotFound from "./NotFound";
-import { getCategoryBySlug, CATEGORIES, SITE_ORIGIN } from "../lib/categories";
+import { getCategoryBySlug, NAV_CATEGORIES, SITE_ORIGIN } from "../lib/categories";
 import { api } from "../lib/api";
 
 /**
@@ -121,19 +121,21 @@ export default function CategoryPage() {
       <nav
         aria-label="More categories"
         data-testid="category-cross-links"
-        className="mt-16 pt-10 border-t border-white/10 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs uppercase tracking-[0.24em]"
+        className="mt-16 pt-10 border-t border-white/10 -mx-6 px-6 md:mx-0 md:px-0 overflow-x-auto md:overflow-visible"
       >
-        <span className="text-white/40">Explore more:</span>
-        {CATEGORIES.filter((c) => c.slug !== category.slug).map((c) => (
-          <Link
-            key={c.slug}
-            to={`/category/${c.slug}`}
-            className="text-white/70 hover:text-[#D4AF37] link-underline"
-            data-testid={`category-cross-${c.slug}`}
-          >
-            {c.label}
-          </Link>
-        ))}
+        <div className="flex md:flex-wrap items-center gap-x-6 gap-y-2 text-xs uppercase tracking-[0.24em] whitespace-nowrap md:whitespace-normal">
+          <span className="text-white/40">Explore more:</span>
+          {NAV_CATEGORIES.filter((c) => c.slug !== category.slug).map((c) => (
+            <Link
+              key={c.slug}
+              to={`/category/${c.slug}`}
+              className="text-white/70 hover:text-[#D4AF37] link-underline"
+              data-testid={`category-cross-${c.slug}`}
+            >
+              {c.label}
+            </Link>
+          ))}
+        </div>
       </nav>
     </div>
   );

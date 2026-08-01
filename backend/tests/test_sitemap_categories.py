@@ -35,8 +35,10 @@ SITE_ORIGIN = "https://samratglass.com"
 CATEGORY_URLS = [
     f"{SITE_ORIGIN}/category/candle-stands",
     f"{SITE_ORIGIN}/category/chandeliers",
+    f"{SITE_ORIGIN}/category/floor-chandeliers",
     f"{SITE_ORIGIN}/category/floor-lamps",
     f"{SITE_ORIGIN}/category/hanging-lights",
+    f"{SITE_ORIGIN}/category/table-chandeliers",
     f"{SITE_ORIGIN}/category/table-lamps",
     f"{SITE_ORIGIN}/category/wall-lights",
 ]
@@ -57,7 +59,7 @@ def test_sitemap_is_well_formed_xml():
     assert root.tag.endswith("urlset"), root.tag
 
 
-def test_sitemap_contains_all_six_category_urls():
+def test_sitemap_contains_all_eight_category_urls():
     body = _get_sitemap_body()
     for url in CATEGORY_URLS:
         # Each URL should appear exactly once as a <loc>.
@@ -65,12 +67,17 @@ def test_sitemap_contains_all_six_category_urls():
         assert body.count(needle) == 1, f"{url} appeared {body.count(needle)}x"
 
 
-def test_sitemap_never_lists_legacy_query_urls():
+def test_sitemap_excludes_all_and_query_urls():
+    """`All` is a filter-only concept — the sitemap must not advertise it."""
     body = _get_sitemap_body()
     # Legacy query URLs are handled by client-side redirect; they must not be
     # advertised as canonical, indexable endpoints.
     assert "/catalog?category=" not in body
     assert "?category=" not in body
+    # Explicitly guard against an "All" pseudo-category slug.
+    assert "/category/all" not in body.lower()
+    assert "/category/none" not in body.lower()
+    assert "/category/undefined" not in body.lower()
 
 
 def test_sitemap_category_urls_have_priority_and_changefreq():

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Mail, MapPin, Clock, Phone, Download, ExternalLink } from "lucide-react";
 import { useSettings } from "../../context/SettingsContext";
 import { formatPhone } from "../../lib/api";
-import { CATEGORIES as SEO_CATEGORIES } from "../../lib/categories";
+import { NAV_CATEGORIES as SEO_CATEGORIES } from "../../lib/categories";
 
 // WhatsApp glyph (brand-safe)
 const WA = ({ size = 15 }) => (
@@ -281,19 +281,21 @@ export default function Footer() {
         <nav
           aria-label="Collections"
           data-testid="footer-collections"
-          className="mt-12 pt-6 border-t border-[#BF9972]/10 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] uppercase tracking-[0.24em]"
+          className="mt-12 pt-6 border-t border-[#BF9972]/10 -mx-1 overflow-x-auto md:overflow-visible"
         >
-          <span className="text-white/40">Collections:</span>
-          {SEO_CATEGORIES.map((c) => (
-            <Link
-              key={c.slug}
-              to={`/category/${c.slug}`}
-              data-testid={`footer-collections-${c.slug}`}
-              className="text-white/70 hover:text-[#D4AF37] link-underline"
-            >
-              {c.label}
-            </Link>
-          ))}
+          <div className="flex md:flex-wrap items-center gap-x-6 gap-y-2 text-[11px] uppercase tracking-[0.24em] whitespace-nowrap md:whitespace-normal px-1">
+            <span className="text-white/40">Collections:</span>
+            {SEO_CATEGORIES.map((c) => (
+              <Link
+                key={c.slug}
+                to={`/category/${c.slug}`}
+                data-testid={`footer-collections-${c.slug}`}
+                className="text-white/70 hover:text-[#D4AF37] link-underline"
+              >
+                {c.label}
+              </Link>
+            ))}
+          </div>
         </nav>
 
         {/* Bottom row — single-line combined copyright */}

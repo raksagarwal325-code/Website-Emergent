@@ -2,7 +2,7 @@ import React from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import SEO from "../components/SEO";
 import CatalogueBrowser from "../components/CatalogueBrowser";
-import { CATEGORIES, getCategoryByDbName } from "../lib/categories";
+import { CATEGORIES, getCategoryByDbName, NAV_CATEGORIES } from "../lib/categories";
 
 /**
  * Main catalogue page.
@@ -43,23 +43,28 @@ export default function Catalog() {
         </p>
       </div>
 
+      {/* Crawlable category strip — reads from the single-source
+          NAV_CATEGORIES so it always matches the left filter, the
+          homepage grid and the footer strip. Wraps on desktop; scrolls
+          horizontally on narrower widths so 8+ items never truncate. */}
       <nav
         aria-label="Browse by category"
         data-testid="catalog-category-strip"
-        className="mb-12 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs uppercase tracking-[0.24em]"
+        className="mb-12 -mx-6 px-6 md:mx-0 md:px-0 overflow-x-auto md:overflow-visible"
       >
-        <span className="text-white/40">Browse by category:</span>
-
-        {CATEGORIES.map((category) => (
-          <Link
-            key={category.slug}
-            to={`/category/${category.slug}`}
-            data-testid={`catalog-strip-${category.slug}`}
-            className="text-white/70 hover:text-[#D4AF37] link-underline"
-          >
-            {category.label}
-          </Link>
-        ))}
+        <div className="flex md:flex-wrap items-center gap-x-6 gap-y-2 text-xs uppercase tracking-[0.24em] whitespace-nowrap md:whitespace-normal">
+          <span className="text-white/40">Browse by category:</span>
+          {NAV_CATEGORIES.map((c) => (
+            <Link
+              key={c.slug}
+              to={`/category/${c.slug}`}
+              data-testid={`catalog-strip-${c.slug}`}
+              className="text-white/70 hover:text-[#D4AF37] link-underline"
+            >
+              {c.label}
+            </Link>
+          ))}
+        </div>
       </nav>
 
       <CatalogueBrowser />
