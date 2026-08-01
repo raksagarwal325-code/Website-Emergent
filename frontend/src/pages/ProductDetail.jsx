@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, MapPin } from "lucide-react";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
+import { schemaAvailabilityFor, isMadeToOrder } from "../lib/productAvailability";
 import { useCatalog } from "../context/CatalogContext";
 import { toast } from "sonner";
 import SEO from "../components/SEO";
