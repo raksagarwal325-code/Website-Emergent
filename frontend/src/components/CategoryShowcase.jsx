@@ -3,26 +3,20 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { api } from "../lib/api";
+import { CATEGORIES } from "../lib/categories";
 
 /**
  * "Shop by Category" — editorial category grid sitting directly under the
- * hero. Each tile deep-links into the catalog with the category filter
- * pre-applied via ?category=<db-name>.
+ * hero. Each tile links to the clean category page at /category/<slug> so
+ * search engines get a permanent, filterable landing page for each category.
  *
  *  - `db_name`   : exact value stored on products (singular, used as filter).
  *  - `label`     : plural marketing label shown to shoppers.
- *  - Image source: newest published product for that category. A future
- *    admin override lets us pin a specific `featured_image` per category.
+ *  - `slug`      : clean URL segment ("chandeliers", "hanging-lights", …).
+ *  - Image source: admin override → newest published product for that
+ *    category → stock fallback (below).
  *  - All below-the-fold images are `loading="lazy"` / `decoding="async"`.
  */
-const CATEGORIES = [
-  { db_name: "Chandelier",   label: "Chandeliers"   },
-  { db_name: "Hanging Light", label: "Hanging Lights" },
-  { db_name: "Wall Light",   label: "Wall Lights"   },
-  { db_name: "Table Lamp",   label: "Table Lamps"   },
-  { db_name: "Floor Lamp",   label: "Floor Lamps"   },
-  { db_name: "Candle Stand", label: "Candle Stands" },
-];
 
 const FALLBACK_IMG =
   "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?w=1200&q=70";
@@ -125,7 +119,7 @@ export default function CategoryShowcase() {
 }
 
 function CategoryCard({ category, imageUrl, index }) {
-  const href = `/catalog?category=${encodeURIComponent(category.db_name)}`;
+  const href = `/category/${category.slug}`;
   return (
     <motion.div
       initial={{ opacity: 0, y: 22 }}

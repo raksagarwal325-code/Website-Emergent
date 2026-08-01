@@ -51,6 +51,7 @@ _BUCKET_BY_MODULE = {
     "test_contact_enquiry_type": "contact",
     "test_products_pagination": None,  # no rate-limited endpoint used
     "test_category_featured_images": None,  # no rate-limited endpoint used
+    "test_sitemap_categories": None,   # sitemap is not rate-limited
     "test_authz_ssrf_ratelimit": "",   # exercises multiple buckets
 }
 

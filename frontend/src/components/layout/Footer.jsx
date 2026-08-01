@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Mail, MapPin, Clock, Phone, Download, ExternalLink } from "lucide-react";
 import { useSettings } from "../../context/SettingsContext";
 import { formatPhone } from "../../lib/api";
+import { CATEGORIES as SEO_CATEGORIES } from "../../lib/categories";
 
 // WhatsApp glyph (brand-safe)
 const WA = ({ size = 15 }) => (
@@ -273,6 +274,27 @@ export default function Footer() {
             </div>
           </div>
         </div>
+
+        {/* Collections strip — crawlable direct links to every category page.
+            Kept as a compact wrapping row so the existing 12-column layout
+            above stays balanced. */}
+        <nav
+          aria-label="Collections"
+          data-testid="footer-collections"
+          className="mt-12 pt-6 border-t border-[#BF9972]/10 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] uppercase tracking-[0.24em]"
+        >
+          <span className="text-white/40">Collections:</span>
+          {SEO_CATEGORIES.map((c) => (
+            <Link
+              key={c.slug}
+              to={`/category/${c.slug}`}
+              data-testid={`footer-collections-${c.slug}`}
+              className="text-white/70 hover:text-[#D4AF37] link-underline"
+            >
+              {c.label}
+            </Link>
+          ))}
+        </nav>
 
         {/* Bottom row — single-line combined copyright */}
         <div className="mt-14 pt-6 border-t border-[#BF9972]/15 text-center text-[11px] text-white/40 tracking-wide" data-testid="footer-copyright">

@@ -900,6 +900,14 @@ _SITE_ORIGIN = "https://samratglass.com"
 _STATIC_SITEMAP_ENTRIES: list[tuple[str, str, str]] = [
     ("/",                 "weekly",  "1.0"),
     ("/catalog",          "weekly",  "0.9"),
+    # SEO category landing pages — clean permanent URLs, single source of
+    # truth for the six categories exposed to search engines.
+    ("/category/chandeliers",    "weekly", "0.85"),
+    ("/category/hanging-lights", "weekly", "0.85"),
+    ("/category/wall-lights",    "weekly", "0.85"),
+    ("/category/table-lamps",    "weekly", "0.85"),
+    ("/category/floor-lamps",    "weekly", "0.85"),
+    ("/category/candle-stands",  "weekly", "0.85"),
     ("/craft",            "monthly", "0.8"),
     ("/about",            "monthly", "0.7"),
     ("/gallery",          "weekly",  "0.8"),
