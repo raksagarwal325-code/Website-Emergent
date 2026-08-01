@@ -130,7 +130,8 @@ export default function ProductDetail() {
     }
   };
 
-  const productSchema = product ? {
+  const availabilityUrl = product ? schemaAvailabilityFor(product) : null;
+  const productSchema = product && availabilityUrl ? {
     "@context": "https://schema.org",
     "@type": "Product",
     "name": product.name,
@@ -150,7 +151,7 @@ export default function ProductDetail() {
       "@type": "Offer",
       "price": String(product.price || 0),
       "priceCurrency": "INR",
-      "availability": product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/MadeToOrder",
+      "availability": availabilityUrl,
       "url": typeof window !== "undefined" ? window.location.href : "",
       "seller": { "@type": "Organization", "name": "Samrat Glass Emporium" }
     }
@@ -261,6 +262,18 @@ export default function ProductDetail() {
               <Heart size={16} fill={fav ? "#D4AF37" : "none"} />
             </button>
           </div>
+
+          {/* Made-to-order note — shown only for published items with no
+              current stock so ready-stock pieces are not mislabelled. */}
+          {isMadeToOrder(product) && (
+            <p
+              data-testid="made-to-order-note"
+              className="text-xs text-white/60 leading-relaxed max-w-md"
+            >
+              <span className="text-[#D4AF37]">Made to order.</span>{" "}
+              Production and dispatch timelines will be confirmed after enquiry.
+            </p>
+          )}
 
           {/* Stock / availability — inquiry-based products never say "unavailable". */}
           <div className="text-xs text-white/50 border-t border-white/10 pt-6">

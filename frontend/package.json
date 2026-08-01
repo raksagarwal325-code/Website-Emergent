@@ -66,6 +66,7 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
+    "postbuild": "node scripts/prerender-categories.js",
     "test": "craco test"
   },
   "browserslist": {

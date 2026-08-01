@@ -9,6 +9,7 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import Home from "@/pages/Home";
 import Catalog from "@/pages/Catalog";
+import CategoryPage from "@/pages/CategoryPage";
 import ProductDetail from "@/pages/ProductDetail";
 import Favorites from "@/pages/Favorites";
 import Cart from "@/pages/Cart";
@@ -51,6 +52,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/catalog" element={<Catalog />} />
+              <Route path="/category/:slug" element={<CategoryPage />} />
               <Route path="/about" element={<About />} />
               <Route path="/craft" element={<Craft />} />
               <Route path="/faq" element={<FAQ />} />
