@@ -264,15 +264,15 @@ export default function ProductDetail() {
             </button>
           </div>
 
-          {/* Made-to-order note — shown only for published items with no
+          {/* Pre-order note — shown only for published items with no
               current stock so ready-stock pieces are not mislabelled. */}
           {isMadeToOrder(product) && (
             <p
               data-testid="made-to-order-note"
               className="text-xs text-white/60 leading-relaxed max-w-md"
             >
-              <span className="text-[#D4AF37]">Made to order.</span>{" "}
-              Production and dispatch timelines will be confirmed after enquiry.
+              <span className="text-[#D4AF37]">Pre-order.</span>{" "}
+              Production and dispatch timelines will be confirmed after your enquiry.
             </p>
           )}
 
@@ -514,7 +514,7 @@ function ProductTabs({ product, settings, waLink }) {
               data-testid="spec-customization-note"
               className="mt-6 border-l-2 border-[#D4AF37] bg-white/[0.02] px-5 py-4 text-sm text-white/75 leading-relaxed"
             >
-              <span className="text-[#D4AF37] font-serif italic">Made-to-order — </span>
+              <span className="text-[#D4AF37] font-serif italic">Pre-order — </span>
               Specifications can be customised as per requirement. Please inquire for exact size,
               holder type, finish, and pricing.
             </div>
