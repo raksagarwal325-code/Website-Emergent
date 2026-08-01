@@ -136,6 +136,6 @@ describe("ProductDetail — availability regression (hotfix)", () => {
     // The visible note is rendered when isMadeToOrder(product) === true.
     const note = await screen.findByTestId("made-to-order-note");
     expect(note).toBeInTheDocument();
-    expect(note.textContent).toMatch(/made to order/i);
+    expect(note.textContent).toMatch(/pre-?order/i);
   });
 });
