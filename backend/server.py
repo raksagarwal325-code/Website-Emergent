@@ -831,9 +831,37 @@ async def create_inquiry(payload: InquiryCreate, _rl = Depends(rate_limit("inqui
     return inquiry
 
 
-@api.get("/inquiries", response_model=List[Inquiry])
+@api.get("/inquiries")
 async def list_inquiries(admin: _AdminUser = Depends(require_admin)):
-    return await db.inquiries.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    """Return the most recent enquiries (defensive):
+    We deliberately DO NOT use `response_model=List[Inquiry]` here because
+    a single malformed row (e.g. legacy empty email, unexpected `items`
+    shape, or a stray field) would raise a Pydantic ValidationError from
+    the response-serialisation layer and surface as an opaque 500/502 to
+    the admin dashboard. Instead we serialise row-by-row through the
+    Pydantic model, skip and log rows that fail validation, and always
+    return a well-formed JSON array so the UI can render whatever is
+    valid. Individual bad rows can still be deleted from the UI once the
+    admin can see them."""
+    try:
+        raw_rows = await db.inquiries.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    except Exception as e:  # pragma: no cover
+        logger.exception("list_inquiries.mongo_error err=%s", e)
+        raise HTTPException(status_code=503, detail="Could not load enquiries")
+    out = []
+    skipped = 0
+    for row in raw_rows:
+        try:
+            out.append(Inquiry(**row).model_dump())
+        except Exception as e:
+            skipped += 1
+            logger.warning(
+                "list_inquiries.row_validation_failed id=%s err=%s",
+                row.get("id"), e,
+            )
+    if skipped:
+        logger.warning("list_inquiries.skipped_rows=%d total=%d", skipped, len(raw_rows))
+    return out
 
 
 @api.patch("/inquiries/{inquiry_id}")
@@ -842,6 +870,64 @@ async def update_inquiry_status(inquiry_id: str, status: str = Query(...), admin
     if res.matched_count == 0:
         raise HTTPException(404, "Inquiry not found")
     return {"ok": True}
+
+
+class _IdList(BaseModel):
+    """Body payload for bulk-delete endpoints. IDs are deduplicated and
+    validated (non-empty, string) before use."""
+    ids: list[str]
+
+
+def _clean_ids(payload: _IdList) -> list[str]:
+    """Deduplicate + strip + drop blanks. Returns a stable ordered list."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in payload.ids or []:
+        s = (raw or "").strip()
+        if not s or s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+    if not out:
+        raise HTTPException(status_code=400, detail="No valid ids supplied")
+    if len(out) > 500:
+        raise HTTPException(status_code=413, detail="Too many ids (max 500)")
+    return out
+
+
+@api.delete("/inquiries/{inquiry_id}")
+async def admin_delete_inquiry(inquiry_id: str, admin: _AdminUser = Depends(require_admin)):
+    """Permanently remove a single enquiry. Enquiries are self-contained
+    (there is no owned child collection in the current data model), so no
+    cascade is performed — unrelated contact messages are untouched."""
+    res = await db.inquiries.delete_one({"id": inquiry_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Inquiry not found")
+    return {"ok": True, "deleted": 1}
+
+
+@api.post("/admin/inquiries/bulk-delete")
+async def admin_bulk_delete_inquiries(payload: _IdList, admin: _AdminUser = Depends(require_admin)):
+    """Bulk-delete enquiries. Reports the actual count Mongo removed —
+    non-existent IDs are silently skipped rather than aborting the batch."""
+    ids = _clean_ids(payload)
+    res = await db.inquiries.delete_many({"id": {"$in": ids}})
+    return {"ok": True, "requested": len(ids), "deleted": res.deleted_count}
+
+
+@api.delete("/contact-messages/{message_id}")
+async def admin_delete_contact_message(message_id: str, admin: _AdminUser = Depends(require_admin)):
+    res = await db.contact_messages.delete_one({"id": message_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"ok": True, "deleted": 1}
+
+
+@api.post("/admin/contact-messages/bulk-delete")
+async def admin_bulk_delete_messages(payload: _IdList, admin: _AdminUser = Depends(require_admin)):
+    ids = _clean_ids(payload)
+    res = await db.contact_messages.delete_many({"id": {"$in": ids}})
+    return {"ok": True, "requested": len(ids), "deleted": res.deleted_count}
 
 
 # --- Contact ---
@@ -861,9 +947,29 @@ async def create_contact(payload: ContactCreate, _rl = Depends(rate_limit("conta
     return msg
 
 
-@api.get("/contact", response_model=List[ContactMessage])
+@api.get("/contact")
 async def list_contact(admin: _AdminUser = Depends(require_admin)):
-    return await db.contact_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    """Same defensive pattern as `list_inquiries`. Skips + logs any row
+    that fails ContactMessage validation instead of returning a 500."""
+    try:
+        raw_rows = await db.contact_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    except Exception as e:  # pragma: no cover
+        logger.exception("list_contact.mongo_error err=%s", e)
+        raise HTTPException(status_code=503, detail="Could not load messages")
+    out = []
+    skipped = 0
+    for row in raw_rows:
+        try:
+            out.append(ContactMessage(**row).model_dump())
+        except Exception as e:
+            skipped += 1
+            logger.warning(
+                "list_contact.row_validation_failed id=%s err=%s",
+                row.get("id"), e,
+            )
+    if skipped:
+        logger.warning("list_contact.skipped_rows=%d total=%d", skipped, len(raw_rows))
+    return out
 
 
 class CatalogueRequest(BaseModel):

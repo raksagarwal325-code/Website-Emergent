@@ -53,6 +53,7 @@ _BUCKET_BY_MODULE = {
     "test_category_featured_images": None,  # no rate-limited endpoint used
     "test_sitemap_categories": None,   # sitemap is not rate-limited
     "test_batch_a_whatsapp_catalogue": "catreq",  # /catalogue-request is rate-limited
+    "test_admin_deletion": None,  # only admin routes, no rate-limited endpoints
     "test_authz_ssrf_ratelimit": "",   # exercises multiple buckets
 }
 

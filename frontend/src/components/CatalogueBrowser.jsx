@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, SlidersHorizontal, Download } from "lucide-react";
+import { Search, SlidersHorizontal, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
 import { NAV_CATEGORIES } from "../lib/categories";
 import ProductCard from "./ProductCard";
@@ -12,16 +12,17 @@ const PAGE_SIZE = 24;
 /**
  * Shared product browser used by both `/catalog` and `/category/<slug>`.
  *
- * The catalogue page keeps the full category sidebar. Category pages pass a
- * `lockedCategory` (canonical DB name) and:
- *   * the category is fixed for every request (never changed by user input);
- *   * the category list in the sidebar is hidden so we don't imply the user
- *     is on the catalogue page;
- *   * the URL is NOT rewritten with `?category=…` — the clean path is the
- *     source of truth.
- *
- * All other browsing controls — search, sort, price, load-more, pagination
- * dedupe and the stale-response guard — behave identically to the catalogue.
+ * Pagination model (Batch B · Item 1):
+ *   - The current page lives in the URL as `?page=N` (default 1).
+ *   - Changing page **replaces** products (no append) and scrolls to the
+ *     top of the grid.
+ *   - Changing search / sort / category / price / lockedCategory always
+ *     resets `?page=1` so the visitor never lands on an out-of-range page
+ *     for a new filter set.
+ *   - Invalid page values (`abc`, `-5`, `1e9`) are clamped to the valid
+ *     range once the total_pages is known — the URL is normalised back
+ *     via `setSearchParams(..., { replace: true })`.
+ *   - Previous is disabled on page 1; Next is disabled on the last page.
  */
 export default function CatalogueBrowser({
   lockedCategory = null,
@@ -30,19 +31,11 @@ export default function CatalogueBrowser({
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState(initialProducts);
-  // Left-filter categories come from the same single-source JSON as the
-  // top navigation, so the two lists cannot drift. "All" is added
-  // client-side inside the JSX — it's a filter-only concept, never a
-  // real category, page or sitemap entry.
   const categories = NAV_CATEGORIES.map((c) => c.db_name);
   const [loading, setLoading] = useState(initialProducts.length === 0);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(initialTotal);
   const [q, setQ] = useState("");
-  // On the catalogue page, seed from ?category=. Ignored when a category is
-  // locked because the URL path (not query) is authoritative.
   const [category, setCategory] = useState(() => {
     if (lockedCategory) return lockedCategory;
     return searchParams.get("category") || "all";
@@ -51,17 +44,32 @@ export default function CatalogueBrowser({
   const [priceRange, setPriceRange] = useState([0, 60000]);
   const [showFilters, setShowFilters] = useState(true);
   const requestKeyRef = useRef(0);
+  const gridTopRef = useRef(null);
+
+  // Parse `?page=` safely. NaN / <1 / non-integer → 1.
+  const parsePage = (raw) => {
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 1) return 1;
+    return n;
+  };
+  const currentPage = parsePage(searchParams.get("page"));
 
   // Whenever the caller changes `lockedCategory` (e.g. navigating between
   // /category/chandeliers and /category/floor-lamps), reset internal state
-  // so the new category renders from scratch instead of appending.
+  // so the new category renders from scratch.
   useEffect(() => {
     if (!lockedCategory) return;
     setCategory(lockedCategory);
     setProducts([]);
     setTotal(0);
-    setPage(1);
+    // Reset URL page as well when a new locked category comes in.
+    const next = new URLSearchParams(searchParams);
+    next.delete("page");
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
     setLoading(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lockedCategory]);
 
   const buildParams = (nextPage) => {
@@ -73,70 +81,84 @@ export default function CatalogueBrowser({
     return params;
   };
 
+  // Whenever a filter/search/sort/price/category changes → reset to page 1.
+  // We compare against the previously-seen filterKey so we do NOT reset on
+  // the very first render (React 18+ Strict Mode double-fires effects,
+  // which makes a plain `isFirstRender` ref unreliable).
+  const filterKey = useMemo(
+    () => JSON.stringify([q, category, sort, priceRange, lockedCategory || ""]),
+    [q, category, sort, priceRange, lockedCategory],
+  );
+  const prevFilterKeyRef = useRef(filterKey);
   useEffect(() => {
-    setLoading(true);
-    setPage(1);
-    // Keep ?category= in sync only on the catalogue page. Category pages
-    // treat the URL path as authoritative and MUST NOT append a query.
+    if (prevFilterKeyRef.current === filterKey) {
+      // First render (or strict-mode double-fire) — nothing to reset.
+      return;
+    }
+    prevFilterKeyRef.current = filterKey;
+    const next = new URLSearchParams(searchParams);
+    // Sync ?category= only on the catalogue page.
     if (!lockedCategory) {
-      const next = new URLSearchParams(searchParams);
       if (category && category !== "all") next.set("category", category);
       else next.delete("category");
-      if (next.toString() !== searchParams.toString()) {
-        setSearchParams(next, { replace: true });
-      }
     }
+    next.delete("page");
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey]);
+
+  // Fetch whenever page OR filters change. Products are REPLACED, never
+  // appended — pagination is deliberately non-infinite so page state is
+  // deterministic and shareable.
+  useEffect(() => {
+    setLoading(true);
     const myKey = ++requestKeyRef.current;
     const t = setTimeout(() => {
       api
-        .listProducts(buildParams(1))
+        .listProducts(buildParams(currentPage))
         .then((res) => {
           if (myKey !== requestKeyRef.current) return;
           const items = res?.items || [];
+          const tp = Math.max(1, res?.total_pages || 1);
           setProducts(items);
-          setTotal(res?.total || items.length);
-          setTotalPages(res?.total_pages || 1);
+          setTotal(res?.total || 0);
+          setTotalPages(tp);
           setLoading(false);
+          // Clamp URL page if it's now out of range (e.g. filters shrank
+          // the result set below the requested page). We replace so
+          // back-button behaviour still lands on the pre-filter state.
+          if (currentPage > tp) {
+            const next = new URLSearchParams(searchParams);
+            if (tp === 1) next.delete("page");
+            else next.set("page", String(tp));
+            setSearchParams(next, { replace: true });
+          }
         })
         .catch(() => {
-          if (myKey === requestKeyRef.current) setLoading(false);
+          if (myKey === requestKeyRef.current) {
+            setProducts([]);
+            setLoading(false);
+          }
         });
     }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, category, sort, priceRange, lockedCategory]);
+  }, [q, category, sort, priceRange, lockedCategory, currentPage]);
 
-  const canLoadMore = page < totalPages && !loading;
-  const loadMoreInFlightRef = useRef(false);
-
-  const loadMore = async () => {
-    if (loadingMore || !canLoadMore) return;
-    if (loadMoreInFlightRef.current) return;
-    loadMoreInFlightRef.current = true;
-    setLoadingMore(true);
-    const nextPage = page + 1;
-    const myKey = requestKeyRef.current;
-    try {
-      const res = await api.listProducts(buildParams(nextPage));
-      if (myKey !== requestKeyRef.current) return;
-      const items = res?.items || [];
-      setProducts((prev) => {
-        const seen = new Set(prev.map((p) => p.id));
-        const merged = [...prev];
-        for (const p of items) {
-          if (p?.id && !seen.has(p.id)) {
-            seen.add(p.id);
-            merged.push(p);
-          }
-        }
-        return merged;
-      });
-      setPage(nextPage);
-      setTotalPages(res?.total_pages || totalPages);
-      setTotal(res?.total ?? total);
-    } finally {
-      loadMoreInFlightRef.current = false;
-      if (myKey === requestKeyRef.current) setLoadingMore(false);
+  const goToPage = (n) => {
+    const target = Math.min(Math.max(1, n), totalPages);
+    if (target === currentPage) return;
+    const next = new URLSearchParams(searchParams);
+    if (target === 1) next.delete("page");
+    else next.set("page", String(target));
+    setSearchParams(next);
+    // Scroll to the top of the grid so the user notices the change.
+    if (gridTopRef.current && typeof gridTopRef.current.scrollIntoView === "function") {
+      try {
+        gridTopRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch { /* jsdom / older browsers */ }
     }
   };
 
@@ -146,6 +168,17 @@ export default function CatalogueBrowser({
     setSort("newest");
     setPriceRange([0, 60000]);
   };
+
+  // Compact page numbers: 1 … currentPage-1, currentPage, currentPage+1 … totalPages
+  const pageWindow = useMemo(() => {
+    const pages = new Set([1, totalPages, currentPage, currentPage - 1, currentPage + 1]);
+    return [...pages]
+      .filter((n) => n >= 1 && n <= totalPages)
+      .sort((a, b) => a - b);
+  }, [currentPage, totalPages]);
+
+  const startIdx = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const endIdx = Math.min(total, currentPage * PAGE_SIZE);
 
   return (
     <>
@@ -196,8 +229,6 @@ export default function CatalogueBrowser({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         {showFilters && (
           <aside data-testid="filters-panel" className="lg:col-span-3 space-y-10 no-print">
-            {/* Category list — hidden on category pages so the URL stays the
-                single source of truth. */}
             {!lockedCategory && (
               <div>
                 <div className="eyebrow mb-4">Category</div>
@@ -250,15 +281,20 @@ export default function CatalogueBrowser({
           </aside>
         )}
 
-        <div className={showFilters ? "lg:col-span-9" : "lg:col-span-12"}>
+        <div className={showFilters ? "lg:col-span-9" : "lg:col-span-12"} ref={gridTopRef}>
           <div className="flex items-center justify-between mb-6 text-xs text-white/50 uppercase tracking-widest">
             <span data-testid="results-count">
               {loading
                 ? "Loading…"
                 : total === 0
                   ? "0 pieces"
-                  : `Showing ${products.length} of ${total} piece${total === 1 ? "" : "s"}`}
+                  : `Showing ${startIdx}–${endIdx} of ${total} piece${total === 1 ? "" : "s"}`}
             </span>
+            {totalPages > 1 && !loading && (
+              <span data-testid="page-indicator" className="text-white/40">
+                Page {currentPage} of {totalPages}
+              </span>
+            )}
           </div>
           {total === 0 && !loading ? (
             <div className="py-24 text-center text-white/40 border border-white/10">
@@ -270,17 +306,61 @@ export default function CatalogueBrowser({
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-8">
                 {products.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
               </div>
-              {canLoadMore && (
-                <div className="mt-12 flex justify-center no-print">
+              {totalPages > 1 && (
+                <nav
+                  aria-label="Catalog pagination"
+                  data-testid="catalog-pagination"
+                  className="mt-14 flex items-center justify-center gap-2 no-print flex-wrap"
+                >
                   <button
-                    data-testid="load-more-btn"
-                    onClick={loadMore}
-                    disabled={loadingMore}
-                    className="inline-flex items-center gap-2 border border-[#D4AF37]/50 hover:border-[#D4AF37] hover:text-[#D4AF37] px-10 py-4 text-xs uppercase tracking-[0.28em] text-white/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                    type="button"
+                    data-testid="pagination-prev"
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage <= 1 || loading}
+                    className="inline-flex items-center gap-1 border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/80 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-white/15 disabled:hover:text-white/80"
                   >
-                    {loadingMore ? "Loading…" : `Load more (${total - products.length} left)`}
+                    <ChevronLeft size={14} /> Previous
                   </button>
-                </div>
+                  {pageWindow.map((n, idx) => {
+                    const prev = pageWindow[idx - 1];
+                    const showGap = prev !== undefined && n - prev > 1;
+                    return (
+                      <React.Fragment key={n}>
+                        {showGap && (
+                          <span
+                            data-testid={`pagination-gap-${prev}-${n}`}
+                            className="px-2 text-white/40 select-none"
+                          >
+                            …
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          data-testid={`pagination-page-${n}`}
+                          onClick={() => goToPage(n)}
+                          disabled={loading}
+                          aria-current={n === currentPage ? "page" : undefined}
+                          className={`min-w-[40px] px-3 py-2 text-xs uppercase tracking-[0.24em] border transition-colors ${
+                            n === currentPage
+                              ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10"
+                              : "border-white/15 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      </React.Fragment>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    data-testid="pagination-next"
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage >= totalPages || loading}
+                    className="inline-flex items-center gap-1 border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/80 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-white/15 disabled:hover:text-white/80"
+                  >
+                    Next <ChevronRight size={14} />
+                  </button>
+                </nav>
               )}
             </>
           )}
