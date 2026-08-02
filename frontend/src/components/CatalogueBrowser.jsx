@@ -184,13 +184,11 @@ export default function CatalogueBrowser({
         </div>
         <div className="flex gap-2">
           <a
-            href="/catalogue?print=1"
-            target="_blank"
-            rel="noreferrer"
+            href="/contact?type=catalogue"
             data-testid="export-pdf-btn"
             className="inline-flex items-center gap-2 border border-[#D4AF37]/50 hover:border-[#D4AF37] hover:text-[#D4AF37] px-4 py-3 text-xs uppercase tracking-[0.2em] text-white/80"
           >
-            <Download size={14} /> Catalogue PDF
+            <Download size={14} /> Request Catalogue
           </a>
         </div>
       </div>

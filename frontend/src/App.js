@@ -64,7 +64,7 @@ function App() {
               <Route path="/cart" element={<Cart />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/admin" element={<AdminAuthGate><Admin /></AdminAuthGate>} />
-              <Route path="/catalogue" element={<Catalogue />} />
+              <Route path="/catalogue" element={<AdminAuthGate><Catalogue /></AdminAuthGate>} />
               <Route path="/legal/:slug" element={<LegalPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

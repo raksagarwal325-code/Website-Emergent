@@ -25,6 +25,8 @@ export const api = {
    * can still get a flat array of items. The public cap is 48/page, admins
    * get 5000/page — either way we page until total_pages is reached.
    */
+  adminProductsExport: () => client.get("/admin/products/export").then(r => r.data),
+
   listAllProducts: async (params = {}) => {
     const collected = [];
     const seen = new Set();

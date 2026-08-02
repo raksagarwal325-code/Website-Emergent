@@ -659,6 +659,18 @@ async def delete_product(product_id: str, admin: _AdminUser = Depends(require_ad
     return {"ok": True}
 
 
+@api.get("/admin/products/export")
+async def admin_products_export(admin: _AdminUser = Depends(require_admin)):
+    """Return the full published-product catalogue for the admin-only PDF
+    generator. Public visitors can browse `/catalog` a page at a time but
+    are not permitted to bulk-download every product — that route is now
+    admin-only and this endpoint is the sole data source for it."""
+    docs = await db.products.find(
+        {"status": {"$ne": "draft"}}, {"_id": 0}
+    ).sort("created_at", -1).to_list(length=10000)
+    return {"items": docs, "total": len(docs)}
+
+
 # --- Reviews ---
 @api.get("/reviews", response_model=List[Review])
 async def list_reviews(product_id: str):
@@ -860,29 +872,52 @@ class CatalogueRequest(BaseModel):
     source: str = "contact_page"
 
 
+import re
+
+_INDIAN_MOBILE_RE = re.compile(r"^(?:\+?91)?([6-9]\d{9})$")
+
+
+def _normalize_indian_mobile(raw: str) -> str | None:
+    """Return `+91XXXXXXXXXX` or None if the input is not a valid Indian mobile.
+
+    Accepts 10 digits, `+91` + 10 digits, or `91` + 10 digits, tolerant of
+    embedded whitespace / dashes / brackets. First subscriber-digit must be
+    6-9 per TRAI numbering plan.
+    """
+    s = re.sub(r"[^\d+]", "", str(raw or ""))
+    m = _INDIAN_MOBILE_RE.match(s)
+    return f"+91{m.group(1)}" if m else None
+
+
 @api.post("/catalogue-request")
 async def create_catalogue_request(payload: CatalogueRequest, _rl = Depends(rate_limit("catreq", 10, 300))):
-    """Store a name + phone lead every time someone requests the PDF catalogue
-    via the "Send catalogue on WhatsApp" flow. Also visible under Admin →
-    Inquiries so the shop owner can follow up if the visitor never actually
-    sends the WhatsApp message."""
+    """Store a name + WhatsApp number every time someone requests the PDF
+    catalogue via the WhatsApp flow. WhatsApp is now mandatory and validated
+    both here and on the frontend."""
+    name = (payload.name or "").strip()[:120]
+    raw_phone = (payload.phone or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Please enter your name.")
+    if not raw_phone:
+        raise HTTPException(status_code=400, detail="Please enter your WhatsApp number.")
+    normalized = _normalize_indian_mobile(raw_phone)
+    if not normalized:
+        raise HTTPException(status_code=400,
+                            detail="Please enter a valid 10-digit WhatsApp number.")
     record = {
         "id": str(uuid.uuid4()),
-        "name": (payload.name or "").strip()[:120],
-        "phone": (payload.phone or "").strip()[:32],
+        "name": name,
+        "phone": normalized,
         "source": (payload.source or "contact_page")[:64],
         "created_at": now_iso(),
         "type": "catalogue_request",
     }
-    if not record["name"] or not record["phone"]:
-        raise HTTPException(status_code=400, detail="Name and phone are required")
-    # Reuse the inquiries collection so the shop owner sees these leads in the
-    # same admin table as regular inquiries.
     await db.inquiries.insert_one({
         **record,
         "customer_name": record["name"],
         "customer_email": "",
-        "customer_phone": record["phone"],
+        "customer_phone": normalized,
+        "customer_whatsapp": normalized,
         "message": f"Requested the PDF catalogue via WhatsApp from {record['source']}",
         "items": [],
         "total": 0.0,

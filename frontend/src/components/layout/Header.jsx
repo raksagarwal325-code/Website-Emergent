@@ -51,16 +51,14 @@ export default function Header() {
           <Link to="/catalog" aria-label="Search" data-testid="header-search" className="text-white/70 hover:text-[#D4AF37]">
             <Search size={18} strokeWidth={1.5} />
           </Link>
-          <a
-            href="/catalogue?print=1"
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            to="/contact?type=catalogue"
             data-testid="header-download-catalogue"
-            title="Download Catalogue PDF"
+            title="Request our product catalogue"
             className="hidden lg:inline-flex items-center gap-1.5 border border-[#D4AF37]/40 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/80 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em]"
           >
-            <Download size={12} /> Catalogue
-          </a>
+            <Download size={12} /> Request Catalogue
+          </Link>
           <Link to="/favorites" aria-label="Favorites" data-testid="header-favorites" className="relative text-white/70 hover:text-[#D4AF37]">
             <Heart size={18} strokeWidth={1.5} />
             {favorites.length > 0 && (

@@ -193,17 +193,16 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
-            {/* Small premium pill for PDF download — kept out of the list so it never wraps */}
-            <a
-              href="/catalogue?print=1"
-              target="_blank"
-              rel="noreferrer"
+            {/* Small premium pill for catalogue request — customers land on
+                the enquiry form; the actual PDF is admin-only. */}
+            <Link
+              to="/contact?type=catalogue"
               data-testid="footer-catalogue-btn"
               className="mt-5 inline-flex items-center gap-2 whitespace-nowrap border border-[#BF9972]/50 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/80 px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
             >
               <Download size={12} strokeWidth={1.6} />
-              Catalogue PDF
-            </a>
+              Request Catalogue
+            </Link>
           </div>
 
           {/* Support */}

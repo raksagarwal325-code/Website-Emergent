@@ -20,9 +20,12 @@ function parsePhone(raw) {
   return { ok: false, digits, e164: null };
 }
 
+import { parseIndianMobile, whatsappErrorFor } from "../lib/indianMobile";
+
 export default function CatalogueOnWhatsApp({ businessWhatsAppNumber }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(null); // { catalogueUrl, waLink }
 
@@ -31,23 +34,26 @@ export default function CatalogueOnWhatsApp({ businessWhatsAppNumber }) {
   const submit = async (e) => {
     e.preventDefault();
     if (!name.trim()) { toast.error("Please enter your name"); return; }
-    const parsed = parsePhone(phone);
-    if (!parsed.ok) {
-      toast.error("Please enter a valid 10-digit Indian mobile number");
+    // WhatsApp is mandatory. Show inline error + block submit on blank/invalid.
+    const err = whatsappErrorFor(phone);
+    if (err) {
+      setPhoneError(err);
+      toast.error(err);
       return;
     }
+    setPhoneError("");
+    const parsed = parseIndianMobile(phone);
+    const normalizedPlus = parsed.normalized;      // +91XXXXXXXXXX
+    const digitsOnly = normalizedPlus.slice(1);    // 91XXXXXXXXXX
     setSubmitting(true);
     try {
-      await api.requestCatalogue(name.trim(), `+${parsed.e164}`, "contact_page");
+      await api.requestCatalogue(name.trim(), normalizedPlus, "contact_page");
       trackGenerateLead({ source: "catalogue_request" });
-      // Build the deep links.
       const catalogueUrl = `${window.location.origin}/catalogue?print=1`;
-      // wa.me link — opens WhatsApp on visitor's device with a message pre-filled
-      // to the BUSINESS number.
       const message =
         `Hi Samrat Glass Emporium 👋\n\n` +
         `I'm ${name.trim()} and I'd love to receive your product catalogue.\n\n` +
-        `My contact: +${parsed.e164}\n` +
+        `My contact: ${normalizedPlus}\n` +
         `Catalogue link (in case it helps): ${catalogueUrl}`;
       const waLink = business
         ? `https://wa.me/${business}?text=${encodeURIComponent(message)}`
@@ -141,20 +147,30 @@ export default function CatalogueOnWhatsApp({ businessWhatsAppNumber }) {
           onChange={(e) => setName(e.target.value)}
           className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm"
         />
-        <div className="flex bg-[#0a0a0a] border border-white/15 focus-within:border-[#D4AF37]">
+        <div className={`flex bg-[#0a0a0a] border ${phoneError ? "border-red-500/70" : "border-white/15"} focus-within:border-[#D4AF37]`}>
           <span className="px-3 py-3 text-sm text-white/40 border-r border-white/10">+91</span>
           <input
             required
+            aria-required="true"
+            aria-invalid={phoneError ? "true" : "false"}
             data-testid="catalogue-wa-phone"
             type="tel"
             inputMode="numeric"
             maxLength={14}
-            placeholder="10-digit mobile"
+            placeholder="10-digit WhatsApp number *"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => { setPhone(e.target.value); if (phoneError) setPhoneError(""); }}
             className="flex-1 bg-transparent outline-none px-3 py-3 text-sm"
           />
         </div>
+        {phoneError && (
+          <p
+            data-testid="catalogue-wa-phone-error"
+            className="col-span-1 sm:col-span-2 -mt-2 text-xs text-red-400"
+          >
+            {phoneError}
+          </p>
+        )}
       </div>
       <button
         type="submit"

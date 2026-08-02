@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { compareBySku } from "../lib/api";
+import { gmailComposeUrl } from "../lib/gmailCompose";
 import { toast } from "sonner";
 import AdminHomepage from "../components/AdminHomepage";
 import AIProductGenerator from "../components/AIProductGenerator";
@@ -732,7 +733,10 @@ function InquiriesAdmin({ inquiries, refresh }) {
       {filtered.map((inq) => {
         const digits = waNumber(inq.customer_phone);
         const waLink = digits ? `https://wa.me/${digits}?text=${encodeURIComponent(`Hi ${inq.customer_name}, thank you for your inquiry to Samrat Glass Emporium. `)}` : "";
-        const mailLink = inq.customer_email ? `mailto:${inq.customer_email}?subject=Re: Your inquiry to Samrat Glass Emporium` : "";
+        const mailLink = gmailComposeUrl({
+          to: inq.customer_email,
+          subject: "Re: Your inquiry to Samrat Glass Emporium",
+        });
         return (
           <div key={inq.id} data-testid={`inq-${inq.id}`} className="border border-white/10 p-6 hover:border-white/20 transition-colors">
             <div className="flex flex-wrap justify-between gap-4">
@@ -752,7 +756,7 @@ function InquiriesAdmin({ inquiries, refresh }) {
                   </a>
                 )}
                 {mailLink && (
-                  <a href={mailLink} data-testid={`inq-mail-${inq.id}`}
+                  <a href={mailLink} target="_blank" rel="noopener noreferrer" data-testid={`inq-mail-${inq.id}`}
                     className="text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-white/25 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]">
                     Email
                   </a>
@@ -999,7 +1003,10 @@ function MessagesAdmin({ messages }) {
         </div>
       )}
       {filtered.map((m) => {
-        const mailLink = m.email ? `mailto:${m.email}?subject=${encodeURIComponent(`Re: ${m.subject || "Your enquiry to Samrat Glass Emporium"}`)}` : "";
+        const mailLink = gmailComposeUrl({
+          to: m.email,
+          subject: `Re: ${m.subject || "Your enquiry to Samrat Glass Emporium"}`,
+        });
         return (
           <div key={m.id} className="border border-white/10 p-6 hover:border-white/20 transition-colors" data-testid={`msg-${m.id}`}>
             <div className="flex flex-wrap justify-between items-start gap-4">
@@ -1023,7 +1030,7 @@ function MessagesAdmin({ messages }) {
                 <div className="text-xs text-white/40 mt-1">{new Date(m.created_at).toLocaleString()}</div>
               </div>
               {mailLink && (
-                <a href={mailLink} data-testid={`msg-reply-${m.id}`}
+                <a href={mailLink} target="_blank" rel="noopener noreferrer" data-testid={`msg-reply-${m.id}`}
                   className="text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-white/25 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]">
                   Reply by email
                 </a>
