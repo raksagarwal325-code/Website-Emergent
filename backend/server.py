@@ -487,6 +487,49 @@ class Settings(BaseModel):
     })
 
 
+class PublicSettings(BaseModel):
+    """Client-safe subset of `Settings` returned by the public
+    `GET /api/settings` endpoint.
+
+    Security invariant: this model MUST NEVER contain server-side secrets.
+    Fields explicitly excluded (and enforced by
+    `test_public_settings_excludes_google_maps_api_key` in
+    tests/test_public_settings_exposure.py):
+      * `google_maps_api_key`  — Google Places API credential, used
+                                 SERVER-SIDE ONLY by `/api/google/reviews`.
+      * `watermark`            — admin-only operational config; not a
+                                 secret, but never consumed client-side
+                                 by public UI so it stays behind the
+                                 admin endpoint.
+
+    Every field below is verified as being read from `/api/settings` by
+    at least one public component (Header/Footer/Home/Cart/Contact/etc.).
+    Do NOT add a field here without checking public frontend usage; do
+    NOT add server-side secrets EVER.
+    """
+    model_config = ConfigDict(extra="ignore")
+    id: str = "settings"
+    brand_name: str = ""
+    tagline: str = ""
+    whatsapp_number: str = ""
+    admin_email: str = ""  # public "contact us" address, shown in footer/mailto
+    hero_image: str = ""
+    address: str = ""
+    gstin: str = ""
+    delivery_info: str = ""
+    payment_methods: str = ""
+    currency_symbol: str = "₹"
+    google_cid: str = ""          # public Google Business CID (used in maps URL)
+    google_place_id: str = ""     # public Place ID (used to build "write review" URL)
+    google_maps_url: str = ""
+    homepage_content: dict = Field(default_factory=dict)
+    instagram_url: str = ""
+    facebook_url: str = ""
+    youtube_url: str = ""
+    pinterest_url: str = ""
+    business_hours: str = ""
+
+
 class SettingsUpdate(BaseModel):
     brand_name: Optional[str] = None
     tagline: Optional[str] = None
@@ -1506,14 +1549,34 @@ async def admin_reset_category_featured(category: str):
 
 
 # --- Settings ---
-@api.get("/settings", response_model=Settings)
+# PUBLIC endpoint — MUST return the reduced `PublicSettings` model only.
+# The full `Settings` object contains `google_maps_api_key` (a server-side
+# Google Places credential) and must never be exposed unauthenticated.
+@api.get("/settings", response_model=PublicSettings)
 async def get_settings():
+    doc = await db.settings.find_one({"id": "settings"}, {"_id": 0})
+    if not doc:
+        # Seed on first read so the admin has a row to edit.
+        s = Settings()
+        await db.settings.insert_one(s.model_dump())
+        doc = s.model_dump()
+    # Merge defaults for backward compat with older DB rows, then let
+    # PublicSettings strip out any field not explicitly whitelisted
+    # (google_maps_api_key, watermark, and any future secret additions).
+    merged = {**Settings().model_dump(), **doc}
+    return PublicSettings(**merged)
+
+
+# ADMIN-ONLY endpoint — full Settings object including
+# `google_maps_api_key`. Protected by `require_admin`; the frontend
+# admin panel now points here instead of the public /settings.
+@api.get("/admin/settings", response_model=Settings)
+async def get_admin_settings(admin: _AdminUser = Depends(require_admin)):
     doc = await db.settings.find_one({"id": "settings"}, {"_id": 0})
     if not doc:
         s = Settings()
         await db.settings.insert_one(s.model_dump())
         return s
-    # Merge in defaults for any newly added fields (backward compat)
     merged = {**Settings().model_dump(), **doc}
     return merged
 

@@ -28,7 +28,10 @@ export default function Admin() {
   const refresh = async () => {
     const [p, s, st, cats, rc] = await Promise.all([
       api.listAllProducts({ include_drafts: 1, limit: 5000 }).catch(() => []),
-      api.getSettings().catch(() => null),
+      // Admin panel needs the FULL settings object (including google_maps_api_key
+      // for the "Google Maps API Key" input). Public `/settings` no longer
+      // returns that field — must use the auth-protected admin endpoint.
+      api.adminGetSettings().catch(() => null),
       api.stats().catch(() => null),
       api.categories().catch(() => []),
       api.adminReviewCounts().catch(() => ({ pending: 0, approved: 0, rejected: 0 })),

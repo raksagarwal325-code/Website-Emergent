@@ -32,6 +32,7 @@ const mockApi = {
   // Every other api.* Admin.jsx touches on mount is mocked to a no-op.
   listAllProducts: jest.fn(() => Promise.resolve([])),
   getSettings: jest.fn(() => Promise.resolve({})),
+  adminGetSettings: jest.fn(() => Promise.resolve({})),
   stats: jest.fn(() => Promise.resolve({ products: 0, inquiries: 0, contact_messages: 0, reviews: 0 })),
   categories: jest.fn(() => Promise.resolve([])),
   adminReviewCounts: jest.fn(() => Promise.resolve({ pending: 0, approved: 0, rejected: 0 })),
@@ -131,6 +132,7 @@ beforeEach(() => {
   mockApi.adminBulkDeleteContactMessages.mockImplementation(() => Promise.resolve({ ok: true, requested: 2, deleted: 2 }));
   mockApi.listAllProducts.mockImplementation(() => Promise.resolve([]));
   mockApi.getSettings.mockImplementation(() => Promise.resolve({}));
+  mockApi.adminGetSettings.mockImplementation(() => Promise.resolve({}));
   mockApi.stats.mockImplementation(() =>
     Promise.resolve({ products: 0, inquiries: 0, contact_messages: 0, reviews: 0 }),
   );

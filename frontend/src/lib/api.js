@@ -80,6 +80,9 @@ export const api = {
   listContact: () => client.get("/contact").then(r => r.data),
 
   getSettings: () => client.get("/settings").then(r => r.data),
+  // Admin-only: returns the full Settings model including secrets like
+  // google_maps_api_key. Public `/settings` deliberately omits those.
+  adminGetSettings: () => client.get("/admin/settings").then(r => r.data),
   updateSettings: (data) => client.put("/settings", data).then(r => r.data),
 
   // --- Hero slider ---
