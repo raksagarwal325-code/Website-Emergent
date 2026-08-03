@@ -76,6 +76,31 @@ INR pricing with en-IN formatting.
 - Instagram feed on Home page
 
 ## Changelog
+- 2026-08-03: **P0 SECURITY FIX — Strict `status == "published"` allow-list on every public product read path.**
+  - **Root cause.** Public product access used a deny-list (`{"status": {"$ne": "draft"}}`). Rows with a missing / null / empty / unknown status therefore leaked to anonymous visitors. Pre-fix DB distribution: 116 `published`, 60 `draft`, **12 with no `status` field** — the 12 were visible on the live site.
+  - **Fix (backend/server.py).** Every anonymous product-read path switched from deny-list to a strict allow-list. Admin behaviour is unchanged:
+    | Endpoint | Anon rule now | Admin rule now |
+    |---|---|---|
+    | `GET /api/products` | `status == "published"` (bypass via `?status=draft` / `?include_drafts=1` silently ignored) | admin default `$ne: draft`, `?status=…` respected, `?include_drafts=1` returns drafts + published |
+    | `GET /api/products/categories` | derived from `status == "published"` only | unchanged (no filter) |
+    | `GET /api/products/{id}` | 404 unless `status == "published"` (never 403 — no existence leak) | admin sees everything |
+    | `POST /api/reviews` | 400 unless target product `status == "published"` | (server-side validator) |
+    | `POST /api/inquiries` | 400 for every non-published item in payload | (server-side validator) |
+    | `GET /api/admin/products/export` (admin-only PDF source) | tightened to `status == "published"` to match the public catalogue | admin-only |
+    | `GET /api/sitemap.xml` | already `status == "published"` — untouched | — |
+  - **Tests.** `backend/tests/test_public_publish_rule.py`: 40 pytests. Seeds nine products covering `published, draft, archived, pending, review, foobar-unknown, "" empty, null, missing status` and asserts:
+    1. Anonymous list returns ONLY the published seed.
+    2. Bypass attempts via `?status=draft/archived/pending/foobar/""`, `?include_drafts=1/true`, and combos still return only published.
+    3. Anonymous `GET /products/{id}` → 200 only for published; every other status → 404 (parametrised across all 8 non-published classes).
+    4. Categories: an "orphan" category attached only to non-published rows never appears anonymously; visible to admins.
+    5. `POST /inquiries` rejects every non-published product id with 400 (all 8 non-published classes).
+    6. `POST /reviews` rejects every non-published product id with 400.
+    7. Admin behaviour preserved: `?status=draft`, `?include_drafts=1`, admin single-product GET on drafts, and admin categories still work.
+    8. Belt-and-braces: assert every row on page 1 of the anonymous listing has `status == "published"`.
+    All 40 pass. Full backend suite: **184/184 in serial mode** (up from 144). Full frontend suite: **120/120**.
+  - **Verified on preview.** Anon `/api/products?limit=48` → 116 rows, all `status=published`. Every bypass query param produces the same result. Anon GET on a known draft id → 404. Anon GET on a known missing-status id → 404. Public categories list contains only categories present on published rows. Admin `/api/products?include_drafts=1&limit=5000` → 193 rows (116 published + 65 draft + 12 missing-status), and admin single-product GET on a draft id → 200. The catalogue page now displays "116 pieces" (down from the previous total that included the 12 leaking rows).
+
+
 - 2026-08-03: **P0 SECURITY FIX — Public `/api/settings` no longer exposes `google_maps_api_key`.**
   - **Root cause.** `GET /api/settings` was unauthenticated and returned the full `Settings` Pydantic model, which included `google_maps_api_key` (a server-side Google Places / Maps credential). Any anonymous visitor could `curl /api/settings` and read the credential in plaintext. Independently identified during the live-site + repo security audit.
   - **Fix.** New `PublicSettings` Pydantic model in `backend/server.py` — an explicit allow-list of client-safe fields (`brand_name`, `tagline`, `whatsapp_number`, `admin_email`, `hero_image`, `address`, `gstin`, `delivery_info`, `payment_methods`, `currency_symbol`, `google_cid`, `google_place_id`, `google_maps_url`, `homepage_content`, `instagram_url`, `facebook_url`, `youtube_url`, `pinterest_url`, `business_hours`, `id`). The `GET /api/settings` route was rewired with `response_model=PublicSettings` so **Pydantic strips** `google_maps_api_key` + `watermark` even if a future refactor accidentally reintroduces them into the DB shape. A separate authenticated `GET /api/admin/settings` (guarded by `require_admin`) returns the full `Settings` object for the admin panel. `PUT /api/settings` mutation stays admin-only + CSRF-guarded (unchanged).

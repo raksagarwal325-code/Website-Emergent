@@ -589,15 +589,29 @@ async def list_products(
     admin: Optional["_AdminUser"] = Depends(maybe_admin),
 ):
     query = {}
-    # SECURITY — only signed-in admins may request drafts. If a public caller
-    # tries to bypass the filter via ?include_drafts=1 or ?status=draft we
-    # silently ignore those params and still exclude drafts.
+    # SECURITY — strict allow-list: only rows with `status == "published"` are
+    # publicly visible. This is INTENTIONALLY stricter than the previous
+    # `$ne: "draft"` deny-list because rows with a missing / null / empty /
+    # unknown status (e.g. legacy imports, future workflow states like
+    # "archived", "pending", "review") must NOT leak to visitors. Any client
+    # attempt to bypass this via `?status=draft` or `?include_drafts=1` from
+    # an unauthenticated caller is silently ignored — the filter stays
+    # `status: "published"`.
+    #
+    # Admin behaviour is unchanged: signed-in admins can pass `status=draft`
+    # to see drafts, `status=<anything>` to filter by any workflow state, or
+    # `include_drafts=1` to list drafts + published together (implemented
+    # via `$in`), and the default admin view still shows everything except
+    # drafts (matching the old admin dashboard expectation).
     if admin is None:
-        query["status"] = {"$ne": "draft"}
-    elif not include_drafts and not status:
-        query["status"] = {"$ne": "draft"}
+        query["status"] = "published"
     elif status:
         query["status"] = status
+    elif include_drafts:
+        # Admin explicitly asked for drafts + published (no filter at all).
+        pass
+    else:
+        query["status"] = {"$ne": "draft"}
     if q:
         query["$or"] = [
             {"name": {"$regex": q, "$options": "i"}},
@@ -656,8 +670,11 @@ async def list_products(
 
 @api.get("/products/categories")
 async def list_categories(admin: Optional["_AdminUser"] = Depends(maybe_admin)):
-    # Public callers must not see categories that only exist on draft rows.
-    query = {} if admin else {"status": {"$ne": "draft"}}
+    # SECURITY — strict allow-list: public callers see categories only from
+    # rows where `status == "published"`. Categories that exist ONLY on
+    # drafts / missing-status / archived / pending rows must not appear
+    # publicly (they would leak information about unpublished inventory).
+    query = {} if admin else {"status": "published"}
     cats = await db.products.distinct("category", query)
     return sorted(cats)
 
@@ -667,9 +684,12 @@ async def get_product(product_id: str, admin: Optional["_AdminUser"] = Depends(m
     doc = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Product not found")
-    # SECURITY — draft products are only visible to signed-in admins. To
-    # anonymous callers, respond with 404 (don't leak existence via 403).
-    if doc.get("status") == "draft" and admin is None:
+    # SECURITY — strict allow-list. Only rows with `status == "published"` are
+    # served to anonymous callers. Everything else (draft, archived, pending,
+    # missing status, null status, empty status, unknown status) responds
+    # 404 to unauthenticated visitors so we don't leak the existence of
+    # unpublished inventory via a distinguishable 403.
+    if admin is None and doc.get("status") != "published":
         raise HTTPException(404, "Product not found")
     return doc
 
@@ -707,9 +727,12 @@ async def admin_products_export(admin: _AdminUser = Depends(require_admin)):
     """Return the full published-product catalogue for the admin-only PDF
     generator. Public visitors can browse `/catalog` a page at a time but
     are not permitted to bulk-download every product — that route is now
-    admin-only and this endpoint is the sole data source for it."""
+    admin-only and this endpoint is the sole data source for it. Strict
+    allow-list (`status == "published"`) mirrors the public visibility
+    rule so the printed PDF never contains a draft/archived/missing-status
+    row that a visitor could never have reached themselves."""
     docs = await db.products.find(
-        {"status": {"$ne": "draft"}}, {"_id": 0}
+        {"status": "published"}, {"_id": 0}
     ).sort("created_at", -1).to_list(length=10000)
     return {"items": docs, "total": len(docs)}
 
@@ -728,13 +751,13 @@ async def list_reviews(product_id: str):
 @api.post("/reviews", response_model=Review)
 async def create_review(payload: ReviewCreate, _rl = Depends(rate_limit("reviews", 3, 600))):
     # SECURITY — every submission goes into moderation regardless of what the
-    # client sends. The product must exist AND be published: drafts and
-    # missing product ids are rejected with 400 so review-farming can't be
-    # aimed at unlisted rows.
+    # client sends. The product must exist AND be strictly `status ==
+    # "published"`. Missing / draft / archived / pending / unknown statuses
+    # are rejected so review-farming can't be aimed at unlisted rows.
     prod = await db.products.find_one({"id": payload.product_id}, {"_id": 0, "id": 1, "status": 1})
     if not prod:
         raise HTTPException(status_code=400, detail="Product not found")
-    if str(prod.get("status", "published")).lower() != "published":
+    if prod.get("status") != "published":
         raise HTTPException(status_code=400, detail="Product is not available for reviews")
 
     review = Review(
@@ -841,7 +864,11 @@ async def create_inquiry(payload: InquiryCreate, _rl = Depends(rate_limit("inqui
         doc = await db.products.find_one({"id": it.product_id}, {"_id": 0})
         if not doc:
             raise HTTPException(status_code=400, detail=f"Product not found: {it.product_id}")
-        if str(doc.get("status", "published")).lower() == "draft":
+        # Strict allow-list: only genuinely-published items can be added to
+        # a cart / inquiry. Missing status, drafts, archived, pending, etc.
+        # are all rejected — public callers should not even be able to
+        # discover their ids, but this is our second line of defence.
+        if doc.get("status") != "published":
             raise HTTPException(status_code=400, detail=f"Product not available: {it.product_id}")
         price = float(doc.get("price") or 0)
         server_items.append(InquiryItem(
