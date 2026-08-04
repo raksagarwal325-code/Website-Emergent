@@ -56,6 +56,7 @@ _BUCKET_BY_MODULE = {
     "test_admin_deletion": None,  # only admin routes, no rate-limited endpoints
     "test_public_settings_exposure": None,  # only settings + google/reviews, not rate-limited
     "test_public_publish_rule": "reviews",  # main rate-limit pressure is the reviews bucket (3/600s)
+    "test_gallery_orphaned_products": None,  # admin-only endpoints, not rate-limited
     "test_authz_ssrf_ratelimit": "",   # exercises multiple buckets
 }
 

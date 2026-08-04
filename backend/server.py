@@ -719,7 +719,96 @@ async def delete_product(product_id: str, admin: _AdminUser = Depends(require_ad
     if res.deleted_count == 0:
         raise HTTPException(404, "Product not found")
     await db.reviews.delete_many({"product_id": product_id})
+    # ALSO sweep any gallery-project references to this product id so the
+    # admin "N linked" counter never shows a phantom count after a
+    # catalogue delete. Failure of this sweep must not abort the delete
+    # (the product is gone regardless), but we do log it. This addresses
+    # the "orphaned linked product" bug where deleting a catalogue product
+    # left dangling ids inside `settings.homepage_content.gallery.items`.
+    try:
+        removed = await _sweep_product_from_gallery_projects(product_id)
+        if removed:
+            logger.info(
+                "delete_product.swept_from_gallery product_id=%s items=%d",
+                product_id, removed,
+            )
+    except Exception as e:  # pragma: no cover
+        logger.exception("delete_product.gallery_sweep_failed err=%s", e)
     return {"ok": True}
+
+
+async def _sweep_product_from_gallery_projects(product_id: str) -> int:
+    """Remove `product_id` from every gallery item's `products` array in
+    `settings.homepage_content.gallery.items`. Returns the number of
+    gallery items that were modified (0 if the id wasn't linked
+    anywhere). Idempotent — safe to call repeatedly."""
+    s = await db.settings.find_one({"id": "settings"}, {"_id": 0})
+    if not s:
+        return 0
+    homepage = s.get("homepage_content") or {}
+    gallery = homepage.get("gallery") or {}
+    items = gallery.get("items") or []
+    if not items:
+        return 0
+    changed = 0
+    for it in items:
+        raw = it.get("products") or []
+        if product_id in raw:
+            it["products"] = [pid for pid in raw if pid != product_id]
+            changed += 1
+    if changed:
+        await db.settings.update_one(
+            {"id": "settings"},
+            {"$set": {"homepage_content.gallery.items": items}},
+        )
+    return changed
+
+
+@api.post("/admin/gallery/cleanup-orphans")
+async def cleanup_gallery_orphans(admin: _AdminUser = Depends(require_admin)):
+    """One-shot cleanup: scan every gallery project's `products` array and
+    remove any id that no longer resolves to an existing product. Returns
+    a per-project report (project title, orphans removed, valid links
+    kept) so the admin can audit what was cleaned. Idempotent — running
+    it again against a clean state returns `orphans_removed_total=0`.
+    Never touches product data or any other collection."""
+    s = await db.settings.find_one({"id": "settings"}, {"_id": 0})
+    if not s:
+        return {"orphans_removed_total": 0, "projects": []}
+    homepage = s.get("homepage_content") or {}
+    gallery = homepage.get("gallery") or {}
+    items = gallery.get("items") or []
+    valid_ids = {
+        row["id"]
+        async for row in db.products.find({}, {"id": 1, "_id": 0})
+    }
+    report = []
+    total_removed = 0
+    for i, it in enumerate(items):
+        raw = it.get("products") or []
+        valid = [pid for pid in raw if pid in valid_ids]
+        orphans = [pid for pid in raw if pid not in valid_ids]
+        if orphans:
+            it["products"] = valid
+            total_removed += len(orphans)
+        report.append({
+            "project_index": i,
+            "project_title": it.get("title") or "(untitled)",
+            "raw_count": len(raw),
+            "valid_count": len(valid),
+            "orphans_removed": len(orphans),
+            "orphan_ids": orphans,
+        })
+    if total_removed:
+        await db.settings.update_one(
+            {"id": "settings"},
+            {"$set": {"homepage_content.gallery.items": items}},
+        )
+    logger.info(
+        "cleanup_gallery_orphans.done total_removed=%d projects_scanned=%d",
+        total_removed, len(items),
+    )
+    return {"orphans_removed_total": total_removed, "projects": report}
 
 
 @api.get("/admin/products/export")

@@ -29,6 +29,7 @@ export const api = {
 
   // --- Admin deletion helpers (Batch B) ---
   adminDeleteInquiry: (id) => client.delete(`/inquiries/${encodeURIComponent(id)}`).then(r => r.data),
+  adminGalleryCleanupOrphans: () => client.post("/admin/gallery/cleanup-orphans", {}).then(r => r.data),
   adminBulkDeleteInquiries: (ids) => client.post("/admin/inquiries/bulk-delete", { ids }).then(r => r.data),
   adminDeleteContactMessage: (id) => client.delete(`/contact-messages/${encodeURIComponent(id)}`).then(r => r.data),
   adminBulkDeleteContactMessages: (ids) => client.post("/admin/contact-messages/bulk-delete", { ids }).then(r => r.data),
