@@ -91,33 +91,53 @@ export const mergeDynamicCategories = (dbNames) => {
   if (!Array.isArray(dbNames)) return [...NAV_CATEGORIES];
   const seen = new Set();
   const out = [];
+  // Helper: title-case for auto-generated labels so admin-typed
+  // "ceiling light" / "CEILING LIGHT" doesn't leak weird casing into the UI.
+  const titleCase = (s) =>
+    String(s || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/\b(\w)/g, (m) => m.toUpperCase());
+
+  const pushRegistry = (registryEntry) => {
+    const key = String(registryEntry.db_name || "").toLowerCase();
+    if (seen.has(key)) return;
+    if (!registryEntry.published || !registryEntry.nav_visible) return;
+    seen.add(key);
+    out.push(registryEntry);
+  };
+
   for (const raw of dbNames) {
     const trimmed = String(raw || "").trim();
     if (!trimmed) continue;
     const key = trimmed.toLowerCase();
     if (seen.has(key)) continue;
-    seen.add(key);
     const registryEntry = CATEGORIES.find(
       (c) => String(c.db_name || "").toLowerCase() === key,
     );
     if (registryEntry) {
-      // Honour the registry's own nav flags: an entry that is unpublished
-      // or `nav_visible: false` remains hidden even if a product uses it.
-      if (registryEntry.published && registryEntry.nav_visible) {
-        out.push(registryEntry);
-      }
+      pushRegistry(registryEntry);
       continue;
     }
     // Fallback for a brand-new db_name.
+    seen.add(key);
     out.push({
       slug: fallbackSlugFor(trimmed),
       db_name: trimmed,
-      label: trimmed,
+      label: titleCase(trimmed),
       published: true,
       nav_visible: true,
       sitemap: false,     // don't auto-add to sitemap without curator review
       _dynamic: true,     // marker so callers can style/skip curated-only UIs
     });
+  }
+  // Finally: make sure every curated nav-visible category is included,
+  // even if no product currently uses it. This preserves the "always
+  // browsable" invariant for curated categories (a category with zero
+  // stock still deserves a discoverable page).
+  for (const cur of NAV_CATEGORIES) {
+    pushRegistry(cur);
   }
   return out;
 };

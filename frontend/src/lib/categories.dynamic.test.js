@@ -53,6 +53,24 @@ describe("mergeDynamicCategories", () => {
     });
   });
 
+  test("curated categories with ZERO products are still included", () => {
+    // Simulate: API only returns Chandelier + Ceiling Light. Every other
+    // curated NAV_CATEGORY must still appear (browsable even when out
+    // of stock).
+    const merged = mergeDynamicCategories(["Chandelier", "Ceiling Light"]);
+    NAV_CATEGORIES.forEach((cur) => {
+      expect(merged.find((c) => c.slug === cur.slug)).toBeDefined();
+    });
+    // And the dynamic one.
+    expect(merged.find((c) => c.slug === "ceiling-lights")).toBeDefined();
+  });
+
+  test("fallback label is Title Cased even if admin typed odd casing", () => {
+    const merged = mergeDynamicCategories(["CEILING LIGHT"]);
+    const ceiling = merged.find((c) => c.slug === "ceiling-lights");
+    expect(ceiling.label).toBe("Ceiling Light");
+  });
+
   test("case + whitespace duplicates are de-duplicated", () => {
     const merged = mergeDynamicCategories([
       "Ceiling Light", "  ceiling light ", "CEILING LIGHT",
@@ -63,10 +81,13 @@ describe("mergeDynamicCategories", () => {
     expect(matches.length).toBe(1);
   });
 
-  test("empty / blank / null entries are ignored", () => {
+  test("empty / blank / null entries are ignored (still returns curated set)", () => {
+    // Even if the API returns only garbage, the curated NAV_CATEGORIES must
+    // still appear so the browsing UI never goes blank on transient errors.
     const merged = mergeDynamicCategories(["", "   ", null, undefined, "Chandelier"]);
-    expect(merged.length).toBe(1);
-    expect(merged[0].db_name).toBe("Chandelier");
+    // Chandelier + every curated NAV_CATEGORY (Chandelier is already one).
+    expect(merged.length).toBe(NAV_CATEGORIES.length);
+    expect(merged.find((c) => c.db_name === "Chandelier")).toBeDefined();
   });
 
   test("registry entry with nav_visible=false is NOT surfaced even if a product uses it", () => {
