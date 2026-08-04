@@ -78,10 +78,10 @@ beforeEach(() => {
   });
 });
 
-const renderBrowser = (initialEntries = ["/catalog"]) =>
+const renderBrowser = (initialEntries = ["/catalog"], extraProps = {}) =>
   render(
     <MemoryRouter initialEntries={initialEntries}>
-      <CatalogueBrowser />
+      <CatalogueBrowser {...extraProps} />
     </MemoryRouter>,
   );
 
@@ -196,5 +196,46 @@ describe("CatalogueBrowser — URL-based pagination", () => {
       expect(screen.getByTestId("product-card-p1-0")).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("catalog-pagination")).toBeNull();
+  });
+});
+
+describe("CatalogueBrowser — sidebar category rendering", () => {
+  test("renders title-cased label (not raw uppercase db_name) for dynamic categories", async () => {
+    // Dynamic category object comes from mergeDynamicCategories → the
+    // fallback label is Title Cased even when the raw db_name is
+    // "CEILING LIGHT".
+    const dynamicCategories = [
+      { slug: "ceiling-lights", db_name: "CEILING LIGHT", label: "Ceiling Light", _dynamic: true },
+      { slug: "chandeliers", db_name: "Chandelier", label: "Chandeliers" },
+    ];
+    renderBrowser(["/catalog"], { dynamicCategories });
+    await waitFor(() =>
+      expect(screen.getByTestId("product-card-p1-0")).toBeInTheDocument(),
+    );
+    // testid is derived from db_name (case-insensitive kebab).
+    const btn = screen.getByTestId("cat-ceiling-light");
+    // Human-visible text must be the Title Cased label, not the raw
+    // "CEILING LIGHT" from the DB.
+    expect(btn.textContent).toBe("Ceiling Light");
+    // The curated entry also renders its label.
+    expect(screen.getByTestId("cat-chandelier").textContent).toBe("Chandeliers");
+  });
+
+  test("does not emit a React unique-key warning for the categories map", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const dynamicCategories = [
+      { slug: "ceiling-lights", db_name: "CEILING LIGHT", label: "Ceiling Light" },
+      { slug: "chandeliers", db_name: "Chandelier", label: "Chandeliers" },
+      { slug: "wall-lights", db_name: "Wall Light", label: "Wall Lights" },
+    ];
+    renderBrowser(["/catalog"], { dynamicCategories });
+    await waitFor(() =>
+      expect(screen.getByTestId("product-card-p1-0")).toBeInTheDocument(),
+    );
+    const keyWarnings = errorSpy.mock.calls.filter((args) =>
+      String(args[0] || "").includes("unique \"key\" prop"),
+    );
+    expect(keyWarnings).toHaveLength(0);
+    errorSpy.mockRestore();
   });
 });

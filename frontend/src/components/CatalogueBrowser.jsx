@@ -38,7 +38,10 @@ export default function CatalogueBrowser({
   const navCats = Array.isArray(dynamicCategories) && dynamicCategories.length > 0
     ? dynamicCategories
     : NAV_CATEGORIES;
-  const categories = navCats.map((c) => c.db_name);
+  // Keep the full nav-cat objects ({ slug, db_name, label, ... }) so the
+  // sidebar can render the title-cased `label` (e.g. "Ceiling Light")
+  // while still filtering products against the raw `db_name`.
+  const categories = navCats;
   const [loading, setLoading] = useState(initialProducts.length === 0);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(initialTotal);
@@ -249,12 +252,12 @@ export default function CatalogueBrowser({
                   </button>
                   {categories.map((c) => (
                     <button
-                      key={c}
-                      data-testid={`cat-${c.replace(/\s+/g, "-").toLowerCase()}`}
-                      onClick={() => setCategory(c)}
-                      className={`block text-sm w-full text-left ${category === c ? "text-[#D4AF37]" : "text-white/70 hover:text-white"}`}
+                      key={c.slug || c.db_name}
+                      data-testid={`cat-${String(c.db_name).replace(/\s+/g, "-").toLowerCase()}`}
+                      onClick={() => setCategory(c.db_name)}
+                      className={`block text-sm w-full text-left ${category === c.db_name ? "text-[#D4AF37]" : "text-white/70 hover:text-white"}`}
                     >
-                      {c}
+                      {c.label || c.db_name}
                     </button>
                   ))}
                 </div>
