@@ -188,6 +188,81 @@ describe("InfluencerPromotions — logical-page pagination", () => {
     expect(screen.getByTestId("influencer-carousel-dot-2").style.width).toBe("28px");
   });
 
+  // ---------------------------------------------------------------------------
+  // The BIG regression — assert the actual TRANSLATE VALUE (not just dot
+  // state), because a wrong translate produces the exact user-reported bug
+  // ("only page 1 shows data"). For 27 items × 3 visible, each page must
+  // shift the track by exactly 100 / (27/3) = 11.111% of its own width.
+  // ---------------------------------------------------------------------------
+  test.each([
+    // [items, viewport, page, expected translate percent (relative to track's own width)]
+    [27, "desktop", 0, 0],                    // page 0: no shift
+    [27, "desktop", 1, (1 * 3 * 100) / 27],   // 11.111%
+    [27, "desktop", 4, (4 * 3 * 100) / 27],   // 44.444%
+    [27, "desktop", 8, (8 * 3 * 100) / 27],   // 88.888%  (last page)
+    [26, "desktop", 8, (26 - 3) * 100 / 26],  // clamped: last-page shows items 23,24,25 (not overshoot)
+    [10, "tablet",  0, 0],
+    [10, "tablet",  4, (4 * 2 * 100) / 10],   // 80%
+    [10, "mobile",  5, (5 * 1 * 100) / 10],   // 50%
+    [ 3, "desktop", 0, 0],                    // 1 page → no translate
+  ])(
+    "%i items, %s viewport, page %i → track translate is %f%%",
+    (n, view, page, expectedTx) => {
+      seed(n, view);
+      renderIt();
+      // Jump to the target page.
+      for (let i = 0; i < page; i++) {
+        act(() => {
+          fireEvent.click(screen.getByTestId("influencer-carousel-next"));
+        });
+      }
+      const track = screen.getByTestId("influencer-carousel-viewport").firstChild;
+      // Parse the inline `transform: translate3d(-X%, 0, 0)` value.
+      const t = track.style.transform;
+      const m = t.match(/translate3d\(\s*-([0-9.]+)%/);
+      expect(m).not.toBeNull();
+      const gotTx = parseFloat(m[1]);
+      // Allow 0.05% tolerance for floating-point rendering.
+      expect(Math.abs(gotTx - expectedTx)).toBeLessThan(0.05);
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // And now the "actually visible cards" regression: assert the cards for
+  // each page (not just what's mounted in the DOM). We assert this via
+  // per-card data-testids that survive mount (all 27 are always mounted;
+  // the visible window is a function of the track transform + viewport
+  // overflow:hidden). We can't fully assert visibility in jsdom (no layout),
+  // but we CAN cross-check that the correct items are at the correct
+  // horizontal offsets by re-deriving the transform.
+  // ---------------------------------------------------------------------------
+  test("all 27 valid cards are mounted (they don't need to unmount per page)", () => {
+    seed(27, "desktop");
+    renderIt();
+    for (let i = 0; i < 27; i++) {
+      expect(screen.getByTestId(`influencer-card-@creator${i}`)).toBeInTheDocument();
+    }
+  });
+
+  test("navigating to page 8 (last) does NOT overshoot the track", () => {
+    seed(27, "desktop");
+    renderIt();
+    for (let i = 0; i < 8; i++) {
+      act(() => {
+        fireEvent.click(screen.getByTestId("influencer-carousel-next"));
+      });
+    }
+    const track = screen.getByTestId("influencer-carousel-viewport").firstChild;
+    const m = track.style.transform.match(/translate3d\(\s*-([0-9.]+)%/);
+    const tx = parseFloat(m[1]);
+    // Last page must show items 24, 25, 26. That means the track's own
+    // width remaining after the shift must be exactly one viewport.
+    // Track width = 900% of viewport. After shift, remaining = 100%.
+    // So shift as % of track's own width = (900 − 100) / 900 = 88.888…%.
+    expect(tx).toBeGreaterThan(88);
+    expect(tx).toBeLessThan(89);
+  });
+
   test("hides pagination entirely when validItems ≤ visible (1 page)", () => {
     seed(3, "desktop"); // exactly one page on desktop
     renderIt();

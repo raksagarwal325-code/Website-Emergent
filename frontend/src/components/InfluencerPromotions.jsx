@@ -106,15 +106,37 @@ export default function InfluencerPromotions() {
   // of cards. With 3 valid items on desktop this is exactly one page → the
   // dots and arrows disappear as expected.
   const showControls = pages > 1;
-  // Track width is a percentage: 100% of the viewport shows `visible` cards,
-  // so each card takes 100/visible%. The full track is 100 * (total / visible)%.
-  const cardWidthPct = 100 / visible;
-  const trackWidthPct = (100 * total) / visible;
-  // Translate by a full page (i.e. `visible` cards) per active step, but
-  // clamp on the last page so we never scroll past the last valid card
-  // and expose empty space when total isn't a multiple of `visible`.
-  const rawTranslatePct = active * visible * cardWidthPct;
-  const maxTranslatePct = Math.max(0, (total - visible) * cardWidthPct);
+  // -------------------------------------------------------------------------
+  // Track + card sizing.
+  // -------------------------------------------------------------------------
+  // Track width is a percentage of the viewport: `visible` cards fit in one
+  // viewport, so the whole track (containing `total` cards) is
+  // `(total / visible) × 100%` wide.
+  // Each card is `100 / total` % of the TRACK'S OWN width (which equals
+  // `100 / visible` % of the viewport).
+  const cardWidthPct = 100 / visible;   // % of viewport per card
+  const trackWidthPct = (100 * total) / visible;  // track width as % of viewport
+  // -------------------------------------------------------------------------
+  // Translation.
+  // -------------------------------------------------------------------------
+  // CSS `transform: translateX(-N%)` interprets N as a percentage of the
+  // ELEMENT'S OWN border-box width — not the parent's. So to move the
+  // track left by exactly one viewport per page we divide by `total/visible`
+  // (a.k.a. `trackWidthPct / 100`), which converts "viewports of shift"
+  // into "percent of the track's own width".
+  //
+  // Shift-in-viewports for page N = N × visible cards × cardWidthPct
+  //                               = N × visible × (100 / visible)
+  //                               = N × 100  (i.e. exactly N viewports)
+  // As a fraction of the track's own width:
+  //   translatePct = (N viewports × 100) / (total/visible)
+  //                = (N × visible × 100) / total
+  const rawTranslatePct = (active * visible * 100) / total;
+  // Clamp so the last page never scrolls past the last card (when `total`
+  // is not an exact multiple of `visible`).
+  const maxTranslatePct = total > visible
+    ? ((total - visible) * 100) / total
+    : 0;
   const translatePct = Math.min(rawTranslatePct, maxTranslatePct);
 
   return (
