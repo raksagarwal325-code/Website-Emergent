@@ -53,6 +53,13 @@ export default function InfluencerPromotions() {
   // Carousel state ---------------------------------------------------------
   const visible = useVisibleCount();
   const total = validItems.length;
+  // A "page" is one viewport-width slice of the carousel — i.e. one group
+  // of `visible` cards. This is the ONLY concept the dots + arrows expose.
+  // Historically the code stored an item-index (0..total-1) as `active`,
+  // which meant on desktop with 27 valid items the pagination rendered 27
+  // dots for a carousel that only has 9 logical pages of 3 cards each.
+  // From here down, `active` is a page-index (0..pages-1).
+  const pages = Math.max(1, Math.ceil(total / Math.max(1, visible)));
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const trackRef = useRef(null);
@@ -63,22 +70,24 @@ export default function InfluencerPromotions() {
   }, [total, visible]);
 
   const goTo = useCallback(
-    (idx) => {
-      if (total === 0) return;
-      const wrapped = ((idx % total) + total) % total;
+    (pageIdx) => {
+      if (pages === 0) return;
+      const wrapped = ((pageIdx % pages) + pages) % pages;
       setActive(wrapped);
     },
-    [total],
+    [pages],
   );
   const next = useCallback(() => goTo(active + 1), [goTo, active]);
   const prev = useCallback(() => goTo(active - 1), [goTo, active]);
 
-  // Autoplay
+  // Autoplay — one PAGE at a time (previously advanced one item at a time,
+  // which felt jittery on desktop because two of the three visible cards
+  // just shifted by one position instead of the whole trio swapping out).
   useEffect(() => {
-    if (paused || total <= visible) return undefined;
-    const t = setInterval(() => setActive((i) => (i + 1) % total), AUTOPLAY_MS);
+    if (paused || pages <= 1) return undefined;
+    const t = setInterval(() => setActive((i) => (i + 1) % pages), AUTOPLAY_MS);
     return () => clearInterval(t);
-  }, [paused, total, visible]);
+  }, [paused, pages]);
 
   // Pause when the tab isn't visible — polite battery-wise.
   useEffect(() => {
@@ -93,12 +102,20 @@ export default function InfluencerPromotions() {
 
   const titlePre = (P.title_pre || "").trim();
   const titleHi = (P.title_highlight || "").trim();
-  const showControls = total > visible;
+  // Show pagination + arrows only when there is more than one logical page
+  // of cards. With 3 valid items on desktop this is exactly one page → the
+  // dots and arrows disappear as expected.
+  const showControls = pages > 1;
   // Track width is a percentage: 100% of the viewport shows `visible` cards,
   // so each card takes 100/visible%. The full track is 100 * (total / visible)%.
   const cardWidthPct = 100 / visible;
   const trackWidthPct = (100 * total) / visible;
-  const translatePct = active * cardWidthPct;
+  // Translate by a full page (i.e. `visible` cards) per active step, but
+  // clamp on the last page so we never scroll past the last valid card
+  // and expose empty space when total isn't a multiple of `visible`.
+  const rawTranslatePct = active * visible * cardWidthPct;
+  const maxTranslatePct = Math.max(0, (total - visible) * cardWidthPct);
+  const translatePct = Math.min(rawTranslatePct, maxTranslatePct);
 
   return (
     <section
@@ -232,19 +249,21 @@ export default function InfluencerPromotions() {
           )}
         </div>
 
-        {/* Dot pagination */}
+        {/* Dot pagination — one dot per LOGICAL PAGE (i.e. per
+            viewport-width group of `visible` cards), not per raw item.
+            Hidden entirely when there is only one page. */}
         {showControls && (
           <div
             className="mt-6 md:mt-8 flex items-center justify-center gap-2"
             data-testid="influencer-carousel-dots"
           >
-            {validItems.map((_, i) => {
+            {Array.from({ length: pages }).map((_, i) => {
               const isActive = i === active;
               return (
                 <button
                   key={i}
                   type="button"
-                  aria-label={`Go to slide ${i + 1}`}
+                  aria-label={`Go to page ${i + 1} of ${pages}`}
                   onClick={() => goTo(i)}
                   data-testid={`influencer-carousel-dot-${i}`}
                   className="h-[6px] rounded-full transition-all duration-500"
