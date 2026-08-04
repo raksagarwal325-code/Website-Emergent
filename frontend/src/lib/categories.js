@@ -78,6 +78,43 @@ export const fallbackSlugFor = (dbName) => {
 };
 
 /**
+ * Resolve a slug against BOTH the curated registry AND the live list of
+ * published-product db_names returned by `/api/products/categories`.
+ *
+ * Curated hits win (instant, sync). If the slug isn't curated, we probe
+ * the merged dynamic list — for a match we synthesise sane SEO defaults
+ * so `<CategoryPage>` can render the same shape it renders for curated
+ * entries. Returns null when the slug matches neither source, which the
+ * page turns into a real 404.
+ *
+ * `dbNames` is expected to be the array from `/api/products/categories`
+ * (already filtered by the backend to `status=published` for anon
+ * callers), so a draft-only category can NEVER resolve here.
+ */
+export const resolveCategoryBySlug = (slug, dbNames) => {
+  const curated = getCategoryBySlug(slug);
+  if (curated) return curated;
+  const merged = mergeDynamicCategories(dbNames);
+  const dyn = merged.find((c) => c.slug === slug && c._dynamic);
+  if (!dyn) return null;
+  // Hydrate safe generic SEO/H1 defaults. Curated copy stays authoritative
+  // for the 8 hand-written categories; auto-created ones get generic but
+  // sensible fallbacks so the page never renders blank fields.
+  const labelLower = String(dyn.label || dyn.db_name).toLowerCase();
+  return {
+    ...dyn,
+    h1: dyn.label,
+    seoTitle: `${dyn.label} · Samrat Glass Emporium`,
+    metaDescription:
+      `Browse handcrafted ${labelLower} at Samrat Glass Emporium — ` +
+      `hand-blown decorative lighting made in Firozabad since 1981.`,
+    intro:
+      `Explore our collection of ${labelLower} — every piece handcrafted ` +
+      `in Firozabad. Enquire for pricing, dimensions and lead times.`,
+  };
+};
+
+/**
  * Merge a live-from-API list of published-product db_names with the
  * curated registry. Published-product db_names are the source of truth;
  * the registry only ENRICHES known ones with SEO metadata (slug, label,

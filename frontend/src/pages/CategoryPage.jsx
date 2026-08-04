@@ -3,29 +3,70 @@ import { Link, useParams } from "react-router-dom";
 import SEO from "../components/SEO";
 import CatalogueBrowser from "../components/CatalogueBrowser";
 import NotFound from "./NotFound";
-import { getCategoryBySlug, NAV_CATEGORIES, SITE_ORIGIN } from "../lib/categories";
+import {
+  getCategoryBySlug,
+  resolveCategoryBySlug,
+  NAV_CATEGORIES,
+  SITE_ORIGIN,
+} from "../lib/categories";
 import { api } from "../lib/api";
 
 /**
  * SEO landing page for one category. Behaviour:
- *   * Unknown slug → real 404 UI (server response is limited by SPA host;
- *     see the sitemap for the canonical set of six slugs).
- *   * Known slug → unique H1 + intro + full CatalogueBrowser locked to the
- *     matching DB category, self-referencing canonical, CollectionPage
- *     JSON-LD with an ItemList of the products currently returned by the
- *     public API.
+ *   * Curated slug (from categories.data.json) → resolves instantly with
+ *     hand-written H1, intro and SEO copy.
+ *   * Dynamic slug — one that came from `mergeDynamicCategories` because a
+ *     published product uses a category not (yet) in the curated
+ *     registry — resolves asynchronously against
+ *     `/api/products/categories` (which the backend restricts to
+ *     `status=published` for anon callers, so a draft-only category can
+ *     never be reached this way). Renders with generic-but-sensible
+ *     fallback H1 / intro / SEO copy.
+ *   * Slug matching neither source → real 404 UI.
  *
- * We deliberately reuse `CatalogueBrowser` so search, sort, price, load-more,
- * pagination dedupe and the stale-response guard behave identically to the
+ * We deliberately reuse `CatalogueBrowser` so search, sort, price,
+ * pagination and the stale-response guard behave identically to the
  * catalogue page — the only thing that changes is that category is locked.
  */
 export default function CategoryPage() {
   const { slug } = useParams();
-  const category = getCategoryBySlug(slug);
+  // Curated hit is synchronous — no loading flash for the 8 canonical slugs.
+  const curated = getCategoryBySlug(slug);
+  // For unknown slugs we probe the dynamic list. `undefined` = still
+  // resolving, `null` = resolved to "not found".
+  const [dynamicResolved, setDynamicResolved] = useState(
+    curated ? curated : undefined,
+  );
   // Products list for the JSON-LD ItemList. We fetch a small first page so
   // the schema block includes real, published products only. If the fetch
   // fails we still render the page — just without the ItemList payload.
   const [ldProducts, setLdProducts] = useState([]);
+
+  // Resolve unknown slugs against /api/products/categories exactly like
+  // the Catalog page does. Depending on `slug` also handles direct
+  // navigation between /category/<a> → /category/<b>.
+  useEffect(() => {
+    if (curated) {
+      setDynamicResolved(curated);
+      return;
+    }
+    let alive = true;
+    setDynamicResolved(undefined);
+    api
+      .categories()
+      .then((dbNames) => {
+        if (!alive) return;
+        setDynamicResolved(resolveCategoryBySlug(slug, dbNames) || null);
+      })
+      .catch(() => {
+        if (alive) setDynamicResolved(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [slug, curated]);
+
+  const category = dynamicResolved;
 
   useEffect(() => {
     if (!category) return;
@@ -42,7 +83,19 @@ export default function CategoryPage() {
     return () => { alive = false; };
   }, [category]);
 
-  if (!category) {
+  // Resolving — render a minimal shell instead of flashing NotFound.
+  if (category === undefined) {
+    return (
+      <div
+        data-testid="page-category-loading"
+        className="max-w-7xl mx-auto px-6 py-16 text-white/40 text-sm"
+      >
+        Loading…
+      </div>
+    );
+  }
+
+  if (category === null) {
     return <NotFound />;
   }
 

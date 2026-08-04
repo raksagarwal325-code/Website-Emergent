@@ -9,6 +9,7 @@ import {
   NAV_CATEGORIES,
   fallbackSlugFor,
   mergeDynamicCategories,
+  resolveCategoryBySlug,
 } from "./categories";
 
 describe("fallbackSlugFor", () => {
@@ -111,5 +112,57 @@ describe("mergeDynamicCategories", () => {
   test("non-array input falls back to NAV_CATEGORIES", () => {
     const merged = mergeDynamicCategories(undefined);
     expect(merged.length).toBe(NAV_CATEGORIES.length);
+  });
+});
+
+describe("resolveCategoryBySlug", () => {
+  test("curated slug resolves synchronously without needing dbNames", () => {
+    const res = resolveCategoryBySlug("chandeliers", []);
+    expect(res).toBeDefined();
+    expect(res.slug).toBe("chandeliers");
+    expect(res.db_name).toBe("Chandelier");
+    expect(res.h1).toBeDefined();
+    expect(res.metaDescription).toBeDefined();
+    // Curated entries must NOT be marked _dynamic.
+    expect(res._dynamic).toBeUndefined();
+  });
+
+  test("dynamic slug (published-product-only) resolves and synthesises defaults", () => {
+    const res = resolveCategoryBySlug("ceiling-lights", ["Chandelier", "Ceiling Light"]);
+    expect(res).toBeDefined();
+    expect(res.slug).toBe("ceiling-lights");
+    expect(res.db_name).toBe("Ceiling Light");
+    expect(res.label).toBe("Ceiling Light");
+    // Generic-but-sensible SEO fallbacks.
+    expect(res.h1).toBe("Ceiling Light");
+    expect(res.seoTitle).toMatch(/Ceiling Light/);
+    expect(res.metaDescription).toMatch(/ceiling light/i);
+    expect(res.intro).toMatch(/ceiling light/i);
+    expect(res._dynamic).toBe(true);
+  });
+
+  test("dynamic slug NOT present in dbNames (draft-only category) does not resolve", () => {
+    // Backend already filters /api/products/categories to published-only,
+    // so a draft-only category never reaches the frontend. This test
+    // simulates that: the slug is requested but the API returned only
+    // Chandelier — Ceiling Light is absent → NotFound expected.
+    const res = resolveCategoryBySlug("ceiling-lights", ["Chandelier"]);
+    expect(res).toBeNull();
+  });
+
+  test("completely nonexistent slug returns null", () => {
+    const res = resolveCategoryBySlug("does-not-exist", ["Chandelier"]);
+    expect(res).toBeNull();
+  });
+
+  test("null / missing dbNames still lets curated slugs resolve", () => {
+    const res = resolveCategoryBySlug("chandeliers", null);
+    expect(res).toBeDefined();
+    expect(res.slug).toBe("chandeliers");
+  });
+
+  test("null / missing dbNames + non-curated slug returns null (no crash)", () => {
+    expect(resolveCategoryBySlug("ceiling-lights", null)).toBeNull();
+    expect(resolveCategoryBySlug("ceiling-lights", undefined)).toBeNull();
   });
 });
