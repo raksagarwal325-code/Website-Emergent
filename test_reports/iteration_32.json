@@ -1,0 +1,47 @@
+{
+  "summary": "Verified the dynamic category discovery fix against preview URL. Seeded TEST_CEILING_SEED (+2 case-variant seeds for dedupe test) with category='Ceiling Light' variants. PRIMARY BUG IS FIXED: 'Ceiling Light' now appears in /catalog top strip (data-testid=catalog-strip-ceiling-lights, href=/category/ceiling-lights) AND sidebar (data-testid=cat-ceiling-light). Filter click narrows results to only the Ceiling Light product. PDP opens correctly. Case-insensitive dedupe works (only 1 Ceiling Light entry despite 3 case variants). Homepage 'Shop by Category' + Footer 'COLLECTIONS' correctly remain curated (no Ceiling Light leak). Regression counter shows 'Showing 1-24 of 117 pieces' (116 baseline + 1 seed). All seed rows deleted at end. HOWEVER — FOUND ONE REGRESSION: curated categories that currently have ZERO published products ('Floor Chandelier', 'Table Chandelier') are DROPPED from the /catalog top strip AND sidebar because mergeDynamicCategories only iterates the API dbNames list. This contradicts the review acceptance criterion 'Confirm the curated categories (…Floor Chandelier, Table Chandelier) still appear in both the top strip and sidebar'. Homepage + Footer are unaffected since they read NAV_CATEGORIES directly. Also a minor dedupe label issue: when multiple casings are present, the FIRST-seen casing is retained as label (e.g. 'CEILING LIGHT' won over 'Ceiling Light' when API listed 'CEILING LIGHT' first alphabetically). If registry casing exists in API list at all, registry entry is used correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Catalog top strip + CatalogueBrowser sidebar", "issue": "Curated categories with zero published products (Floor Chandelier, Table Chandelier) are missing from /catalog top strip and sidebar. mergeDynamicCategories only iterates API-returned dbNames — categories in registry with no product don't get merged in.", "selector": "[data-testid='catalog-category-strip'], [data-testid='filters-panel']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/catalog dedupe label", "issues": ["When multiple casings of an unknown (non-registry) db_name exist, the label uses whichever casing the API returns FIRST (typically alphabetical). Non-blocking but could surface odd casing like 'CEILING LIGHT'. Consider normalising to Title Case for fallback entries."]}
+    ]
+  },
+  "primary_bug_verification": {
+    "status": "PASS for the Ceiling-Light dynamic surfacing; FAIL for the 'all 8 curated still appear' acceptance criterion",
+    "top_strip_after_seed": ["Candle Stands", "Ceiling Light", "Chandeliers", "Floor Lamps", "Hanging Lights", "Table Lamps", "Wall Lights"],
+    "sidebar_after_seed": ["All", "Candle Stand", "Ceiling Light", "Chandelier", "Floor Lamp", "Hanging Light", "Table Lamp", "Wall Light"],
+    "missing_curated_categories": ["Floor Chandelier", "Table Chandelier"],
+    "ceiling_light_link": {"testid": "catalog-strip-ceiling-lights", "text": "Ceiling Light", "href": "/category/ceiling-lights"},
+    "ceiling_light_sidebar_testid": "cat-ceiling-light",
+    "sidebar_click_filters_correctly": true,
+    "filtered_count": "Showing 1-1 of 1 piece",
+    "case_insensitive_dedupe": {"api_returned": ["CEILING LIGHT", "Ceiling Light", "ceiling light"], "strip_count_of_ceiling_entries": 1, "pass": true},
+    "results_counter_baseline_plus_seed": "Showing 1-24 of 117 pieces",
+    "pdp_opens_for_seeded_product": true,
+    "homepage_shop_by_category_curated": ["Chandeliers", "Hanging Lights", "Wall Lights", "Table Lamps", "Floor Lamps", "Candle Stands", "Floor Chandeliers", "Table Chandeliers"],
+    "homepage_has_ceiling_light_leak": false,
+    "footer_collections_curated": ["CHANDELIERS", "HANGING LIGHTS", "WALL LIGHTS", "TABLE LAMPS", "FLOOR LAMPS", "CANDLE STANDS", "FLOOR CHANDELIERS", "TABLE CHANDELIERS"],
+    "footer_has_ceiling_light_leak": false
+  },
+  "critical_code_review_comments": [
+    "frontend/src/lib/categories.js — mergeDynamicCategories iterates only the API-returned dbNames. Curated registry entries with no currently-published product are silently dropped from nav strips. Fix: after iterating dbNames, walk NAV_CATEGORIES and push any published+nav_visible curated entry that wasn't already seen (case-insensitively). This preserves curated design intent for empty categories while still surfacing new dynamic ones.",
+    "Suggest normalising fallback label casing to Title Case (e.g. 'ceiling light' -> 'Ceiling Light') so odd admin casing doesn't leak to UI. Currently the first-seen casing wins.",
+    "Backend /api/products/categories returns categories with casing intact and unsorted-by-user-intent — consider server-side case-normalisation + dedupe to make client merge simpler and idempotent (defence in depth)."
+  ],
+  "test_report_links": ["/app/test_reports/iteration_32.json"],
+  "action_items": [
+    "HIGH: Update mergeDynamicCategories to also include curated NAV_CATEGORIES that were not present in API dbNames — Floor Chandelier and Table Chandelier currently disappear from /catalog top strip + sidebar when no product is published in those categories.",
+    "MINOR: Title-case fallback labels so admin-typed casings ('ceiling light', 'CEILING LIGHT') display cleanly."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (categories endpoint returning as expected)", "frontend": "~85% (primary Ceiling-Light discovery works; regression on empty curated categories)"},
+  "seed_data_creation": "Inserted TEST_CEILING_SEED, TEST_CEILING_SEED2 (category='ceiling light'), TEST_CEILING_SEED3 (category='CEILING LIGHT'). ALL THREE DELETED at end of test run — verified via db.products.countDocuments({category:{$regex:/ceiling/i}}) = 0.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Bug: mergeDynamicCategories in frontend/src/lib/categories.js only returns categories present in the API response. Since /api/products/categories only lists categories with at least one published product, curated registry entries with zero products (currently Floor Chandelier, Table Chandelier) are dropped from /catalog top strip and CatalogueBrowser sidebar filter. The fix must union NAV_CATEGORIES into the merge result (case-insensitive dedupe by db_name). Retest after fix should confirm all 8 curated categories + any dynamic ones (like Ceiling Light when seeded) appear together.",
+  "rca_of_the_issue": "mergeDynamicCategories(dbNames) is a pure inbound merge — it walks dbNames from the API and either enriches with registry data (if match) or adds a fallback. It never iterates the curated NAV_CATEGORIES to add ones the API omitted. Because /api/products/categories only returns db_names that appear on published products (distinct), any curated category with zero live products is invisible in the merged list. The fix should be a two-pass merge: (1) iterate NAV_CATEGORIES first to seed baseline curated visibility, (2) then iterate API dbNames to enrich/add dynamics, both under the same case-insensitive `seen` Set. This preserves current dynamic-add behaviour AND stops the regression."
+}

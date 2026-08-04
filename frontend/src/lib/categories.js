@@ -55,3 +55,69 @@ export const getCategoryBySlug = (slug) =>
  */
 export const getCategoryByDbName = (name) =>
   PUBLIC_CATEGORIES.find((c) => c.db_name === name);
+
+/**
+ * Deterministic slug generator for categories that aren't in the curated
+ * registry yet — e.g. a fresh admin uploads a product with
+ * `category = "Ceiling Light"` and no one has enriched it with SEO
+ * metadata. We generate `ceiling-lights` (lowercased, kebab-cased,
+ * simply-pluralised) so the fallback slug matches the naming
+ * convention already used by registry entries (`chandeliers`,
+ * `hanging-lights`, `wall-lights`, `table-lamps`).
+ */
+export const fallbackSlugFor = (dbName) => {
+  const base = String(dbName || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-+|-+$)/g, "")
+    .trim();
+  if (!base) return "";
+  // Add a naive plural s if the word doesn't already end in one — matches
+  // the convention of the registry ("Chandelier" → "chandeliers").
+  return base.endsWith("s") ? base : `${base}s`;
+};
+
+/**
+ * Merge a live-from-API list of published-product db_names with the
+ * curated registry. Published-product db_names are the source of truth;
+ * the registry only ENRICHES known ones with SEO metadata (slug, label,
+ * intro, hero image). Unknown db_names get a safe fallback slug and use
+ * the db_name itself as the label.
+ *
+ * De-duplication is case + whitespace insensitive so "  ceiling light "
+ * and "Ceiling Light" never appear as two separate categories.
+ */
+export const mergeDynamicCategories = (dbNames) => {
+  if (!Array.isArray(dbNames)) return [...NAV_CATEGORIES];
+  const seen = new Set();
+  const out = [];
+  for (const raw of dbNames) {
+    const trimmed = String(raw || "").trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const registryEntry = CATEGORIES.find(
+      (c) => String(c.db_name || "").toLowerCase() === key,
+    );
+    if (registryEntry) {
+      // Honour the registry's own nav flags: an entry that is unpublished
+      // or `nav_visible: false` remains hidden even if a product uses it.
+      if (registryEntry.published && registryEntry.nav_visible) {
+        out.push(registryEntry);
+      }
+      continue;
+    }
+    // Fallback for a brand-new db_name.
+    out.push({
+      slug: fallbackSlugFor(trimmed),
+      db_name: trimmed,
+      label: trimmed,
+      published: true,
+      nav_visible: true,
+      sitemap: false,     // don't auto-add to sitemap without curator review
+      _dynamic: true,     // marker so callers can style/skip curated-only UIs
+    });
+  }
+  return out;
+};

@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import SEO from "../components/SEO";
 import CatalogueBrowser from "../components/CatalogueBrowser";
-import { CATEGORIES, getCategoryByDbName, NAV_CATEGORIES } from "../lib/categories";
+import { CATEGORIES, getCategoryByDbName, NAV_CATEGORIES, mergeDynamicCategories } from "../lib/categories";
+import { api } from "../lib/api";
 
 /**
  * Catalog page.
@@ -13,10 +14,25 @@ import { CATEGORIES, getCategoryByDbName, NAV_CATEGORIES } from "../lib/categori
  *      clean permanent URL. This is a client-side <Navigate replace> — a
  *      *true* HTTP 301 is a follow-up infrastructure task (ingress rule).
  *   2. Render the "Browse by category" strip so category pages are
- *      crawlable from the main catalogue too.
+ *      crawlable from the main catalogue too. This strip is DYNAMIC —
+ *      it merges the curated registry with categories that appear on
+ *      currently-published products (fetched from
+ *      `/api/products/categories`), so a fresh admin who publishes a
+ *      product with a new `category` value sees it in the strip
+ *      without a code deploy.
  */
 export default function Catalog() {
   const [searchParams] = useSearchParams();
+  const [dynamicCats, setDynamicCats] = useState(NAV_CATEGORIES);
+  useEffect(() => {
+    let alive = true;
+    api
+      .categories()
+      .then((dbNames) => { if (alive) setDynamicCats(mergeDynamicCategories(dbNames)); })
+      .catch(() => { /* fall back to curated NAV_CATEGORIES already set */ });
+    return () => { alive = false; };
+  }, []);
+
   const legacyCategory = searchParams.get("category");
   const mapped = legacyCategory ? getCategoryByDbName(legacyCategory) : null;
   if (mapped) {
@@ -38,10 +54,12 @@ export default function Catalog() {
         </p>
       </div>
 
-      {/* Crawlable category strip — reads from the single-source
-          NAV_CATEGORIES so it always matches the left filter, the
-          homepage grid and the footer strip. Wraps on desktop; scrolls
-          horizontally on narrower widths so 8+ items never truncate. */}
+      {/* Crawlable category strip — DYNAMIC: merges the curated registry
+          with every published-product category returned by
+          /api/products/categories. Unknown categories get a safe
+          fallback slug (see mergeDynamicCategories in lib/categories.js).
+          Wraps on desktop; scrolls horizontally on narrower widths so
+          8+ items never truncate. */}
       <nav
         aria-label="Browse by category"
         data-testid="catalog-category-strip"
@@ -49,11 +67,11 @@ export default function Catalog() {
       >
         <div className="flex md:flex-wrap items-center gap-x-6 gap-y-2 text-xs uppercase tracking-[0.24em] whitespace-nowrap md:whitespace-normal">
           <span className="text-white/40">Browse by category:</span>
-          {NAV_CATEGORIES.map((c) => (
+          {dynamicCats.map((c) => (
             <Link
-              key={c.slug}
+              key={c.slug || c.db_name}
               to={`/category/${c.slug}`}
-              data-testid={`catalog-strip-${c.slug}`}
+              data-testid={`catalog-strip-${c.slug || c.db_name.toLowerCase().replace(/\s+/g, "-")}`}
               className="text-white/70 hover:text-[#D4AF37] link-underline"
             >
               {c.label}
@@ -62,7 +80,7 @@ export default function Catalog() {
         </div>
       </nav>
 
-      <CatalogueBrowser />
+      <CatalogueBrowser dynamicCategories={dynamicCats} />
     </div>
   );
 }

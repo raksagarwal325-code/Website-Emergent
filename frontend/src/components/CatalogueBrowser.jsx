@@ -28,10 +28,17 @@ export default function CatalogueBrowser({
   lockedCategory = null,
   initialProducts = [],
   initialTotal = 0,
+  dynamicCategories = null,
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState(initialProducts);
-  const categories = NAV_CATEGORIES.map((c) => c.db_name);
+  // Sidebar filter categories come from the parent (Catalog page fetches
+  // /api/products/categories and merges with the registry) OR fall back
+  // to the curated NAV_CATEGORIES so this component works standalone.
+  const navCats = Array.isArray(dynamicCategories) && dynamicCategories.length > 0
+    ? dynamicCategories
+    : NAV_CATEGORIES;
+  const categories = navCats.map((c) => c.db_name);
   const [loading, setLoading] = useState(initialProducts.length === 0);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(initialTotal);
