@@ -15,14 +15,16 @@ import { toast } from "sonner";
  * Arbitrary external URLs are intentionally not accepted (SSRF hardening).
  */
 const CATEGORIES = [
-  { db_name: "Chandelier",    label: "Chandeliers"    },
-  { db_name: "Hanging Light", label: "Hanging Lights" },
-  { db_name: "Wall Light",    label: "Wall Lights"    },
-  { db_name: "Table Lamp",    label: "Table Lamps"    },
-  { db_name: "Floor Lamp",    label: "Floor Lamps"    },
-  { db_name: "Candle Stand",  label: "Candle Stands"  },
-  { db_name: "Ceiling Light", label: "Ceiling Lights" },
-  { db_name: "Gate Light",    label: "Gate Lights"    },
+  { db_name: "Chandelier",        label: "Chandeliers"        },
+  { db_name: "Hanging Light",     label: "Hanging Lights"     },
+  { db_name: "Wall Light",        label: "Wall Lights"        },
+  { db_name: "Table Lamp",        label: "Table Lamps"        },
+  { db_name: "Floor Lamp",        label: "Floor Lamps"        },
+  { db_name: "Candle Stand",      label: "Candle Stands"      },
+  { db_name: "Ceiling Light",     label: "Ceiling Lights"     },
+  { db_name: "Gate Light",        label: "Gate Lights"        },
+  { db_name: "Floor Chandelier",  label: "Floor Chandeliers"  },
+  { db_name: "Table Chandelier",  label: "Table Chandeliers"  },
 ];
 
 export default function CategoryImagesAdmin() {

@@ -1510,6 +1510,8 @@ CATEGORY_FEATURED_ALLOWED = {
     "Candle Stand",
     "Ceiling Light",
     "Gate Light",
+    "Floor Chandelier",
+    "Table Chandelier",
 }
 
 
