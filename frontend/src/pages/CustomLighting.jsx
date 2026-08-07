@@ -7,6 +7,7 @@ import { api } from "../lib/api";
 import { trackGenerateLead } from "../lib/analytics";
 import { useSettings } from "../context/SettingsContext";
 import { waCustomLightingLink } from "../lib/whatsapp";
+import { normalizePhone } from "../lib/phone";
 
 /**
  * Dedicated landing page for custom lighting & bulk-order enquiries.
@@ -175,10 +176,12 @@ export function CommercialLeadForm({
   const [form, setForm] = useState({
     name: "",
     email: "",
+    phone: "",
     subject: "",
     message: "",
     enquiry_type: enquiryType,
   });
+  const [phoneError, setPhoneError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -188,13 +191,20 @@ export function CommercialLeadForm({
       toast.error("Name, email and message are required");
       return;
     }
+    const p = normalizePhone(form.phone);
+    if (!p.ok) {
+      setPhoneError(p.error);
+      toast.error(p.error);
+      return;
+    }
+    setPhoneError("");
     setSubmitting(true);
     try {
-      await api.createContact(form);
+      await api.createContact({ ...form, phone: p.value });
       trackGenerateLead({ source: analyticsSource, enquiry_type: enquiryType });
       toast.success("Message received. We'll respond shortly.");
       setDone(true);
-      setForm({ name: "", email: "", subject: "", message: "", enquiry_type: enquiryType });
+      setForm({ name: "", email: "", phone: "", subject: "", message: "", enquiry_type: enquiryType });
     } catch {
       toast.error("Could not send message");
     } finally {
@@ -245,6 +255,25 @@ export function CommercialLeadForm({
         onChange={(e) => setForm({ ...form, email: e.target.value })}
         className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm"
       />
+      <div>
+        <input
+          required
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          data-testid={`${testIdPrefix}-form-phone`}
+          placeholder="Mobile / WhatsApp Number"
+          value={form.phone}
+          onChange={(e) => {
+            setForm({ ...form, phone: e.target.value });
+            if (phoneError) setPhoneError("");
+          }}
+          className={`w-full bg-[#0a0a0a] border ${phoneError ? "border-red-500/70" : "border-white/15"} focus:border-[#D4AF37] outline-none px-4 py-3 text-sm`}
+        />
+        {phoneError && (
+          <div data-testid={`${testIdPrefix}-form-phone-error`} className="mt-1.5 text-xs text-red-400">{phoneError}</div>
+        )}
+      </div>
       <input
         data-testid={`${testIdPrefix}-form-subject`}
         placeholder={subjectPlaceholder}

@@ -1244,7 +1244,7 @@ function MessagesAdmin() {
   const filtered = messages.filter((m) => {
     if (!q.trim()) return true;
     const needle = q.toLowerCase();
-    return `${m.name || ""} ${m.email || ""} ${m.subject || ""} ${m.message || ""} ${_enqLabel(m.enquiry_type)}`.toLowerCase().includes(needle);
+    return `${m.name || ""} ${m.email || ""} ${m.phone || ""} ${m.subject || ""} ${m.message || ""} ${_enqLabel(m.enquiry_type)}`.toLowerCase().includes(needle);
   });
 
   const filteredIds = filtered.map((m) => m.id);
@@ -1413,7 +1413,10 @@ function MessagesAdmin() {
                       {_enqLabel(m.enquiry_type)}
                     </span>
                   </div>
-                  <div className="text-white/50 text-sm mt-1">from {m.name} · <span className="text-white/70">{m.email}</span></div>
+                  <div className="text-white/50 text-sm mt-1">
+                    from {m.name} · <span className="text-white/70">{m.email}</span>
+                    {m.phone && <span className="text-white/70"> · <a href={`tel:${m.phone}`} className="hover:text-[#D4AF37]" data-testid={`msg-phone-${m.id}`}>{m.phone}</a></span>}
+                  </div>
                   <div className="text-xs text-white/40 mt-1">{new Date(m.created_at).toLocaleString()}</div>
                 </div>
               </div>

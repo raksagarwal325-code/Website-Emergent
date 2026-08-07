@@ -8,6 +8,7 @@ import SEO from "../components/SEO";
 import { ENQUIRY_TYPES, resolveEnquiryType } from "../lib/enquiryTypes";
 import { trackGenerateLead } from "../lib/analytics";
 import { waGeneralLink } from "../lib/whatsapp";
+import { normalizePhone } from "../lib/phone";
 
 export default function Contact() {
   const location = useLocation();
@@ -18,10 +19,12 @@ export default function Contact() {
   const [form, setForm] = useState({
     name: "",
     email: "",
+    phone: "",
     subject: "",
     message: "",
     enquiry_type: initialType,
   });
+  const [phoneError, setPhoneError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [settings, setSettings] = useState(null);
 
@@ -40,12 +43,19 @@ export default function Contact() {
       toast.error("Name, email and message are required");
       return;
     }
+    const p = normalizePhone(form.phone);
+    if (!p.ok) {
+      setPhoneError(p.error);
+      toast.error(p.error);
+      return;
+    }
+    setPhoneError("");
     setSubmitting(true);
     try {
-      await api.createContact(form);
+      await api.createContact({ ...form, phone: p.value });
       trackGenerateLead({ source: "contact_form", enquiry_type: form.enquiry_type });
       toast.success("Message received. We'll respond shortly.");
-      setForm({ name: "", email: "", subject: "", message: "", enquiry_type: initialType });
+      setForm({ name: "", email: "", phone: "", subject: "", message: "", enquiry_type: initialType });
     } catch {
       toast.error("Could not send message");
     } finally {
@@ -117,6 +127,22 @@ export default function Contact() {
           </div>
           <input required data-testid="contact-name" placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
           <input required type="email" data-testid="contact-email-input" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
+          <div>
+            <input
+              required
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              data-testid="contact-phone-input"
+              placeholder="Mobile / WhatsApp Number"
+              value={form.phone}
+              onChange={(e) => { setForm({ ...form, phone: e.target.value }); if (phoneError) setPhoneError(""); }}
+              className={`w-full bg-[#0a0a0a] border ${phoneError ? "border-red-500/70" : "border-white/15"} focus:border-[#D4AF37] outline-none px-4 py-3 text-sm`}
+            />
+            {phoneError && (
+              <div data-testid="contact-phone-error" className="mt-1.5 text-xs text-red-400">{phoneError}</div>
+            )}
+          </div>
 
           <div>
             <label htmlFor="enquiry-type" className="block text-[10px] uppercase tracking-[0.24em] text-white/50 mb-2">Enquiry type</label>

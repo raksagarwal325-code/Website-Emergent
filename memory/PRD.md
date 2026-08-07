@@ -176,6 +176,44 @@ INR pricing with en-IN formatting.
 
 - 2026-02-13: **Catalogue PDF — full-page background watermark + luxury polish.** Replaced per-image logo overlay with a single centered chandelier/logo watermark rendered behind ALL content on every page (cover, TOC, about, why, category dividers, product pages, contact). Product-card CTA switched from bright green (#25D366) to a gold→bronze→copper gradient pill. WhatsApp number rendered as `+91 89203 92937`. Description font upped from 9.5pt→10.5pt with 1.7 line-height; specs from 8.5pt→9.5pt/1.55. New `isMeaningfulSpec()` filter hides blank, "-", "—", "N/A", "TBD", "unconfirmed", "not specified", "0", "nil". Business hours normalized to "Mon – Sat: 10:30 AM – 8:00 PM · Sunday: Closed". Added "Scan to Connect" QR row on contact page (WhatsApp, Website, Google Maps, Instagram) via new `qrcode` npm package.
 - 2026-02-13: **Global "Currently unavailable" verbiage removed.** Verified via grep across `/app/frontend/src/` — zero occurrences. `ProductDetail.jsx` shows "Available on request" when `stock === 0`; `ProductCard.jsx` / `Catalog.jsx` / `Cart.jsx` intentionally don't render stock badges (inquiry-based catalog). Live-verified on 0-stock product `/product/23afd515-…` — screenshot confirms clean "Price on request" + "Available on request" copy.
+- 2026-02-13: **Mobile / WhatsApp number now REQUIRED on all four public lead flows.** Field label everywhere: "Mobile / WhatsApp Number". Input attributes: `type="tel" inputMode="tel" autoComplete="tel" required`. Client-side validation shows an inline error under the field; server-side validation returns HTTP 422 with a Pydantic error message.
+
+  · **Shared normalisers** (kept in one place, mirrored across client + server so the same input always yields the same output):
+    - `frontend/src/lib/phone.js` — `normalizePhone(raw)` returning `{ok, value}` or `{ok, error}`
+    - `backend/server_phone.py` — `normalize_phone(value)` returning the E.164 string or raising `ValueError` (Pydantic then surfaces as 422)
+  · **Formats accepted**: `+91XXXXXXXXXX` · `91XXXXXXXXXX` · `0XXXXXXXXXX` · plain 10-digit Indian mobile · any valid international `+CC...` (8–15 digits after the `+`) · spaces/hyphens/parens are stripped before validation. Output always normalises to E.164 with a leading `+`.
+
+  · **Backend model changes** (`backend/server.py`):
+    - `ContactCreate`: added required `phone: str` with `field_validator` calling `normalize_phone`.
+    - `ContactMessage` (storage): added `phone: str = ""` — default empty so **legacy rows without a phone continue to hydrate** via `list_contact`.
+    - `InquiryCreate`: flipped `customer_phone` from optional-with-default-`""` to REQUIRED with the same `field_validator`. Storage `Inquiry.customer_phone` remains `str = ""` so legacy inquiries still load.
+    - `create_contact` handler unchanged — it already persists via `payload.model_dump()`, which now includes the phone.
+    - `create_inquiry` handler unchanged — it already forwards `payload.customer_phone` into the persisted `Inquiry`.
+
+  · **Frontend forms updated (4 flows)**:
+    - `pages/Contact.jsx` — inserted phone input between email and subject; client normalises before `api.createContact`.
+    - `pages/Cart.jsx` (Inquiry Basket) — flipped the existing "Phone (optional)" to required with the same validator + inline error.
+    - `pages/CustomLighting.jsx` `<CommercialLeadForm>` (shared by `pages/ArchitectsDesigners.jsx`) — inserted phone input between email and subject; both landing forms now require it.
+
+  · **Admin UX** (`pages/Admin.jsx`):
+    - Inquiries list already surfaced `customer_phone`; unchanged.
+    - Messages list now shows the phone as a clickable `tel:` link next to email (`data-testid="msg-phone-<id>"`) and includes phone in the free-text search.
+
+  · **Legacy compatibility**: existing `contact_messages` documents with no `phone` field and existing `inquiries` documents with no `customer_phone` field still load — the storage models default `phone`/`customer_phone` to `""`. This is asserted by `TestLegacyStorageCompat` in the new backend test file.
+
+  · **Tests added**:
+    - `frontend/src/lib/phone.test.js` — 10 cases (empty, non-numeric, 10-digit, spaces/hyphens/parens, +91, 91, leading-0, +US, +UK, too-short/too-long).
+    - `backend/tests/test_required_phone.py` — 23 cases across 4 classes covering the normaliser, `ContactCreate`, `InquiryCreate` and legacy storage compat.
+    - Updated `frontend/src/pages/CommercialLandings.test.jsx` — the existing bulk/trade submission tests now include a phone; added a new "rejects submission when phone is missing" case asserting inline error + no API call.
+
+  · **Verification (preview)**:
+    - `POST /api/contact` with no phone → HTTP **422** `{"loc":["body","phone"],"msg":"Field required"}`
+    - `POST /api/contact` with junk phone → HTTP **422** `{"msg":"Value error, Enter a valid phone number (digits only)"}`
+    - `POST /api/contact` with `"+91 89203-92937"` → HTTP **200**, persisted as `phone: "+918920392937"`
+    - Full frontend suite: **19 suites / 226 tests pass**; backend phone tests: **23/23 pass**.
+
+  Files: `backend/server.py`, `backend/server_phone.py` (new), `backend/tests/test_required_phone.py` (new), `frontend/src/lib/phone.js` (new), `frontend/src/lib/phone.test.js` (new), `frontend/src/pages/Contact.jsx`, `frontend/src/pages/Cart.jsx`, `frontend/src/pages/CustomLighting.jsx`, `frontend/src/pages/Admin.jsx`, `frontend/src/pages/CommercialLandings.test.jsx`.
+
 - 2026-02-13: **Admin → Category Images now covers all 10 curated categories.** Added Floor Chandeliers and Table Chandeliers (both already curated in `categories.data.json` with hand-written SEO copy, sitemap enabled, homepage-visible) to the two hard-coded lists that mirror the curated registry: (a) `CATEGORY_FEATURED_ALLOWED` in `backend/server.py` (the server-side gate for the `/api/admin/category-featured-images/*` upload/reset endpoints — was previously 8 entries, now 10), and (b) the `CATEGORIES` list in `frontend/src/components/admin/CategoryImagesAdmin.jsx` (the Admin UI table — was 8 rows, now 10). No categories removed; existing slugs, SEO metadata and product mapping untouched. Added two regression tests that fail fast if the lists ever drift from the curated registry: `frontend/src/components/admin/CategoryImagesAdmin.registry.test.js` (4 tests — count equals PUBLIC_CATEGORIES, both chandelier variants present, labels match) and `backend/tests/test_category_featured_allow_list.py` (3 tests — set-equality with categories.data.json db_names, both variants included, original six categories intact). Verified: Admin → Category Images now renders 10 tiles in the order Chandeliers → Hanging → Wall → Table Lamps → Floor Lamps → Candle Stands → Ceiling → Gate → Floor Chandeliers → Table Chandeliers. Frontend suite 18 / 215 pass, backend allow-list tests 3/3 pass. Files: `backend/server.py`, `frontend/src/components/admin/CategoryImagesAdmin.jsx`, `backend/tests/test_category_featured_allow_list.py` (new), `frontend/src/components/admin/CategoryImagesAdmin.registry.test.js` (new).
 
 - 2026-02-13: **WhatsApp CTA messages centralised & standardised.** Audited every public "Chat on WhatsApp" / "Enquire on WhatsApp" entry point and removed personal-name greetings ("Rakshit ji") in favour of the brand-led "Hi Samrat Glass Emporium, …" reconciled with the required per-context suffixes.

@@ -112,6 +112,9 @@ describe("Custom Lighting / Bulk Orders landing", () => {
     fireEvent.change(screen.getByTestId("custom-lighting-form-email"), {
       target: { value: "priya@example.com" },
     });
+    fireEvent.change(screen.getByTestId("custom-lighting-form-phone"), {
+      target: { value: "+918920392937" },
+    });
     fireEvent.change(screen.getByTestId("custom-lighting-form-message"), {
       target: { value: "Need 40 pendants for a boutique hotel." },
     });
@@ -123,7 +126,44 @@ describe("Custom Lighting / Bulk Orders landing", () => {
     expect(payload.enquiry_type).toBe("bulk");
     expect(payload.name).toBe("Priya");
     expect(payload.email).toBe("priya@example.com");
+    expect(payload.phone).toBe("+918920392937");
     expect(payload.message).toMatch(/pendants/);
+  });
+
+  test("rejects submission when phone is missing", async () => {
+    render(
+      <MemoryRouter initialEntries={["/custom-lighting-bulk-orders"]}>
+        <Routes>
+          <Route path="/custom-lighting-bulk-orders" element={<CustomLighting />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.change(screen.getByTestId("custom-lighting-form-name"), {
+      target: { value: "Priya" },
+    });
+    fireEvent.change(screen.getByTestId("custom-lighting-form-email"), {
+      target: { value: "priya@example.com" },
+    });
+    fireEvent.change(screen.getByTestId("custom-lighting-form-message"), {
+      target: { value: "Need 40 pendants." },
+    });
+    // The HTML `required` attr will normally block submission client-side,
+    // but our JS validator ALSO runs and shows a clear inline error.
+    // Bypass the HTML5 gate by manually calling the submit path with
+    // whitespace which is not caught by `required` but IS caught by our
+    // normaliser.
+    fireEvent.change(screen.getByTestId("custom-lighting-form-phone"), {
+      target: { value: "   " },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("custom-lighting-form-submit"));
+    });
+    // Backend was never called because the client-side normaliser rejected.
+    expect(mockCreateContact).not.toHaveBeenCalled();
+    // Inline error displayed on the phone field.
+    expect(
+      screen.getByTestId("custom-lighting-form-phone-error").textContent,
+    ).toMatch(/required/i);
   });
 });
 
@@ -170,6 +210,9 @@ describe("Architects & Interior Designers landing", () => {
     fireEvent.change(screen.getByTestId("architects-designers-form-email"), {
       target: { value: "hello@studionine.com" },
     });
+    fireEvent.change(screen.getByTestId("architects-designers-form-phone"), {
+      target: { value: "8920392937" },
+    });
     fireEvent.change(screen.getByTestId("architects-designers-form-message"), {
       target: { value: "Villa project — 30 fixtures, custom finishes." },
     });
@@ -181,6 +224,8 @@ describe("Architects & Interior Designers landing", () => {
     expect(payload.enquiry_type).toBe("trade");
     expect(payload.name).toBe("Studio Nine");
     expect(payload.email).toBe("hello@studionine.com");
+    // Bare 10-digit input normalises to E.164 +91.
+    expect(payload.phone).toBe("+918920392937");
     expect(payload.message).toMatch(/Villa/);
   });
 });

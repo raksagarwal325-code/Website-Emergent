@@ -415,9 +415,18 @@ class Inquiry(BaseModel):
 class InquiryCreate(BaseModel):
     customer_name: str
     customer_email: EmailStr
-    customer_phone: str = ""
+    # Mobile / WhatsApp number is now REQUIRED on new submissions.
+    # The stored `Inquiry` model above keeps `customer_phone` optional so
+    # legacy rows without a phone continue to load in the admin dashboard.
+    customer_phone: str
     message: str = ""
     items: List[InquiryItemInput] = []
+
+    @field_validator("customer_phone")
+    @classmethod
+    def _normalize_phone(cls, v):
+        from server_phone import normalize_phone  # pragma: no cover
+        return normalize_phone(v)
 
 
 # Allowed enquiry types on the /contact form. Kept in one place so backend
@@ -431,6 +440,9 @@ class ContactMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     email: EmailStr
+    # Legacy contact rows may pre-date the "required phone" contract; keep
+    # storage optional so `list_contacts` doesn't 500 on old data.
+    phone: str = ""
     subject: str = ""
     message: str
     enquiry_type: EnquiryType = "general"
@@ -440,9 +452,17 @@ class ContactMessage(BaseModel):
 class ContactCreate(BaseModel):
     name: str
     email: EmailStr
+    # Mobile / WhatsApp number is REQUIRED on new /api/contact submissions.
+    phone: str
     subject: str = ""
     message: str
     enquiry_type: EnquiryType = "general"
+
+    @field_validator("phone")
+    @classmethod
+    def _normalize_phone(cls, v):
+        from server_phone import normalize_phone  # pragma: no cover
+        return normalize_phone(v)
 
     @field_validator("enquiry_type", mode="before")
     @classmethod
