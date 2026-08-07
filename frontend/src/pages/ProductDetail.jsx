@@ -9,6 +9,7 @@ import SEO from "../components/SEO";
 import SchemaLD from "../components/SchemaLD";
 import SeenInProjects from "../components/SeenInProjects";
 import { trackViewItem } from "../lib/analytics";
+import { waProductLink } from "../lib/whatsapp";
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -80,9 +81,11 @@ export default function ProductDetail() {
   const fav = isFavorite(product.id);
   const images = (product.images || []).map(api.resolveImage);
 
-  const waNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waMessage = encodeURIComponent(`Hello, I'd like to enquire about the ${product.name} (${product.sku}).`);
-  const waLink = waNumber ? `https://wa.me/${waNumber}?text=${waMessage}` : "#";
+  const productUrl =
+    typeof window !== "undefined" && window.location
+      ? `${window.location.origin}/product/${product.id}`
+      : "";
+  const waLink = waProductLink(settings?.whatsapp_number, product, productUrl) || "#";
 
   const handleAdd = () => {
     addToCart(product);

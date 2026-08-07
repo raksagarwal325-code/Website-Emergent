@@ -6,6 +6,7 @@ import SEO from "../components/SEO";
 import { api } from "../lib/api";
 import { trackGenerateLead } from "../lib/analytics";
 import { useSettings } from "../context/SettingsContext";
+import { waCustomLightingLink } from "../lib/whatsapp";
 
 /**
  * Dedicated landing page for custom lighting & bulk-order enquiries.
@@ -14,12 +15,7 @@ import { useSettings } from "../context/SettingsContext";
  */
 export default function CustomLighting() {
   const { settings } = useSettings();
-  const waNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waLink = waNumber
-    ? `https://wa.me/${waNumber}?text=${encodeURIComponent(
-        "Hello Samrat Glass Emporium, I'd like to discuss a custom lighting / bulk order.",
-      )}`
-    : "#";
+  const waLink = waCustomLightingLink(settings?.whatsapp_number) || "#";
 
   return (
     <div data-testid="page-custom-lighting" className="max-w-7xl mx-auto px-6 py-16">

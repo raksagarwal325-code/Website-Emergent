@@ -176,6 +176,38 @@ INR pricing with en-IN formatting.
 
 - 2026-02-13: **Catalogue PDF — full-page background watermark + luxury polish.** Replaced per-image logo overlay with a single centered chandelier/logo watermark rendered behind ALL content on every page (cover, TOC, about, why, category dividers, product pages, contact). Product-card CTA switched from bright green (#25D366) to a gold→bronze→copper gradient pill. WhatsApp number rendered as `+91 89203 92937`. Description font upped from 9.5pt→10.5pt with 1.7 line-height; specs from 8.5pt→9.5pt/1.55. New `isMeaningfulSpec()` filter hides blank, "-", "—", "N/A", "TBD", "unconfirmed", "not specified", "0", "nil". Business hours normalized to "Mon – Sat: 10:30 AM – 8:00 PM · Sunday: Closed". Added "Scan to Connect" QR row on contact page (WhatsApp, Website, Google Maps, Instagram) via new `qrcode` npm package.
 - 2026-02-13: **Global "Currently unavailable" verbiage removed.** Verified via grep across `/app/frontend/src/` — zero occurrences. `ProductDetail.jsx` shows "Available on request" when `stock === 0`; `ProductCard.jsx` / `Catalog.jsx` / `Cart.jsx` intentionally don't render stock badges (inquiry-based catalog). Live-verified on 0-stock product `/product/23afd515-…` — screenshot confirms clean "Price on request" + "Available on request" copy.
+- 2026-02-13: **WhatsApp CTA messages centralised & standardised.** Audited every public "Chat on WhatsApp" / "Enquire on WhatsApp" entry point and removed personal-name greetings ("Rakshit ji") in favour of the brand-led "Hi Samrat Glass Emporium, …" reconciled with the required per-context suffixes.
+
+  · **New helper** `frontend/src/lib/whatsapp.js` — exports named message presets (`WA_MESSAGES.general/customLighting/architects/gallery/notFound`), context-aware message builders (`productMessage(product, url)`, `galleryProductMessage(product, project)`, `cartMessage(items)`), a link primitive (`buildWaLink(number, msg)`) that normalises phone digits, and convenience wrappers (`waGeneralLink`, `waCustomLightingLink`, `waArchitectsLink`, `waGalleryLink`, `waNotFoundLink`, `waProductLink`, `waGalleryProductLink`, `waCartLink`). Every public CTA now uses these.
+
+  · **Files migrated (12 consumers):**
+    - `pages/Home.jsx` (hero secondary CTA) → waGeneralLink
+    - `pages/Contact.jsx` (Phone/WhatsApp row + "Chat on WhatsApp") → waGeneralLink
+    - `pages/FAQ.jsx` (bottom WhatsApp help CTA) → waGeneralLink (removed "Rakshit ji")
+    - `pages/NotFound.jsx` (fallback WhatsApp button) → waNotFoundLink (brand-led)
+    - `pages/CustomLighting.jsx` (hero WhatsApp us + bottom link) → waCustomLightingLink
+    - `pages/ArchitectsDesigners.jsx` (hero WhatsApp us + bottom link) → waArchitectsLink
+    - `pages/ProductDetail.jsx` (product WhatsApp button) → waProductLink(product, absolute url)
+    - `pages/GalleryProject.jsx` (project product WhatsApp) → waGalleryProductLink(product, project) (removed "Rakshit ji")
+    - `pages/Cart.jsx` (Inquiry Basket → Enquire on WhatsApp) → waCartLink(items)
+    - `components/FloatingActions.jsx` (desktop floating WhatsApp) → waGeneralLink (removed "Rakshit ji")
+    - `components/MobileReachStrip.jsx` (mobile sticky WA icon) → waGeneralLink (removed "Rakshit ji")
+    - `components/layout/Footer.jsx` (Support → WhatsApp Support) → waGeneralLink (removed "Rakshit ji")
+    - `components/AtelierShowcase.jsx` (Atelier featured product inquiry) → productMessage extended with the price line (removed "Rakshit ji")
+    - `components/CollageSection.jsx` (secondary CTA fallback) → waGeneralLink (already brand-led, now routes through the helper for consistency)
+
+  · **Untouched (per instructions):** `pages/Admin.jsx` — admin-only enquiry reply builder (Contextualises per-customer with `Hi ${customer_name}`); `pages/Catalogue.jsx` — admin-only printable PDF page (uses phone-only `https://wa.me/${digits}` with no prefill for the QR code).
+
+  · **Number:** Single source of truth remains `settings.whatsapp_number` (from `/api/settings`). No number change.
+
+  · **Analytics:** Unchanged — `trackWhatsAppClick` still fires on every CTA (Cart still calls it, Product page still calls it, etc.). The helper only builds the URL.
+
+  · **Tests:** added `frontend/src/lib/whatsapp.test.js` (20 tests including a repo-wide static invariant asserting no non-test source file under `src/` contains a "Rakshit" prefill outside the helper's own anti-pattern comment). Full frontend suite: 17 suites / 211 tests pass.
+
+  · **Verified in preview:** Custom Lighting hero WhatsApp button → `https://wa.me/918920392937?text=Hi%20Samrat%20Glass%20Emporium%2C%20I%20would%20like%20to%20discuss%20a%20custom%20lighting%20%2F%20bulk%20order%20requirement.` (matches spec exactly).
+
+  Files: `frontend/src/lib/whatsapp.js` (new), `frontend/src/lib/whatsapp.test.js` (new), 14 consumer files.
+
 - 2026-02-13: **Batch fix — removed Unsplash flash + fixed Google Business links.**
   · **Stock image flash removed**: created `frontend/src/lib/placeholders.js` exporting two neutral branded SVG data URIs (`BRAND_PLACEHOLDER` — burgundy radial with faint gold "SG" emblem for tile-shaped placeholders; `BRAND_PLACEHOLDER_HERO` — wider dark burgundy for the hero background). Both are inline data URIs so they render synchronously without any external network fetch. Replaced the hardcoded `https://images.unsplash.com/photo-1513506003901-1e6a229e2d15…` fallback in `frontend/src/components/CategoryShowcase.jsx` (category tile fallback) and in `frontend/src/pages/Home.jsx` (hero image fallback). CategoryShowcase's existing skeleton-while-loading behaviour (state = undefined) is unchanged; only the "loaded but no image" branch now uses the branded SVG instead of Unsplash. Preview verified: 10 category tiles rendered, 0 Unsplash URLs present in the DOM.
   · **Google Business Profile links fixed**: audit revealed the stored `google_cid` (`16850385744624001495`) pointed to a different business than the stored `google_place_id` (`ChIJqRfIkPVHdDkRreYAh5J1egk`). Mathematically decoded the Place ID (base64-decoded last 8 bytes as unsigned little-endian int64) and confirmed the canonical CID for Samrat Glass Emporium, Firozabad is `682987565690709677`. Updated `Settings` model defaults in `backend/server.py` L470-483 to the reconciled pair; patched the currently-stored settings document in the preview MongoDB via a one-shot script so `/api/settings` and `/api/google/reviews` immediately return the correct destinations. **"Review us on Google"** → `search.google.com/local/writereview?placeid=ChIJqRfIkPVHdDkRreYAh5J1egk` (opens composer for the correct business — was already using Place ID, so this was already correct). **"View all reviews on Google"** and **"Visit our showroom"** → `www.google.com/maps?cid=682987565690709677` (now match the same business — previously pointed elsewhere). All three CTAs already had `target="_blank" rel="noreferrer"`.

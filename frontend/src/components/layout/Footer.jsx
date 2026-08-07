@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Mail, MapPin, Clock, Phone, ExternalLink } from "lucide-react";
 import { useSettings } from "../../context/SettingsContext";
+import { waGeneralLink } from "../../lib/whatsapp";
 import { formatPhone } from "../../lib/api";
 import { NAV_CATEGORIES as SEO_CATEGORIES } from "../../lib/categories";
 
@@ -112,7 +113,7 @@ export default function Footer() {
   const f = hp.footer || {};
 
   const waRaw = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waHref = waRaw ? `https://wa.me/${waRaw}?text=${encodeURIComponent("Hi Rakshit ji, I am interested in Samrat Glass Emporium products. Please share more details.")}` : "";
+  const waHref = waGeneralLink(settings?.whatsapp_number);
   const phoneHref = settings?.whatsapp_number ? `tel:+${(settings.whatsapp_number || "").replace(/[^0-9]/g, "")}` : "";
   const phoneDisplay = formatPhone(settings?.whatsapp_number);
   const emailHref = settings?.admin_email ? `mailto:${settings.admin_email}` : "";

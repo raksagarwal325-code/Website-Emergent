@@ -7,6 +7,7 @@ import GoogleReviews from "../components/GoogleReviews";
 import SEO from "../components/SEO";
 import { ENQUIRY_TYPES, resolveEnquiryType } from "../lib/enquiryTypes";
 import { trackGenerateLead } from "../lib/analytics";
+import { waGeneralLink } from "../lib/whatsapp";
 
 export default function Contact() {
   const location = useLocation();
@@ -52,8 +53,7 @@ export default function Contact() {
     }
   };
 
-  const waNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waLink = waNumber ? `https://wa.me/${waNumber}?text=${encodeURIComponent("Hello Samrat Glass Emporium, I would like to enquire.")}` : "#";
+  const waLink = waGeneralLink(settings?.whatsapp_number) || "#";
 
   return (
     <div data-testid="page-contact" className="max-w-7xl mx-auto px-6 py-16">

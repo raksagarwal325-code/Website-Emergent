@@ -4,6 +4,7 @@ import { MessageCircle, Compass, Layers, Palette, ArrowRight, Users } from "luci
 import SEO from "../components/SEO";
 import { CommercialLeadForm } from "./CustomLighting";
 import { useSettings } from "../context/SettingsContext";
+import { waArchitectsLink } from "../lib/whatsapp";
 
 // `Handshake` was added to lucide-react in a later version; alias to
 // `Users` (also-installed here) as a safe fallback so this page never
@@ -17,12 +18,7 @@ const Handshake = Users;
  */
 export default function ArchitectsDesigners() {
   const { settings } = useSettings();
-  const waNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waLink = waNumber
-    ? `https://wa.me/${waNumber}?text=${encodeURIComponent(
-        "Hello Samrat Glass Emporium, I'm working on a project and would like to discuss custom lighting.",
-      )}`
-    : "#";
+  const waLink = waArchitectsLink(settings?.whatsapp_number) || "#";
 
   return (
     <div data-testid="page-architects-designers" className="max-w-7xl mx-auto px-6 py-16">

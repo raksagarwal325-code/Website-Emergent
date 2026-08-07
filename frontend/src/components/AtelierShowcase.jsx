@@ -3,26 +3,20 @@ import { Link } from "react-router-dom";
 import { ArrowUpRight, MessageCircle } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api, formatProductPrice } from "../lib/api";
+import { buildWaLink, productMessage } from "../lib/whatsapp";
 
-const INQUIRY_LEAD = "Hi Rakshit ji, I am interested in this product. Please share details.";
-
-function buildWaLink(phone, product) {
-  const raw = (phone || "").replace(/\D/g, "");
-  if (!raw || !product) return null;
+function buildAtelierWaLink(phone, product) {
+  if (!product) return null;
   const priceInfo = formatProductPrice(product);
   const priceLine = priceInfo.onRequest
     ? "Price: Price on request"
     : `Price: ${priceInfo.label ? priceInfo.label + " " : ""}${priceInfo.primary}`;
   const link = `${typeof window !== "undefined" ? window.location.origin : ""}/product/${product.id}`;
-  const msg = [
-    INQUIRY_LEAD,
-    "",
-    `• Product: ${product.name}`,
-    `• Reference Code: ${product.sku}`,
-    `• ${priceLine}`,
-    `• Link: ${link}`,
-  ].join("\n");
-  return `https://wa.me/${raw}?text=${encodeURIComponent(msg)}`;
+  // Extend the brand-led product message with an itemised price + link
+  // block. Keeps casing/greeting consistent with the rest of the site.
+  const base = productMessage(product, link);
+  const msg = `${base}\n\n${priceLine}`;
+  return buildWaLink(phone, msg);
 }
 
 export default function AtelierShowcase() {
@@ -76,7 +70,7 @@ export default function AtelierShowcase() {
   const activeCaption = current?.caption || activeProduct?.name || "";
   const activeImg = current?.src || activeProduct?.images?.[0] || "";
   const productHref = activeProduct ? `/product/${activeProduct.id}` : null;
-  const waLink = buildWaLink(settings?.whatsapp_number, activeProduct);
+  const waLink = buildAtelierWaLink(settings?.whatsapp_number, activeProduct);
 
   const HeroWrap = productHref ? Link : "div";
   const heroWrapProps = productHref

@@ -17,6 +17,7 @@ import HeroSlideshow from "../components/HeroSlideshow";
 import CategoryShowcase from "../components/CategoryShowcase";
 import { useSettings } from "../context/SettingsContext";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
+import { waGeneralLink } from "../lib/whatsapp";
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
@@ -28,10 +29,7 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
-  const waNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waLink = waNumber
-    ? `https://wa.me/${waNumber}?text=${encodeURIComponent("Hello Samrat Glass Emporium, I would like to enquire about your lighting collection.")}`
-    : "#";
+  const waLink = waGeneralLink(settings?.whatsapp_number) || "#";
 
   const H = hp.hero;
   const F = hp.featured;

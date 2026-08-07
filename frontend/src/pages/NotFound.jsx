@@ -3,13 +3,11 @@ import { Link } from "react-router-dom";
 import { Home, ShoppingBag, MessageCircle } from "lucide-react";
 import SEO from "../components/SEO";
 import { useSettings } from "../context/SettingsContext";
+import { waNotFoundLink } from "../lib/whatsapp";
 
 export default function NotFound() {
   const { settings } = useSettings();
-  const waNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waLink = waNumber
-    ? `https://wa.me/${waNumber}?text=${encodeURIComponent("Hello, I landed on a page that couldn't be found — can you help?")}`
-    : null;
+  const waLink = waNotFoundLink(settings?.whatsapp_number) || null;
 
   return (
     <div data-testid="page-not-found" className="max-w-3xl mx-auto px-6 py-24 text-center">

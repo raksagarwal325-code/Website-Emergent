@@ -5,6 +5,7 @@ import { useCatalog } from "../context/CatalogContext";
 import { api, formatPrice } from "../lib/api";
 import { toast } from "sonner";
 import { trackGenerateLead, trackWhatsAppClick } from "../lib/analytics";
+import { waCartLink } from "../lib/whatsapp";
 
 export default function Cart() {
   const { cart, removeFromCart, updateQty, clearCart, cartTotal, hasOnRequestItems, hasPricedItems, isItemOnRequest } = useCatalog();
@@ -41,14 +42,9 @@ export default function Cart() {
     }
   };
 
-  const waNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waMsg = cart.length > 0
-    ? encodeURIComponent(
-        "Hello, I would like to enquire about:\n" +
-        cart.map((i) => `- ${i.name}${i.sku ? ` (SKU: ${i.sku})` : ""} (x${i.quantity})`).join("\n")
-      )
-    : "";
-  const waLink = waNumber ? `https://wa.me/${waNumber}?text=${waMsg}` : "#";
+  const waLink = cart.length > 0
+    ? (waCartLink(settings?.whatsapp_number, cart) || "#")
+    : "#";
 
   return (
     <div data-testid="page-cart" className="max-w-7xl mx-auto px-6 py-16">
