@@ -28,13 +28,13 @@ describe("fallbackSlugFor", () => {
 describe("mergeDynamicCategories", () => {
   test("new published category not in registry gets a fallback entry", () => {
     const merged = mergeDynamicCategories([
-      "Chandelier", "Ceiling Light",
+      "Chandelier", "Novelty Lamp",
     ]);
-    const ceiling = merged.find((c) => c.db_name === "Ceiling Light");
-    expect(ceiling).toBeDefined();
-    expect(ceiling.slug).toBe("ceiling-lights");
-    expect(ceiling.label).toBe("Ceiling Light");
-    expect(ceiling._dynamic).toBe(true);
+    const novelty = merged.find((c) => c.db_name === "Novelty Lamp");
+    expect(novelty).toBeDefined();
+    expect(novelty.slug).toBe("novelty-lamps");
+    expect(novelty.label).toBe("Novelty Lamp");
+    expect(novelty._dynamic).toBe(true);
     // Curated Chandelier entry is preserved with its full SEO metadata.
     const chand = merged.find((c) => c.db_name === "Chandelier");
     expect(chand.slug).toBe("chandeliers");
@@ -55,29 +55,29 @@ describe("mergeDynamicCategories", () => {
   });
 
   test("curated categories with ZERO products are still included", () => {
-    // Simulate: API only returns Chandelier + Ceiling Light. Every other
+    // Simulate: API only returns Chandelier + Novelty Lamp. Every other
     // curated NAV_CATEGORY must still appear (browsable even when out
     // of stock).
-    const merged = mergeDynamicCategories(["Chandelier", "Ceiling Light"]);
+    const merged = mergeDynamicCategories(["Chandelier", "Novelty Lamp"]);
     NAV_CATEGORIES.forEach((cur) => {
       expect(merged.find((c) => c.slug === cur.slug)).toBeDefined();
     });
     // And the dynamic one.
-    expect(merged.find((c) => c.slug === "ceiling-lights")).toBeDefined();
+    expect(merged.find((c) => c.slug === "novelty-lamps")).toBeDefined();
   });
 
   test("fallback label is Title Cased even if admin typed odd casing", () => {
-    const merged = mergeDynamicCategories(["CEILING LIGHT"]);
-    const ceiling = merged.find((c) => c.slug === "ceiling-lights");
-    expect(ceiling.label).toBe("Ceiling Light");
+    const merged = mergeDynamicCategories(["NOVELTY LAMP"]);
+    const novelty = merged.find((c) => c.slug === "novelty-lamps");
+    expect(novelty.label).toBe("Novelty Lamp");
   });
 
   test("case + whitespace duplicates are de-duplicated", () => {
     const merged = mergeDynamicCategories([
-      "Ceiling Light", "  ceiling light ", "CEILING LIGHT",
+      "Novelty Lamp", "  novelty lamp ", "NOVELTY LAMP",
     ]);
     const matches = merged.filter(
-      (c) => c.db_name.toLowerCase().trim() === "ceiling light",
+      (c) => c.db_name.toLowerCase().trim() === "novelty lamp",
     );
     expect(matches.length).toBe(1);
   });
@@ -128,16 +128,16 @@ describe("resolveCategoryBySlug", () => {
   });
 
   test("dynamic slug (published-product-only) resolves and synthesises defaults", () => {
-    const res = resolveCategoryBySlug("ceiling-lights", ["Chandelier", "Ceiling Light"]);
+    const res = resolveCategoryBySlug("novelty-lamps", ["Chandelier", "Novelty Lamp"]);
     expect(res).toBeDefined();
-    expect(res.slug).toBe("ceiling-lights");
-    expect(res.db_name).toBe("Ceiling Light");
-    expect(res.label).toBe("Ceiling Light");
+    expect(res.slug).toBe("novelty-lamps");
+    expect(res.db_name).toBe("Novelty Lamp");
+    expect(res.label).toBe("Novelty Lamp");
     // Generic-but-sensible SEO fallbacks.
-    expect(res.h1).toBe("Ceiling Light");
-    expect(res.seoTitle).toMatch(/Ceiling Light/);
-    expect(res.metaDescription).toMatch(/ceiling light/i);
-    expect(res.intro).toMatch(/ceiling light/i);
+    expect(res.h1).toBe("Novelty Lamp");
+    expect(res.seoTitle).toMatch(/Novelty Lamp/);
+    expect(res.metaDescription).toMatch(/novelty lamp/i);
+    expect(res.intro).toMatch(/novelty lamp/i);
     expect(res._dynamic).toBe(true);
   });
 
@@ -145,8 +145,8 @@ describe("resolveCategoryBySlug", () => {
     // Backend already filters /api/products/categories to published-only,
     // so a draft-only category never reaches the frontend. This test
     // simulates that: the slug is requested but the API returned only
-    // Chandelier — Ceiling Light is absent → NotFound expected.
-    const res = resolveCategoryBySlug("ceiling-lights", ["Chandelier"]);
+    // Chandelier — Novelty Lamp is absent → NotFound expected.
+    const res = resolveCategoryBySlug("novelty-lamps", ["Chandelier"]);
     expect(res).toBeNull();
   });
 
@@ -162,7 +162,7 @@ describe("resolveCategoryBySlug", () => {
   });
 
   test("null / missing dbNames + non-curated slug returns null (no crash)", () => {
-    expect(resolveCategoryBySlug("ceiling-lights", null)).toBeNull();
-    expect(resolveCategoryBySlug("ceiling-lights", undefined)).toBeNull();
+    expect(resolveCategoryBySlug("novelty-lamps", null)).toBeNull();
+    expect(resolveCategoryBySlug("novelty-lamps", undefined)).toBeNull();
   });
 });

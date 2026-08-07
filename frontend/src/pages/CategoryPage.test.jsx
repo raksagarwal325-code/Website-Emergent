@@ -95,11 +95,44 @@ describe("CategoryPage — slug resolution", () => {
     await waitFor(() => expect(mockListProducts).toHaveBeenCalled());
   });
 
-  test("dynamic published category (ceiling-lights) resolves and renders", async () => {
-    // Simulates a fresh admin who published a "Ceiling Light" product but
-    // has not added an entry to categories.data.json yet.
+  test("newly-curated slug (ceiling-lights) resolves synchronously", async () => {
+    // After Ceiling Lights was added to categories.data.json this became a
+    // curated slug. Ensure it resolves the same way as any other curated
+    // entry — no loading flash, hand-written H1.
     mockCategories.mockResolvedValue(["Chandelier", "Ceiling Light"]);
-    renderAt("/category/ceiling-lights");
+    await act(async () => {
+      renderAt("/category/ceiling-lights");
+    });
+    expect(screen.queryByTestId("page-category-loading")).toBeNull();
+    expect(
+      screen.getByTestId("category-h1-ceiling-lights").textContent,
+    ).toBe("Decorative Ceiling Lights");
+    expect(
+      screen.getByTestId("catalogue-browser-stub").getAttribute("data-locked-category"),
+    ).toBe("Ceiling Light");
+    await waitFor(() => expect(mockListProducts).toHaveBeenCalled());
+  });
+
+  test("newly-curated slug (gate-lights) resolves synchronously", async () => {
+    mockCategories.mockResolvedValue(["Chandelier", "Gate Light"]);
+    await act(async () => {
+      renderAt("/category/gate-lights");
+    });
+    expect(screen.queryByTestId("page-category-loading")).toBeNull();
+    expect(
+      screen.getByTestId("category-h1-gate-lights").textContent,
+    ).toBe("Decorative Gate Lights");
+    expect(
+      screen.getByTestId("catalogue-browser-stub").getAttribute("data-locked-category"),
+    ).toBe("Gate Light");
+    await waitFor(() => expect(mockListProducts).toHaveBeenCalled());
+  });
+
+  test("dynamic (uncurated) published category resolves and renders", async () => {
+    // Simulates a fresh admin who published a product with a NEW category
+    // value that is not (yet) in categories.data.json.
+    mockCategories.mockResolvedValue(["Chandelier", "Novelty Lamp"]);
+    renderAt("/category/novelty-lamps");
 
     // Brief loading state before the API returns.
     expect(screen.getByTestId("page-category-loading")).toBeInTheDocument();
@@ -108,28 +141,25 @@ describe("CategoryPage — slug resolution", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("page-category-loading")).toBeNull(),
     );
-    // Fallback H1 is the Title Cased label — NOT "Not Found".
     expect(screen.queryByTestId("not-found-view")).toBeNull();
     expect(
-      screen.getByTestId("category-h1-ceiling-lights").textContent,
-    ).toBe("Ceiling Light");
-    // Locked category is the exact DB name so filtering works.
+      screen.getByTestId("category-h1-novelty-lamps").textContent,
+    ).toBe("Novelty Lamp");
     expect(
       screen.getByTestId("catalogue-browser-stub").getAttribute("data-locked-category"),
-    ).toBe("Ceiling Light");
-    // Let the product-list fetch settle to avoid an act() warning.
+    ).toBe("Novelty Lamp");
     await waitFor(() => expect(mockListProducts).toHaveBeenCalled());
   });
 
   test("dynamic category filters products by db_name (not slug)", async () => {
-    mockCategories.mockResolvedValue(["Ceiling Light"]);
-    renderAt("/category/ceiling-lights");
+    mockCategories.mockResolvedValue(["Novelty Lamp"]);
+    renderAt("/category/novelty-lamps");
     await waitFor(() => {
       // The JSON-LD ItemList fetch should query products by the exact
       // canonical db_name, not the slug.
       const call = mockListProducts.mock.calls[0]?.[0];
       expect(call).toBeDefined();
-      expect(call.category).toBe("Ceiling Light");
+      expect(call.category).toBe("Novelty Lamp");
     });
   });
 
@@ -145,7 +175,7 @@ describe("CategoryPage — slug resolution", () => {
   });
 
   test("completely nonexistent slug shows NotFound", async () => {
-    mockCategories.mockResolvedValue(["Chandelier", "Ceiling Light"]);
+    mockCategories.mockResolvedValue(["Chandelier", "Novelty Lamp"]);
     renderAt("/category/pizza");
     await waitFor(() =>
       expect(screen.getByTestId("not-found-view")).toBeInTheDocument(),
@@ -154,7 +184,7 @@ describe("CategoryPage — slug resolution", () => {
 
   test("API failure on unknown slug degrades gracefully to NotFound (no infinite spinner)", async () => {
     mockCategories.mockRejectedValue(new Error("network"));
-    renderAt("/category/ceiling-lights");
+    renderAt("/category/novelty-lamps");
     await waitFor(() =>
       expect(screen.getByTestId("not-found-view")).toBeInTheDocument(),
     );

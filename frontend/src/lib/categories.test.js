@@ -11,14 +11,16 @@ import {
 const wordCount = (s) => s.trim().split(/\s+/).filter(Boolean).length;
 
 describe("categories catalogue", () => {
-  test("exposes the eight published SEO categories", () => {
-    expect(PUBLIC_CATEGORIES).toHaveLength(8);
+  test("exposes the ten published SEO categories", () => {
+    expect(PUBLIC_CATEGORIES).toHaveLength(10);
     const slugs = PUBLIC_CATEGORIES.map((c) => c.slug).sort();
     expect(slugs).toEqual([
       "candle-stands",
+      "ceiling-lights",
       "chandeliers",
       "floor-chandeliers",
       "floor-lamps",
+      "gate-lights",
       "hanging-lights",
       "table-chandeliers",
       "table-lamps",
@@ -62,8 +64,9 @@ describe("categories catalogue", () => {
 
   test("db_name values match the values stored on products", () => {
     const expected = [
-      "Candle Stand", "Chandelier", "Floor Chandelier", "Floor Lamp",
-      "Hanging Light", "Table Chandelier", "Table Lamp", "Wall Light",
+      "Candle Stand", "Ceiling Light", "Chandelier", "Floor Chandelier",
+      "Floor Lamp", "Gate Light", "Hanging Light", "Table Chandelier",
+      "Table Lamp", "Wall Light",
     ];
     expect(PUBLIC_CATEGORIES.map((c) => c.db_name).sort())
       .toEqual(expected.sort());
@@ -108,14 +111,38 @@ describe("categories catalogue", () => {
     // same list (as db_names) into CatalogueBrowser. Both are read from a
     // single import — this assertion documents that contract.
     const navDbNames = NAV_CATEGORIES.map((c) => c.db_name).sort();
-    // 8 published + nav-visible categories today.
-    expect(navDbNames).toHaveLength(8);
+    // 10 published + nav-visible categories today.
+    expect(navDbNames).toHaveLength(10);
     // "All" is filter-only — it must NOT appear in any navigation list.
     expect(navDbNames).not.toContain("All");
     expect(navDbNames).not.toContain("all");
   });
 
-  test("existing six URLs remain untouched", () => {
+  test("Ceiling Lights and Gate Lights are registered as curated categories", () => {
+    // Regression: this file WAS the single source of truth for curated
+    // homepage/sitemap categories. Adding these two here surfaces them on
+    // the homepage grid, the sitemap and the prerender output without
+    // any additional code change.
+    const ceiling = getCategoryBySlug("ceiling-lights");
+    expect(ceiling).toBeDefined();
+    expect(ceiling.db_name).toBe("Ceiling Light");
+    expect(ceiling.label).toBe("Ceiling Lights");
+    expect(ceiling.h1).toBe("Decorative Ceiling Lights");
+    expect(ceiling.published).toBe(true);
+    expect(ceiling.nav_visible).toBe(true);
+    expect(ceiling.sitemap).toBe(true);
+
+    const gate = getCategoryBySlug("gate-lights");
+    expect(gate).toBeDefined();
+    expect(gate.db_name).toBe("Gate Light");
+    expect(gate.label).toBe("Gate Lights");
+    expect(gate.h1).toBe("Decorative Gate Lights");
+    expect(gate.published).toBe(true);
+    expect(gate.nav_visible).toBe(true);
+    expect(gate.sitemap).toBe(true);
+  });
+
+  test("existing eight URLs remain untouched", () => {
     // Guard against accidental slug renames on the categories that were
     // originally shipped. The db_name → slug mapping must be stable.
     const expected = {
@@ -125,6 +152,8 @@ describe("categories catalogue", () => {
       "Table Lamp": "table-lamps",
       "Floor Lamp": "floor-lamps",
       "Candle Stand": "candle-stands",
+      "Floor Chandelier": "floor-chandeliers",
+      "Table Chandelier": "table-chandeliers",
     };
     for (const [db, slug] of Object.entries(expected)) {
       const c = getCategoryByDbName(db);

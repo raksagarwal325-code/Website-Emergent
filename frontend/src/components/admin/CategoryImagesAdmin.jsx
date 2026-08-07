@@ -21,6 +21,8 @@ const CATEGORIES = [
   { db_name: "Table Lamp",    label: "Table Lamps"    },
   { db_name: "Floor Lamp",    label: "Floor Lamps"    },
   { db_name: "Candle Stand",  label: "Candle Stands"  },
+  { db_name: "Ceiling Light", label: "Ceiling Lights" },
+  { db_name: "Gate Light",    label: "Gate Lights"    },
 ];
 
 export default function CategoryImagesAdmin() {

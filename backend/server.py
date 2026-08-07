@@ -1503,6 +1503,8 @@ CATEGORY_FEATURED_ALLOWED = {
     "Table Lamp",
     "Floor Lamp",
     "Candle Stand",
+    "Ceiling Light",
+    "Gate Light",
 }
 
 
