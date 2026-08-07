@@ -82,8 +82,8 @@ const EXPLORE_LINKS = [
   { label: "The Craft", href: "/craft" },
   { label: "Project Gallery", href: "/gallery" },
   { label: "About Us", href: "/about" },
-  { label: "Custom Lighting / Bulk Orders", href: "/contact?type=bulk" },
-  { label: "Architects & Interior Designers", href: "/contact?type=trade" },
+  { label: "Custom Lighting / Bulk Orders", href: "/custom-lighting-bulk-orders" },
+  { label: "Architects & Interior Designers", href: "/architects-interior-designers" },
   { label: "Wishlist", href: "/favorites" },
   { label: "Inquiry Basket", href: "/cart" },
 ];
