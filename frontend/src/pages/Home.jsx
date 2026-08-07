@@ -16,6 +16,7 @@ import FounderTeaser from "../components/FounderTeaser";
 import HeroSlideshow from "../components/HeroSlideshow";
 import CategoryShowcase from "../components/CategoryShowcase";
 import { useSettings } from "../context/SettingsContext";
+import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
@@ -55,7 +56,7 @@ export default function Home() {
           transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
         >
           <img
-            src={settings?.hero_image || "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15"}
+            src={settings?.hero_image || BRAND_PLACEHOLDER_HERO}
             alt=""
             className="w-full h-full object-cover"
           />

@@ -468,8 +468,13 @@ class Settings(BaseModel):
     delivery_info: str = "Pan-India shipping · 7–10 business days"
     payment_methods: str = "UPI · Net Banking"
     currency_symbol: str = "₹"
-    google_cid: str = "16850385744624001495"
-    google_place_id: str = ""
+    # CID 682987565690709677 is the canonical Google Business Profile CID
+    # for Samrat Glass Emporium, Firozabad — verified by decoding the
+    # Google Place ID `ChIJqRfIkPVHdDkRreYAh5J1egk` (the last 8 bytes of
+    # the base64-decoded Place ID, interpreted as an unsigned little-endian
+    # int64). Any admin override in the Settings collection is respected.
+    google_cid: str = "682987565690709677"
+    google_place_id: str = "ChIJqRfIkPVHdDkRreYAh5J1egk"
     google_maps_api_key: str = ""
     homepage_content: dict = Field(default_factory=dict)
     instagram_url: str = ""
@@ -477,7 +482,7 @@ class Settings(BaseModel):
     youtube_url: str = ""
     pinterest_url: str = ""
     business_hours: str = "Mon – Sun: 10:00 AM – 8:00 PM"
-    google_maps_url: str = "https://www.google.com/maps?cid=16850385744624001495"
+    google_maps_url: str = "https://www.google.com/maps?cid=682987565690709677"
     watermark: dict = Field(default_factory=lambda: {
         "enabled": True,
         "opacity": 0.15,
