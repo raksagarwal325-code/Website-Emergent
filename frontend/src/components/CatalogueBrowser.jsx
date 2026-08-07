@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, SlidersHorizontal, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, SlidersHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
 import { NAV_CATEGORIES } from "../lib/categories";
 import ProductCard from "./ProductCard";
@@ -224,15 +224,6 @@ export default function CatalogueBrowser({
               <SelectItem value="name">Name A→Z</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-        <div className="flex gap-2">
-          <a
-            href="/contact?type=catalogue"
-            data-testid="export-pdf-btn"
-            className="inline-flex items-center gap-2 border border-[#D4AF37]/50 hover:border-[#D4AF37] hover:text-[#D4AF37] px-4 py-3 text-xs uppercase tracking-[0.2em] text-white/80"
-          >
-            <Download size={14} /> Request Catalogue
-          </a>
         </div>
       </div>
 

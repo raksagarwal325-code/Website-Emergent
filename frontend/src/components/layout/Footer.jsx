@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Mail, MapPin, Clock, Phone, Download, ExternalLink } from "lucide-react";
+import { Mail, MapPin, Clock, Phone, ExternalLink } from "lucide-react";
 import { useSettings } from "../../context/SettingsContext";
 import { formatPhone } from "../../lib/api";
 import { NAV_CATEGORIES as SEO_CATEGORIES } from "../../lib/categories";
@@ -193,16 +193,6 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
-            {/* Small premium pill for catalogue request — customers land on
-                the enquiry form; the actual PDF is admin-only. */}
-            <Link
-              to="/contact?type=catalogue"
-              data-testid="footer-catalogue-btn"
-              className="mt-5 inline-flex items-center gap-2 whitespace-nowrap border border-[#BF9972]/50 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/80 px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-            >
-              <Download size={12} strokeWidth={1.6} />
-              Request Catalogue
-            </Link>
           </div>
 
           {/* Support */}

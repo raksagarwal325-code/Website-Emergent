@@ -4,7 +4,6 @@ import { MessageCircle, Mail, MapPin, Phone, FileText, Truck, CreditCard } from 
 import { api } from "../lib/api";
 import { toast } from "sonner";
 import GoogleReviews from "../components/GoogleReviews";
-import CatalogueOnWhatsApp from "../components/CatalogueOnWhatsApp";
 import SEO from "../components/SEO";
 import { ENQUIRY_TYPES, resolveEnquiryType } from "../lib/enquiryTypes";
 import { trackGenerateLead } from "../lib/analytics";
@@ -109,11 +108,6 @@ export default function Contact() {
           >
             <MessageCircle size={14} /> Chat on WhatsApp
           </a>
-
-          {/* Get catalogue on WhatsApp — captures the lead + delivers the PDF */}
-          <div className="mt-8">
-            <CatalogueOnWhatsApp businessWhatsAppNumber={settings?.whatsapp_number} />
-          </div>
         </div>
 
         <form onSubmit={submit} className="lg:col-span-7 border border-white/10 p-8 md:p-10 space-y-5 h-fit">
