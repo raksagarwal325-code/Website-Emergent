@@ -176,6 +176,26 @@ INR pricing with en-IN formatting.
 
 - 2026-02-13: **Catalogue PDF — full-page background watermark + luxury polish.** Replaced per-image logo overlay with a single centered chandelier/logo watermark rendered behind ALL content on every page (cover, TOC, about, why, category dividers, product pages, contact). Product-card CTA switched from bright green (#25D366) to a gold→bronze→copper gradient pill. WhatsApp number rendered as `+91 89203 92937`. Description font upped from 9.5pt→10.5pt with 1.7 line-height; specs from 8.5pt→9.5pt/1.55. New `isMeaningfulSpec()` filter hides blank, "-", "—", "N/A", "TBD", "unconfirmed", "not specified", "0", "nil". Business hours normalized to "Mon – Sat: 10:30 AM – 8:00 PM · Sunday: Closed". Added "Scan to Connect" QR row on contact page (WhatsApp, Website, Google Maps, Instagram) via new `qrcode` npm package.
 - 2026-02-13: **Global "Currently unavailable" verbiage removed.** Verified via grep across `/app/frontend/src/` — zero occurrences. `ProductDetail.jsx` shows "Available on request" when `stock === 0`; `ProductCard.jsx` / `Catalog.jsx` / `Cart.jsx` intentionally don't render stock badges (inquiry-based catalog). Live-verified on 0-stock product `/product/23afd515-…` — screenshot confirms clean "Price on request" + "Available on request" copy.
+- 2026-02-13: **Accessibility cleanup — minimal-risk patch.** Four Lighthouse/PageSpeed issues fixed in two components; no data-fetch, admin, GA4, WhatsApp, sitemap or page-structure changes.
+
+  · **A. Google Reviews star markup** (`frontend/src/components/GoogleReviews.jsx` — `Stars` component) — `<span aria-label="4.7 stars">` on a role-less span was flagged as prohibited ARIA. Now `<span role="img" aria-label="X out of 5 stars">` with `<Star aria-hidden="true" focusable="false">` on every child SVG so the rating is announced exactly once. Fixes both the ARIA-attribute-not-allowed rule and the accessibility-tree malformation.
+
+  · **B. Contrast** — bumped two low-contrast lines in the reviews block:
+    - "Based on X Google reviews" wrapper `text-white/50` → `text-white/70`; number `text-white/80` → `text-white/90`.
+    - Review-age line `text-white/40` → `text-white/65`. Both now clear WCAG AA (≥ 4.5:1 for normal text) against the section's `bg-black/40` panel.
+
+  · **C. Tap targets** — Google Reviews and Atelier carousel dots were `h-1.5` (~6px). Both replaced by a `min-w-[44px] min-h-[44px] flex items-center justify-center` `<button>` with `focus-visible:ring-[#D4AF37]`, `aria-label="Go to review N"` / `View slide N`, and `aria-current="true"` on the active dot. The visual pill is now an inner `<span aria-hidden="true" class="h-1.5 …">` so the small dot look is preserved exactly while the tap target hits WCAG 2.5.5.
+
+  · **D. Accessibility tree** — the star fix removes the invalid entries. The dot fix converts each pill from a bare `<button class="h-1.5 w-3">` into a proper interactive control with correct semantics + focusable state + aria-current.
+
+  · **Preserved**: data-fetch (`/api/google/reviews`), admin, GA4, WhatsApp, sitemap/schema, mobile bottom bar, page design elsewhere. Prev/next remain native `<button>` with existing `aria-label`s. Carousel autoplay + dot switching + prev/next behaviour parity confirmed by the testing agent live on the Atelier component.
+
+  · **Tests added (8)**: `GoogleReviews.a11y.test.jsx` (7 cases — role=img + aria-label, aria-hidden SVG children, no bare aria-label span, 44×44 dot classes, aria-hidden pill, prev/next as native buttons with aria-labels, bumped contrast classes). `AtelierShowcase.a11y.test.jsx` (1 case — 44×44 hit target + preserved h-1.5 pill + aria-current + aria-label). Full frontend suite: **23 suites / 240 tests pass**.
+
+  · **Testing-agent iteration_36 — 100% pass, retest_needed=false.** Atelier dots live-verified on preview (measured 44×44 CSS px, keyboard Enter/Space activate them, aria-current toggles). Google Reviews slider covered by Jest a11y suite (preview backend returns `enabled: false` because the Google Places key is still expired, so the live slider mounts only its fallback). Every source-code assertion the agent inspected matched the spec verbatim. One pre-existing console warning ("empty string src attribute") noted as out-of-scope for this patch.
+
+  Files: `frontend/src/components/GoogleReviews.jsx`, `frontend/src/components/AtelierShowcase.jsx`, `frontend/src/components/GoogleReviews.a11y.test.jsx` (new), `frontend/src/components/AtelierShowcase.a11y.test.jsx` (new).
+
 - 2026-02-13: **SEO merchant listing structured data + sitemap cleanup (minimal-risk patch).**
 
   · **Product JSON-LD (`frontend/src/pages/ProductDetail.jsx`)** — the `productSchema.offers` const now emits two additional Schema.org fields inside the existing Offer:
