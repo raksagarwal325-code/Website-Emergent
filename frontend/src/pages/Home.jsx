@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense, lazy } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
@@ -11,7 +11,16 @@ import ReasonsSection from "../components/ReasonsSection";
 import AtelierShowcase from "../components/AtelierShowcase";
 import TrustedBySection from "../components/TrustedBySection";
 import GalleryPreview from "../components/GalleryPreview";
-import InfluencerPromotions from "../components/InfluencerPromotions";
+// InfluencerPromotions is the largest below-the-fold homepage component
+// (~353 lines + framer-motion + IntersectionObserver + product fetch).
+// It renders at the very bottom of the homepage and is well below the
+// fold on every viewport, so we ship it as a separate JS chunk and
+// defer its download until React reaches its position in the tree.
+// A stable-height fallback (`min-h-[600px]`) keeps the below-the-fold
+// scroll geometry identical so there is no visible layout shift.
+const InfluencerPromotions = lazy(() =>
+  import(/* webpackChunkName: "influencer" */ "../components/InfluencerPromotions"),
+);
 import FounderTeaser from "../components/FounderTeaser";
 import HeroSlideshow from "../components/HeroSlideshow";
 import CategoryShowcase from "../components/CategoryShowcase";
@@ -199,7 +208,9 @@ export default function Home() {
       <GalleryPreview />
 
       {/* Influencer Promotions — auto-hides when no items are configured */}
-      <InfluencerPromotions />
+      <Suspense fallback={<div aria-hidden="true" className="min-h-[600px]" />}>
+        <InfluencerPromotions />
+      </Suspense>
     </div>
   );
 }
