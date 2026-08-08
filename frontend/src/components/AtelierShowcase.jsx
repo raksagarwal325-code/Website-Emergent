@@ -118,15 +118,21 @@ export default function AtelierShowcase() {
               <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]/90 backdrop-blur bg-black/40 px-2 py-1 max-w-[70%] truncate">
                 {activeCaption}
               </div>
-              <div className="flex gap-1.5 pointer-events-auto">
+              <div className="flex pointer-events-auto -mr-3">
                 {slides.map((_, i) => (
                   <button
                     key={i}
                     data-testid={`atelier-dot-${i}`}
                     aria-label={`View slide ${i + 1}`}
+                    aria-current={i === active ? "true" : undefined}
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActive(i); }}
-                    className={`h-1.5 transition-all ${i === active ? "w-6 bg-[#D4AF37]" : "w-1.5 bg-white/25 hover:bg-white/50"}`}
-                  />
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center group focus:outline-none focus-visible:ring-1 focus-visible:ring-[#D4AF37]"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`h-1.5 transition-all ${i === active ? "w-6 bg-[#D4AF37]" : "w-1.5 bg-white/25 group-hover:bg-white/50"}`}
+                    />
+                  </button>
                 ))}
               </div>
             </div>
