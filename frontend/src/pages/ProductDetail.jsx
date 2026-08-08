@@ -135,6 +135,12 @@ export default function ProductDetail() {
   };
 
   const availabilityUrl = product ? schemaAvailabilityFor(product) : null;
+  // Site origin — used inside Offer.shippingDetails / hasMerchantReturnPolicy
+  // links. Falls back to samratglass.com so the JSON-LD is complete even
+  // in SSR/prerender contexts where `window` is not defined.
+  const siteOrigin =
+    (typeof window !== "undefined" && window.location?.origin) ||
+    "https://samratglass.com";
   const productSchema = product && availabilityUrl ? {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -157,7 +163,39 @@ export default function ProductDetail() {
       "priceCurrency": "INR",
       "availability": availabilityUrl,
       "url": typeof window !== "undefined" ? window.location.href : "",
-      "seller": { "@type": "Organization", "name": "Samrat Glass Emporium" }
+      "seller": { "@type": "Organization", "name": "Samrat Glass Emporium" },
+      // Returns / replacements — handcrafted, fragile glass. We do NOT
+      // accept general returns; transit-damage replacements are handled
+      // per the linked policy page. `MerchantReturnNotPermitted` is the
+      // narrowest truthful enum value; the merchantReturnLink surfaces
+      // the damage-replacement carve-out to visitors and crawlers.
+      "hasMerchantReturnPolicy": {
+        "@type": "MerchantReturnPolicy",
+        "applicableCountry": "IN",
+        "returnPolicyCategory": "https://schema.org/MerchantReturnNotPermitted",
+        "merchantReturnLink": `${siteOrigin}/legal/returns`
+      },
+      // Shipping — India-only. Typical transit is 7-10 business days.
+      // We intentionally OMIT `shippingRate` because the business does
+      // not offer a fixed monetary shipping charge; per Google's guidance
+      // it is better to omit an optional pricing field than to invent
+      // one that isn't truthful.
+      "shippingDetails": {
+        "@type": "OfferShippingDetails",
+        "shippingDestination": {
+          "@type": "DefinedRegion",
+          "addressCountry": "IN"
+        },
+        "deliveryTime": {
+          "@type": "ShippingDeliveryTime",
+          "transitTime": {
+            "@type": "QuantitativeValue",
+            "minValue": 7,
+            "maxValue": 10,
+            "unitCode": "DAY"
+          }
+        }
+      }
     }
   } : null;
 

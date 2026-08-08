@@ -1261,6 +1261,9 @@ _STATIC_SITEMAP_ENTRIES: list[tuple[str, str, str]] = [
     ("/gallery",          "weekly",  "0.8"),
     ("/faq",              "monthly", "0.6"),
     ("/contact",          "yearly",  "0.6"),
+    # Dedicated commercial-lead landing pages — high-intent B2B traffic.
+    ("/custom-lighting-bulk-orders",     "monthly", "0.8"),
+    ("/architects-interior-designers",   "monthly", "0.8"),
     ("/legal/privacy",    "yearly",  "0.3"),
     ("/legal/terms",      "yearly",  "0.3"),
     ("/legal/shipping",   "yearly",  "0.3"),
