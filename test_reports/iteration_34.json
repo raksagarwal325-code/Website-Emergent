@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend regression verification for the Cart.jsx `waNumber is not defined` fix. Tested empty /cart, /cart with a seeded item, WhatsApp CTA routing through waCartLink, mandatory phone validation + normalization, and regression across public routes. All scenarios pass with zero uncaught JS errors on the preview URL.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "empty_cart_renders_no_error": "PASS — 'Your basket is empty.' visible on /cart, no console/pageerror.",
+    "cart_with_item_renders_full_ui_no_ReferenceError": "PASS — cart-item, submit-inquiry-btn, wa-basket-btn all visible with 1 line item seeded via localStorage key `cart`; zero pageerrors, no `waNumber is not defined`.",
+    "whatsapp_cta_href_via_waCartLink": "PASS — href starts with `https://wa.me/918920392937?text=...`, decoded prefix `Hi Samrat Glass Emporium, I would like to enquire about the following items:` present, target=_blank, item lines included.",
+    "phone_required_and_normalized": "PASS — data-testid=inq-phone has HTML `required` attribute. Blank phone submit blocked by HTML5 (no POST captured). Submitting `+91 89203-92937` sends POST /api/inquiries with `customer_phone: +918920392937` (E.164 normalised).",
+    "regression_other_routes": "PASS — /, /catalog, /contact, /favorites, /custom-lighting-bulk-orders, /architects-interior-designers, /product/<id> all load with no JS console errors or ReferenceErrors."
+  },
+  "captured_inquiry_post_body": "{\"customer_name\":\"Test User\",\"customer_email\":\"test@example.com\",\"customer_phone\":\"+918920392937\",\"message\":\"\",\"items\":[{\"product_id\":\"test-prod-1\",\"sku\":\"SKU-TEST-1\",\"name\":\"Test Chandelier\",\"quantity\":2,\"price\":12500}]}",
+  "captured_wa_href_decoded": "https://wa.me/918920392937?text=Hi Samrat Glass Emporium, I would like to enquire about the following items:\n- Test Chandelier (SKU: SKU-TEST-1) (x2)",
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Note: the review_request mentions CatalogContext localStorage key `sge_cart_v1`, but the actual key in /app/frontend/src/context/CatalogContext.jsx is simply `cart`. Not a bug — just a docs mismatch that could mislead future agents seeding fixtures.",
+    "Cart.jsx line 54-56: `waLink` is computed as `waCartLink(...) || '#'`, then the JSX guard `waLink && waLink !== '#'` correctly hides the CTA when whatsapp_number is missing. Fix looks correct and minimal.",
+    "Minor: `waLink && …` in the guard is redundant since `waLink` is always a truthy string (`'#'` fallback), but not harmful."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only scope)", "frontend": "100%"},
+  "test_credentials": "Not required — public flows only.",
+  "seed_data_creation": "Injected one cart line into localStorage key `cart` on the preview origin to reproduce the previously-crashing non-empty /cart render.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The regression fix (Cart.jsx guarding on waLink instead of the deleted waNumber var) is confirmed working on preview https://glass-product-hub.preview.emergentagent.com. Correct localStorage seed key is `cart` (not `sge_cart_v1` as mentioned in the request). WhatsApp number configured in preview settings: +91 89203-92937 → normalised to 918920392937 in wa.me links.",
+  "rca_of_the_issue": "Pre-fix: Cart.jsx JSX at line 134 referenced `waNumber` after a prior WhatsApp-standardisation refactor had removed the variable in favour of the centralised `waCartLink()` computation stored in `waLink`. Every render of /cart with a non-empty cart threw `ReferenceError: waNumber is not defined`, blanking the page. Fix guards on the existing `waLink` value (`{waLink && waLink !== '#' && (…)}`). Verified end-to-end on the preview URL — no ReferenceError, WhatsApp CTA still routes through the centralised helper with the brand-led prefix intact, and mandatory phone capture + E.164 normalisation continue to work."
+}

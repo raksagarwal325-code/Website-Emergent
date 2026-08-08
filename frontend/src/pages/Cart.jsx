@@ -131,7 +131,7 @@ export default function Cart() {
             <button disabled={submitting} data-testid="submit-inquiry-btn" className="w-full bg-[#D4AF37] text-black py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-50">
               {submitting ? "Sending…" : "Send inquiry"}
             </button>
-            {waNumber && (
+            {waLink && waLink !== "#" && (
               <a
                 data-testid="wa-basket-btn"
                 href={waLink}
