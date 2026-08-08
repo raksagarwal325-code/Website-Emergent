@@ -176,6 +176,44 @@ INR pricing with en-IN formatting.
 
 - 2026-02-13: **Catalogue PDF — full-page background watermark + luxury polish.** Replaced per-image logo overlay with a single centered chandelier/logo watermark rendered behind ALL content on every page (cover, TOC, about, why, category dividers, product pages, contact). Product-card CTA switched from bright green (#25D366) to a gold→bronze→copper gradient pill. WhatsApp number rendered as `+91 89203 92937`. Description font upped from 9.5pt→10.5pt with 1.7 line-height; specs from 8.5pt→9.5pt/1.55. New `isMeaningfulSpec()` filter hides blank, "-", "—", "N/A", "TBD", "unconfirmed", "not specified", "0", "nil". Business hours normalized to "Mon – Sat: 10:30 AM – 8:00 PM · Sunday: Closed". Added "Scan to Connect" QR row on contact page (WhatsApp, Website, Google Maps, Instagram) via new `qrcode` npm package.
 - 2026-02-13: **Global "Currently unavailable" verbiage removed.** Verified via grep across `/app/frontend/src/` — zero occurrences. `ProductDetail.jsx` shows "Available on request" when `stock === 0`; `ProductCard.jsx` / `Catalog.jsx` / `Cart.jsx` intentionally don't render stock badges (inquiry-based catalog). Live-verified on 0-stock product `/product/23afd515-…` — screenshot confirms clean "Price on request" + "Available on request" copy.
+- 2026-02-13: **SEO merchant listing structured data + sitemap cleanup (minimal-risk patch).**
+
+  · **Product JSON-LD (`frontend/src/pages/ProductDetail.jsx`)** — the `productSchema.offers` const now emits two additional Schema.org fields inside the existing Offer:
+    ```
+    hasMerchantReturnPolicy: {
+      @type: MerchantReturnPolicy,
+      applicableCountry: "IN",
+      returnPolicyCategory: "https://schema.org/MerchantReturnNotPermitted",
+      merchantReturnLink: `${siteOrigin}/legal/returns`
+    }
+    shippingDetails: {
+      @type: OfferShippingDetails,
+      shippingDestination: { @type: DefinedRegion, addressCountry: "IN" },
+      deliveryTime: {
+        @type: ShippingDeliveryTime,
+        transitTime: { @type: QuantitativeValue, minValue: 7, maxValue: 10, unitCode: "DAY" }
+      }
+    }
+    ```
+    - `MerchantReturnNotPermitted` is the narrowest truthful enum because we do NOT accept general returns; the `merchantReturnLink` surfaces the fragile-glass / transit-damage carve-out in the existing `/legal/returns` page.
+    - `shippingRate` is intentionally OMITTED because the business does not offer a fixed monetary shipping charge. Per user directive, omission is preferable to inventing a value. `applicableCountry` is India-only, aligned with the current business model.
+    - `siteOrigin` falls back to `https://samratglass.com` when `window` is undefined (SSR/prerender safety).
+
+  · **Sitemap (`backend/server.py`)** — added two entries to `_STATIC_SITEMAP_ENTRIES` (positioned right after `/contact`, before the legal block):
+    - `/custom-lighting-bulk-orders` — monthly / 0.8
+    - `/architects-interior-designers` — monthly / 0.8
+    All pre-existing entries preserved in the same order.
+
+  · **Tests added (11):**
+    - `frontend/src/pages/ProductDetail.jsonld.test.jsx` — 5 cases (valid Product+Offer, valid hasMerchantReturnPolicy, valid shippingDetails, no invented shippingRate, no regression on existing fields).
+    - `backend/tests/test_sitemap_commercial_landings.py` — 6 cases (both landings present exactly once, correct monthly/0.8 metadata, pre-existing entries preserved, draft product excluded via live-DB seed+cleanup, well-formed XML).
+
+  · **Testing-agent iteration_35 — 100% pass, 0 action items, retest_needed=false.** End-to-end verified against preview: sitemap emits both commercial URLs with the correct metadata; live product JSON-LD (extracted via Playwright from a real published product page) contains both new schema blocks with the exact expected structure; no regression on name/sku/brand/price/priceCurrency/availability/seller.
+
+  · **Explicitly UNTOUCHED**: product UUID URL structure, canonical URLs, publication filtering, pricing / on-request behaviour, availability behaviour, product admin data, GA4, WhatsApp, page design.
+
+  Files: `backend/server.py` (2-line addition to `_STATIC_SITEMAP_ENTRIES`), `frontend/src/pages/ProductDetail.jsx` (extended `productSchema.offers`), `backend/tests/test_sitemap_commercial_landings.py` (new), `frontend/src/pages/ProductDetail.jsonld.test.jsx` (new).
+
 - 2026-02-13: **P0 hotfix — /cart blank page (ReferenceError: waNumber is not defined).** During the WhatsApp CTA standardisation refactor the local variable `waNumber` in `Cart.jsx` was removed in favour of a centralised `waCartLink(...)` computation stored in `waLink`, but the JSX guard `{waNumber && (…)}` on line 134 was missed and kept referencing the deleted variable — throwing `Uncaught ReferenceError: waNumber is not defined` on every render of `/cart` with a non-empty cart, blanking the page. Single-line fix: guard the WhatsApp CTA on the existing centralised `waLink` value (`{waLink && waLink !== "#" && (…)}`). No second WhatsApp source introduced. Mandatory phone capture preserved. Added `frontend/src/pages/Cart.regression.test.jsx` (mocked-context test verifying /cart renders the inquiry form + WhatsApp CTA without ReferenceError). Testing-agent iteration_34 verified 100% end-to-end on the preview URL — 5/5 scenarios pass, 0 action items, no retest needed. Full frontend suite: 20 suites / 227 tests pass. Files: `frontend/src/pages/Cart.jsx` (1-line JSX guard fix), `frontend/src/pages/Cart.regression.test.jsx` (new).
 
 - 2026-02-13: **Mobile / WhatsApp number now REQUIRED on all four public lead flows.** Field label everywhere: "Mobile / WhatsApp Number". Input attributes: `type="tel" inputMode="tel" autoComplete="tel" required`. Client-side validation shows an inline error under the field; server-side validation returns HTTP 422 with a Pydantic error message.
