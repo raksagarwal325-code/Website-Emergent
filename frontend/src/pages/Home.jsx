@@ -57,6 +57,9 @@ export default function Home() {
             src={settings?.hero_image || BRAND_PLACEHOLDER_HERO}
             alt=""
             className="w-full h-full object-cover"
+            loading="eager"
+            fetchpriority="high"
+            decoding="async"
           />
           {/* Hero-slider background: crossfades between admin-managed
               images. Renders on top of the CMS `hero_image` fallback so if
