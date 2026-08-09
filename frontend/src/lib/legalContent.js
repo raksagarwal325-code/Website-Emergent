@@ -47,7 +47,7 @@ export const LEGAL_PAGES = {
         bullets: [
           "To respond to product inquiries",
           "To share quotations and product details",
-          "To process catalogue download requests",
+          "To process catalogue downloads",
           "To coordinate delivery and customer support",
           "To improve our website, catalogue, and product experience",
           "To send business-related communication when requested by the customer",
@@ -248,3 +248,11 @@ export const LEGAL_PAGES = {
 };
 
 export const LEGAL_ORDER = ["privacy", "terms", "shipping", "returns", "payment"];
+
+// Fixed default "Last updated" date associated with the currently shipped
+// default policy wording. The public page falls back to this constant when
+// an admin has not entered a value in Admin → Legal / Policies → Last updated.
+// Bump this ONLY when the code-shipped default wording in this file is
+// materially changed and you want that reflected on the live page. The
+// per-policy Admin field always wins when it is filled in.
+export const LEGAL_DEFAULT_UPDATED_AT = "20 February 2026";

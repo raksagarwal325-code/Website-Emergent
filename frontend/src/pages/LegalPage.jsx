@@ -1,11 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
-import { LEGAL_PAGES, LEGAL_ORDER } from "../lib/legalContent";
+import { LEGAL_PAGES, LEGAL_ORDER, LEGAL_DEFAULT_UPDATED_AT } from "../lib/legalContent";
 import { api } from "../lib/api";
-
-const formatDate = () =>
-  new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
 /**
  * Parse an admin-authored plain-text policy body into the same
@@ -154,7 +151,7 @@ export default function LegalPage() {
   const page = useOverride
     ? { title: defaults.title, intro: override.intro || defaults.intro, sections: override.sections }
     : defaults;
-  const lastUpdatedLabel = updatedAt || formatDate();
+  const lastUpdatedLabel = updatedAt || LEGAL_DEFAULT_UPDATED_AT;
 
   return (
     <div data-testid={`legal-page-${slug}`} className="min-h-screen relative">

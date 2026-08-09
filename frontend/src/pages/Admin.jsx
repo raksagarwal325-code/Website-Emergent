@@ -1571,7 +1571,7 @@ function LegalAdmin({ settings, onSave }) {
               data-testid={`legal-${slug}-updated`}
               value={form[slug].updated_at}
               onChange={(e) => update(slug, "updated_at", e.target.value)}
-              placeholder="Leave blank to auto-show today's date"
+              placeholder="Leave blank to keep the default policy date"
               className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-2 text-sm"
             />
           </div>
