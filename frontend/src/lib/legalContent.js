@@ -116,6 +116,11 @@ export const LEGAL_PAGES = {
           "All brand content, logo, product images, text, catalogue designs, and website content belong to Samrat Glass Emporium unless otherwise stated.",
       },
       {
+        heading: "Product Images & Usage Rights",
+        text:
+          "All product photographs, catalogue images, renders, graphics and other visual content displayed on this website are the property of Samrat Glass Emporium unless otherwise stated. Unauthorized copying, downloading, reproduction, redistribution, commercial use, modification, or removal of attribution is prohibited without prior written permission.",
+      },
+      {
         heading: "Limitation",
         text:
           "Samrat Glass Emporium is not responsible for delays caused by courier issues, natural events, incorrect customer details, or circumstances beyond our control.",

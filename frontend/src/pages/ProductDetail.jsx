@@ -10,6 +10,7 @@ import SchemaLD from "../components/SchemaLD";
 import SeenInProjects from "../components/SeenInProjects";
 import { trackViewItem } from "../lib/analytics";
 import { waProductLink } from "../lib/whatsapp";
+import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -220,10 +221,31 @@ export default function ProductDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
         {/* Gallery */}
         <div className="lg:col-span-7">
-          <div className="aspect-[4/5] overflow-hidden bg-[#0a0a0a] border border-white/5 flex items-center justify-center p-6">
+          <div
+            className="aspect-[4/5] overflow-hidden bg-[#0a0a0a] border border-white/5 flex items-center justify-center p-6 relative"
+            {...containerGuardProps}
+            style={containerGuardStyle}
+          >
             {images.length > 0 && (
-              <img src={images[selectedImg]} alt={product.name} className="max-w-full max-h-full w-auto h-auto object-contain object-center" data-testid="product-main-image" />
+              <img
+                src={images[selectedImg]}
+                alt={product.name}
+                className="max-w-full max-h-full w-auto h-auto object-contain object-center"
+                data-testid="product-main-image"
+                {...imgGuardProps}
+                style={imgGuardStyle}
+              />
             )}
+            {/* Transparent interaction overlay — captures right-click / long-press
+                on the image area so browsers can't offer "Save image" on the raw
+                <img>. Purely deterrent; does not block screenshots. */}
+            <div
+              aria-hidden="true"
+              data-testid="product-image-guard-overlay"
+              className="absolute inset-0"
+              {...containerGuardProps}
+              style={{ ...containerGuardStyle, background: "transparent" }}
+            />
           </div>
           {images.length > 1 && (
             <div className="grid grid-cols-4 gap-3 mt-4">
@@ -232,9 +254,16 @@ export default function ProductDetail() {
                   key={i}
                   data-testid={`thumb-${i}`}
                   onClick={() => setSelectedImg(i)}
+                  {...containerGuardProps}
                   className={`aspect-square overflow-hidden border flex items-center justify-center bg-[#0a0a0a] p-2 ${selectedImg === i ? "border-[#D4AF37]" : "border-white/10 hover:border-white/30"}`}
                 >
-                  <img src={img} alt={`thumb ${i + 1}`} className="max-w-full max-h-full w-auto h-auto object-contain object-center" />
+                  <img
+                    src={img}
+                    alt={`thumb ${i + 1}`}
+                    className="max-w-full max-h-full w-auto h-auto object-contain object-center"
+                    {...imgGuardProps}
+                    style={imgGuardStyle}
+                  />
                 </button>
               ))}
             </div>
