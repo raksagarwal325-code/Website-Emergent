@@ -281,21 +281,39 @@ export default function InfluencerPromotions() {
           >
             {Array.from({ length: pages }).map((_, i) => {
               const isActive = i === active;
+              const pillW = isActive ? 28 : 8;
               return (
                 <button
                   key={i}
                   type="button"
                   aria-label={`Go to page ${i + 1} of ${pages}`}
+                  aria-current={isActive ? "page" : undefined}
                   onClick={() => goTo(i)}
                   data-testid={`influencer-carousel-dot-${i}`}
-                  className="h-[6px] rounded-full transition-all duration-500"
+                  className="relative border-0 bg-transparent p-0 cursor-pointer"
                   style={{
-                    width: isActive ? 28 : 8,
-                    background: isActive
-                      ? "linear-gradient(90deg, #D4AF37, #B5952F)"
-                      : "rgba(212,175,55,0.28)",
+                    width: pillW,
+                    height: 6,
+                    paddingTop: 19,
+                    paddingBottom: 19,
+                    paddingLeft: (44 - pillW) / 2,
+                    paddingRight: (44 - pillW) / 2,
+                    boxSizing: "content-box",
+                    background: "transparent",
                   }}
-                />
+                >
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-500 pointer-events-none"
+                    style={{
+                      width: pillW,
+                      height: 6,
+                      background: isActive
+                        ? "linear-gradient(90deg, #D4AF37, #B5952F)"
+                        : "rgba(212,175,55,0.28)",
+                    }}
+                  />
+                </button>
               );
             })}
           </div>
