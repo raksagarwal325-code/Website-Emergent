@@ -256,3 +256,42 @@ export const LEGAL_ORDER = ["privacy", "terms", "shipping", "returns", "payment"
 // materially changed and you want that reflected on the live page. The
 // per-policy Admin field always wins when it is filled in.
 export const LEGAL_DEFAULT_UPDATED_AT = "20 February 2026";
+
+
+/**
+ * Serialize a shipped-default policy back into the same plain-text
+ * format the Admin editor and the LegalPage parser use
+ * (`## heading`, `- bullet`, blank-line separators).
+ *
+ * Used by the Admin editor to prefill each textarea with the actual
+ * current default body when no admin override has been saved yet,
+ * so admins see and edit the real wording rather than an empty box.
+ *
+ * The public LegalPage rendering path does NOT use this — it still
+ * reads the structured `LEGAL_PAGES[slug]` object directly. This
+ * serializer is only for populating the Admin UI.
+ */
+export function serializeLegalDefault(slug) {
+  const p = LEGAL_PAGES[slug];
+  if (!p) return "";
+  const out = [];
+  if (p.intro) out.push(p.intro);
+  for (const s of p.sections || []) {
+    if (out.length) out.push(""); // blank line between blocks
+    if (s.heading) out.push(`## ${s.heading}`);
+    if (s.text) out.push(s.text);
+    if (Array.isArray(s.bullets)) {
+      for (const b of s.bullets) out.push(`- ${b}`);
+    }
+    if (Array.isArray(s.blocks)) {
+      // `blocks` is used sparingly (e.g. the Privacy Contact block).
+      // Serialize subheadings as `## …` and each `text` on its own line
+      // so an admin can see and edit the exact wording.
+      for (const bl of s.blocks) {
+        if (bl.subheading) out.push(`## ${bl.subheading}`);
+        if (bl.text) out.push(bl.text);
+      }
+    }
+  }
+  return out.join("\n");
+}

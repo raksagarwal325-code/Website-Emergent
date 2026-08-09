@@ -10,6 +10,7 @@ import ProductNameSuggester from "../components/ProductNameSuggester";
 import ProductFullRegenerator from "../components/ProductFullRegenerator";
 import HeroSliderAdmin from "../components/admin/HeroSliderAdmin";
 import CategoryImagesAdmin from "../components/admin/CategoryImagesAdmin";
+import { LEGAL_DEFAULT_UPDATED_AT, serializeLegalDefault } from "../lib/legalContent";
 
 const emptyProduct = {
   name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "USD",
@@ -1512,13 +1513,30 @@ const LEGAL_POLICY_SLUGS = [
 
 function LegalAdmin({ settings, onSave }) {
   const initial = (settings && settings.legal_content) || {};
+  // Prefill each textarea with the actual shipped default body (and the
+  // fixed shipped default date) whenever the admin has not saved a
+  // non-blank override for that policy yet. If a real override exists,
+  // show it verbatim so admins can edit it further.
+  const defaultsBySlug = useMemo(() => {
+    const m = {};
+    for (const [slug] of LEGAL_POLICY_SLUGS) {
+      m[slug] = {
+        body: serializeLegalDefault(slug),
+        updated_at: LEGAL_DEFAULT_UPDATED_AT,
+      };
+    }
+    return m;
+  }, []);
+
   const [form, setForm] = useState(() => {
     const seed = {};
     for (const [slug] of LEGAL_POLICY_SLUGS) {
       const entry = initial[slug] || {};
+      const savedBody = typeof entry.body === "string" ? entry.body : "";
+      const savedUpdatedAt = typeof entry.updated_at === "string" ? entry.updated_at : "";
       seed[slug] = {
-        body: typeof entry.body === "string" ? entry.body : "",
-        updated_at: typeof entry.updated_at === "string" ? entry.updated_at : "",
+        body: savedBody.trim() ? savedBody : defaultsBySlug[slug].body,
+        updated_at: savedUpdatedAt.trim() ? savedUpdatedAt : defaultsBySlug[slug].updated_at,
       };
     }
     return seed;
@@ -1530,10 +1548,24 @@ function LegalAdmin({ settings, onSave }) {
 
   const save = async (e) => {
     e.preventDefault();
-    // Send the full legal_content dict so admins can also clear a policy
-    // (blank body) and get the code-shipped default back on the public page.
+    // For each policy, if the admin left the shipped defaults untouched,
+    // send empty strings instead of the serialized default. That keeps
+    // the code-shipped default as the source of truth on the public page
+    // (so future default-wording updates continue to flow through) and
+    // avoids silently "freezing" today's wording as a saved override.
+    const payload = {};
+    for (const [slug] of LEGAL_POLICY_SLUGS) {
+      const cur = form[slug];
+      const def = defaultsBySlug[slug];
+      const bodyIsDefault = cur.body === def.body;
+      const dateIsDefault = cur.updated_at === def.updated_at;
+      payload[slug] = {
+        body: bodyIsDefault ? "" : cur.body,
+        updated_at: dateIsDefault ? "" : cur.updated_at,
+      };
+    }
     try {
-      await api.updateSettings({ legal_content: form });
+      await api.updateSettings({ legal_content: payload });
       toast.success("Legal content saved");
       onSave();
     } catch {
