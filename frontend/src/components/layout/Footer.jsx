@@ -50,10 +50,16 @@ function ContactRow({ icon: Icon, label, value, href, external, testId, children
     </div>
   );
   if (!href) return <div data-testid={testId}>{inner}</div>;
+  // 44×44 tap target for the WhatsApp / phone / email rows without any
+  // visible layout shift: min-h enlarges the hit area, flex items-center
+  // keeps the icon+text visually centered inside the enlarged anchor,
+  // and negative vertical margin collapses the extra outer footprint so
+  // the space-y between rows stays exactly as before.
+  const tapClass = "flex items-center min-h-[44px] -my-[10px]";
   return external ? (
-    <a href={href} target="_blank" rel="noreferrer" data-testid={testId}>{inner}</a>
+    <a href={href} target="_blank" rel="noreferrer" data-testid={testId} className={tapClass}>{inner}</a>
   ) : (
-    <Link to={href} data-testid={testId}>{inner}</Link>
+    <Link to={href} data-testid={testId} className={tapClass}>{inner}</Link>
   );
 }
 
