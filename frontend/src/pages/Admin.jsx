@@ -118,6 +118,7 @@ export default function Admin() {
       {tab === "settings" && settings && (
         <div className="space-y-8">
           <SettingsAdmin settings={settings} onSave={refresh} />
+          <LegalAdmin settings={settings} onSave={refresh} />
           <WatermarkAdmin settings={settings} onSave={refresh} />
         </div>
       )}
@@ -1496,6 +1497,99 @@ function SettingsAdmin({ settings, onSave }) {
       ))}
       <button data-testid="save-settings-btn" className="bg-[#D4AF37] text-black px-8 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]">
         Save settings
+      </button>
+    </form>
+  );
+}
+
+const LEGAL_POLICY_SLUGS = [
+  ["privacy",  "Privacy Policy"],
+  ["terms",    "Terms & Conditions"],
+  ["shipping", "Shipping & Delivery Policy"],
+  ["returns",  "Return & Replacement Policy"],
+  ["payment",  "Payment Policy"],
+];
+
+function LegalAdmin({ settings, onSave }) {
+  const initial = (settings && settings.legal_content) || {};
+  const [form, setForm] = useState(() => {
+    const seed = {};
+    for (const [slug] of LEGAL_POLICY_SLUGS) {
+      const entry = initial[slug] || {};
+      seed[slug] = {
+        body: typeof entry.body === "string" ? entry.body : "",
+        updated_at: typeof entry.updated_at === "string" ? entry.updated_at : "",
+      };
+    }
+    return seed;
+  });
+
+  const update = (slug, field, value) => {
+    setForm((f) => ({ ...f, [slug]: { ...f[slug], [field]: value } }));
+  };
+
+  const save = async (e) => {
+    e.preventDefault();
+    // Send the full legal_content dict so admins can also clear a policy
+    // (blank body) and get the code-shipped default back on the public page.
+    try {
+      await api.updateSettings({ legal_content: form });
+      toast.success("Legal content saved");
+      onSave();
+    } catch {
+      toast.error("Save failed");
+    }
+  };
+
+  return (
+    <form onSubmit={save} data-testid="legal-admin-form" className="max-w-2xl space-y-6 border border-white/10 p-8">
+      <div>
+        <div className="eyebrow">Legal / Policies</div>
+        <p className="text-xs text-white/50 mt-2 leading-relaxed">
+          Edit the public legal pages. Leave a body blank to keep the default text.
+          Use <span className="text-white/70">## Heading</span> to start a section and
+          <span className="text-white/70"> - bullet</span> for bullet points. Plain text only —
+          HTML tags will be shown as literal characters.
+        </p>
+      </div>
+      {LEGAL_POLICY_SLUGS.map(([slug, label]) => (
+        <div key={slug} className="space-y-2 border-t border-white/10 pt-4">
+          <div className="flex items-baseline justify-between gap-4">
+            <label className="text-xs uppercase tracking-[0.2em] text-white/70">{label}</label>
+            <a
+              href={`/legal/${slug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[10px] uppercase tracking-[0.24em] text-[#D4AF37] hover:underline"
+            >
+              View public page →
+            </a>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-1 block">Last updated (free text, e.g. 15 March 2025)</label>
+            <input
+              data-testid={`legal-${slug}-updated`}
+              value={form[slug].updated_at}
+              onChange={(e) => update(slug, "updated_at", e.target.value)}
+              placeholder="Leave blank to auto-show today's date"
+              className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-1 block">Body</label>
+            <textarea
+              data-testid={`legal-${slug}-body`}
+              value={form[slug].body}
+              onChange={(e) => update(slug, "body", e.target.value)}
+              rows={10}
+              placeholder={"Intro paragraph here.\n\n## Section heading\nParagraph text.\n- Bullet one\n- Bullet two"}
+              className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm font-mono leading-relaxed"
+            />
+          </div>
+        </div>
+      ))}
+      <button data-testid="save-legal-btn" className="bg-[#D4AF37] text-black px-8 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]">
+        Save legal content
       </button>
     </form>
   );

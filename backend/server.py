@@ -497,6 +497,12 @@ class Settings(BaseModel):
     google_place_id: str = "ChIJqRfIkPVHdDkRreYAh5J1egk"
     google_maps_api_key: str = ""
     homepage_content: dict = Field(default_factory=dict)
+    # Editable legal / policy content. Shape (all keys optional):
+    #   { "<slug>": { "body": "<multiline text>", "updated_at": "YYYY-MM-DD" } }
+    # where <slug> ∈ {privacy, terms, shipping, returns, payment}.
+    # If a slug is missing OR its `body` is blank/whitespace, the frontend
+    # falls back to the code-shipped default in `lib/legalContent.js`.
+    legal_content: dict = Field(default_factory=dict)
     instagram_url: str = ""
     facebook_url: str = ""
     youtube_url: str = ""
@@ -548,6 +554,7 @@ class PublicSettings(BaseModel):
     google_place_id: str = ""     # public Place ID (used to build "write review" URL)
     google_maps_url: str = ""
     homepage_content: dict = Field(default_factory=dict)
+    legal_content: dict = Field(default_factory=dict)
     instagram_url: str = ""
     facebook_url: str = ""
     youtube_url: str = ""
@@ -570,6 +577,7 @@ class SettingsUpdate(BaseModel):
     google_place_id: Optional[str] = None
     google_maps_api_key: Optional[str] = None
     homepage_content: Optional[dict] = None
+    legal_content: Optional[dict] = None
     instagram_url: Optional[str] = None
     facebook_url: Optional[str] = None
     youtube_url: Optional[str] = None
