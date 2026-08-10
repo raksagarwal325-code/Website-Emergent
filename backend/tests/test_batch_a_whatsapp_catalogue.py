@@ -48,11 +48,18 @@ async def _seed_admin() -> str:
     return token
 
 
+async def _fetch_and_delete_inquiry(rid: str):
+    db = _mongo()
+    doc = await db.inquiries.find_one({"id": rid}, {"_id": 0})
+    await db.inquiries.delete_one({"id": rid})
+    return doc
+
+
 @pytest.fixture(scope="module")
 def admin_token():
     if not (os.environ.get("ADMIN_EMAILS", "") or "").strip():
         pytest.skip("ADMIN_EMAILS not configured")
-    return asyncio.get_event_loop().run_until_complete(_seed_admin())
+    return asyncio.run(_seed_admin())
 
 
 # ---- WhatsApp validation on /api/catalogue-request ----------------------
@@ -83,18 +90,11 @@ def test_catalogue_request_normalises_valid_whatsapp():
                        json={"name": "Norm Test", "phone": raw, "source": "unit-test"})
             assert r.status_code == 200, f"{raw} failed: {r.text}"
             rid = r.json()["id"]
-            # Verify persisted shape
-            db = _mongo()
-            doc = asyncio.get_event_loop().run_until_complete(
-                db.inquiries.find_one({"id": rid}, {"_id": 0}),
-            )
+            # Verify persisted shape and clean up within one event loop.
+            doc = asyncio.run(_fetch_and_delete_inquiry(rid))
             assert doc is not None
             assert doc["customer_whatsapp"] == "+919876543210"
             assert doc["customer_phone"] == "+919876543210"
-            # Cleanup
-            asyncio.get_event_loop().run_until_complete(
-                db.inquiries.delete_one({"id": rid}),
-            )
 
 
 # ---- Catalogue export is admin-only -------------------------------------
