@@ -71,6 +71,7 @@ def _base_body(**overrides):
     body = {
         "name": f"TEST_ENQ_{tag}",
         "email": f"test-{tag}@example.com",
+        "phone": "9876543210",
         "subject": "TEST enquiry",
         "message": "TEST message body long enough to pass any length checks.",
     }

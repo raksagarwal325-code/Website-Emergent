@@ -12,6 +12,7 @@ These tests prove:
 """
 
 import os
+import subprocess
 import uuid
 import requests
 import pytest
@@ -24,13 +25,68 @@ API = f"{BASE_URL}/api"
 ADMIN_COOKIES = {"session_token": "test_admin_session"}
 STATE_CHANGE_HEADERS = {"X-Requested-With": "fetch"}
 
+TEST_PRODUCTS = [
+    {
+        "id": "TEST_inquiry_security_product_1",
+        "name": "TEST Inquiry Security Product One",
+        "sku": "TEST-SEC-001",
+        "category": "Chandelier",
+        "price": 1250,
+    },
+    {
+        "id": "TEST_inquiry_security_product_2",
+        "name": "TEST Inquiry Security Product Two",
+        "sku": "TEST-SEC-002",
+        "category": "Hanging Light",
+        "price": 2750,
+    },
+]
+
+
+def _mongo():
+    mongo_url = "mongodb://localhost:27017"
+    db_name = "samrat_glass_emporium"
+    with open("/app/backend/.env") as f:
+        for line in f:
+            if line.startswith("MONGO_URL="):
+                mongo_url = line.split("=", 1)[1].strip().strip('"').strip("'")
+            elif line.startswith("DB_NAME="):
+                db_name = line.split("=", 1)[1].strip().strip('"').strip("'")
+    return mongo_url, db_name
+
+
+def _run_mongo(script):
+    mongo_url, db_name = _mongo()
+    return subprocess.run(
+        ["mongosh", f"{mongo_url}/{db_name}", "--quiet", "--eval", script],
+        check=False, capture_output=True, timeout=20,
+    )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _seed_published_products():
+    _run_mongo(
+        'db.products.deleteMany({id:{$in:["TEST_inquiry_security_product_1",'
+        '"TEST_inquiry_security_product_2"]}});'
+        'db.products.insertMany(['
+        '{id:"TEST_inquiry_security_product_1", name:"TEST Inquiry Security Product One",'
+        ' sku:"TEST-SEC-001", category:"Chandelier", price:1250, currency:"INR",'
+        ' status:"published", images:[], created_at:new Date().toISOString(),'
+        ' updated_at:new Date().toISOString()},'
+        '{id:"TEST_inquiry_security_product_2", name:"TEST Inquiry Security Product Two",'
+        ' sku:"TEST-SEC-002", category:"Hanging Light", price:2750, currency:"INR",'
+        ' status:"published", images:[], created_at:new Date().toISOString(),'
+        ' updated_at:new Date().toISOString()}]);'
+    )
+    yield
+    _run_mongo(
+        'db.products.deleteMany({id:{$in:["TEST_inquiry_security_product_1",'
+        '"TEST_inquiry_security_product_2"]}});'
+    )
+
 
 def _fetch_a_product():
-    r = requests.get(f"{API}/products?limit=5", timeout=30)
-    assert r.status_code == 200, r.text
-    prods = r.json().get("items", [])
-    assert isinstance(prods, list) and prods, "no seeded products"
-    return prods[0]
+    return TEST_PRODUCTS[0]
 
 
 # ---------- Price cannot be manipulated ----------
@@ -66,10 +122,7 @@ def test_client_price_is_ignored_server_uses_db_price():
 
 
 def test_multiple_items_total_is_sum_of_server_prices():
-    r = requests.get(f"{API}/products?limit=3", timeout=30)
-    prods = r.json().get("items", [])
-    assert isinstance(prods, list) and len(prods) >= 2, "need >=2 products"
-    a, b = prods[0], prods[1]
+    a, b = TEST_PRODUCTS
     payload = {
         "customer_name": "Multi Item",
         "customer_email": f"TEST_mi_{uuid.uuid4().hex[:8]}@example.com",
@@ -102,16 +155,8 @@ def test_missing_product_id_returns_400():
 def test_draft_product_returns_400():
     # Seed a draft product directly via Mongo, then try to inquire on it.
     # If we can't seed directly, skip.
-    import subprocess, json as _json
     # parse .env robustly (values may be quoted)
-    mongo_url = "mongodb://localhost:27017"
-    db_name = "samrat_glass_emporium"
-    with open("/app/backend/.env") as f:
-        for line in f:
-            if line.startswith("MONGO_URL="):
-                mongo_url = line.split("=", 1)[1].strip().strip('"').strip("'")
-            elif line.startswith("DB_NAME="):
-                db_name = line.split("=", 1)[1].strip().strip('"').strip("'")
+    mongo_url, db_name = _mongo()
 
     draft_id = f"TEST_draft_{uuid.uuid4().hex[:8]}"
     script = f"""
