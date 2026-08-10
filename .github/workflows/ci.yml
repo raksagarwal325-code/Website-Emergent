@@ -91,6 +91,7 @@ jobs:
       # A dev-only session token the pytest suite already recognises for the
       # admin-facing tests (see backend/tests/conftest.py). No secrets.
       ADMIN_EMAILS: "raks.agarwal325@gmail.com"
+      REACT_APP_BACKEND_URL: "http://localhost:8001"
 
     steps:
       - name: Checkout
@@ -142,7 +143,69 @@ jobs:
           # inside the backend process when it starts; here we just make
           # sure the DB exists.
           echo "MONGO_URL=$MONGO_URL DB_NAME=$DB_NAME"
+      - name: Prepare backend CI runtime
+        run: |
+          # Existing pytest fixtures expect Emergent-style absolute env paths.
+          sudo mkdir -p /app/backend /app/frontend
+          printf 'MONGO_URL=%s\nDB_NAME=%s\n' "$MONGO_URL" "$DB_NAME" \
+            | sudo tee /app/backend/.env >/dev/null
+          printf 'REACT_APP_BACKEND_URL=%s\n' "$REACT_APP_BACKEND_URL" \
+            | sudo tee /app/frontend/.env >/dev/null
 
+          # conftest.py invokes `mongosh` directly. The Mongo service container
+          # already contains mongosh, so expose a tiny host-side wrapper.
+          sudo tee /usr/local/bin/mongosh >/dev/null <<'SH'
+          #!/usr/bin/env bash
+          set -e
+          cid=$(docker ps --filter "ancestor=mongo:6" --format '{{.ID}}' | head -n1)
+          if [ -z "$cid" ]; then
+            echo "MongoDB service container not found" >&2
+            exit 1
+          fi
+          exec docker exec "$cid" mongosh "$@"
+          SH
+          sudo chmod +x /usr/local/bin/mongosh
+
+      - name: Start FastAPI backend on :8001
+        working-directory: backend
+        run: |
+          nohup python -m uvicorn server:app \
+            --host 0.0.0.0 \
+            --port 8001 \
+            --workers 1 \
+            > /tmp/backend.log 2>&1 &
+
+          echo $! > /tmp/backend_worker_real.pid
+          echo "Backend pid: $(cat /tmp/backend_worker_real.pid)"
+
+          python - <<'PY'
+          import sys
+          import time
+          import urllib.request
+
+          deadline = time.time() + 90
+          last_error = None
+
+          while time.time() < deadline:
+              try:
+                  with urllib.request.urlopen(
+                      "http://localhost:8001/api/settings",
+                      timeout=2,
+                  ) as response:
+                      if response.status == 200:
+                          print("backend ready")
+                          sys.exit(0)
+              except Exception as exc:
+                  last_error = repr(exc)
+
+              time.sleep(1)
+
+          print(
+              f"timed out waiting for backend: {last_error}",
+              file=sys.stderr,
+          )
+          sys.exit(1)
+          PY
       - name: Run backend pytest (serial mode — matches audited-green run)
         working-directory: backend
         env:
@@ -152,6 +215,12 @@ jobs:
           PYTEST_ADDOPTS: "-n 0"
         run: |
           python -m pytest tests/ -q --tb=short
+
+      - name: Dump backend log on failure
+        if: failure()
+        run: |
+          echo "--- /tmp/backend.log ---"
+          tail -n 200 /tmp/backend.log || true
 
   # ---------------------------------------------------------------------------
   # 2) Frontend Jest / RTL suite.
