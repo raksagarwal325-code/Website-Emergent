@@ -4,6 +4,7 @@ import { Heart, ShoppingBag, ArrowUpRight, Sparkles } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
 import { useSettings } from "../context/SettingsContext";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
+import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
 import { toast } from "sonner";
 
 // Elegant fallback: a subtle gold "S" monogram on solid black
@@ -80,9 +81,20 @@ export default function ProductCard({ product, index = 0 }) {
       </button>
 
       <Link to={`/product/${product.id}`} className="block" data-testid={`product-link-${product.id}`}>
-        <div className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center relative p-4">
+        <div
+          className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center relative p-4"
+          {...containerGuardProps}
+          style={containerGuardStyle}
+        >
           {img ? (
-            <img src={img} alt={product.name} className="product-image max-w-full max-h-full w-auto h-auto object-contain object-center opacity-95 group-hover:opacity-100" loading="lazy" />
+            <img
+              src={img}
+              alt={product.name}
+              className="product-image max-w-full max-h-full w-auto h-auto object-contain object-center opacity-95 group-hover:opacity-100"
+              loading="lazy"
+              {...imgGuardProps}
+              style={imgGuardStyle}
+            />
           ) : (
             <ProductPlaceholder name={product.name} />
           )}

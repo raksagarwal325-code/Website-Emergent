@@ -191,7 +191,17 @@ export default function GalleryPreview() {
                           data-testid={`home-gallery-card-${sIdx}-${i}`}
                           className="group border border-white/8 hover:border-[#D4AF37]/50 transition-colors bg-[#0e0510]"
                         >
-                          <Link to={`/gallery/${p.__slug}`} className="block">
+                          <Link
+                            to={`/gallery/${p.__slug}`}
+                            className="block"
+                            // Keyboard focus must follow the same visibility
+                            // state that drives aria-hidden on the wrapping
+                            // slide. Off-screen slides are aria-hidden, so
+                            // their links are removed from the tab order to
+                            // satisfy Lighthouse a11y (aria-hidden-focus).
+                            tabIndex={sIdx === active ? 0 : -1}
+                            aria-hidden={sIdx === active ? undefined : true}
+                          >
                             <div className="aspect-[4/5] overflow-hidden bg-black">
                               {cover ? (
                                 <img

@@ -1,10 +1,80 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
-import { LEGAL_PAGES, LEGAL_ORDER } from "../lib/legalContent";
+import { LEGAL_PAGES, LEGAL_ORDER, LEGAL_DEFAULT_UPDATED_AT } from "../lib/legalContent";
+import { api } from "../lib/api";
 
-const formatDate = () =>
-  new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+/**
+ * Parse an admin-authored plain-text policy body into the same
+ * `{ intro, sections: [{ heading, text, bullets }] }` shape used by
+ * the code-shipped defaults. Format is intentionally minimal so
+ * admins never need code / rich-text tooling:
+ *
+ *   ## Heading            → starts a new section with that heading
+ *   - bullet              → appends a bullet to the current section
+ *   (blank line)          → paragraph separator inside the current section
+ *   any other line        → appended to the current section's text
+ *
+ * Text is rendered by React as text nodes (never dangerouslySetInnerHTML),
+ * so any HTML/scripts an admin might paste in are shown as literal text.
+ * Returns null when the body is missing/blank so the caller can fall
+ * back to the code default.
+ */
+export function parseLegalBody(body) {
+  if (typeof body !== "string") return null;
+  const trimmed = body.replace(/\r\n/g, "\n").trim();
+  if (!trimmed) return null;
+
+  const lines = trimmed.split("\n");
+  const intro = [];
+  const sections = [];
+  let current = null;
+  let seenHeading = false;
+
+  const pushIntro = (line) => intro.push(line);
+  const ensureSection = () => {
+    if (!current) {
+      current = { heading: "", text: "", bullets: [] };
+      sections.push(current);
+    }
+    return current;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+
+    if (/^##\s+/.test(line)) {
+      current = { heading: line.replace(/^##\s+/, "").trim(), text: "", bullets: [] };
+      sections.push(current);
+      seenHeading = true;
+      continue;
+    }
+    if (/^-\s+/.test(line)) {
+      ensureSection().bullets.push(line.replace(/^-\s+/, "").trim());
+      continue;
+    }
+    if (!seenHeading) {
+      pushIntro(line);
+      continue;
+    }
+    // paragraph line — append to current section's text, preserving blank lines
+    const s = ensureSection();
+    s.text = s.text ? `${s.text}\n${line}` : line;
+  }
+
+  // Clean up trailing/leading blank lines in text blocks
+  const clean = (s) => (s || "").replace(/^\n+/, "").replace(/\n+$/, "");
+  const outSections = sections.map((s) => ({
+    heading: s.heading,
+    text: clean(s.text),
+    bullets: s.bullets.length ? s.bullets : undefined,
+  }));
+
+  return {
+    intro: clean(intro.join("\n")),
+    sections: outSections,
+  };
+}
 
 function Section({ section }) {
   return (
@@ -12,7 +82,9 @@ function Section({ section }) {
       {section.heading && (
         <h2 className="font-serif text-xl md:text-2xl text-white mb-4 brand-gradient-text">{section.heading}</h2>
       )}
-      {section.text && <p className="text-white/70 leading-relaxed">{section.text}</p>}
+      {section.text && (
+        <p className="text-white/70 leading-relaxed" style={{ whiteSpace: "pre-line" }}>{section.text}</p>
+      )}
       {section.bullets && (
         <ul className="mt-2 space-y-2">
           {section.bullets.map((b, i) => (
@@ -41,14 +113,45 @@ function Section({ section }) {
 
 export default function LegalPage() {
   const { slug } = useParams();
-  const page = LEGAL_PAGES[slug];
+  const defaults = LEGAL_PAGES[slug];
+  const [override, setOverride] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState("");
 
   useEffect(() => {
-    if (page) window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
-    if (page) document.title = `${page.title} · Samrat Glass Emporium`;
-  }, [page]);
+    let cancelled = false;
+    if (!defaults) return;
+    (async () => {
+      try {
+        const s = await api.getSettings();
+        if (cancelled) return;
+        const entry = (s && s.legal_content && s.legal_content[slug]) || null;
+        const parsed = entry ? parseLegalBody(entry.body) : null;
+        setOverride(parsed);
+        setUpdatedAt((entry && typeof entry.updated_at === "string" && entry.updated_at.trim()) || "");
+      } catch {
+        if (!cancelled) {
+          setOverride(null);
+          setUpdatedAt("");
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [slug, defaults]);
 
-  if (!page) return <Navigate to="/" replace />;
+  useEffect(() => {
+    if (defaults) window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+    if (defaults) document.title = `${defaults.title} · Samrat Glass Emporium`;
+  }, [defaults]);
+
+  if (!defaults) return <Navigate to="/" replace />;
+
+  // Fall back to the code-shipped default whenever the admin override
+  // is missing, blank, or fails to parse into at least one section.
+  const useOverride = override && Array.isArray(override.sections) && override.sections.length > 0;
+  const page = useOverride
+    ? { title: defaults.title, intro: override.intro || defaults.intro, sections: override.sections }
+    : defaults;
+  const lastUpdatedLabel = updatedAt || LEGAL_DEFAULT_UPDATED_AT;
 
   return (
     <div data-testid={`legal-page-${slug}`} className="min-h-screen relative">
@@ -70,13 +173,13 @@ export default function LegalPage() {
             {page.title}
           </h1>
           <div className="mt-4 text-xs text-white/50">
-            Last updated: <span data-testid="legal-updated" className="text-white/70">{formatDate()}</span>
+            Last updated: <span data-testid="legal-updated" className="text-white/70">{lastUpdatedLabel}</span>
           </div>
         </div>
 
         {/* Intro */}
         {page.intro && (
-          <p className="text-white/75 leading-relaxed text-base md:text-lg mb-12 font-serif italic">{page.intro}</p>
+          <p className="text-white/75 leading-relaxed text-base md:text-lg mb-12 font-serif italic" style={{ whiteSpace: "pre-line" }}>{page.intro}</p>
         )}
 
         {/* Sections */}

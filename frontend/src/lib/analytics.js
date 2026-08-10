@@ -137,6 +137,52 @@ export const trackWhatsAppClick = ({ source, page, product } = {}) => {
   _dispatch("whatsapp_click", params);
 };
 
+/**
+ * Global fallback tracker for ANY public WhatsApp CTA that wasn't wired
+ * with an explicit `trackWhatsAppClick(...)` onClick — e.g. header /
+ * footer / product / gallery / commercial-landing / atelier / etc.
+ *
+ * Only 2 of the site's ~14 WA links previously fired the custom event.
+ * A single capture-phase listener on the document catches every click
+ * on any anchor whose href points at `wa.me/` and dispatches the
+ * `whatsapp_click` event once — labelled with the DOM data-testid so
+ * GA4 can distinguish sources.
+ *
+ * Idempotent: the listener is attached exactly once (guarded by a
+ * module-level flag) so hot-reload or double-import can't stack it.
+ */
+let _waListenerAttached = false;
+export const installWhatsAppClickListener = () => {
+  if (_waListenerAttached) return;
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  _waListenerAttached = true;
+  document.addEventListener(
+    "click",
+    (e) => {
+      // Traverse up to find the <a> — a click may land on the icon/span
+      // inside the anchor.
+      let el = e.target;
+      while (el && el !== document.body && el.tagName !== "A") {
+        el = el.parentElement;
+      }
+      if (!el || el.tagName !== "A") return;
+      const href = el.getAttribute("href") || "";
+      if (!/^https:\/\/(www\.)?wa\.me\//.test(href)) return;
+      const source =
+        el.getAttribute("data-testid") ||
+        el.getAttribute("data-source") ||
+        "unknown";
+      trackWhatsAppClick({
+        source,
+        page:
+          (typeof window !== "undefined" && window.location?.pathname) ||
+          undefined,
+      });
+    },
+    true, // capture phase — fires even if child handlers stopPropagation
+  );
+};
+
 export const trackCatalogueDownload = (source = "unknown") => {
   _dispatch("catalogue_download", { source: String(source).slice(0, 40) });
 };

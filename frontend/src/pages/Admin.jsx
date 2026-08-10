@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon } from "lucide-react";
+import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon, RefreshCw, AlertTriangle } from "lucide-react";
 import { api } from "../lib/api";
 import { compareBySku } from "../lib/api";
+import { gmailComposeUrl } from "../lib/gmailCompose";
 import { toast } from "sonner";
 import AdminHomepage from "../components/AdminHomepage";
 import AIProductGenerator from "../components/AIProductGenerator";
@@ -9,6 +10,7 @@ import ProductNameSuggester from "../components/ProductNameSuggester";
 import ProductFullRegenerator from "../components/ProductFullRegenerator";
 import HeroSliderAdmin from "../components/admin/HeroSliderAdmin";
 import CategoryImagesAdmin from "../components/admin/CategoryImagesAdmin";
+import { LEGAL_DEFAULT_UPDATED_AT, serializeLegalDefault } from "../lib/legalContent";
 
 const emptyProduct = {
   name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "USD",
@@ -18,8 +20,6 @@ const emptyProduct = {
 export default function Admin() {
   const [tab, setTab] = useState("dashboard");
   const [products, setProducts] = useState([]);
-  const [inquiries, setInquiries] = useState([]);
-  const [messages, setMessages] = useState([]);
   const [settings, setSettings] = useState(null);
   const [stats, setStats] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -27,16 +27,17 @@ export default function Admin() {
   const [reviewCounts, setReviewCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
 
   const refresh = async () => {
-    const [p, i, m, s, st, cats, rc] = await Promise.all([
+    const [p, s, st, cats, rc] = await Promise.all([
       api.listAllProducts({ include_drafts: 1, limit: 5000 }).catch(() => []),
-      api.listInquiries().catch(() => []),
-      api.listContact().catch(() => []),
-      api.getSettings().catch(() => null),
+      // Admin panel needs the FULL settings object (including google_maps_api_key
+      // for the "Google Maps API Key" input). Public `/settings` no longer
+      // returns that field — must use the auth-protected admin endpoint.
+      api.adminGetSettings().catch(() => null),
       api.stats().catch(() => null),
       api.categories().catch(() => []),
       api.adminReviewCounts().catch(() => ({ pending: 0, approved: 0, rejected: 0 })),
     ]);
-    setProducts(p); setInquiries(i); setMessages(m); setSettings(s); setStats(st); setCategories(cats); setReviewCounts(rc);
+    setProducts(p); setSettings(s); setStats(st); setCategories(cats); setReviewCounts(rc);
   };
   useEffect(() => { refresh(); }, []);
 
@@ -109,15 +110,16 @@ export default function Admin() {
         <ProductsAdmin products={products} categories={categories} refresh={refresh} setEditing={setEditing} editing={editing} />
       )}
 
-      {tab === "inquiries" && <InquiriesAdmin inquiries={inquiries} refresh={refresh} />}
+      {tab === "inquiries" && <InquiriesAdmin />}
 
       {tab === "reviews" && <ReviewsAdmin products={products} refresh={refresh} />}
 
-      {tab === "messages" && <MessagesAdmin messages={messages} />}
+      {tab === "messages" && <MessagesAdmin />}
 
       {tab === "settings" && settings && (
         <div className="space-y-8">
           <SettingsAdmin settings={settings} onSave={refresh} />
+          <LegalAdmin settings={settings} onSave={refresh} />
           <WatermarkAdmin settings={settings} onSave={refresh} />
         </div>
       )}
@@ -678,14 +680,49 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
   );
 }
 
-function InquiriesAdmin({ inquiries, refresh }) {
+function InquiriesAdmin() {
+  const [inquiries, setInquiries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filter, setFilter] = useState("all");
   const [q, setQ] = useState("");
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [confirming, setConfirming] = useState(null); // { ids: string[], mode: "single"|"bulk" }
+  const [deleting, setDeleting] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    api
+      .listInquiries()
+      .then((data) => {
+        if (!alive) return;
+        setInquiries(Array.isArray(data) ? data : []);
+        setSelectedIds(new Set());
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        const status = e?.response?.status;
+        const msg = status ? `Server responded with ${status}` : (e?.message || "Network error");
+        setError(msg);
+        setLoading(false);
+      });
+    return () => { alive = false; };
+  }, [reloadKey]);
+
+  const reload = () => setReloadKey((k) => k + 1);
 
   const setStatus = async (id, s) => {
-    await api.updateInquiryStatus(id, s);
-    toast.success("Status updated");
-    refresh();
+    try {
+      await api.updateInquiryStatus(id, s);
+      toast.success("Status updated");
+      reload();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to update status");
+    }
   };
 
   const counts = {
@@ -705,7 +742,90 @@ function InquiriesAdmin({ inquiries, refresh }) {
     return true;
   });
 
+  const filteredIds = filtered.map((i) => i.id);
+  const visibleSelected = filteredIds.filter((id) => selectedIds.has(id));
+  const allVisibleSelected = filteredIds.length > 0 && visibleSelected.length === filteredIds.length;
+
+  const toggleOne = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) filteredIds.forEach((id) => next.delete(id));
+      else filteredIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const askDelete = (ids) => {
+    if (!ids || ids.length === 0) return;
+    setConfirming({ ids: [...ids], mode: ids.length === 1 ? "single" : "bulk" });
+  };
+
+  const doDelete = async () => {
+    if (!confirming) return;
+    const { ids } = confirming;
+    setDeleting(true);
+    try {
+      if (ids.length === 1) {
+        await api.adminDeleteInquiry(ids[0]);
+      } else {
+        await api.adminBulkDeleteInquiries(ids);
+      }
+      toast.success(`Deleted ${ids.length} enquir${ids.length === 1 ? "y" : "ies"}`);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      setConfirming(null);
+      reload();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Delete failed");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const waNumber = (raw) => (raw || "").replace(/[^0-9]/g, "");
+
+  if (loading) {
+    return (
+      <div data-testid="inq-loading" className="text-white/50 text-sm py-12 text-center border border-white/5">
+        Loading enquiries…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        data-testid="inq-error"
+        role="alert"
+        className="border border-[#a36350]/40 bg-[#2a1113]/40 p-8 flex flex-col items-center text-center gap-3"
+      >
+        <AlertTriangle size={20} className="text-[#E5B579]" />
+        <div className="font-serif text-lg">We couldn't load enquiries</div>
+        <div className="text-white/60 text-sm max-w-md">
+          {error}. Your enquiries data is safe — this is only a display fetch.
+        </div>
+        <button
+          type="button"
+          data-testid="inq-retry"
+          onClick={reload}
+          className="mt-2 inline-flex items-center gap-2 border border-[#D4AF37]/60 hover:border-[#D4AF37] text-[#D4AF37] px-5 py-2 text-xs uppercase tracking-[0.24em]"
+        >
+          <RefreshCw size={12} /> Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -727,22 +847,65 @@ function InquiriesAdmin({ inquiries, refresh }) {
         />
       </div>
 
+      {/* Bulk toolbar */}
+      {filtered.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 border border-white/10 bg-black/30 px-3 py-2">
+          <label className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.24em] text-white/70 cursor-pointer">
+            <input
+              type="checkbox"
+              data-testid="inq-select-all"
+              checked={allVisibleSelected}
+              onChange={toggleAllVisible}
+              className="w-4 h-4 accent-[#D4AF37]"
+            />
+            Select all visible
+          </label>
+          <span data-testid="inq-selected-count" className="text-[11px] text-white/50">
+            {visibleSelected.length} selected
+          </span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            data-testid="inq-bulk-delete"
+            onClick={() => askDelete(visibleSelected)}
+            disabled={visibleSelected.length === 0 || deleting}
+            className="inline-flex items-center gap-2 border border-[#a36350]/50 text-[#E5B579] hover:bg-[#a36350]/10 px-4 py-1.5 text-[11px] uppercase tracking-[0.24em] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Trash2 size={12} /> Delete selected
+          </button>
+        </div>
+      )}
+
       {filtered.length === 0 && <div className="text-white/50 text-sm py-12 text-center border border-white/5">No inquiries match this filter.</div>}
 
       {filtered.map((inq) => {
         const digits = waNumber(inq.customer_phone);
         const waLink = digits ? `https://wa.me/${digits}?text=${encodeURIComponent(`Hi ${inq.customer_name}, thank you for your inquiry to Samrat Glass Emporium. `)}` : "";
-        const mailLink = inq.customer_email ? `mailto:${inq.customer_email}?subject=Re: Your inquiry to Samrat Glass Emporium` : "";
+        const mailLink = gmailComposeUrl({
+          to: inq.customer_email,
+          subject: "Re: Your inquiry to Samrat Glass Emporium",
+        });
+        const isChecked = selectedIds.has(inq.id);
         return (
-          <div key={inq.id} data-testid={`inq-${inq.id}`} className="border border-white/10 p-6 hover:border-white/20 transition-colors">
+          <div key={inq.id} data-testid={`inq-${inq.id}`} className={`border p-6 transition-colors ${isChecked ? "border-[#D4AF37]/60 bg-[#D4AF37]/[0.04]" : "border-white/10 hover:border-white/20"}`}>
             <div className="flex flex-wrap justify-between gap-4">
-              <div>
-                <div className="font-serif text-lg">{inq.customer_name}</div>
-                <div className="text-white/50 text-sm mt-1">
-                  {inq.customer_email && <span>{inq.customer_email}</span>}
-                  {inq.customer_phone && <span> · {inq.customer_phone}</span>}
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  data-testid={`inq-select-${inq.id}`}
+                  checked={isChecked}
+                  onChange={() => toggleOne(inq.id)}
+                  className="mt-1.5 w-4 h-4 accent-[#D4AF37]"
+                  aria-label={`Select enquiry from ${inq.customer_name || "customer"}`}
+                />
+                <div>
+                  <div className="font-serif text-lg">{inq.customer_name}</div>
+                  <div className="text-white/50 text-sm mt-1">
+                    {inq.customer_email && <span>{inq.customer_email}</span>}
+                    {inq.customer_phone && <span> · {inq.customer_phone}</span>}
+                  </div>
+                  <div className="text-xs text-white/40 mt-1">{new Date(inq.created_at).toLocaleString()}</div>
                 </div>
-                <div className="text-xs text-white/40 mt-1">{new Date(inq.created_at).toLocaleString()}</div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {waLink && (
@@ -752,7 +915,7 @@ function InquiriesAdmin({ inquiries, refresh }) {
                   </a>
                 )}
                 {mailLink && (
-                  <a href={mailLink} data-testid={`inq-mail-${inq.id}`}
+                  <a href={mailLink} target="_blank" rel="noopener noreferrer" data-testid={`inq-mail-${inq.id}`}
                     className="text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-white/25 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]">
                     Email
                   </a>
@@ -760,6 +923,16 @@ function InquiriesAdmin({ inquiries, refresh }) {
                 {["new","in_progress","closed"].map((s) => (
                   <button key={s} onClick={() => setStatus(inq.id, s)} className={`text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border ${inq.status === s ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/15 text-white/60 hover:text-white"}`}>{s === "in_progress" ? "In progress" : s}</button>
                 ))}
+                <button
+                  type="button"
+                  data-testid={`inq-delete-${inq.id}`}
+                  onClick={() => askDelete([inq.id])}
+                  disabled={deleting}
+                  aria-label="Delete enquiry"
+                  className="text-[#E5B579] hover:text-[#a36350] p-1.5 border border-transparent hover:border-[#a36350]/40 disabled:opacity-40"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             </div>
             {inq.message && <p className="mt-3 text-white/70 text-sm whitespace-pre-wrap">{inq.message}</p>}
@@ -786,6 +959,69 @@ function InquiriesAdmin({ inquiries, refresh }) {
           </div>
         );
       })}
+
+      {confirming && (
+        <DeleteConfirmModal
+          testIdPrefix="inq"
+          count={confirming.ids.length}
+          kind="enquiry"
+          kindPlural="enquiries"
+          onCancel={() => (deleting ? null : setConfirming(null))}
+          onConfirm={doDelete}
+          busy={deleting}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Confirmation modal used by both the enquiries and messages tabs.
+ * Rendered as a fixed overlay; the confirm button is disabled while a
+ * delete request is in flight so the user cannot double-submit.
+ */
+function DeleteConfirmModal({ testIdPrefix, count, kind, kindPlural, onCancel, onConfirm, busy }) {
+  const noun = count === 1 ? kind : kindPlural;
+  return (
+    <div
+      data-testid={`${testIdPrefix}-delete-modal`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={`${testIdPrefix}-delete-modal-title`}
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+    >
+      <div className="max-w-md w-full border border-[#a36350]/40 bg-[#0e0708] p-8 shadow-2xl">
+        <div className="flex items-center gap-3 mb-4">
+          <AlertTriangle size={20} className="text-[#E5B579]" />
+          <div id={`${testIdPrefix}-delete-modal-title`} className="font-serif text-xl">
+            Delete {count} {noun}?
+          </div>
+        </div>
+        <p className="text-white/70 text-sm leading-relaxed mb-6">
+          This will permanently remove <span data-testid={`${testIdPrefix}-delete-modal-count`} className="text-[#D4AF37] font-semibold">{count}</span>{" "}
+          {noun} from the database. This action cannot be undone.
+        </p>
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            data-testid={`${testIdPrefix}-delete-cancel`}
+            onClick={onCancel}
+            disabled={busy}
+            className="text-[11px] uppercase tracking-[0.24em] px-5 py-2 border border-white/20 text-white/80 hover:border-white/40 disabled:opacity-40"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            data-testid={`${testIdPrefix}-delete-confirm`}
+            onClick={onConfirm}
+            disabled={busy}
+            className="text-[11px] uppercase tracking-[0.24em] px-5 py-2 border border-[#a36350] text-[#E5B579] bg-[#a36350]/20 hover:bg-[#a36350]/40 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {busy ? "Deleting…" : `Delete ${count} ${noun}`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -967,18 +1203,135 @@ function ReviewsAdmin({ products, refresh }) {
 }
 
 
-function MessagesAdmin({ messages }) {
+function MessagesAdmin() {
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [q, setQ] = useState("");
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [confirming, setConfirming] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    api
+      .listContact()
+      .then((data) => {
+        if (!alive) return;
+        setMessages(Array.isArray(data) ? data : []);
+        setSelectedIds(new Set());
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        const status = e?.response?.status;
+        const msg = status ? `Server responded with ${status}` : (e?.message || "Network error");
+        setError(msg);
+        setLoading(false);
+      });
+    return () => { alive = false; };
+  }, [reloadKey]);
+
+  const reload = () => setReloadKey((k) => k + 1);
+
   const _enqLabel = (v) => (
     v === "bulk" ? "Custom Lighting / Bulk"
     : v === "trade" ? "Architect / Interior"
     : "General"
   );
+
   const filtered = messages.filter((m) => {
     if (!q.trim()) return true;
     const needle = q.toLowerCase();
-    return `${m.name || ""} ${m.email || ""} ${m.subject || ""} ${m.message || ""} ${_enqLabel(m.enquiry_type)}`.toLowerCase().includes(needle);
+    return `${m.name || ""} ${m.email || ""} ${m.phone || ""} ${m.subject || ""} ${m.message || ""} ${_enqLabel(m.enquiry_type)}`.toLowerCase().includes(needle);
   });
+
+  const filteredIds = filtered.map((m) => m.id);
+  const visibleSelected = filteredIds.filter((id) => selectedIds.has(id));
+  const allVisibleSelected = filteredIds.length > 0 && visibleSelected.length === filteredIds.length;
+
+  const toggleOne = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) filteredIds.forEach((id) => next.delete(id));
+      else filteredIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const askDelete = (ids) => {
+    if (!ids || ids.length === 0) return;
+    setConfirming({ ids: [...ids], mode: ids.length === 1 ? "single" : "bulk" });
+  };
+
+  const doDelete = async () => {
+    if (!confirming) return;
+    const { ids } = confirming;
+    setDeleting(true);
+    try {
+      if (ids.length === 1) {
+        await api.adminDeleteContactMessage(ids[0]);
+      } else {
+        await api.adminBulkDeleteContactMessages(ids);
+      }
+      toast.success(`Deleted ${ids.length} message${ids.length === 1 ? "" : "s"}`);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      setConfirming(null);
+      reload();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Delete failed");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div data-testid="msg-loading" className="text-white/50 text-sm py-12 text-center border border-white/5">
+        Loading messages…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        data-testid="msg-error"
+        role="alert"
+        className="border border-[#a36350]/40 bg-[#2a1113]/40 p-8 flex flex-col items-center text-center gap-3"
+      >
+        <AlertTriangle size={20} className="text-[#E5B579]" />
+        <div className="font-serif text-lg">We couldn't load messages</div>
+        <div className="text-white/60 text-sm max-w-md">
+          {error}. Your messages data is safe — this is only a display fetch.
+        </div>
+        <button
+          type="button"
+          data-testid="msg-retry"
+          onClick={reload}
+          className="mt-2 inline-flex items-center gap-2 border border-[#D4AF37]/60 hover:border-[#D4AF37] text-[#D4AF37] px-5 py-2 text-xs uppercase tracking-[0.24em]"
+        >
+          <RefreshCw size={12} /> Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 mb-2">
@@ -993,46 +1346,117 @@ function MessagesAdmin({ messages }) {
           className="flex-1 min-w-[200px] bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-3 py-2 text-sm"
         />
       </div>
+
+      {/* Bulk toolbar */}
+      {filtered.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 border border-white/10 bg-black/30 px-3 py-2">
+          <label className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.24em] text-white/70 cursor-pointer">
+            <input
+              type="checkbox"
+              data-testid="msg-select-all"
+              checked={allVisibleSelected}
+              onChange={toggleAllVisible}
+              className="w-4 h-4 accent-[#D4AF37]"
+            />
+            Select all visible
+          </label>
+          <span data-testid="msg-selected-count" className="text-[11px] text-white/50">
+            {visibleSelected.length} selected
+          </span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            data-testid="msg-bulk-delete"
+            onClick={() => askDelete(visibleSelected)}
+            disabled={visibleSelected.length === 0 || deleting}
+            className="inline-flex items-center gap-2 border border-[#a36350]/50 text-[#E5B579] hover:bg-[#a36350]/10 px-4 py-1.5 text-[11px] uppercase tracking-[0.24em] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Trash2 size={12} /> Delete selected
+          </button>
+        </div>
+      )}
+
       {filtered.length === 0 && (
         <div className="text-white/50 text-sm py-12 text-center border border-white/5">
           {messages.length === 0 ? "No messages yet." : "No messages match this search."}
         </div>
       )}
       {filtered.map((m) => {
-        const mailLink = m.email ? `mailto:${m.email}?subject=${encodeURIComponent(`Re: ${m.subject || "Your enquiry to Samrat Glass Emporium"}`)}` : "";
+        const mailLink = gmailComposeUrl({
+          to: m.email,
+          subject: `Re: ${m.subject || "Your enquiry to Samrat Glass Emporium"}`,
+        });
+        const isChecked = selectedIds.has(m.id);
         return (
-          <div key={m.id} className="border border-white/10 p-6 hover:border-white/20 transition-colors" data-testid={`msg-${m.id}`}>
+          <div key={m.id} className={`border p-6 transition-colors ${isChecked ? "border-[#D4AF37]/60 bg-[#D4AF37]/[0.04]" : "border-white/10 hover:border-white/20"}`} data-testid={`msg-${m.id}`}>
             <div className="flex flex-wrap justify-between items-start gap-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="font-serif text-lg">{m.subject || "No subject"}</div>
-                  <span
-                    data-testid={`msg-enquiry-type-${m.id}`}
-                    className={`text-[10px] uppercase tracking-[0.24em] px-2 py-0.5 border ${
-                      m.enquiry_type === "bulk"
-                        ? "border-[#D4AF37] text-[#D4AF37]"
-                        : m.enquiry_type === "trade"
-                        ? "border-[#B87333] text-[#E5B579]"
-                        : "border-white/25 text-white/60"
-                    }`}
-                  >
-                    {_enqLabel(m.enquiry_type)}
-                  </span>
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  data-testid={`msg-select-${m.id}`}
+                  checked={isChecked}
+                  onChange={() => toggleOne(m.id)}
+                  className="mt-1.5 w-4 h-4 accent-[#D4AF37]"
+                  aria-label={`Select message from ${m.name || "customer"}`}
+                />
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-serif text-lg">{m.subject || "No subject"}</div>
+                    <span
+                      data-testid={`msg-enquiry-type-${m.id}`}
+                      className={`text-[10px] uppercase tracking-[0.24em] px-2 py-0.5 border ${
+                        m.enquiry_type === "bulk"
+                          ? "border-[#D4AF37] text-[#D4AF37]"
+                          : m.enquiry_type === "trade"
+                          ? "border-[#B87333] text-[#E5B579]"
+                          : "border-white/25 text-white/60"
+                      }`}
+                    >
+                      {_enqLabel(m.enquiry_type)}
+                    </span>
+                  </div>
+                  <div className="text-white/50 text-sm mt-1">
+                    from {m.name} · <span className="text-white/70">{m.email}</span>
+                    {m.phone && <span className="text-white/70"> · <a href={`tel:${m.phone}`} className="hover:text-[#D4AF37]" data-testid={`msg-phone-${m.id}`}>{m.phone}</a></span>}
+                  </div>
+                  <div className="text-xs text-white/40 mt-1">{new Date(m.created_at).toLocaleString()}</div>
                 </div>
-                <div className="text-white/50 text-sm mt-1">from {m.name} · <span className="text-white/70">{m.email}</span></div>
-                <div className="text-xs text-white/40 mt-1">{new Date(m.created_at).toLocaleString()}</div>
               </div>
-              {mailLink && (
-                <a href={mailLink} data-testid={`msg-reply-${m.id}`}
-                  className="text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-white/25 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]">
-                  Reply by email
-                </a>
-              )}
+              <div className="flex items-center gap-2">
+                {mailLink && (
+                  <a href={mailLink} target="_blank" rel="noopener noreferrer" data-testid={`msg-reply-${m.id}`}
+                    className="text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-white/25 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]">
+                    Reply by email
+                  </a>
+                )}
+                <button
+                  type="button"
+                  data-testid={`msg-delete-${m.id}`}
+                  onClick={() => askDelete([m.id])}
+                  disabled={deleting}
+                  aria-label="Delete message"
+                  className="text-[#E5B579] hover:text-[#a36350] p-1.5 border border-transparent hover:border-[#a36350]/40 disabled:opacity-40"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
             <p className="mt-4 text-white/70 text-sm leading-relaxed whitespace-pre-wrap">{m.message}</p>
           </div>
         );
       })}
+
+      {confirming && (
+        <DeleteConfirmModal
+          testIdPrefix="msg"
+          count={confirming.ids.length}
+          kind="message"
+          kindPlural="messages"
+          onCancel={() => (deleting ? null : setConfirming(null))}
+          onConfirm={doDelete}
+          busy={deleting}
+        />
+      )}
     </div>
   );
 }
@@ -1074,6 +1498,130 @@ function SettingsAdmin({ settings, onSave }) {
       ))}
       <button data-testid="save-settings-btn" className="bg-[#D4AF37] text-black px-8 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]">
         Save settings
+      </button>
+    </form>
+  );
+}
+
+const LEGAL_POLICY_SLUGS = [
+  ["privacy",  "Privacy Policy"],
+  ["terms",    "Terms & Conditions"],
+  ["shipping", "Shipping & Delivery Policy"],
+  ["returns",  "Return & Replacement Policy"],
+  ["payment",  "Payment Policy"],
+];
+
+function LegalAdmin({ settings, onSave }) {
+  const initial = (settings && settings.legal_content) || {};
+  // Prefill each textarea with the actual shipped default body (and the
+  // fixed shipped default date) whenever the admin has not saved a
+  // non-blank override for that policy yet. If a real override exists,
+  // show it verbatim so admins can edit it further.
+  const defaultsBySlug = useMemo(() => {
+    const m = {};
+    for (const [slug] of LEGAL_POLICY_SLUGS) {
+      m[slug] = {
+        body: serializeLegalDefault(slug),
+        updated_at: LEGAL_DEFAULT_UPDATED_AT,
+      };
+    }
+    return m;
+  }, []);
+
+  const [form, setForm] = useState(() => {
+    const seed = {};
+    for (const [slug] of LEGAL_POLICY_SLUGS) {
+      const entry = initial[slug] || {};
+      const savedBody = typeof entry.body === "string" ? entry.body : "";
+      const savedUpdatedAt = typeof entry.updated_at === "string" ? entry.updated_at : "";
+      seed[slug] = {
+        body: savedBody.trim() ? savedBody : defaultsBySlug[slug].body,
+        updated_at: savedUpdatedAt.trim() ? savedUpdatedAt : defaultsBySlug[slug].updated_at,
+      };
+    }
+    return seed;
+  });
+
+  const update = (slug, field, value) => {
+    setForm((f) => ({ ...f, [slug]: { ...f[slug], [field]: value } }));
+  };
+
+  const save = async (e) => {
+    e.preventDefault();
+    // For each policy, if the admin left the shipped defaults untouched,
+    // send empty strings instead of the serialized default. That keeps
+    // the code-shipped default as the source of truth on the public page
+    // (so future default-wording updates continue to flow through) and
+    // avoids silently "freezing" today's wording as a saved override.
+    const payload = {};
+    for (const [slug] of LEGAL_POLICY_SLUGS) {
+      const cur = form[slug];
+      const def = defaultsBySlug[slug];
+      const bodyIsDefault = cur.body === def.body;
+      const dateIsDefault = cur.updated_at === def.updated_at;
+      payload[slug] = {
+        body: bodyIsDefault ? "" : cur.body,
+        updated_at: dateIsDefault ? "" : cur.updated_at,
+      };
+    }
+    try {
+      await api.updateSettings({ legal_content: payload });
+      toast.success("Legal content saved");
+      onSave();
+    } catch {
+      toast.error("Save failed");
+    }
+  };
+
+  return (
+    <form onSubmit={save} data-testid="legal-admin-form" className="max-w-2xl space-y-6 border border-white/10 p-8">
+      <div>
+        <div className="eyebrow">Legal / Policies</div>
+        <p className="text-xs text-white/50 mt-2 leading-relaxed">
+          Edit the public legal pages. Leave a body blank to keep the default text.
+          Use <span className="text-white/70">## Heading</span> to start a section and
+          <span className="text-white/70"> - bullet</span> for bullet points. Plain text only —
+          HTML tags will be shown as literal characters.
+        </p>
+      </div>
+      {LEGAL_POLICY_SLUGS.map(([slug, label]) => (
+        <div key={slug} className="space-y-2 border-t border-white/10 pt-4">
+          <div className="flex items-baseline justify-between gap-4">
+            <label className="text-xs uppercase tracking-[0.2em] text-white/70">{label}</label>
+            <a
+              href={`/legal/${slug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[10px] uppercase tracking-[0.24em] text-[#D4AF37] hover:underline"
+            >
+              View public page →
+            </a>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-1 block">Last updated (free text, e.g. 15 March 2025)</label>
+            <input
+              data-testid={`legal-${slug}-updated`}
+              value={form[slug].updated_at}
+              onChange={(e) => update(slug, "updated_at", e.target.value)}
+              placeholder="Leave blank to keep the default policy date"
+              className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-1 block">Body</label>
+            <textarea
+              data-testid={`legal-${slug}-body`}
+              value={form[slug].body}
+              onChange={(e) => update(slug, "body", e.target.value)}
+              rows={10}
+              placeholder={"Intro paragraph here.\n\n## Section heading\nParagraph text.\n- Bullet one\n- Bullet two"}
+              className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm font-mono leading-relaxed"
+            />
+          </div>
+        </div>
+      ))}
+      <button data-testid="save-legal-btn" className="bg-[#D4AF37] text-black px-8 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]">
+        Save legal content
       </button>
     </form>
   );

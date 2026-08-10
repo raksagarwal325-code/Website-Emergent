@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, MessageCircle } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import SEO from "../components/SEO";
+import { waGeneralLink } from "../lib/whatsapp";
 
 function FAQItem({ q, a, defaultOpen = false, index }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -36,10 +37,7 @@ export default function FAQ() {
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
   }, []);
 
-  const waRaw = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waLink = waRaw
-    ? `https://wa.me/${waRaw}?text=${encodeURIComponent("Hi Rakshit ji, I have a question about Samrat Glass Emporium.")}`
-    : "";
+  const waLink = waGeneralLink(settings?.whatsapp_number) || "";
 
   return (
     <div data-testid="page-faq" className="relative min-h-screen">

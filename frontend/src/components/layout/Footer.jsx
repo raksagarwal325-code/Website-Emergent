@@ -1,7 +1,8 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Mail, MapPin, Clock, Phone, Download, ExternalLink } from "lucide-react";
+import { Mail, MapPin, Clock, Phone, ExternalLink } from "lucide-react";
 import { useSettings } from "../../context/SettingsContext";
+import { waGeneralLink } from "../../lib/whatsapp";
 import { formatPhone } from "../../lib/api";
 import { NAV_CATEGORIES as SEO_CATEGORIES } from "../../lib/categories";
 
@@ -49,10 +50,16 @@ function ContactRow({ icon: Icon, label, value, href, external, testId, children
     </div>
   );
   if (!href) return <div data-testid={testId}>{inner}</div>;
+  // 44×44 tap target for the WhatsApp / phone / email rows without any
+  // visible layout shift: min-h enlarges the hit area, flex items-center
+  // keeps the icon+text visually centered inside the enlarged anchor,
+  // and negative vertical margin collapses the extra outer footprint so
+  // the space-y between rows stays exactly as before.
+  const tapClass = "flex items-center min-h-[44px] -my-[10px]";
   return external ? (
-    <a href={href} target="_blank" rel="noreferrer" data-testid={testId}>{inner}</a>
+    <a href={href} target="_blank" rel="noreferrer" data-testid={testId} className={tapClass}>{inner}</a>
   ) : (
-    <Link to={href} data-testid={testId}>{inner}</Link>
+    <Link to={href} data-testid={testId} className={tapClass}>{inner}</Link>
   );
 }
 
@@ -82,8 +89,8 @@ const EXPLORE_LINKS = [
   { label: "The Craft", href: "/craft" },
   { label: "Project Gallery", href: "/gallery" },
   { label: "About Us", href: "/about" },
-  { label: "Custom Lighting / Bulk Orders", href: "/contact?type=bulk" },
-  { label: "Architects & Interior Designers", href: "/contact?type=trade" },
+  { label: "Custom Lighting / Bulk Orders", href: "/custom-lighting-bulk-orders" },
+  { label: "Architects & Interior Designers", href: "/architects-interior-designers" },
   { label: "Wishlist", href: "/favorites" },
   { label: "Inquiry Basket", href: "/cart" },
 ];
@@ -112,7 +119,7 @@ export default function Footer() {
   const f = hp.footer || {};
 
   const waRaw = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waHref = waRaw ? `https://wa.me/${waRaw}?text=${encodeURIComponent("Hi Rakshit ji, I am interested in Samrat Glass Emporium products. Please share more details.")}` : "";
+  const waHref = waGeneralLink(settings?.whatsapp_number);
   const phoneHref = settings?.whatsapp_number ? `tel:+${(settings.whatsapp_number || "").replace(/[^0-9]/g, "")}` : "";
   const phoneDisplay = formatPhone(settings?.whatsapp_number);
   const emailHref = settings?.admin_email ? `mailto:${settings.admin_email}` : "";
@@ -193,17 +200,6 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
-            {/* Small premium pill for PDF download — kept out of the list so it never wraps */}
-            <a
-              href="/catalogue?print=1"
-              target="_blank"
-              rel="noreferrer"
-              data-testid="footer-catalogue-btn"
-              className="mt-5 inline-flex items-center gap-2 whitespace-nowrap border border-[#BF9972]/50 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/80 px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-            >
-              <Download size={12} strokeWidth={1.6} />
-              Catalogue PDF
-            </a>
           </div>
 
           {/* Support */}

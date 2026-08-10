@@ -55,3 +55,126 @@ export const getCategoryBySlug = (slug) =>
  */
 export const getCategoryByDbName = (name) =>
   PUBLIC_CATEGORIES.find((c) => c.db_name === name);
+
+/**
+ * Deterministic slug generator for categories that aren't in the curated
+ * registry yet — e.g. a fresh admin uploads a product with
+ * `category = "Ceiling Light"` and no one has enriched it with SEO
+ * metadata. We generate `ceiling-lights` (lowercased, kebab-cased,
+ * simply-pluralised) so the fallback slug matches the naming
+ * convention already used by registry entries (`chandeliers`,
+ * `hanging-lights`, `wall-lights`, `table-lamps`).
+ */
+export const fallbackSlugFor = (dbName) => {
+  const base = String(dbName || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-+|-+$)/g, "")
+    .trim();
+  if (!base) return "";
+  // Add a naive plural s if the word doesn't already end in one — matches
+  // the convention of the registry ("Chandelier" → "chandeliers").
+  return base.endsWith("s") ? base : `${base}s`;
+};
+
+/**
+ * Resolve a slug against BOTH the curated registry AND the live list of
+ * published-product db_names returned by `/api/products/categories`.
+ *
+ * Curated hits win (instant, sync). If the slug isn't curated, we probe
+ * the merged dynamic list — for a match we synthesise sane SEO defaults
+ * so `<CategoryPage>` can render the same shape it renders for curated
+ * entries. Returns null when the slug matches neither source, which the
+ * page turns into a real 404.
+ *
+ * `dbNames` is expected to be the array from `/api/products/categories`
+ * (already filtered by the backend to `status=published` for anon
+ * callers), so a draft-only category can NEVER resolve here.
+ */
+export const resolveCategoryBySlug = (slug, dbNames) => {
+  const curated = getCategoryBySlug(slug);
+  if (curated) return curated;
+  const merged = mergeDynamicCategories(dbNames);
+  const dyn = merged.find((c) => c.slug === slug && c._dynamic);
+  if (!dyn) return null;
+  // Hydrate safe generic SEO/H1 defaults. Curated copy stays authoritative
+  // for the 8 hand-written categories; auto-created ones get generic but
+  // sensible fallbacks so the page never renders blank fields.
+  const labelLower = String(dyn.label || dyn.db_name).toLowerCase();
+  return {
+    ...dyn,
+    h1: dyn.label,
+    seoTitle: `${dyn.label} · Samrat Glass Emporium`,
+    metaDescription:
+      `Browse handcrafted ${labelLower} at Samrat Glass Emporium — ` +
+      `hand-blown decorative lighting made in Firozabad since 1981.`,
+    intro:
+      `Explore our collection of ${labelLower} — every piece handcrafted ` +
+      `in Firozabad. Enquire for pricing, dimensions and lead times.`,
+  };
+};
+
+/**
+ * Merge a live-from-API list of published-product db_names with the
+ * curated registry. Published-product db_names are the source of truth;
+ * the registry only ENRICHES known ones with SEO metadata (slug, label,
+ * intro, hero image). Unknown db_names get a safe fallback slug and use
+ * the db_name itself as the label.
+ *
+ * De-duplication is case + whitespace insensitive so "  ceiling light "
+ * and "Ceiling Light" never appear as two separate categories.
+ */
+export const mergeDynamicCategories = (dbNames) => {
+  if (!Array.isArray(dbNames)) return [...NAV_CATEGORIES];
+  const seen = new Set();
+  const out = [];
+  // Helper: title-case for auto-generated labels so admin-typed
+  // "ceiling light" / "CEILING LIGHT" doesn't leak weird casing into the UI.
+  const titleCase = (s) =>
+    String(s || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/\b(\w)/g, (m) => m.toUpperCase());
+
+  const pushRegistry = (registryEntry) => {
+    const key = String(registryEntry.db_name || "").toLowerCase();
+    if (seen.has(key)) return;
+    if (!registryEntry.published || !registryEntry.nav_visible) return;
+    seen.add(key);
+    out.push(registryEntry);
+  };
+
+  for (const raw of dbNames) {
+    const trimmed = String(raw || "").trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    const registryEntry = CATEGORIES.find(
+      (c) => String(c.db_name || "").toLowerCase() === key,
+    );
+    if (registryEntry) {
+      pushRegistry(registryEntry);
+      continue;
+    }
+    // Fallback for a brand-new db_name.
+    seen.add(key);
+    out.push({
+      slug: fallbackSlugFor(trimmed),
+      db_name: trimmed,
+      label: titleCase(trimmed),
+      published: true,
+      nav_visible: true,
+      sitemap: false,     // don't auto-add to sitemap without curator review
+      _dynamic: true,     // marker so callers can style/skip curated-only UIs
+    });
+  }
+  // Finally: make sure every curated nav-visible category is included,
+  // even if no product currently uses it. This preserves the "always
+  // browsable" invariant for curated categories (a category with zero
+  // stock still deserves a discoverable page).
+  for (const cur of NAV_CATEGORIES) {
+    pushRegistry(cur);
+  }
+  return out;
+};

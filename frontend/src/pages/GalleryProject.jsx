@@ -6,6 +6,7 @@ import { useSettings } from "../context/SettingsContext";
 import { useCatalog } from "../context/CatalogContext";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { findProjectBySlug, buildProjectSlugs } from "../lib/slug";
+import { waGalleryProductLink } from "../lib/whatsapp";
 import SEO from "../components/SEO";
 import { toast } from "sonner";
 
@@ -174,9 +175,11 @@ export default function GalleryProject() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {linkedProducts.map((p) => {
                 const img = api.resolveImage(p.images?.[0]);
-                const waHref = waRaw
-                  ? `https://wa.me/${waRaw}?text=${encodeURIComponent(`Hi Rakshit ji, I saw the ${p.name} (SKU: ${p.sku}) in your ${project.title} project on the website. Please share more details.`)}`
-                  : "";
+                const waHref = waGalleryProductLink(
+                  settings?.whatsapp_number,
+                  p,
+                  project,
+                );
                 const handleAdd = (e) => { e.preventDefault(); e.stopPropagation(); addToCart(p); toast.success(`${p.name} added to inquiry`); };
                 return (
                   <div key={p.id} data-testid={`project-product-${p.id}`} className="group border border-white/8 hover:border-[#D4AF37]/50 bg-[#0e0510] transition-colors flex flex-col">

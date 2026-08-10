@@ -14,9 +14,17 @@ const GoogleMark = ({ size = 16 }) => (
 );
 
 const Stars = ({ value = 0 }) => (
-  <span className="inline-flex" aria-label={`${value} stars`}>
+  // `role="img"` + `aria-label` is the valid semantic for a graphical
+  // rating summary. Each child <Star> icon is hidden from AT so the
+  // rating is announced exactly once as "X out of 5 stars" instead of
+  // being read five times.
+  <span
+    role="img"
+    aria-label={`${Math.round(value * 10) / 10} out of 5 stars`}
+    className="inline-flex"
+  >
     {[1,2,3,4,5].map((n) => (
-      <Star key={n} size={14} strokeWidth={1.4} className={n <= Math.round(value) ? "text-[#D4AF37]" : "text-white/20"} fill={n <= Math.round(value) ? "#D4AF37" : "none"} />
+      <Star key={n} size={14} strokeWidth={1.4} aria-hidden="true" focusable="false" className={n <= Math.round(value) ? "text-[#D4AF37]" : "text-white/20"} fill={n <= Math.round(value) ? "#D4AF37" : "none"} />
     ))}
   </span>
 );
@@ -97,7 +105,7 @@ export default function GoogleReviews({ variant = "full" }) {
                 <span className="text-white/60 text-sm">/ 5</span>
               </div>
               <Stars value={rating || 0} />
-              <div className="text-white/50 text-xs mt-2">Based on <span data-testid="gr-total" className="text-white/80">{total_ratings}</span> Google reviews</div>
+              <div className="text-white/70 text-xs mt-2">Based on <span data-testid="gr-total" className="text-white/90">{total_ratings}</span> Google reviews</div>
             </>
           ) : (
             <>
@@ -173,7 +181,7 @@ export default function GoogleReviews({ variant = "full" }) {
                         )}
                       </div>
                       {r.relative_time_description && (
-                        <div className="text-[10px] text-white/40 uppercase tracking-widest mt-0.5">{r.relative_time_description}</div>
+                        <div className="text-[10px] text-white/65 uppercase tracking-widest mt-0.5">{r.relative_time_description}</div>
                       )}
                     </div>
                     <Stars value={r.rating} />
@@ -210,18 +218,26 @@ export default function GoogleReviews({ variant = "full" }) {
               )}
             </div>
 
-            {/* Dots below the card */}
+            {/* Dots below the card — visible pill is small, the actual
+                interactive target is expanded to 44×44 CSS px for touch
+                accessibility (WCAG 2.5.5 / Lighthouse "Tap targets"). */}
             {allReviews.length > 1 && (
-              <div className="mt-5 flex items-center justify-center gap-2" data-testid="gr-dots">
+              <div className="mt-3 flex items-center justify-center" data-testid="gr-dots">
                 {allReviews.map((_, i) => (
                   <button
                     key={i}
                     type="button"
                     onClick={() => setIdx(i)}
                     aria-label={`Go to review ${i + 1}`}
+                    aria-current={i === idx ? "true" : undefined}
                     data-testid={`gr-dot-${i}`}
-                    className={`h-1.5 rounded-none transition-all ${i === idx ? "w-8 bg-[#D4AF37]" : "w-3 bg-white/20 hover:bg-white/40"}`}
-                  />
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center group focus:outline-none focus-visible:ring-1 focus-visible:ring-[#D4AF37]"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`h-1.5 rounded-none transition-all ${i === idx ? "w-8 bg-[#D4AF37]" : "w-3 bg-white/25 group-hover:bg-white/50"}`}
+                    />
+                  </button>
                 ))}
               </div>
             )}

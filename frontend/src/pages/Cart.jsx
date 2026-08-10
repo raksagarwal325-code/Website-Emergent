@@ -5,10 +5,13 @@ import { useCatalog } from "../context/CatalogContext";
 import { api, formatPrice } from "../lib/api";
 import { toast } from "sonner";
 import { trackGenerateLead, trackWhatsAppClick } from "../lib/analytics";
+import { waCartLink } from "../lib/whatsapp";
+import { normalizePhone } from "../lib/phone";
 
 export default function Cart() {
   const { cart, removeFromCart, updateQty, clearCart, cartTotal, hasOnRequestItems, hasPricedItems, isItemOnRequest } = useCatalog();
   const [form, setForm] = useState({ customer_name: "", customer_email: "", customer_phone: "", message: "" });
+  const [phoneError, setPhoneError] = useState("");
   const [settings, setSettings] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -22,6 +25,13 @@ export default function Cart() {
       toast.error("Name and email are required");
       return;
     }
+    const p = normalizePhone(form.customer_phone);
+    if (!p.ok) {
+      setPhoneError(p.error);
+      toast.error(p.error);
+      return;
+    }
+    setPhoneError("");
     if (cart.length === 0) {
       toast.error("Your inquiry basket is empty");
       return;
@@ -29,7 +39,7 @@ export default function Cart() {
     setSubmitting(true);
     try {
     const items = cart.map((i) => ({ product_id: i.product_id, sku: i.sku || "", name: i.name, quantity: i.quantity, price: i.price }));
-      await api.createInquiry({ ...form, items });
+      await api.createInquiry({ ...form, customer_phone: p.value, items });
       trackGenerateLead({ source: "inquiry_basket", cart_size: cart.length });
       toast.success("Inquiry sent. We'll be in touch shortly.");
       clearCart();
@@ -41,14 +51,9 @@ export default function Cart() {
     }
   };
 
-  const waNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waMsg = cart.length > 0
-    ? encodeURIComponent(
-        "Hello, I would like to enquire about:\n" +
-        cart.map((i) => `- ${i.name}${i.sku ? ` (SKU: ${i.sku})` : ""} (x${i.quantity})`).join("\n")
-      )
-    : "";
-  const waLink = waNumber ? `https://wa.me/${waNumber}?text=${waMsg}` : "#";
+  const waLink = cart.length > 0
+    ? (waCartLink(settings?.whatsapp_number, cart) || "#")
+    : "#";
 
   return (
     <div data-testid="page-cart" className="max-w-7xl mx-auto px-6 py-16">
@@ -120,12 +125,13 @@ export default function Cart() {
             <div className="eyebrow mb-2">Send Inquiry</div>
             <input required data-testid="inq-name" placeholder="Full name" value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
             <input required type="email" data-testid="inq-email" placeholder="Email" value={form.customer_email} onChange={(e) => setForm({ ...form, customer_email: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
-            <input data-testid="inq-phone" placeholder="Phone (optional)" value={form.customer_phone} onChange={(e) => setForm({ ...form, customer_phone: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
+            <input data-testid="inq-phone" required type="tel" inputMode="tel" autoComplete="tel" placeholder="Mobile / WhatsApp Number" value={form.customer_phone} onChange={(e) => { setForm({ ...form, customer_phone: e.target.value }); if (phoneError) setPhoneError(""); }} className={`w-full bg-[#0a0a0a] border ${phoneError ? "border-red-500/70" : "border-white/15"} focus:border-[#D4AF37] outline-none px-4 py-3 text-sm`} />
+            {phoneError && <div data-testid="inq-phone-error" className="text-xs text-red-400">{phoneError}</div>}
             <textarea data-testid="inq-message" placeholder="Notes (optional)" rows="4" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm resize-none" />
             <button disabled={submitting} data-testid="submit-inquiry-btn" className="w-full bg-[#D4AF37] text-black py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-50">
               {submitting ? "Sending…" : "Send inquiry"}
             </button>
-            {waNumber && (
+            {waLink && waLink !== "#" && (
               <a
                 data-testid="wa-basket-btn"
                 href={waLink}

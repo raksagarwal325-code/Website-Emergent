@@ -3,26 +3,20 @@ import { Link } from "react-router-dom";
 import { ArrowUpRight, MessageCircle } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api, formatProductPrice } from "../lib/api";
+import { buildWaLink, productMessage } from "../lib/whatsapp";
 
-const INQUIRY_LEAD = "Hi Rakshit ji, I am interested in this product. Please share details.";
-
-function buildWaLink(phone, product) {
-  const raw = (phone || "").replace(/\D/g, "");
-  if (!raw || !product) return null;
+function buildAtelierWaLink(phone, product) {
+  if (!product) return null;
   const priceInfo = formatProductPrice(product);
   const priceLine = priceInfo.onRequest
     ? "Price: Price on request"
     : `Price: ${priceInfo.label ? priceInfo.label + " " : ""}${priceInfo.primary}`;
   const link = `${typeof window !== "undefined" ? window.location.origin : ""}/product/${product.id}`;
-  const msg = [
-    INQUIRY_LEAD,
-    "",
-    `• Product: ${product.name}`,
-    `• Reference Code: ${product.sku}`,
-    `• ${priceLine}`,
-    `• Link: ${link}`,
-  ].join("\n");
-  return `https://wa.me/${raw}?text=${encodeURIComponent(msg)}`;
+  // Extend the brand-led product message with an itemised price + link
+  // block. Keeps casing/greeting consistent with the rest of the site.
+  const base = productMessage(product, link);
+  const msg = `${base}\n\n${priceLine}`;
+  return buildWaLink(phone, msg);
 }
 
 export default function AtelierShowcase() {
@@ -76,7 +70,7 @@ export default function AtelierShowcase() {
   const activeCaption = current?.caption || activeProduct?.name || "";
   const activeImg = current?.src || activeProduct?.images?.[0] || "";
   const productHref = activeProduct ? `/product/${activeProduct.id}` : null;
-  const waLink = buildWaLink(settings?.whatsapp_number, activeProduct);
+  const waLink = buildAtelierWaLink(settings?.whatsapp_number, activeProduct);
 
   const HeroWrap = productHref ? Link : "div";
   const heroWrapProps = productHref
@@ -124,15 +118,21 @@ export default function AtelierShowcase() {
               <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]/90 backdrop-blur bg-black/40 px-2 py-1 max-w-[70%] truncate">
                 {activeCaption}
               </div>
-              <div className="flex gap-1.5 pointer-events-auto">
+              <div className="flex pointer-events-auto -mr-3">
                 {slides.map((_, i) => (
                   <button
                     key={i}
                     data-testid={`atelier-dot-${i}`}
                     aria-label={`View slide ${i + 1}`}
+                    aria-current={i === active ? "true" : undefined}
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActive(i); }}
-                    className={`h-1.5 transition-all ${i === active ? "w-6 bg-[#D4AF37]" : "w-1.5 bg-white/25 hover:bg-white/50"}`}
-                  />
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center group focus:outline-none focus-visible:ring-1 focus-visible:ring-[#D4AF37]"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`h-1.5 transition-all ${i === active ? "w-6 bg-[#D4AF37]" : "w-1.5 bg-white/25 group-hover:bg-white/50"}`}
+                    />
+                  </button>
                 ))}
               </div>
             </div>

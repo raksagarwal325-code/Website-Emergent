@@ -2,16 +2,14 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, MessageCircle, Sparkles, Award, Truck, Palette, Package, ShieldCheck } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
+import { waGeneralLink } from "../lib/whatsapp";
 
 const ICONS = [Sparkles, Award, Truck, Palette, Package, ShieldCheck];
 
 export default function CollageSection() {
   const { settings, hp } = useSettings();
   const c = hp.collage;
-  const wa = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const secondaryHref = c.secondary_cta_link || (wa
-    ? `https://wa.me/${wa}?text=${encodeURIComponent("Hello Samrat Glass Emporium, I would like to enquire about your lighting collection.")}`
-    : "#");
+  const secondaryHref = c.secondary_cta_link || waGeneralLink(settings?.whatsapp_number) || "#";
   const secondaryExternal = secondaryHref.startsWith("http") || secondaryHref.startsWith("mailto") || secondaryHref.startsWith("tel");
 
   return (

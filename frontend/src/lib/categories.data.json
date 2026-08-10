@@ -95,6 +95,30 @@
       "published": true,
       "nav_visible": true,
       "sitemap": true
+    },
+    {
+      "slug": "ceiling-lights",
+      "db_name": "Ceiling Light",
+      "label": "Ceiling Lights",
+      "h1": "Decorative Ceiling Lights",
+      "seoTitle": "Decorative Ceiling Lights | Samrat Glass Emporium",
+      "metaDescription": "Explore handcrafted decorative ceiling lights from Samrat Glass Emporium, featuring elegant glass and metal designs for luxury homes and interiors.",
+      "intro": "Discover decorative ceiling lights crafted to bring warm illumination and distinctive character to interiors — flush-mount and semi-flush fixtures for bedrooms, hallways, walk-in closets, dining nooks and refined hospitality settings. Each piece in this collection is hand-assembled in our Firozabad atelier by karigars who have been working in decorative glass since 1981. Choose from hand-blown crystal domes, hand-etched frosted-glass shades, brass-cage lanterns and minimalist cut-glass discs sized for Indian ceiling heights. Popular finishes include gilt brass, antique bronze, aged copper and matte black; popular glass profiles span clear prism, amber luster, smoked hurricane and hand-painted floral. Every ceiling light is available for pre-order — we confirm dimensions, mounting spec and voltage after your enquiry so the piece fits your ceiling and wiring exactly.",
+      "published": true,
+      "nav_visible": true,
+      "sitemap": true
+    },
+    {
+      "slug": "gate-lights",
+      "db_name": "Gate Light",
+      "label": "Gate Lights",
+      "h1": "Decorative Gate Lights",
+      "seoTitle": "Decorative Gate Lights | Samrat Glass Emporium",
+      "metaDescription": "Explore handcrafted decorative gate lights from Samrat Glass Emporium for entrances, gates, facades and elegant exterior spaces.",
+      "intro": "Create a memorable entrance with decorative gate lights crafted in glass and metal for the exteriors of Indian homes — pillar-mount lanterns, wall-mount coach lights, hanging entrance pendants and heritage bracket sconces built to sit either side of a driveway gate or a front door. Each piece is hand-assembled in our Firozabad workshop from weather-resistant brass, wrought iron and cast metal, with hand-blown or hand-etched glass panels held in decorative cages. Popular styles include the classic six-panel coach lantern, the ornate Victorian pillar lamp, the minimalist cube gate light and the Ottoman-inspired brass hanging lantern. Finishes span antique brass, aged bronze, matte black and gilt gold. All gate lights are available for pre-order — production, weatherproofing spec and dispatch timelines are confirmed after enquiry.",
+      "published": true,
+      "nav_visible": true,
+      "sitemap": true
     }
   ]
 }

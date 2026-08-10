@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend-only a11y patch verification. (1) Live-preview DOM verified for Atelier carousel: dot buttons render as <button>, measured 44×44 CSS px (w:44,h:44), aria-current='true' only on active dot, aria-label 'View slide N', inner <span aria-hidden='true' class='h-1.5 …'> — no regression. focus-visible:ring-[#D4AF37] class is applied on all dots. Click, Enter and Space each successfully advance the slide; URL stays at '/' (Link navigation correctly prevented by onClick preventDefault). (2) Google Reviews section could NOT be exercised live because the preview backend returns enabled:false and there are no manual_reviews.items — so the slider markup (Stars, gr-dot-*, gr-prev/next, gr-total, review-age) never mounts in preview. The section renders only its 'Loved a piece?…' fallback. (3) To cover the un-mountable DOM the shipped Jest a11y suite was executed against the two edited components — GoogleReviews.a11y.test.jsx (7 assertions covering role='img'+aria-label, aria-hidden SVG children, no bare aria-label on span, 44×44 dot classes, aria-hidden pill, prev/next as native <button> with aria-labels, text-white/70 wrapper + text-white/90 number) and AtelierShowcase.a11y.test.jsx (44×44 + h-1.5 pill + aria-hidden + aria-label + aria-current) — 2 suites, 8 tests, 8 passed. (4) Source code inspection of GoogleReviews.jsx confirms review-age line uses text-white/65 and metadata uses text-white/70 + text-white/90 as specified. No API/data-fetch changes; carousel autoplay, dot switching and prev/next behaviour preserved.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/frontend/src/components/GoogleReviews.a11y.test.jsx",
+    "/app/frontend/src/components/AtelierShowcase.a11y.test.jsx"
+  ],
+  "action_items": [
+    "OPTIONAL: Google Reviews slider markup (Stars/gr-dot-*/gr-prev/gr-next/gr-total/review-age) cannot be verified in the preview environment because backend returns enabled:false and manual_reviews is empty. Jest a11y suite covers it fully; a live-DOM check will only be possible once the Places API is wired or a manual review is seeded in Admin → Settings → Manual reviews.",
+    "PRE-EXISTING (out of scope for this patch): console warning 'An empty string (\"\") was passed to the src attribute' surfaces on homepage load — worth chasing separately (likely an <img src={''} /> when a resolved asset is missing)."
+  ],
+  "critical_code_review_comments": [
+    "GoogleReviews.jsx Stars component correctly uses role='img' + aria-label='<n> out of 5 stars' and each child <Star> carries aria-hidden='true' focusable='false' — matches the spec verbatim.",
+    "Metadata line 'Based on X Google reviews' wrapper uses text-white/70 with inner gr-total using text-white/90 (line 108) — verified.",
+    "Review-age line uses text-white/65 (line 184) — verified.",
+    "gr-dot-* buttons wrap the visual pill inside a min-w-[44px] min-h-[44px] flex container with aria-current + aria-label + focus-visible:ring-[#D4AF37]; inner <span aria-hidden='true'> keeps the h-1.5 pill visual — matches spec.",
+    "Atelier dot-* buttons mirror the same 44×44 hit-target pattern, verified live in preview (measured 44×44 CSS px, aria-current toggles on click, keyboard Enter/Space activate them).",
+    "gr-prev / gr-next remain native <button> with valid aria-label='Previous review' / 'Next review'.",
+    "No data-fetch / autoplay / wrap logic changes — behaviour parity preserved."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100%"},
+  "test_credentials": "None required — public homepage.",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Google Reviews slider DOM cannot be validated on preview URL until either the Google Places integration returns reviews or a manual review is seeded via Admin Settings. Use the Jest a11y suite (GoogleReviews.a11y.test.jsx / AtelierShowcase.a11y.test.jsx) for regression coverage. Atelier dots ARE live-verifiable and pass all checks.",
+  "rca of the issue": "N/A — this was a verification pass on a shipped a11y patch, no bugs to RCA."
+}

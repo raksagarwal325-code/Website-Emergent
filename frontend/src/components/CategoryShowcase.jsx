@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { api } from "../lib/api";
 import { NAV_CATEGORIES as CATEGORIES } from "../lib/categories";
+import { BRAND_PLACEHOLDER } from "../lib/placeholders";
 
 /**
  * "Shop by Category" — editorial category grid sitting directly under the
@@ -14,12 +15,15 @@ import { NAV_CATEGORIES as CATEGORIES } from "../lib/categories";
  *  - `label`     : plural marketing label shown to shoppers.
  *  - `slug`      : clean URL segment ("chandeliers", "hanging-lights", …).
  *  - Image source: admin override → newest published product for that
- *    category → stock fallback (below).
+ *    category → neutral branded placeholder (below — no third-party stock).
  *  - All below-the-fold images are `loading="lazy"` / `decoding="async"`.
  */
 
-const FALLBACK_IMG =
-  "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?w=1200&q=70";
+// Branded neutral placeholder shown ONLY when a category has neither an
+// admin-override image nor any published product with imagery. Encoded as
+// an inline SVG data URI so it renders synchronously with no external
+// network fetch (no more Unsplash flash before the real image loads).
+const FALLBACK_IMG = BRAND_PLACEHOLDER;
 
 export default function CategoryShowcase() {
   // Map of db_name -> resolved image url (or null while loading).

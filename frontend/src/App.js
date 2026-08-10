@@ -25,9 +25,12 @@ import GalleryProject from "@/pages/GalleryProject";
 import StyledBy from "@/pages/StyledBy";
 import LegalPage from "@/pages/LegalPage";
 import NotFound from "@/pages/NotFound";
+import CustomLighting from "@/pages/CustomLighting";
+import ArchitectsDesigners from "@/pages/ArchitectsDesigners";
 import FloatingActions from "@/components/FloatingActions";
 import MobileReachStrip from "@/components/MobileReachStrip";
 import AnalyticsRouteTracker from "@/components/AnalyticsRouteTracker";
+import ScrollToTop from "@/components/ScrollToTop";
 
 function App() {
   React.useEffect(() => {
@@ -46,6 +49,7 @@ function App() {
       <CatalogProvider>
         <SettingsProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <AnalyticsRouteTracker />
           <Header />
           <main className="flex-1">
@@ -63,8 +67,10 @@ function App() {
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/contact" element={<Contact />} />
+              <Route path="/custom-lighting-bulk-orders" element={<CustomLighting />} />
+              <Route path="/architects-interior-designers" element={<ArchitectsDesigners />} />
               <Route path="/admin" element={<AdminAuthGate><Admin /></AdminAuthGate>} />
-              <Route path="/catalogue" element={<Catalogue />} />
+              <Route path="/catalogue" element={<AdminAuthGate><Catalogue /></AdminAuthGate>} />
               <Route path="/legal/:slug" element={<LegalPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

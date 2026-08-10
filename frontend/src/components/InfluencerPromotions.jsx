@@ -53,6 +53,13 @@ export default function InfluencerPromotions() {
   // Carousel state ---------------------------------------------------------
   const visible = useVisibleCount();
   const total = validItems.length;
+  // A "page" is one viewport-width slice of the carousel — i.e. one group
+  // of `visible` cards. This is the ONLY concept the dots + arrows expose.
+  // Historically the code stored an item-index (0..total-1) as `active`,
+  // which meant on desktop with 27 valid items the pagination rendered 27
+  // dots for a carousel that only has 9 logical pages of 3 cards each.
+  // From here down, `active` is a page-index (0..pages-1).
+  const pages = Math.max(1, Math.ceil(total / Math.max(1, visible)));
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const trackRef = useRef(null);
@@ -63,22 +70,24 @@ export default function InfluencerPromotions() {
   }, [total, visible]);
 
   const goTo = useCallback(
-    (idx) => {
-      if (total === 0) return;
-      const wrapped = ((idx % total) + total) % total;
+    (pageIdx) => {
+      if (pages === 0) return;
+      const wrapped = ((pageIdx % pages) + pages) % pages;
       setActive(wrapped);
     },
-    [total],
+    [pages],
   );
   const next = useCallback(() => goTo(active + 1), [goTo, active]);
   const prev = useCallback(() => goTo(active - 1), [goTo, active]);
 
-  // Autoplay
+  // Autoplay — one PAGE at a time (previously advanced one item at a time,
+  // which felt jittery on desktop because two of the three visible cards
+  // just shifted by one position instead of the whole trio swapping out).
   useEffect(() => {
-    if (paused || total <= visible) return undefined;
-    const t = setInterval(() => setActive((i) => (i + 1) % total), AUTOPLAY_MS);
+    if (paused || pages <= 1) return undefined;
+    const t = setInterval(() => setActive((i) => (i + 1) % pages), AUTOPLAY_MS);
     return () => clearInterval(t);
-  }, [paused, total, visible]);
+  }, [paused, pages]);
 
   // Pause when the tab isn't visible — polite battery-wise.
   useEffect(() => {
@@ -93,12 +102,42 @@ export default function InfluencerPromotions() {
 
   const titlePre = (P.title_pre || "").trim();
   const titleHi = (P.title_highlight || "").trim();
-  const showControls = total > visible;
-  // Track width is a percentage: 100% of the viewport shows `visible` cards,
-  // so each card takes 100/visible%. The full track is 100 * (total / visible)%.
-  const cardWidthPct = 100 / visible;
-  const trackWidthPct = (100 * total) / visible;
-  const translatePct = active * cardWidthPct;
+  // Show pagination + arrows only when there is more than one logical page
+  // of cards. With 3 valid items on desktop this is exactly one page → the
+  // dots and arrows disappear as expected.
+  const showControls = pages > 1;
+  // -------------------------------------------------------------------------
+  // Track + card sizing.
+  // -------------------------------------------------------------------------
+  // Track width is a percentage of the viewport: `visible` cards fit in one
+  // viewport, so the whole track (containing `total` cards) is
+  // `(total / visible) × 100%` wide.
+  // Each card is `100 / total` % of the TRACK'S OWN width (which equals
+  // `100 / visible` % of the viewport).
+  const cardWidthPct = 100 / visible;   // % of viewport per card
+  const trackWidthPct = (100 * total) / visible;  // track width as % of viewport
+  // -------------------------------------------------------------------------
+  // Translation.
+  // -------------------------------------------------------------------------
+  // CSS `transform: translateX(-N%)` interprets N as a percentage of the
+  // ELEMENT'S OWN border-box width — not the parent's. So to move the
+  // track left by exactly one viewport per page we divide by `total/visible`
+  // (a.k.a. `trackWidthPct / 100`), which converts "viewports of shift"
+  // into "percent of the track's own width".
+  //
+  // Shift-in-viewports for page N = N × visible cards × cardWidthPct
+  //                               = N × visible × (100 / visible)
+  //                               = N × 100  (i.e. exactly N viewports)
+  // As a fraction of the track's own width:
+  //   translatePct = (N viewports × 100) / (total/visible)
+  //                = (N × visible × 100) / total
+  const rawTranslatePct = (active * visible * 100) / total;
+  // Clamp so the last page never scrolls past the last card (when `total`
+  // is not an exact multiple of `visible`).
+  const maxTranslatePct = total > visible
+    ? ((total - visible) * 100) / total
+    : 0;
+  const translatePct = Math.min(rawTranslatePct, maxTranslatePct);
 
   return (
     <section
@@ -232,29 +271,49 @@ export default function InfluencerPromotions() {
           )}
         </div>
 
-        {/* Dot pagination */}
+        {/* Dot pagination — one dot per LOGICAL PAGE (i.e. per
+            viewport-width group of `visible` cards), not per raw item.
+            Hidden entirely when there is only one page. */}
         {showControls && (
           <div
             className="mt-6 md:mt-8 flex items-center justify-center gap-2"
             data-testid="influencer-carousel-dots"
           >
-            {validItems.map((_, i) => {
+            {Array.from({ length: pages }).map((_, i) => {
               const isActive = i === active;
+              const pillW = isActive ? 28 : 8;
               return (
                 <button
                   key={i}
                   type="button"
-                  aria-label={`Go to slide ${i + 1}`}
+                  aria-label={`Go to page ${i + 1} of ${pages}`}
+                  aria-current={isActive ? "page" : undefined}
                   onClick={() => goTo(i)}
                   data-testid={`influencer-carousel-dot-${i}`}
-                  className="h-[6px] rounded-full transition-all duration-500"
+                  className="relative border-0 bg-transparent p-0 cursor-pointer"
                   style={{
-                    width: isActive ? 28 : 8,
-                    background: isActive
-                      ? "linear-gradient(90deg, #D4AF37, #B5952F)"
-                      : "rgba(212,175,55,0.28)",
+                    width: pillW,
+                    height: 6,
+                    paddingTop: 19,
+                    paddingBottom: 19,
+                    paddingLeft: (44 - pillW) / 2,
+                    paddingRight: (44 - pillW) / 2,
+                    boxSizing: "content-box",
+                    background: "transparent",
                   }}
-                />
+                >
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-500 pointer-events-none"
+                    style={{
+                      width: pillW,
+                      height: 6,
+                      background: isActive
+                        ? "linear-gradient(90deg, #D4AF37, #B5952F)"
+                        : "rgba(212,175,55,0.28)",
+                    }}
+                  />
+                </button>
               );
             })}
           </div>

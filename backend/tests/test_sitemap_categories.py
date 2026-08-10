@@ -34,9 +34,11 @@ SITE_ORIGIN = "https://samratglass.com"
 # Canonical, sorted list — mirrors src/lib/categories.data.json.
 CATEGORY_URLS = [
     f"{SITE_ORIGIN}/category/candle-stands",
+    f"{SITE_ORIGIN}/category/ceiling-lights",
     f"{SITE_ORIGIN}/category/chandeliers",
     f"{SITE_ORIGIN}/category/floor-chandeliers",
     f"{SITE_ORIGIN}/category/floor-lamps",
+    f"{SITE_ORIGIN}/category/gate-lights",
     f"{SITE_ORIGIN}/category/hanging-lights",
     f"{SITE_ORIGIN}/category/table-chandeliers",
     f"{SITE_ORIGIN}/category/table-lamps",
@@ -59,7 +61,7 @@ def test_sitemap_is_well_formed_xml():
     assert root.tag.endswith("urlset"), root.tag
 
 
-def test_sitemap_contains_all_eight_category_urls():
+def test_sitemap_contains_all_ten_category_urls():
     body = _get_sitemap_body()
     for url in CATEGORY_URLS:
         # Each URL should appear exactly once as a <loc>.

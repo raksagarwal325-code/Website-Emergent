@@ -76,6 +76,48 @@ INR pricing with en-IN formatting.
 - Instagram feed on Home page
 
 ## Changelog
+- 2026-08-03: **P0 SECURITY FIX — Strict `status == "published"` allow-list on every public product read path.**
+  - **Root cause.** Public product access used a deny-list (`{"status": {"$ne": "draft"}}`). Rows with a missing / null / empty / unknown status therefore leaked to anonymous visitors. Pre-fix DB distribution: 116 `published`, 60 `draft`, **12 with no `status` field** — the 12 were visible on the live site.
+  - **Fix (backend/server.py).** Every anonymous product-read path switched from deny-list to a strict allow-list. Admin behaviour is unchanged:
+    | Endpoint | Anon rule now | Admin rule now |
+    |---|---|---|
+    | `GET /api/products` | `status == "published"` (bypass via `?status=draft` / `?include_drafts=1` silently ignored) | admin default `$ne: draft`, `?status=…` respected, `?include_drafts=1` returns drafts + published |
+    | `GET /api/products/categories` | derived from `status == "published"` only | unchanged (no filter) |
+    | `GET /api/products/{id}` | 404 unless `status == "published"` (never 403 — no existence leak) | admin sees everything |
+    | `POST /api/reviews` | 400 unless target product `status == "published"` | (server-side validator) |
+    | `POST /api/inquiries` | 400 for every non-published item in payload | (server-side validator) |
+    | `GET /api/admin/products/export` (admin-only PDF source) | tightened to `status == "published"` to match the public catalogue | admin-only |
+    | `GET /api/sitemap.xml` | already `status == "published"` — untouched | — |
+  - **Tests.** `backend/tests/test_public_publish_rule.py`: 40 pytests. Seeds nine products covering `published, draft, archived, pending, review, foobar-unknown, "" empty, null, missing status` and asserts:
+    1. Anonymous list returns ONLY the published seed.
+    2. Bypass attempts via `?status=draft/archived/pending/foobar/""`, `?include_drafts=1/true`, and combos still return only published.
+    3. Anonymous `GET /products/{id}` → 200 only for published; every other status → 404 (parametrised across all 8 non-published classes).
+    4. Categories: an "orphan" category attached only to non-published rows never appears anonymously; visible to admins.
+    5. `POST /inquiries` rejects every non-published product id with 400 (all 8 non-published classes).
+    6. `POST /reviews` rejects every non-published product id with 400.
+    7. Admin behaviour preserved: `?status=draft`, `?include_drafts=1`, admin single-product GET on drafts, and admin categories still work.
+    8. Belt-and-braces: assert every row on page 1 of the anonymous listing has `status == "published"`.
+    All 40 pass. Full backend suite: **184/184 in serial mode** (up from 144). Full frontend suite: **120/120**.
+  - **Verified on preview.** Anon `/api/products?limit=48` → 116 rows, all `status=published`. Every bypass query param produces the same result. Anon GET on a known draft id → 404. Anon GET on a known missing-status id → 404. Public categories list contains only categories present on published rows. Admin `/api/products?include_drafts=1&limit=5000` → 193 rows (116 published + 65 draft + 12 missing-status), and admin single-product GET on a draft id → 200. The catalogue page now displays "116 pieces" (down from the previous total that included the 12 leaking rows).
+
+
+- 2026-08-03: **P0 SECURITY FIX — Public `/api/settings` no longer exposes `google_maps_api_key`.**
+  - **Root cause.** `GET /api/settings` was unauthenticated and returned the full `Settings` Pydantic model, which included `google_maps_api_key` (a server-side Google Places / Maps credential). Any anonymous visitor could `curl /api/settings` and read the credential in plaintext. Independently identified during the live-site + repo security audit.
+  - **Fix.** New `PublicSettings` Pydantic model in `backend/server.py` — an explicit allow-list of client-safe fields (`brand_name`, `tagline`, `whatsapp_number`, `admin_email`, `hero_image`, `address`, `gstin`, `delivery_info`, `payment_methods`, `currency_symbol`, `google_cid`, `google_place_id`, `google_maps_url`, `homepage_content`, `instagram_url`, `facebook_url`, `youtube_url`, `pinterest_url`, `business_hours`, `id`). The `GET /api/settings` route was rewired with `response_model=PublicSettings` so **Pydantic strips** `google_maps_api_key` + `watermark` even if a future refactor accidentally reintroduces them into the DB shape. A separate authenticated `GET /api/admin/settings` (guarded by `require_admin`) returns the full `Settings` object for the admin panel. `PUT /api/settings` mutation stays admin-only + CSRF-guarded (unchanged).
+  - **Frontend.** `frontend/src/lib/api.js` exposes a new `api.adminGetSettings()` helper. `frontend/src/pages/Admin.jsx` uses it in `refresh()` so the admin settings form (which needs to display + save `google_maps_api_key`) reads from the protected admin endpoint. Public pages continue to use `api.getSettings()` unchanged and render exactly the same brand/contact/social/hours info from the reduced payload.
+  - **Verification (preview).** Anonymous `curl /api/settings` returns 20 keys, and `google_maps_api_key ∉ response` and `watermark ∉ response`. Anonymous `curl /api/admin/settings` → 401. Admin `curl /api/admin/settings` (with session cookie) → 22 keys including `google_maps_api_key`. `curl /api/google/reviews` still reports `enabled=true, api_key_set=true` with real `total_ratings=242` — Google Reviews continues to read the credential server-side without ever putting it into the HTTP response body.
+  - **Tests.** New `backend/tests/test_public_settings_exposure.py` (9 pytests): public 200, key absence assertion + seeded marker string absence, watermark absence, required public fields present, admin endpoint 401 anon vs 200 admin, PUT admin + CSRF gates, and Google Reviews still working without leaking the key. The tests seed a recognisable `TESTKEY_<uuid>` marker into Mongo instead of touching the production credential — the marker string is asserted-not-in the public response, so no real credential ever appears in test output. Marker is restored on teardown. Suites: **144/144 backend, 120/120 frontend** all passing.
+
+
+- 2026-02-24: **Batch B — URL-based Catalog Pagination + Admin Deletion Controls + Enquiries/Messages resilience.**
+  1. **Public `/catalog` URL pagination (Item 1).** Replaced the "Load More" button with a full URL-driven pager: current page lives in `?page=N` (default 1), page changes REPLACE the products (no append), and any filter/search/sort/price/category change resets to `?page=1`. Compact numeric pager (`Previous · 1 · 2 · … · N · Next`) with `Previous` disabled on page 1 and `Next` disabled on the last page. Invalid `?page=` values (`abc`, `-5`, `999`) are safely clamped to the valid range once total_pages is known and the URL is rewritten via `replace`. Direct deep-links (`?page=2`) work — regression fix in the process: React 18+ Strict Mode double-fires effects, which was silently stripping `?page=` on mount via a plain `isFirstRender` ref; replaced with a `prevFilterKeyRef` compare so the filter-reset effect ONLY fires when a filter actually changes. Scroll-to-grid-top on page change. Same pager reused on `/category/<slug>` pages via the shared `CatalogueBrowser` (no duplication).
+  2. **Admin deletion controls for Enquiries and Messages (Item 3).** Each row in `/admin` → Enquiries + Messages now has (a) a per-row checkbox, (b) a trash-icon delete, and (c) a "Select all visible" toolbar that selects the CURRENTLY FILTERED rows only (never rows hidden by filters). The bulk toolbar shows a live "N selected" count and a "Delete selected" action. Both flows open a confirmation modal that displays the EXACT count and record kind ("Delete 3 enquiries?") — cancel closes the modal without side-effects, confirm calls `DELETE /api/inquiries/{id}` / `POST /api/admin/inquiries/bulk-delete` (and the mirror endpoints for contact messages). Deleted rows are removed from local selection and the tab reloads. All four endpoints strictly require `require_admin` + the `X-Requested-With: fetch` CSRF header. Bulk endpoints dedupe + strip blank ids, cap at 500 (`413` over cap), reject empty payloads (`400`), and never delete across collections (an enquiry delete never touches a contact message).
+  3. **Enquiries/Messages 502 diagnosis + resilience.** Root-cause investigation showed the Admin dashboard's original single `Promise.all` fetch loaded seven parallel endpoints, and any one intermittent 5xx (e.g. a legacy row failing Pydantic `response_model` re-validation, or ingress hiccup) blanked the entire Enquiries tab with no way to recover. Two-part fix:
+     - **Backend defensive lists.** `GET /api/inquiries` and `GET /api/contact` dropped their `response_model=List[...]` re-serialisation step. Rows are now validated row-by-row through the Pydantic model in a `try/except` — one malformed legacy row (bad `items` shape, invalid `email` in an old draft, etc.) is skipped and logged (`list_inquiries.row_validation_failed id=... err=...`); the rest still stream back with a clean 200. Mongo query itself is wrapped in try/except → 503 with a safe generic message on a driver-level fault (no HTML leak).
+     - **Frontend per-tab fetch + retry UI.** Enquiries + Messages tabs are now self-fetching (they no longer share the admin page's parent-level Promise.all). Each has its own loading, error, and retry state. A fetch failure surfaces a `data-testid="inq-error"` / `msg-error"` panel with the actual status code (e.g. "Server responded with 502") and a "Retry" button (`inq-retry` / `msg-retry`) that re-invokes only that resource without touching the rest of the admin dashboard. Products, Settings and Stats loading is completely decoupled from Enquiries/Messages loading.
+  4. **Tests.** 18 new backend pytests in `tests/test_admin_deletion.py` (auth on all 4 endpoints, CSRF guard, single + bulk happy path, 404 on unknown id, dedupe + partial delete, empty payload → 400, over-cap payload → 413, collection isolation, and two defensive-endpoint tests that intentionally seed a malformed row and assert `GET /api/inquiries` + `GET /api/contact` skip it without 500). 15 new Jest tests: `CatalogueBrowser.test.jsx` (7 pagination behaviors — page indicator, page-2 fetch replacement, disabled bounds, filter → page=1 reset, deep-link `?page=2`, out-of-range clamp, single-page pager hidden) and `Admin.deletion.test.jsx` (8 admin deletion behaviors — modal count, single delete + refetch, cancel no-op, filtered bulk delete, error surface + retry, messages parity). Full backend suite: **135/135 passing** (up from 117). Full frontend: **120/120 passing** (up from 105). Production `yarn build` including the `prerender-categories.js` step confirmed end-to-end.
+
+
 - 2026-02-24: **Homepage "Shop by Category" + Admin Category Featured Images.** New editorial category grid on the homepage (directly under the hero) with 6 tiles: Chandeliers, Hanging Lights, Wall Lights, Table Lamps, Floor Lamps, Candle Stands. Layout: 3-col desktop / 2-col tablet / 1-col mobile, `object-cover` at aspect `4/5`, Framer Motion staggered fade-in, gold hover hairline. Tiles deep-link into `/catalog?category=<db-name>` — Catalog now reads and syncs the `?category=` URL param.
   - **Image source priority per tile**: admin override → newest published product image → stock fallback.
   - **Admin panel** — new "Category Images" tab (`admin-tab-category-images`) with a card per category showing the current source badge (Automatic / Product image / Custom upload) and three actions: **From product** opens a picker modal listing every product in that category with each of its images as a selectable thumbnail; **Upload** drops a custom image straight into Emergent object storage under `samrat-glass/categories/<slug>/<uuid>.<ext>`; **Reset** clears the override.
@@ -134,6 +176,163 @@ INR pricing with en-IN formatting.
 
 - 2026-02-13: **Catalogue PDF — full-page background watermark + luxury polish.** Replaced per-image logo overlay with a single centered chandelier/logo watermark rendered behind ALL content on every page (cover, TOC, about, why, category dividers, product pages, contact). Product-card CTA switched from bright green (#25D366) to a gold→bronze→copper gradient pill. WhatsApp number rendered as `+91 89203 92937`. Description font upped from 9.5pt→10.5pt with 1.7 line-height; specs from 8.5pt→9.5pt/1.55. New `isMeaningfulSpec()` filter hides blank, "-", "—", "N/A", "TBD", "unconfirmed", "not specified", "0", "nil". Business hours normalized to "Mon – Sat: 10:30 AM – 8:00 PM · Sunday: Closed". Added "Scan to Connect" QR row on contact page (WhatsApp, Website, Google Maps, Instagram) via new `qrcode` npm package.
 - 2026-02-13: **Global "Currently unavailable" verbiage removed.** Verified via grep across `/app/frontend/src/` — zero occurrences. `ProductDetail.jsx` shows "Available on request" when `stock === 0`; `ProductCard.jsx` / `Catalog.jsx` / `Cart.jsx` intentionally don't render stock badges (inquiry-based catalog). Live-verified on 0-stock product `/product/23afd515-…` — screenshot confirms clean "Price on request" + "Available on request" copy.
+- 2026-02-13: **Accessibility cleanup — minimal-risk patch.** Four Lighthouse/PageSpeed issues fixed in two components; no data-fetch, admin, GA4, WhatsApp, sitemap or page-structure changes.
+
+  · **A. Google Reviews star markup** (`frontend/src/components/GoogleReviews.jsx` — `Stars` component) — `<span aria-label="4.7 stars">` on a role-less span was flagged as prohibited ARIA. Now `<span role="img" aria-label="X out of 5 stars">` with `<Star aria-hidden="true" focusable="false">` on every child SVG so the rating is announced exactly once. Fixes both the ARIA-attribute-not-allowed rule and the accessibility-tree malformation.
+
+  · **B. Contrast** — bumped two low-contrast lines in the reviews block:
+    - "Based on X Google reviews" wrapper `text-white/50` → `text-white/70`; number `text-white/80` → `text-white/90`.
+    - Review-age line `text-white/40` → `text-white/65`. Both now clear WCAG AA (≥ 4.5:1 for normal text) against the section's `bg-black/40` panel.
+
+  · **C. Tap targets** — Google Reviews and Atelier carousel dots were `h-1.5` (~6px). Both replaced by a `min-w-[44px] min-h-[44px] flex items-center justify-center` `<button>` with `focus-visible:ring-[#D4AF37]`, `aria-label="Go to review N"` / `View slide N`, and `aria-current="true"` on the active dot. The visual pill is now an inner `<span aria-hidden="true" class="h-1.5 …">` so the small dot look is preserved exactly while the tap target hits WCAG 2.5.5.
+
+  · **D. Accessibility tree** — the star fix removes the invalid entries. The dot fix converts each pill from a bare `<button class="h-1.5 w-3">` into a proper interactive control with correct semantics + focusable state + aria-current.
+
+  · **Preserved**: data-fetch (`/api/google/reviews`), admin, GA4, WhatsApp, sitemap/schema, mobile bottom bar, page design elsewhere. Prev/next remain native `<button>` with existing `aria-label`s. Carousel autoplay + dot switching + prev/next behaviour parity confirmed by the testing agent live on the Atelier component.
+
+  · **Tests added (8)**: `GoogleReviews.a11y.test.jsx` (7 cases — role=img + aria-label, aria-hidden SVG children, no bare aria-label span, 44×44 dot classes, aria-hidden pill, prev/next as native buttons with aria-labels, bumped contrast classes). `AtelierShowcase.a11y.test.jsx` (1 case — 44×44 hit target + preserved h-1.5 pill + aria-current + aria-label). Full frontend suite: **23 suites / 240 tests pass**.
+
+  · **Testing-agent iteration_36 — 100% pass, retest_needed=false.** Atelier dots live-verified on preview (measured 44×44 CSS px, keyboard Enter/Space activate them, aria-current toggles). Google Reviews slider covered by Jest a11y suite (preview backend returns `enabled: false` because the Google Places key is still expired, so the live slider mounts only its fallback). Every source-code assertion the agent inspected matched the spec verbatim. One pre-existing console warning ("empty string src attribute") noted as out-of-scope for this patch.
+
+  Files: `frontend/src/components/GoogleReviews.jsx`, `frontend/src/components/AtelierShowcase.jsx`, `frontend/src/components/GoogleReviews.a11y.test.jsx` (new), `frontend/src/components/AtelierShowcase.a11y.test.jsx` (new).
+
+- 2026-02-13: **SEO merchant listing structured data + sitemap cleanup (minimal-risk patch).**
+
+  · **Product JSON-LD (`frontend/src/pages/ProductDetail.jsx`)** — the `productSchema.offers` const now emits two additional Schema.org fields inside the existing Offer:
+    ```
+    hasMerchantReturnPolicy: {
+      @type: MerchantReturnPolicy,
+      applicableCountry: "IN",
+      returnPolicyCategory: "https://schema.org/MerchantReturnNotPermitted",
+      merchantReturnLink: `${siteOrigin}/legal/returns`
+    }
+    shippingDetails: {
+      @type: OfferShippingDetails,
+      shippingDestination: { @type: DefinedRegion, addressCountry: "IN" },
+      deliveryTime: {
+        @type: ShippingDeliveryTime,
+        transitTime: { @type: QuantitativeValue, minValue: 7, maxValue: 10, unitCode: "DAY" }
+      }
+    }
+    ```
+    - `MerchantReturnNotPermitted` is the narrowest truthful enum because we do NOT accept general returns; the `merchantReturnLink` surfaces the fragile-glass / transit-damage carve-out in the existing `/legal/returns` page.
+    - `shippingRate` is intentionally OMITTED because the business does not offer a fixed monetary shipping charge. Per user directive, omission is preferable to inventing a value. `applicableCountry` is India-only, aligned with the current business model.
+    - `siteOrigin` falls back to `https://samratglass.com` when `window` is undefined (SSR/prerender safety).
+
+  · **Sitemap (`backend/server.py`)** — added two entries to `_STATIC_SITEMAP_ENTRIES` (positioned right after `/contact`, before the legal block):
+    - `/custom-lighting-bulk-orders` — monthly / 0.8
+    - `/architects-interior-designers` — monthly / 0.8
+    All pre-existing entries preserved in the same order.
+
+  · **Tests added (11):**
+    - `frontend/src/pages/ProductDetail.jsonld.test.jsx` — 5 cases (valid Product+Offer, valid hasMerchantReturnPolicy, valid shippingDetails, no invented shippingRate, no regression on existing fields).
+    - `backend/tests/test_sitemap_commercial_landings.py` — 6 cases (both landings present exactly once, correct monthly/0.8 metadata, pre-existing entries preserved, draft product excluded via live-DB seed+cleanup, well-formed XML).
+
+  · **Testing-agent iteration_35 — 100% pass, 0 action items, retest_needed=false.** End-to-end verified against preview: sitemap emits both commercial URLs with the correct metadata; live product JSON-LD (extracted via Playwright from a real published product page) contains both new schema blocks with the exact expected structure; no regression on name/sku/brand/price/priceCurrency/availability/seller.
+
+  · **Explicitly UNTOUCHED**: product UUID URL structure, canonical URLs, publication filtering, pricing / on-request behaviour, availability behaviour, product admin data, GA4, WhatsApp, page design.
+
+  Files: `backend/server.py` (2-line addition to `_STATIC_SITEMAP_ENTRIES`), `frontend/src/pages/ProductDetail.jsx` (extended `productSchema.offers`), `backend/tests/test_sitemap_commercial_landings.py` (new), `frontend/src/pages/ProductDetail.jsonld.test.jsx` (new).
+
+- 2026-02-13: **P0 hotfix — /cart blank page (ReferenceError: waNumber is not defined).** During the WhatsApp CTA standardisation refactor the local variable `waNumber` in `Cart.jsx` was removed in favour of a centralised `waCartLink(...)` computation stored in `waLink`, but the JSX guard `{waNumber && (…)}` on line 134 was missed and kept referencing the deleted variable — throwing `Uncaught ReferenceError: waNumber is not defined` on every render of `/cart` with a non-empty cart, blanking the page. Single-line fix: guard the WhatsApp CTA on the existing centralised `waLink` value (`{waLink && waLink !== "#" && (…)}`). No second WhatsApp source introduced. Mandatory phone capture preserved. Added `frontend/src/pages/Cart.regression.test.jsx` (mocked-context test verifying /cart renders the inquiry form + WhatsApp CTA without ReferenceError). Testing-agent iteration_34 verified 100% end-to-end on the preview URL — 5/5 scenarios pass, 0 action items, no retest needed. Full frontend suite: 20 suites / 227 tests pass. Files: `frontend/src/pages/Cart.jsx` (1-line JSX guard fix), `frontend/src/pages/Cart.regression.test.jsx` (new).
+
+- 2026-02-13: **Mobile / WhatsApp number now REQUIRED on all four public lead flows.** Field label everywhere: "Mobile / WhatsApp Number". Input attributes: `type="tel" inputMode="tel" autoComplete="tel" required`. Client-side validation shows an inline error under the field; server-side validation returns HTTP 422 with a Pydantic error message.
+
+  · **Shared normalisers** (kept in one place, mirrored across client + server so the same input always yields the same output):
+    - `frontend/src/lib/phone.js` — `normalizePhone(raw)` returning `{ok, value}` or `{ok, error}`
+    - `backend/server_phone.py` — `normalize_phone(value)` returning the E.164 string or raising `ValueError` (Pydantic then surfaces as 422)
+  · **Formats accepted**: `+91XXXXXXXXXX` · `91XXXXXXXXXX` · `0XXXXXXXXXX` · plain 10-digit Indian mobile · any valid international `+CC...` (8–15 digits after the `+`) · spaces/hyphens/parens are stripped before validation. Output always normalises to E.164 with a leading `+`.
+
+  · **Backend model changes** (`backend/server.py`):
+    - `ContactCreate`: added required `phone: str` with `field_validator` calling `normalize_phone`.
+    - `ContactMessage` (storage): added `phone: str = ""` — default empty so **legacy rows without a phone continue to hydrate** via `list_contact`.
+    - `InquiryCreate`: flipped `customer_phone` from optional-with-default-`""` to REQUIRED with the same `field_validator`. Storage `Inquiry.customer_phone` remains `str = ""` so legacy inquiries still load.
+    - `create_contact` handler unchanged — it already persists via `payload.model_dump()`, which now includes the phone.
+    - `create_inquiry` handler unchanged — it already forwards `payload.customer_phone` into the persisted `Inquiry`.
+
+  · **Frontend forms updated (4 flows)**:
+    - `pages/Contact.jsx` — inserted phone input between email and subject; client normalises before `api.createContact`.
+    - `pages/Cart.jsx` (Inquiry Basket) — flipped the existing "Phone (optional)" to required with the same validator + inline error.
+    - `pages/CustomLighting.jsx` `<CommercialLeadForm>` (shared by `pages/ArchitectsDesigners.jsx`) — inserted phone input between email and subject; both landing forms now require it.
+
+  · **Admin UX** (`pages/Admin.jsx`):
+    - Inquiries list already surfaced `customer_phone`; unchanged.
+    - Messages list now shows the phone as a clickable `tel:` link next to email (`data-testid="msg-phone-<id>"`) and includes phone in the free-text search.
+
+  · **Legacy compatibility**: existing `contact_messages` documents with no `phone` field and existing `inquiries` documents with no `customer_phone` field still load — the storage models default `phone`/`customer_phone` to `""`. This is asserted by `TestLegacyStorageCompat` in the new backend test file.
+
+  · **Tests added**:
+    - `frontend/src/lib/phone.test.js` — 10 cases (empty, non-numeric, 10-digit, spaces/hyphens/parens, +91, 91, leading-0, +US, +UK, too-short/too-long).
+    - `backend/tests/test_required_phone.py` — 23 cases across 4 classes covering the normaliser, `ContactCreate`, `InquiryCreate` and legacy storage compat.
+    - Updated `frontend/src/pages/CommercialLandings.test.jsx` — the existing bulk/trade submission tests now include a phone; added a new "rejects submission when phone is missing" case asserting inline error + no API call.
+
+  · **Verification (preview)**:
+    - `POST /api/contact` with no phone → HTTP **422** `{"loc":["body","phone"],"msg":"Field required"}`
+    - `POST /api/contact` with junk phone → HTTP **422** `{"msg":"Value error, Enter a valid phone number (digits only)"}`
+    - `POST /api/contact` with `"+91 89203-92937"` → HTTP **200**, persisted as `phone: "+918920392937"`
+    - Full frontend suite: **19 suites / 226 tests pass**; backend phone tests: **23/23 pass**.
+
+  Files: `backend/server.py`, `backend/server_phone.py` (new), `backend/tests/test_required_phone.py` (new), `frontend/src/lib/phone.js` (new), `frontend/src/lib/phone.test.js` (new), `frontend/src/pages/Contact.jsx`, `frontend/src/pages/Cart.jsx`, `frontend/src/pages/CustomLighting.jsx`, `frontend/src/pages/Admin.jsx`, `frontend/src/pages/CommercialLandings.test.jsx`.
+
+- 2026-02-13: **Admin → Category Images now covers all 10 curated categories.** Added Floor Chandeliers and Table Chandeliers (both already curated in `categories.data.json` with hand-written SEO copy, sitemap enabled, homepage-visible) to the two hard-coded lists that mirror the curated registry: (a) `CATEGORY_FEATURED_ALLOWED` in `backend/server.py` (the server-side gate for the `/api/admin/category-featured-images/*` upload/reset endpoints — was previously 8 entries, now 10), and (b) the `CATEGORIES` list in `frontend/src/components/admin/CategoryImagesAdmin.jsx` (the Admin UI table — was 8 rows, now 10). No categories removed; existing slugs, SEO metadata and product mapping untouched. Added two regression tests that fail fast if the lists ever drift from the curated registry: `frontend/src/components/admin/CategoryImagesAdmin.registry.test.js` (4 tests — count equals PUBLIC_CATEGORIES, both chandelier variants present, labels match) and `backend/tests/test_category_featured_allow_list.py` (3 tests — set-equality with categories.data.json db_names, both variants included, original six categories intact). Verified: Admin → Category Images now renders 10 tiles in the order Chandeliers → Hanging → Wall → Table Lamps → Floor Lamps → Candle Stands → Ceiling → Gate → Floor Chandeliers → Table Chandeliers. Frontend suite 18 / 215 pass, backend allow-list tests 3/3 pass. Files: `backend/server.py`, `frontend/src/components/admin/CategoryImagesAdmin.jsx`, `backend/tests/test_category_featured_allow_list.py` (new), `frontend/src/components/admin/CategoryImagesAdmin.registry.test.js` (new).
+
+- 2026-02-13: **WhatsApp CTA messages centralised & standardised.** Audited every public "Chat on WhatsApp" / "Enquire on WhatsApp" entry point and removed personal-name greetings ("Rakshit ji") in favour of the brand-led "Hi Samrat Glass Emporium, …" reconciled with the required per-context suffixes.
+
+  · **New helper** `frontend/src/lib/whatsapp.js` — exports named message presets (`WA_MESSAGES.general/customLighting/architects/gallery/notFound`), context-aware message builders (`productMessage(product, url)`, `galleryProductMessage(product, project)`, `cartMessage(items)`), a link primitive (`buildWaLink(number, msg)`) that normalises phone digits, and convenience wrappers (`waGeneralLink`, `waCustomLightingLink`, `waArchitectsLink`, `waGalleryLink`, `waNotFoundLink`, `waProductLink`, `waGalleryProductLink`, `waCartLink`). Every public CTA now uses these.
+
+  · **Files migrated (12 consumers):**
+    - `pages/Home.jsx` (hero secondary CTA) → waGeneralLink
+    - `pages/Contact.jsx` (Phone/WhatsApp row + "Chat on WhatsApp") → waGeneralLink
+    - `pages/FAQ.jsx` (bottom WhatsApp help CTA) → waGeneralLink (removed "Rakshit ji")
+    - `pages/NotFound.jsx` (fallback WhatsApp button) → waNotFoundLink (brand-led)
+    - `pages/CustomLighting.jsx` (hero WhatsApp us + bottom link) → waCustomLightingLink
+    - `pages/ArchitectsDesigners.jsx` (hero WhatsApp us + bottom link) → waArchitectsLink
+    - `pages/ProductDetail.jsx` (product WhatsApp button) → waProductLink(product, absolute url)
+    - `pages/GalleryProject.jsx` (project product WhatsApp) → waGalleryProductLink(product, project) (removed "Rakshit ji")
+    - `pages/Cart.jsx` (Inquiry Basket → Enquire on WhatsApp) → waCartLink(items)
+    - `components/FloatingActions.jsx` (desktop floating WhatsApp) → waGeneralLink (removed "Rakshit ji")
+    - `components/MobileReachStrip.jsx` (mobile sticky WA icon) → waGeneralLink (removed "Rakshit ji")
+    - `components/layout/Footer.jsx` (Support → WhatsApp Support) → waGeneralLink (removed "Rakshit ji")
+    - `components/AtelierShowcase.jsx` (Atelier featured product inquiry) → productMessage extended with the price line (removed "Rakshit ji")
+    - `components/CollageSection.jsx` (secondary CTA fallback) → waGeneralLink (already brand-led, now routes through the helper for consistency)
+
+  · **Untouched (per instructions):** `pages/Admin.jsx` — admin-only enquiry reply builder (Contextualises per-customer with `Hi ${customer_name}`); `pages/Catalogue.jsx` — admin-only printable PDF page (uses phone-only `https://wa.me/${digits}` with no prefill for the QR code).
+
+  · **Number:** Single source of truth remains `settings.whatsapp_number` (from `/api/settings`). No number change.
+
+  · **Analytics:** Unchanged — `trackWhatsAppClick` still fires on every CTA (Cart still calls it, Product page still calls it, etc.). The helper only builds the URL.
+
+  · **Tests:** added `frontend/src/lib/whatsapp.test.js` (20 tests including a repo-wide static invariant asserting no non-test source file under `src/` contains a "Rakshit" prefill outside the helper's own anti-pattern comment). Full frontend suite: 17 suites / 211 tests pass.
+
+  · **Verified in preview:** Custom Lighting hero WhatsApp button → `https://wa.me/918920392937?text=Hi%20Samrat%20Glass%20Emporium%2C%20I%20would%20like%20to%20discuss%20a%20custom%20lighting%20%2F%20bulk%20order%20requirement.` (matches spec exactly).
+
+  Files: `frontend/src/lib/whatsapp.js` (new), `frontend/src/lib/whatsapp.test.js` (new), 14 consumer files.
+
+- 2026-02-13: **Batch fix — removed Unsplash flash + fixed Google Business links.**
+  · **Stock image flash removed**: created `frontend/src/lib/placeholders.js` exporting two neutral branded SVG data URIs (`BRAND_PLACEHOLDER` — burgundy radial with faint gold "SG" emblem for tile-shaped placeholders; `BRAND_PLACEHOLDER_HERO` — wider dark burgundy for the hero background). Both are inline data URIs so they render synchronously without any external network fetch. Replaced the hardcoded `https://images.unsplash.com/photo-1513506003901-1e6a229e2d15…` fallback in `frontend/src/components/CategoryShowcase.jsx` (category tile fallback) and in `frontend/src/pages/Home.jsx` (hero image fallback). CategoryShowcase's existing skeleton-while-loading behaviour (state = undefined) is unchanged; only the "loaded but no image" branch now uses the branded SVG instead of Unsplash. Preview verified: 10 category tiles rendered, 0 Unsplash URLs present in the DOM.
+  · **Google Business Profile links fixed**: audit revealed the stored `google_cid` (`16850385744624001495`) pointed to a different business than the stored `google_place_id` (`ChIJqRfIkPVHdDkRreYAh5J1egk`). Mathematically decoded the Place ID (base64-decoded last 8 bytes as unsigned little-endian int64) and confirmed the canonical CID for Samrat Glass Emporium, Firozabad is `682987565690709677`. Updated `Settings` model defaults in `backend/server.py` L470-483 to the reconciled pair; patched the currently-stored settings document in the preview MongoDB via a one-shot script so `/api/settings` and `/api/google/reviews` immediately return the correct destinations. **"Review us on Google"** → `search.google.com/local/writereview?placeid=ChIJqRfIkPVHdDkRreYAh5J1egk` (opens composer for the correct business — was already using Place ID, so this was already correct). **"View all reviews on Google"** and **"Visit our showroom"** → `www.google.com/maps?cid=682987565690709677` (now match the same business — previously pointed elsewhere). All three CTAs already had `target="_blank" rel="noreferrer"`.
+  · **Tests**: added `frontend/src/lib/placeholders.test.js` (4 tests — data-URI shape, no Unsplash in placeholder or in the two consuming source files) and `backend/tests/test_google_business_identity.py` (3 tests — default CID matches default Place ID, default maps URL uses reconciled CID, Samrat Glass Place ID decodes to the expected canonical CID). Full frontend suite: 16 suites / 191 tests pass. Backend Google identity tests: 3/3 pass.
+  · **Production note**: The production `settings` document also still has the wrong CID. After redeploying this code change, either (a) run the same `settings.google_cid` update on the production DB, or (b) reset via Admin → Settings → save (the Pydantic defaults will now supply the reconciled pair on any fresh insert / model_dump merge).
+  Files: `backend/server.py`, `frontend/src/lib/placeholders.js` (new), `frontend/src/lib/placeholders.test.js` (new), `frontend/src/components/CategoryShowcase.jsx`, `frontend/src/pages/Home.jsx`, `backend/tests/test_google_business_identity.py` (new).
+
+- 2026-02-13: **Batch fix — route scroll restoration + dedicated commercial landing pages.**
+  · **ScrollToTop**: added a small `frontend/src/components/ScrollToTop.jsx` component (mounted once inside `<BrowserRouter>` above `<Routes>`). On every PUSH/REPLACE navigation it scrolls the window to `(0, 0)`; POP (browser back/forward) is left alone so the browser's own scroll restoration works; presence of a URL `#hash` short-circuits the scroll so intra-page anchor links keep working. No changes to any child page.
+  · **Custom Lighting / Bulk Orders**: new page at `/custom-lighting-bulk-orders` (`frontend/src/pages/CustomLighting.jsx`) with hero, "Why Samrat Glass" (6 cards), scope list, 5-step "How it works", and a lead form that reuses `POST /api/contact` with `enquiry_type = "bulk"` prefilled. Own SEO title / description / canonical.
+  · **Architects & Interior Designers**: new page at `/architects-interior-designers` (`frontend/src/pages/ArchitectsDesigners.jsx`) with hero, "What we support" (6 cards), "Why work with us" bullets, "Project types" grid, and a lead form that reuses `POST /api/contact` with `enquiry_type = "trade"` prefilled. Own SEO title / description / canonical. The `<CommercialLeadForm>` is a named export from `CustomLighting.jsx` so both landing pages share exactly one form component; each page passes its own prefilled `enquiryType`, testid prefix and copy.
+  · **Footer wiring**: `EXPLORE_LINKS` in `frontend/src/components/layout/Footer.jsx` updated so the two footer links now point at the dedicated routes instead of `/contact?type=bulk` / `/contact?type=trade`. Existing Contact page is unchanged and continues to handle `?type=` legacy URLs.
+  · **Backend reuse**: `/api/contact` endpoint is untouched. The existing `resolveEnquiryType` allow-list (`general`, `bulk`, `trade`) covers both new pages — no schema, model or new endpoint needed.
+  · **Tests**: added `frontend/src/pages/CommercialLandings.test.jsx` with 7 cases (H1 assertion + prefill for each landing, form submission asserts `enquiry_type` on `/api/contact` payload, landing-pages-are-distinct guard, ScrollToTop PUSH-scrolls-to-top, ScrollToTop-preserves-hash-navigation).
+  · **Results**: Full frontend suite 15 suites / 187 tests pass. Both routes return HTTP 200 in preview, render with correct H1/CTAs and prefill values, backend contact endpoint unchanged.
+  Files: `frontend/src/App.js`, `frontend/src/components/layout/Footer.jsx`, `frontend/src/components/ScrollToTop.jsx` (new), `frontend/src/pages/CustomLighting.jsx` (new), `frontend/src/pages/ArchitectsDesigners.jsx` (new), `frontend/src/pages/CommercialLandings.test.jsx` (new).
+
+- 2026-02-13: **Removed all public "Request Catalogue" CTAs.** Frontend-only content change; backend catalogue-generation and admin catalogue tools left fully intact. Removed the desktop-header pill in `Header.jsx`, the footer pill in `Footer.jsx`, the catalog-toolbar link in `CatalogueBrowser.jsx`, and the entire "Catalogue on WhatsApp" public lead-capture block from `Contact.jsx`. Deleted the now-orphaned `CatalogueOnWhatsApp.jsx` component. Also dropped unused `Download` icon imports from the three modified layout files. Kept: (a) admin-gated `/catalogue` route (`AdminAuthGate` wrapper), (b) backend `POST /api/catalogue-request` endpoint, (c) `api.requestCatalogue` client helper, (d) `trackCatalogueDownload` analytics helper — all available for admin manual sharing / future flows. Verified in preview: no `Request Catalogue` string appears anywhere in the public UI (desktop header, mobile drawer, catalog toolbar, contact page, footer). Full frontend suite: **14 suites / 180 tests pass**. Files: `frontend/src/components/layout/Header.jsx`, `frontend/src/components/layout/Footer.jsx`, `frontend/src/components/CatalogueBrowser.jsx`, `frontend/src/pages/Contact.jsx`, `frontend/src/components/CatalogueOnWhatsApp.jsx` (deleted).
+
+- 2026-02-13: **Added Ceiling Lights and Gate Lights to the curated category registry.** Small content/config change (no architectural changes). Appended 2 entries to `frontend/src/lib/categories.data.json` (published, nav_visible, sitemap = true for both) with hand-written SEO copy — H1: "Decorative Ceiling Lights" / "Decorative Gate Lights"; meta descriptions ≤180 chars; intros 123 and 124 words respectively (within the required 100-150 range). Order of existing 8 categories preserved — new tiles appended at positions 9 and 10. Also expanded `CATEGORY_FEATURED_ALLOWED` in `backend/server.py` and the matching list in `frontend/src/components/admin/CategoryImagesAdmin.jsx` from 6 → 8 entries so admins can pin a hero image for the new tiles. Updated `frontend/src/lib/categories.test.js` (8 → 10) and `backend/tests/test_sitemap_categories.py` (8 → 10 URLs). Migrated `mergeDynamicCategories` / `resolveCategoryBySlug` test fixtures from "Ceiling Light" (now curated) to a truly-uncurated "Novelty Lamp" so the dynamic-discovery contract remains covered. Verified: (a) sitemap.xml now advertises both slugs, (b) prerender pipeline wrote 10 category pages including `ceiling-lights/index.html` and `gate-lights/index.html` with correct titles/canonicals/H1s, (c) homepage `CategoryShowcase` renders 10 tiles in the expected order with the new tiles at positions 9 & 10, (d) `/category/gate-lights` and `/category/ceiling-lights` render with hand-written H1s and filter products by db_name. Full frontend suite: **14 suites / 180 tests pass**. Backend sitemap tests: 4/4 pass. Files: `frontend/src/lib/categories.data.json`, `frontend/src/lib/categories.test.js`, `frontend/src/lib/categories.dynamic.test.js`, `frontend/src/pages/CategoryPage.test.jsx`, `frontend/src/components/admin/CategoryImagesAdmin.jsx`, `backend/server.py`, `backend/tests/test_sitemap_categories.py`.
+
+- 2026-02-13: **P0 fix — Dynamic category slug 404.** `/category/ceiling-lights` on production was rendering the 404 view because `CategoryPage.jsx` resolved slugs only against the curated `categories.data.json`, while catalog discovery uses the live `/api/products/categories` endpoint. Added `resolveCategoryBySlug(slug, dbNames)` in `frontend/src/lib/categories.js` that keeps curated resolution synchronous (no flash for the 8 canonical slugs) and falls back to `mergeDynamicCategories` when the slug is unknown. `CategoryPage.jsx` now fetches `/api/products/categories` on unknown slugs and renders the merged result with generic-but-sensible SEO fallbacks (H1 = label, generic seoTitle/metaDescription/intro). Draft-only categories cannot resolve because the backend already filters that endpoint to `status=published` for anonymous callers; nonexistent slugs still render the 404 view. E2E verified in preview: seeded a "Ceiling Light" product → `/category/ceiling-lights` rendered with H1 "Ceiling Light" and filtered product list. Added 12 new tests (6 unit + 6 page-level). Frontend suite: 14 suites / 177 tests pass. Files: `frontend/src/lib/categories.js`, `frontend/src/pages/CategoryPage.jsx`, `frontend/src/lib/categories.dynamic.test.js`, `frontend/src/pages/CategoryPage.test.jsx`.
+
+- 2026-02-13: **Dynamic Category UI polish (P0 close-out).** Fixed two residual bugs in `CatalogueBrowser.jsx` sidebar: (1) title-cased label now reaches the render layer — new category "Ceiling Light" no longer displays as raw "CEILING LIGHT" from the DB; the sidebar renders `c.label || c.db_name` while filtering still uses `c.db_name`. (2) React unique-key warning eliminated — map now uses `key={c.slug || c.db_name}`. Added 2 regression tests in `CatalogueBrowser.test.jsx`: label casing check and console.error key-warning assertion. Full frontend suite green: 13 test suites / 165 tests pass. Homepage `CategoryShowcase` intentionally left unchanged — verified as curated (static NAV_CATEGORIES) by design; only imagery is dynamic (admin override → newest product image → stock fallback). Files: `frontend/src/components/CatalogueBrowser.jsx`, `frontend/src/components/CatalogueBrowser.test.jsx`.
+
 - 2026-02-12: **AI description style upgraded to Samrat Catalogue voice.** New `_AI_PROMPT_SYSTEM` enforces a 4-part description: (1) elegant introduction, (2) visible design details (hedged), (3) ideal usage spaces drawn from a curated list (living/dining/bedroom/hotel/villa/temple/restaurant/showroom/luxury villa/banquet), (4) a mandatory `Key Features:` heading with 4-6 `• `-prefixed bullets. Explicitly forbids overusing *exquisite/timeless/captivating/mesmerizing/enchanting* (max once each). Tags now mix category + material-look + use-case (12-14 comma-separated phrases). Existing product detail page already renders newlines via `whitespace-pre-wrap` — no frontend change needed. Verified live: real chandelier image produced clean 4-section output with 6 bullets, hedged material language, zero fabricated specs.
 - 2026-02-12: **Product detail page cleaner rules.** Details in previous entry.
 - 2026-02-12: **AI Product Details Generator (Gemini 3 Flash + vision).** Full details in previous entry.
