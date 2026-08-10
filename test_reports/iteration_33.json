@@ -1,0 +1,47 @@
+{
+  "summary": "Retest of iter_32 fixes on preview URL. Seeded TEST_CEILING_SEED (category='Ceiling Light') + TEST_CEILING_SEED_CAPS (category='CEILING LIGHT'). BOTH fixes verified: (1) HIGH — Floor Chandelier + Table Chandelier now appear in /catalog top strip (catalog-strip-floor-chandeliers, catalog-strip-table-chandeliers) AND sidebar (cat-floor-chandelier, cat-table-chandelier) even with zero products. (2) MINOR — top-strip Ceiling Light link text is now 'Ceiling Light' (Title Case) despite CAPS product in DB. Ceiling Light dynamic surfacing still works (catalog-strip-ceiling-lights + cat-ceiling-light present, filter click narrows to 1 piece). Homepage 'Shop by Category' + Footer 'COLLECTIONS' remain curated with NO Ceiling Light leak. Counter shows 'Showing 1–24 of 118 pieces' (116 baseline + 2 seeds) meeting ≥117 requirement. All seed rows deleted. Two follow-up observations (see minor issues).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CatalogueBrowser sidebar", "issue": "Sidebar filter button for a fallback (non-registry) category renders the raw db_name, not the titleCased label. With CAPS-seeded product, sidebar button text shows 'CEILING LIGHT' while top strip correctly shows 'Ceiling Light'. Root cause: CatalogueBrowser.jsx line 41 maps navCats to c.db_name and line 257 renders c directly. It should render c.label (or a lookup by db_name → label) so titleCased fallback labels reach the sidebar too.", "selector": "[data-testid='filters-panel'] button", "priority": "MINOR"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/catalog CatalogueBrowser", "issues": ["React console warning: 'Each child in a list should have a unique key prop. Check the render method of CatalogueBrowser.' Not blocking but should be addressed — likely the categories list contains duplicate/undefined key when both a fallback + registry variant appear, or when a c.db_name equals another after normalisation. Worth passing an id-safe key like c.slug or `cat-${c.replace(...)}`."]}
+    ]
+  },
+  "primary_bug_verification": {
+    "status": "PASS on all acceptance criteria from the review request",
+    "top_strip_after_seed": ["Ceiling Light", "Candle Stands", "Chandeliers", "Floor Lamps", "Hanging Lights", "Table Lamps", "Wall Lights", "Floor Chandeliers", "Table Chandeliers"],
+    "top_strip_testids": ["catalog-strip-ceiling-lights", "catalog-strip-candle-stands", "catalog-strip-chandeliers", "catalog-strip-floor-lamps", "catalog-strip-hanging-lights", "catalog-strip-table-lamps", "catalog-strip-wall-lights", "catalog-strip-floor-chandeliers", "catalog-strip-table-chandeliers"],
+    "sidebar_testids": ["cat-all", "cat-ceiling-light", "cat-candle-stand", "cat-chandelier", "cat-floor-lamp", "cat-hanging-light", "cat-table-lamp", "cat-wall-light", "cat-floor-chandelier", "cat-table-chandelier", "clear-filters-btn"],
+    "floor_chandelier_present_in_strip": true,
+    "floor_chandelier_present_in_sidebar": true,
+    "table_chandelier_present_in_strip": true,
+    "table_chandelier_present_in_sidebar": true,
+    "strip_ceiling_link_text_titlecased": "Ceiling Light",
+    "sidebar_ceiling_button_text_still_all_caps": "CEILING LIGHT",
+    "ceiling_filter_click_narrows_to": "Showing 1-1 of 1 piece",
+    "baseline_counter": "Showing 1–24 of 118 pieces",
+    "homepage_shop_by_category": ["Chandeliers","Hanging Lights","Wall Lights","Table Lamps","Floor Lamps","Candle Stands","Floor Chandeliers","Table Chandeliers"],
+    "homepage_ceiling_leak": false,
+    "footer_ceiling_leak": false
+  },
+  "critical_code_review_comments": [
+    "CatalogueBrowser.jsx currently displays c.db_name as the sidebar button label. Now that mergeDynamicCategories emits a titleCased `label`, sidebar should render `c.label` (falling back to db_name). This will fix the leftover 'CEILING LIGHT' odd casing surfaced by the retest.",
+    "React key warning surfaced in CatalogueBrowser render — investigate categories.map key uniqueness (line 252: key={c}). Should use c.slug or a normalised key.",
+    "Optional: backend /api/products/categories could case-normalise + dedupe server-side so client merge doesn't need to guess."
+  ],
+  "test_report_links": ["/app/test_reports/iteration_33.json"],
+  "action_items": [
+    "MINOR (leftover): CatalogueBrowser.jsx sidebar renders raw db_name — switch to `c.label` so fallback title-cased labels reach the sidebar. Currently 'CEILING LIGHT' still shows in sidebar even though top strip now correctly shows 'Ceiling Light'.",
+    "MINOR: Fix React unique-key warning in CatalogueBrowser (key={c} → key={c.slug || c.db_name})."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "~95% — both flagged issues from iter_32 are fixed in the top strip; sidebar has a remaining label-source bug (renders db_name, not label)"},
+  "seed_data_creation": "Inserted _id=TEST_CEILING_SEED (category='Ceiling Light') and _id=TEST_CEILING_SEED_CAPS (category='CEILING LIGHT'). BOTH DELETED at end; verified db.products.countDocuments({category:/ceiling/i}) = 0.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter_32 HIGH (missing Floor/Table Chandelier) is fully resolved. iter_32 MINOR (Title Case fallback label) is resolved for /catalog top strip but NOT for the sidebar because CatalogueBrowser.jsx renders c.db_name instead of c.label. Small one-line fix in components/CatalogueBrowser.jsx (line 257 — swap to c.label with fallback). Also a benign but visible React key warning in the same file (line 252).",
+  "rca_of_the_issue": "mergeDynamicCategories now correctly title-cases the `label` field on fallback entries, so the top strip (which renders `label`) displays 'Ceiling Light'. However CatalogueBrowser.jsx maps navCats → c.db_name and uses that string as both the render text and the setCategory filter value. Since the filter needs to match the exact product.category value, db_name must be kept for the click handler — but the visible text should read from c.label. Split the two: pass the full object, use c.label for text and c.db_name for state."
+}

@@ -294,6 +294,7 @@ def test_contact_submission_dispatches_admin_and_ack(app_client, captured_dispat
     r = client.post("/api/contact", json={
         "name": "TEST_MAIL_CONTACT",
         "email": "test-mail-contact@example.com",
+        "phone": "9876543210",
         "subject": "Hello",
         "message": "Please quote me a chandelier.",
         "enquiry_type": "bulk",
@@ -315,6 +316,7 @@ def test_contact_submission_persists_even_if_email_fails(app_client, monkeypatch
     r = client.post("/api/contact", json={
         "name": "TEST_MAIL_FAIL",
         "email": "test-mail-fail@example.com",
+        "phone": "9876543210",
         "message": "Please quote.",
         "enquiry_type": "general",
     }, headers={"X-Requested-With": "fetch"})

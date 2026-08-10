@@ -24,6 +24,65 @@ const SECTIONS = [
   { key: "founder_teaser", label: "Meet the Founder Teaser (Home)" },
 ];
 
+/**
+ * Small toolbar rendered above the gallery-project list.
+ *
+ * The "N linked" counter used to count the raw length of a project's
+ * `products` array, which meant deleting a catalogue product would
+ * leave a dangling id inside the project and the counter would keep
+ * counting it. The ProductPicker below now shows valid vs orphaned
+ * counts inline, but existing rows in the DB still carry stale ids.
+ *
+ * This bar exposes the one-shot backend cleanup that removes every
+ * dangling product id from every gallery project in a single Mongo
+ * update. It never touches product data, never modifies any valid
+ * link, and is idempotent — running it against a clean gallery
+ * simply reports "0 orphans found".
+ */
+const GalleryOrphanCleanupBar = () => {
+  const [busy, setBusy] = useState(false);
+  const [lastReport, setLastReport] = useState(null);
+  const run = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const report = await api.adminGalleryCleanupOrphans();
+      setLastReport(report);
+      const n = report?.orphans_removed_total || 0;
+      if (n === 0) toast.success("No orphaned product links found in any project.");
+      else toast.success(`Cleaned ${n} orphaned product link${n === 1 ? "" : "s"} across ${(report.projects || []).filter(p => p.orphans_removed > 0).length} project(s). Reload the page to see the updated counters.`);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e?.message || "Cleanup failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-2 border border-[#BF9972]/25 bg-black/30 p-3 flex items-start gap-3 flex-wrap" data-testid="gallery-orphan-cleanup-bar">
+      <div className="flex-1 min-w-[240px]">
+        <div className="text-[11px] uppercase tracking-widest text-[#BF9972]">Orphaned product links</div>
+        <div className="text-[11px] text-white/60 mt-1">
+          If a catalogue product linked from a project is later deleted, its id stays inside the project's product list until you run this. Safe to re-run.
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy}
+        data-testid="gallery-orphan-cleanup-btn"
+        className="text-[10px] uppercase tracking-[0.24em] px-4 py-2 border border-[#D4AF37]/60 hover:border-[#D4AF37] hover:text-[#D4AF37] disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {busy ? "Cleaning…" : "Clean up orphaned links"}
+      </button>
+      {lastReport && (
+        <div className="w-full text-[10px] text-white/50 border-t border-white/5 pt-2 mt-1" data-testid="gallery-orphan-cleanup-report">
+          Last run: removed <span className="text-[#D4AF37]">{lastReport.orphans_removed_total}</span> orphaned link{lastReport.orphans_removed_total === 1 ? "" : "s"} across <span className="text-white/70">{(lastReport.projects || []).length}</span> project(s) scanned.
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Reusable inputs -----
 const Text = ({ label, value, onChange, "data-testid": tid, normalize, ...rest }) => (
   <label className="block">
@@ -47,15 +106,29 @@ const TextArea = ({ label, value, onChange, rows = 4, "data-testid": tid, normal
 
 const ProductPicker = ({ label, value, onChange, "data-testid": tid }) => {
   const [products, setProducts] = useState([]);
+  const [productsLoaded, setProductsLoaded] = useState(false);
   const [q, setQ] = useState("");
   const selected = Array.isArray(value) ? value : [];
-  useEffect(() => { api.listAllProducts().then(setProducts).catch(() => {}); }, []);
+  useEffect(() => {
+    api.listAllProducts()
+      .then((p) => { setProducts(p); setProductsLoaded(true); })
+      .catch(() => setProductsLoaded(true));
+  }, []);
   const filtered = products.filter((p) => {
     if (!q.trim()) return true;
     const needle = q.toLowerCase();
     return `${p.name} ${p.sku} ${p.category}`.toLowerCase().includes(needle);
   });
   const toggle = (id) => onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  // Count only ids that actually resolve to an existing catalogue product.
+  // Ids that used to reference a product which was later deleted show up in
+  // `selected` but not in `products` — they are orphans that must NOT be
+  // counted in the "N linked" indicator (that was the reported bug: admin
+  // showed 2 linked when only 1 product was actually resolvable).
+  const validSelectedIds = productsLoaded
+    ? selected.filter((id) => products.some((p) => p.id === id))
+    : selected;
+  const orphanCount = productsLoaded ? selected.length - validSelectedIds.length : 0;
   return (
     <div data-testid={tid}>
       <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-1">{label}</span>
@@ -81,7 +154,17 @@ const ProductPicker = ({ label, value, onChange, "data-testid": tid }) => {
           );
         })}
       </div>
-      {selected.length > 0 && <div className="mt-1 text-[10px] uppercase tracking-widest text-[#D4AF37]">{selected.length} linked</div>}
+      {selected.length > 0 && (
+        <div className="mt-1 text-[10px] uppercase tracking-widest flex items-center gap-3 flex-wrap" data-testid={`${tid}-count`}>
+          <span className="text-[#D4AF37]" data-testid={`${tid}-count-valid`}>{validSelectedIds.length} linked</span>
+          {orphanCount > 0 && (
+            <span className="text-[#E5B579]" data-testid={`${tid}-count-orphans`}>
+              · {orphanCount} orphaned (deleted product; run cleanup to remove)
+            </span>
+          )}
+          {!productsLoaded && <span className="text-white/40">(loading products…)</span>}
+        </div>
+      )}
     </div>
   );
 };
@@ -677,6 +760,8 @@ function SectionEditor({ sectionKey, data, patch }) {
       return (
         <div className="space-y-4">
           <p className="text-[11px] text-white/40">Controls the <span className="text-white/70">/gallery</span> page — real client installations (homes, hotels, weddings). Leaving items empty hides project cards and shows a &ldquo;coming soon&rdquo; message.</p>
+
+          <GalleryOrphanCleanupBar />
 
           <div className="eyebrow mb-1 mt-4">Header</div>
           <Text label="Eyebrow" value={data.eyebrow} onChange={(v)=>set("eyebrow",v)} data-testid="hp-gallery-eyebrow" />

@@ -2,6 +2,7 @@ import React from "react";
 import { useLocation } from "react-router-dom";
 import { Phone, Navigation } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
+import { waGeneralLink } from "../lib/whatsapp";
 
 // WhatsApp glyph
 const WA = ({ size = 20 }) => (
@@ -10,7 +11,7 @@ const WA = ({ size = 20 }) => (
   </svg>
 );
 
-const WA_PREFILLED = "Hi Rakshit ji, I am interested in Samrat Glass Emporium products. Please share more details.";
+const WA_PREFILLED_KEY = "general"; // routed through waGeneralLink
 
 /**
  * Sticky mobile reach-us strip.
@@ -23,7 +24,7 @@ export default function MobileReachStrip() {
   if (location.pathname.startsWith("/catalogue")) return null;
 
   const rawNum = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waHref = rawNum ? `https://wa.me/${rawNum}?text=${encodeURIComponent(WA_PREFILLED)}` : "";
+  const waHref = waGeneralLink(settings?.whatsapp_number);
   const telHref = rawNum ? `tel:+${rawNum}` : "";
   const mapsHref = settings?.google_maps_url || (settings?.google_cid ? `https://www.google.com/maps?cid=${settings.google_cid}` : "");
 

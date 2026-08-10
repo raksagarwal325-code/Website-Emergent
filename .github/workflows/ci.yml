@@ -1,0 +1,346 @@
+# -----------------------------------------------------------------------------
+# CI — Samrat Glass Emporium (samratglass.com)
+#
+# Runs on every push and pull_request against `main`. Three parallel jobs:
+#
+#   1. backend         — pytest suite against an ephemeral MongoDB service
+#                        started inside the job (never touches production data).
+#   2. frontend-tests  — Jest / RTL suite via CRA/craco.
+#   3. frontend-build  — Full production build + category prerender + a
+#                        strict assertion that every expected category HTML
+#                        file was actually emitted.
+#
+# All frontend installs use the committed `frontend/yarn.lock` in
+# `--frozen-lockfile` mode, matching the tree audited on 2026-08-03 and
+# committed at 0b5bc8b. Frozen-lockfile refuses to write, so any drift
+# would abort the install (the whole point of the earlier lockfile audit).
+#
+# Tooling versions are pinned to the exact ones that already produce a
+# clean build on the developer pod:
+#
+#     Node 20.20.2  ·  yarn 1.22.22  ·  Python 3.11
+#
+# NOTE — TEMPORARY REMOTE API DEPENDENCY
+# --------------------------------------
+# The `frontend-build` job passes `PRERENDER_API_URL=https://samratglass.com`
+# so the `postbuild` script (`node scripts/prerender-categories.js`) can
+# fetch real category data during the build. This mirrors exactly what the
+# Emergent deploy container does and is what the successful audit ran with.
+#
+# The tradeoff: this couples CI health to the availability of the live
+# production API. If samratglass.com is down (e.g. the 520 incident during
+# the last deploy) then this job will fail, even though the code is fine.
+#
+# Follow-up work (out of scope for this PR): replace the remote API
+# dependency with either:
+#   (a) a deterministic CI fixture (checked-in JSON dump used only when
+#       PRERENDER_MODE=fixture), or
+#   (b) a lightweight local API booted inside the job (docker-compose
+#       style) that returns a known-good product set.
+# Track this as its own follow-up before adding branch-protection
+# strictness that blocks merges on transient API outages.
+# -----------------------------------------------------------------------------
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same branch so a rapid push chain doesn't
+# hog runners. Does not affect main-branch pushes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) Backend — pytest against an ephemeral MongoDB service.
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Backend tests (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      # Ephemeral, empty MongoDB spun up JUST for this job. GitHub Actions
+      # tears it down when the job ends — production Mongo is never touched.
+      mongodb:
+        image: mongo:6
+        ports:
+          - 27017:27017
+        # Health-check gates the job on Mongo actually being READY, not just
+        # the port being bound. Prevents "connection refused" flakes on the
+        # first test that runs before mongod is done initialising.
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' | grep 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+          --health-start-period 10s
+
+    env:
+      # Point the backend at the ephemeral CI Mongo, NOT production.
+      MONGO_URL: "mongodb://localhost:27017"
+      DB_NAME: "test_ci_${{ github.run_id }}"
+      # A dev-only session token the pytest suite already recognises for the
+      # admin-facing tests (see backend/tests/conftest.py). No secrets.
+      ADMIN_EMAILS: "raks.agarwal325@gmail.com"
+      REACT_APP_BACKEND_URL: "http://localhost:8001"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # `emergentintegrations` is an Emergent-internal package hosted on
+          # a private CloudFront index and is NOT available from public PyPI.
+          # It is intentionally kept in backend/requirements.txt so the
+          # production/preview deploy containers (which do have that index
+          # configured) install it correctly. In GitHub Actions we skip it
+          # here so pytest can still exercise the rest of the suite; any
+          # tests that require the LLM integration are already gated on
+          # the runtime module import.
+          grep -v -E '^\s*emergentintegrations([<>=!~ ].*)?$' backend/requirements.txt > /tmp/ci-requirements.txt
+          pip install -r /tmp/ci-requirements.txt
+
+      - name: Wait for MongoDB to accept connections
+        run: |
+          # Belt-and-braces on top of the service health-check: ping until
+          # ready or fail after ~60s. mongosh isn't installed on the runner,
+          # so use a tiny python one-liner.
+          python - <<'PY'
+          import socket, time, sys
+          deadline = time.time() + 60
+          while time.time() < deadline:
+              try:
+                  with socket.create_connection(("localhost", 27017), 2):
+                      print("mongo port open")
+                      sys.exit(0)
+              except OSError:
+                  time.sleep(2)
+          print("timed out waiting for mongo", file=sys.stderr); sys.exit(1)
+          PY
+
+      - name: Seed admin test session (matches conftest expectations)
+        run: |
+          # The pytest suite uses a fixed session_token=test_admin_session
+          # cookie to hit admin endpoints. conftest.py handles the seeding
+          # inside the backend process when it starts; here we just make
+          # sure the DB exists.
+          echo "MONGO_URL=$MONGO_URL DB_NAME=$DB_NAME"
+      - name: Prepare backend CI runtime
+        run: |
+          # Existing pytest fixtures expect Emergent-style absolute env paths.
+          sudo mkdir -p /app/backend /app/frontend
+          printf 'MONGO_URL=%s\nDB_NAME=%s\n' "$MONGO_URL" "$DB_NAME" \
+            | sudo tee /app/backend/.env >/dev/null
+          printf 'REACT_APP_BACKEND_URL=%s\n' "$REACT_APP_BACKEND_URL" \
+            | sudo tee /app/frontend/.env >/dev/null
+
+          # conftest.py invokes `mongosh` directly. The Mongo service container
+          # already contains mongosh, so expose a tiny host-side wrapper.
+          sudo tee /usr/local/bin/mongosh >/dev/null <<'SH'
+          #!/usr/bin/env bash
+          set -e
+          cid=$(docker ps --filter "ancestor=mongo:6" --format '{{.ID}}' | head -n1)
+          if [ -z "$cid" ]; then
+            echo "MongoDB service container not found" >&2
+            exit 1
+          fi
+          exec docker exec "$cid" mongosh "$@"
+          SH
+          sudo chmod +x /usr/local/bin/mongosh
+
+      - name: Start FastAPI backend on :8001
+        working-directory: backend
+        run: |
+          nohup python -m uvicorn server:app \
+            --host 0.0.0.0 \
+            --port 8001 \
+            --workers 1 \
+            > /tmp/backend.log 2>&1 &
+
+          echo $! > /tmp/backend_worker_real.pid
+          echo "Backend pid: $(cat /tmp/backend_worker_real.pid)"
+
+          python - <<'PY'
+          import sys
+          import time
+          import urllib.request
+
+          deadline = time.time() + 90
+          last_error = None
+
+          while time.time() < deadline:
+              try:
+                  with urllib.request.urlopen(
+                      "http://localhost:8001/api/settings",
+                      timeout=2,
+                  ) as response:
+                      if response.status == 200:
+                          print("backend ready")
+                          sys.exit(0)
+              except Exception as exc:
+                  last_error = repr(exc)
+
+              time.sleep(1)
+
+          print(
+              f"timed out waiting for backend: {last_error}",
+              file=sys.stderr,
+          )
+          sys.exit(1)
+          PY
+      - name: Run backend pytest (serial mode — matches audited-green run)
+        working-directory: backend
+        env:
+          # Serial mode: the parallel xdist run has known pre-existing
+          # flakes (documented in the fork handoff) that are unrelated to
+          # this CI gate. -n 0 matches the 184/184-green baseline we ship.
+          PYTEST_ADDOPTS: "-n 0"
+        run: |
+          python -m pytest tests/ -q --tb=short
+
+      - name: Dump backend log on failure
+        if: failure()
+        run: |
+          echo "--- /tmp/backend.log ---"
+          tail -n 200 /tmp/backend.log || true
+
+  # ---------------------------------------------------------------------------
+  # 2) Frontend Jest / RTL suite.
+  # ---------------------------------------------------------------------------
+  frontend-tests:
+    name: Frontend tests (Jest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20.20.2
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.20.2"
+          cache: "yarn"
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install (frozen lockfile — refuses to write)
+        run: yarn install --frozen-lockfile --network-timeout 120000
+
+      - name: Run Jest suite
+        env:
+          CI: "true"
+        run: yarn test --watchAll=false
+
+  # ---------------------------------------------------------------------------
+  # 3) Frontend production build + category-prerender assertion.
+  #
+  # Uses the EXACT command the developer audit proved successful:
+  #     PRERENDER_API_URL=https://samratglass.com
+  #     REACT_APP_BACKEND_URL=https://samratglass.com
+  #     CI=false GENERATE_SOURCEMAP=false yarn build
+  # ---------------------------------------------------------------------------
+  frontend-build:
+    name: Frontend production build + prerender
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20.20.2
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.20.2"
+          cache: "yarn"
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install (frozen lockfile — refuses to write)
+        run: yarn install --frozen-lockfile --network-timeout 120000
+
+      - name: Production build + postbuild prerender
+        env:
+          # See note at top of file: this is deliberately the live prod API.
+          # Replace with a deterministic CI fixture once the follow-up lands.
+          PRERENDER_API_URL: "https://samratglass.com"
+          REACT_APP_BACKEND_URL: "https://samratglass.com"
+          # CRA's CI=true converts warnings into errors; we keep warnings
+          # non-fatal because the current tree has known cosmetic Tailwind
+          # ambiguous-class warnings that aren't blocking the ship.
+          CI: "false"
+          GENERATE_SOURCEMAP: "false"
+        run: yarn build
+
+      - name: Assert build/index.html exists and is non-empty
+        run: |
+          test -s build/index.html \
+            || { echo "::error::build/index.html missing or empty"; exit 1; }
+
+      - name: Assert every expected category prerender HTML file exists
+        # Slug-driven, not count-driven: we validate the exact expected list
+        # from frontend/src/lib/categories.data.json. A future accidental
+        # rename or deletion inside categories.data.json will fail here
+        # loudly instead of silently shipping a broken sitemap.
+        run: |
+          set -euo pipefail
+          expected_slugs=(
+            chandeliers
+            hanging-lights
+            wall-lights
+            table-lamps
+            floor-lamps
+            candle-stands
+            floor-chandeliers
+            table-chandeliers
+            ceiling-lights
+            gate-lights
+          )
+          missing=()
+          for slug in "${expected_slugs[@]}"; do
+            f="build/category/${slug}/index.html"
+            if [ ! -s "$f" ]; then
+              missing+=("$slug ($f)")
+            fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            echo "::error::Missing/empty prerendered category HTML files:"
+            printf '::error:: - %s\n' "${missing[@]}"
+            exit 1
+          fi
+          # Belt-and-braces: nothing UNEXPECTED slipped in either.
+          found=$(ls build/category | sort)
+          expected=$(printf '%s\n' "${expected_slugs[@]}" | sort)
+          if [ "$found" != "$expected" ]; then
+            echo "::error::Unexpected category directories under build/category/"
+            echo "Expected:"; printf '  %s\n' "${expected_slugs[@]}"
+            echo "Found:";    printf '  %s\n' $found
+            exit 1
+          fi
+          echo "All 10 expected category HTML files present:"
+          printf '  ✓ %s\n' "${expected_slugs[@]}"

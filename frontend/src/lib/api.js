@@ -25,6 +25,15 @@ export const api = {
    * can still get a flat array of items. The public cap is 48/page, admins
    * get 5000/page — either way we page until total_pages is reached.
    */
+  adminProductsExport: () => client.get("/admin/products/export").then(r => r.data),
+
+  // --- Admin deletion helpers (Batch B) ---
+  adminDeleteInquiry: (id) => client.delete(`/inquiries/${encodeURIComponent(id)}`).then(r => r.data),
+  adminGalleryCleanupOrphans: () => client.post("/admin/gallery/cleanup-orphans", {}).then(r => r.data),
+  adminBulkDeleteInquiries: (ids) => client.post("/admin/inquiries/bulk-delete", { ids }).then(r => r.data),
+  adminDeleteContactMessage: (id) => client.delete(`/contact-messages/${encodeURIComponent(id)}`).then(r => r.data),
+  adminBulkDeleteContactMessages: (ids) => client.post("/admin/contact-messages/bulk-delete", { ids }).then(r => r.data),
+
   listAllProducts: async (params = {}) => {
     const collected = [];
     const seen = new Set();
@@ -72,6 +81,9 @@ export const api = {
   listContact: () => client.get("/contact").then(r => r.data),
 
   getSettings: () => client.get("/settings").then(r => r.data),
+  // Admin-only: returns the full Settings model including secrets like
+  // google_maps_api_key. Public `/settings` deliberately omits those.
+  adminGetSettings: () => client.get("/admin/settings").then(r => r.data),
   updateSettings: (data) => client.put("/settings", data).then(r => r.data),
 
   // --- Hero slider ---

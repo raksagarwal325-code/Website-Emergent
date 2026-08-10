@@ -415,9 +415,18 @@ class Inquiry(BaseModel):
 class InquiryCreate(BaseModel):
     customer_name: str
     customer_email: EmailStr
-    customer_phone: str = ""
+    # Mobile / WhatsApp number is now REQUIRED on new submissions.
+    # The stored `Inquiry` model above keeps `customer_phone` optional so
+    # legacy rows without a phone continue to load in the admin dashboard.
+    customer_phone: str
     message: str = ""
     items: List[InquiryItemInput] = []
+
+    @field_validator("customer_phone")
+    @classmethod
+    def _normalize_phone(cls, v):
+        from server_phone import normalize_phone  # pragma: no cover
+        return normalize_phone(v)
 
 
 # Allowed enquiry types on the /contact form. Kept in one place so backend
@@ -431,6 +440,9 @@ class ContactMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     email: EmailStr
+    # Legacy contact rows may pre-date the "required phone" contract; keep
+    # storage optional so `list_contacts` doesn't 500 on old data.
+    phone: str = ""
     subject: str = ""
     message: str
     enquiry_type: EnquiryType = "general"
@@ -440,9 +452,17 @@ class ContactMessage(BaseModel):
 class ContactCreate(BaseModel):
     name: str
     email: EmailStr
+    # Mobile / WhatsApp number is REQUIRED on new /api/contact submissions.
+    phone: str
     subject: str = ""
     message: str
     enquiry_type: EnquiryType = "general"
+
+    @field_validator("phone")
+    @classmethod
+    def _normalize_phone(cls, v):
+        from server_phone import normalize_phone  # pragma: no cover
+        return normalize_phone(v)
 
     @field_validator("enquiry_type", mode="before")
     @classmethod
@@ -468,16 +488,27 @@ class Settings(BaseModel):
     delivery_info: str = "Pan-India shipping · 7–10 business days"
     payment_methods: str = "UPI · Net Banking"
     currency_symbol: str = "₹"
-    google_cid: str = "16850385744624001495"
-    google_place_id: str = ""
+    # CID 682987565690709677 is the canonical Google Business Profile CID
+    # for Samrat Glass Emporium, Firozabad — verified by decoding the
+    # Google Place ID `ChIJqRfIkPVHdDkRreYAh5J1egk` (the last 8 bytes of
+    # the base64-decoded Place ID, interpreted as an unsigned little-endian
+    # int64). Any admin override in the Settings collection is respected.
+    google_cid: str = "682987565690709677"
+    google_place_id: str = "ChIJqRfIkPVHdDkRreYAh5J1egk"
     google_maps_api_key: str = ""
     homepage_content: dict = Field(default_factory=dict)
+    # Editable legal / policy content. Shape (all keys optional):
+    #   { "<slug>": { "body": "<multiline text>", "updated_at": "YYYY-MM-DD" } }
+    # where <slug> ∈ {privacy, terms, shipping, returns, payment}.
+    # If a slug is missing OR its `body` is blank/whitespace, the frontend
+    # falls back to the code-shipped default in `lib/legalContent.js`.
+    legal_content: dict = Field(default_factory=dict)
     instagram_url: str = ""
     facebook_url: str = ""
     youtube_url: str = ""
     pinterest_url: str = ""
     business_hours: str = "Mon – Sun: 10:00 AM – 8:00 PM"
-    google_maps_url: str = "https://www.google.com/maps?cid=16850385744624001495"
+    google_maps_url: str = "https://www.google.com/maps?cid=682987565690709677"
     watermark: dict = Field(default_factory=lambda: {
         "enabled": True,
         "opacity": 0.15,
@@ -485,6 +516,50 @@ class Settings(BaseModel):
         "position": "center",
         "adaptive_tone": True,
     })
+
+
+class PublicSettings(BaseModel):
+    """Client-safe subset of `Settings` returned by the public
+    `GET /api/settings` endpoint.
+
+    Security invariant: this model MUST NEVER contain server-side secrets.
+    Fields explicitly excluded (and enforced by
+    `test_public_settings_excludes_google_maps_api_key` in
+    tests/test_public_settings_exposure.py):
+      * `google_maps_api_key`  — Google Places API credential, used
+                                 SERVER-SIDE ONLY by `/api/google/reviews`.
+      * `watermark`            — admin-only operational config; not a
+                                 secret, but never consumed client-side
+                                 by public UI so it stays behind the
+                                 admin endpoint.
+
+    Every field below is verified as being read from `/api/settings` by
+    at least one public component (Header/Footer/Home/Cart/Contact/etc.).
+    Do NOT add a field here without checking public frontend usage; do
+    NOT add server-side secrets EVER.
+    """
+    model_config = ConfigDict(extra="ignore")
+    id: str = "settings"
+    brand_name: str = ""
+    tagline: str = ""
+    whatsapp_number: str = ""
+    admin_email: str = ""  # public "contact us" address, shown in footer/mailto
+    hero_image: str = ""
+    address: str = ""
+    gstin: str = ""
+    delivery_info: str = ""
+    payment_methods: str = ""
+    currency_symbol: str = "₹"
+    google_cid: str = ""          # public Google Business CID (used in maps URL)
+    google_place_id: str = ""     # public Place ID (used to build "write review" URL)
+    google_maps_url: str = ""
+    homepage_content: dict = Field(default_factory=dict)
+    legal_content: dict = Field(default_factory=dict)
+    instagram_url: str = ""
+    facebook_url: str = ""
+    youtube_url: str = ""
+    pinterest_url: str = ""
+    business_hours: str = ""
 
 
 class SettingsUpdate(BaseModel):
@@ -502,6 +577,7 @@ class SettingsUpdate(BaseModel):
     google_place_id: Optional[str] = None
     google_maps_api_key: Optional[str] = None
     homepage_content: Optional[dict] = None
+    legal_content: Optional[dict] = None
     instagram_url: Optional[str] = None
     facebook_url: Optional[str] = None
     youtube_url: Optional[str] = None
@@ -546,15 +622,29 @@ async def list_products(
     admin: Optional["_AdminUser"] = Depends(maybe_admin),
 ):
     query = {}
-    # SECURITY — only signed-in admins may request drafts. If a public caller
-    # tries to bypass the filter via ?include_drafts=1 or ?status=draft we
-    # silently ignore those params and still exclude drafts.
+    # SECURITY — strict allow-list: only rows with `status == "published"` are
+    # publicly visible. This is INTENTIONALLY stricter than the previous
+    # `$ne: "draft"` deny-list because rows with a missing / null / empty /
+    # unknown status (e.g. legacy imports, future workflow states like
+    # "archived", "pending", "review") must NOT leak to visitors. Any client
+    # attempt to bypass this via `?status=draft` or `?include_drafts=1` from
+    # an unauthenticated caller is silently ignored — the filter stays
+    # `status: "published"`.
+    #
+    # Admin behaviour is unchanged: signed-in admins can pass `status=draft`
+    # to see drafts, `status=<anything>` to filter by any workflow state, or
+    # `include_drafts=1` to list drafts + published together (implemented
+    # via `$in`), and the default admin view still shows everything except
+    # drafts (matching the old admin dashboard expectation).
     if admin is None:
-        query["status"] = {"$ne": "draft"}
-    elif not include_drafts and not status:
-        query["status"] = {"$ne": "draft"}
+        query["status"] = "published"
     elif status:
         query["status"] = status
+    elif include_drafts:
+        # Admin explicitly asked for drafts + published (no filter at all).
+        pass
+    else:
+        query["status"] = {"$ne": "draft"}
     if q:
         query["$or"] = [
             {"name": {"$regex": q, "$options": "i"}},
@@ -613,8 +703,11 @@ async def list_products(
 
 @api.get("/products/categories")
 async def list_categories(admin: Optional["_AdminUser"] = Depends(maybe_admin)):
-    # Public callers must not see categories that only exist on draft rows.
-    query = {} if admin else {"status": {"$ne": "draft"}}
+    # SECURITY — strict allow-list: public callers see categories only from
+    # rows where `status == "published"`. Categories that exist ONLY on
+    # drafts / missing-status / archived / pending rows must not appear
+    # publicly (they would leak information about unpublished inventory).
+    query = {} if admin else {"status": "published"}
     cats = await db.products.distinct("category", query)
     return sorted(cats)
 
@@ -624,9 +717,12 @@ async def get_product(product_id: str, admin: Optional["_AdminUser"] = Depends(m
     doc = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Product not found")
-    # SECURITY — draft products are only visible to signed-in admins. To
-    # anonymous callers, respond with 404 (don't leak existence via 403).
-    if doc.get("status") == "draft" and admin is None:
+    # SECURITY — strict allow-list. Only rows with `status == "published"` are
+    # served to anonymous callers. Everything else (draft, archived, pending,
+    # missing status, null status, empty status, unknown status) responds
+    # 404 to unauthenticated visitors so we don't leak the existence of
+    # unpublished inventory via a distinguishable 403.
+    if admin is None and doc.get("status") != "published":
         raise HTTPException(404, "Product not found")
     return doc
 
@@ -656,7 +752,111 @@ async def delete_product(product_id: str, admin: _AdminUser = Depends(require_ad
     if res.deleted_count == 0:
         raise HTTPException(404, "Product not found")
     await db.reviews.delete_many({"product_id": product_id})
+    # ALSO sweep any gallery-project references to this product id so the
+    # admin "N linked" counter never shows a phantom count after a
+    # catalogue delete. Failure of this sweep must not abort the delete
+    # (the product is gone regardless), but we do log it. This addresses
+    # the "orphaned linked product" bug where deleting a catalogue product
+    # left dangling ids inside `settings.homepage_content.gallery.items`.
+    try:
+        removed = await _sweep_product_from_gallery_projects(product_id)
+        if removed:
+            logger.info(
+                "delete_product.swept_from_gallery product_id=%s items=%d",
+                product_id, removed,
+            )
+    except Exception as e:  # pragma: no cover
+        logger.exception("delete_product.gallery_sweep_failed err=%s", e)
     return {"ok": True}
+
+
+async def _sweep_product_from_gallery_projects(product_id: str) -> int:
+    """Remove `product_id` from every gallery item's `products` array in
+    `settings.homepage_content.gallery.items`. Returns the number of
+    gallery items that were modified (0 if the id wasn't linked
+    anywhere). Idempotent — safe to call repeatedly."""
+    s = await db.settings.find_one({"id": "settings"}, {"_id": 0})
+    if not s:
+        return 0
+    homepage = s.get("homepage_content") or {}
+    gallery = homepage.get("gallery") or {}
+    items = gallery.get("items") or []
+    if not items:
+        return 0
+    changed = 0
+    for it in items:
+        raw = it.get("products") or []
+        if product_id in raw:
+            it["products"] = [pid for pid in raw if pid != product_id]
+            changed += 1
+    if changed:
+        await db.settings.update_one(
+            {"id": "settings"},
+            {"$set": {"homepage_content.gallery.items": items}},
+        )
+    return changed
+
+
+@api.post("/admin/gallery/cleanup-orphans")
+async def cleanup_gallery_orphans(admin: _AdminUser = Depends(require_admin)):
+    """One-shot cleanup: scan every gallery project's `products` array and
+    remove any id that no longer resolves to an existing product. Returns
+    a per-project report (project title, orphans removed, valid links
+    kept) so the admin can audit what was cleaned. Idempotent — running
+    it again against a clean state returns `orphans_removed_total=0`.
+    Never touches product data or any other collection."""
+    s = await db.settings.find_one({"id": "settings"}, {"_id": 0})
+    if not s:
+        return {"orphans_removed_total": 0, "projects": []}
+    homepage = s.get("homepage_content") or {}
+    gallery = homepage.get("gallery") or {}
+    items = gallery.get("items") or []
+    valid_ids = {
+        row["id"]
+        async for row in db.products.find({}, {"id": 1, "_id": 0})
+    }
+    report = []
+    total_removed = 0
+    for i, it in enumerate(items):
+        raw = it.get("products") or []
+        valid = [pid for pid in raw if pid in valid_ids]
+        orphans = [pid for pid in raw if pid not in valid_ids]
+        if orphans:
+            it["products"] = valid
+            total_removed += len(orphans)
+        report.append({
+            "project_index": i,
+            "project_title": it.get("title") or "(untitled)",
+            "raw_count": len(raw),
+            "valid_count": len(valid),
+            "orphans_removed": len(orphans),
+            "orphan_ids": orphans,
+        })
+    if total_removed:
+        await db.settings.update_one(
+            {"id": "settings"},
+            {"$set": {"homepage_content.gallery.items": items}},
+        )
+    logger.info(
+        "cleanup_gallery_orphans.done total_removed=%d projects_scanned=%d",
+        total_removed, len(items),
+    )
+    return {"orphans_removed_total": total_removed, "projects": report}
+
+
+@api.get("/admin/products/export")
+async def admin_products_export(admin: _AdminUser = Depends(require_admin)):
+    """Return the full published-product catalogue for the admin-only PDF
+    generator. Public visitors can browse `/catalog` a page at a time but
+    are not permitted to bulk-download every product — that route is now
+    admin-only and this endpoint is the sole data source for it. Strict
+    allow-list (`status == "published"`) mirrors the public visibility
+    rule so the printed PDF never contains a draft/archived/missing-status
+    row that a visitor could never have reached themselves."""
+    docs = await db.products.find(
+        {"status": "published"}, {"_id": 0}
+    ).sort("created_at", -1).to_list(length=10000)
+    return {"items": docs, "total": len(docs)}
 
 
 # --- Reviews ---
@@ -673,13 +873,13 @@ async def list_reviews(product_id: str):
 @api.post("/reviews", response_model=Review)
 async def create_review(payload: ReviewCreate, _rl = Depends(rate_limit("reviews", 3, 600))):
     # SECURITY — every submission goes into moderation regardless of what the
-    # client sends. The product must exist AND be published: drafts and
-    # missing product ids are rejected with 400 so review-farming can't be
-    # aimed at unlisted rows.
+    # client sends. The product must exist AND be strictly `status ==
+    # "published"`. Missing / draft / archived / pending / unknown statuses
+    # are rejected so review-farming can't be aimed at unlisted rows.
     prod = await db.products.find_one({"id": payload.product_id}, {"_id": 0, "id": 1, "status": 1})
     if not prod:
         raise HTTPException(status_code=400, detail="Product not found")
-    if str(prod.get("status", "published")).lower() != "published":
+    if prod.get("status") != "published":
         raise HTTPException(status_code=400, detail="Product is not available for reviews")
 
     review = Review(
@@ -786,7 +986,11 @@ async def create_inquiry(payload: InquiryCreate, _rl = Depends(rate_limit("inqui
         doc = await db.products.find_one({"id": it.product_id}, {"_id": 0})
         if not doc:
             raise HTTPException(status_code=400, detail=f"Product not found: {it.product_id}")
-        if str(doc.get("status", "published")).lower() == "draft":
+        # Strict allow-list: only genuinely-published items can be added to
+        # a cart / inquiry. Missing status, drafts, archived, pending, etc.
+        # are all rejected — public callers should not even be able to
+        # discover their ids, but this is our second line of defence.
+        if doc.get("status") != "published":
             raise HTTPException(status_code=400, detail=f"Product not available: {it.product_id}")
         price = float(doc.get("price") or 0)
         server_items.append(InquiryItem(
@@ -819,9 +1023,37 @@ async def create_inquiry(payload: InquiryCreate, _rl = Depends(rate_limit("inqui
     return inquiry
 
 
-@api.get("/inquiries", response_model=List[Inquiry])
+@api.get("/inquiries")
 async def list_inquiries(admin: _AdminUser = Depends(require_admin)):
-    return await db.inquiries.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    """Return the most recent enquiries (defensive):
+    We deliberately DO NOT use `response_model=List[Inquiry]` here because
+    a single malformed row (e.g. legacy empty email, unexpected `items`
+    shape, or a stray field) would raise a Pydantic ValidationError from
+    the response-serialisation layer and surface as an opaque 500/502 to
+    the admin dashboard. Instead we serialise row-by-row through the
+    Pydantic model, skip and log rows that fail validation, and always
+    return a well-formed JSON array so the UI can render whatever is
+    valid. Individual bad rows can still be deleted from the UI once the
+    admin can see them."""
+    try:
+        raw_rows = await db.inquiries.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    except Exception as e:  # pragma: no cover
+        logger.exception("list_inquiries.mongo_error err=%s", e)
+        raise HTTPException(status_code=503, detail="Could not load enquiries")
+    out = []
+    skipped = 0
+    for row in raw_rows:
+        try:
+            out.append(Inquiry(**row).model_dump())
+        except Exception as e:
+            skipped += 1
+            logger.warning(
+                "list_inquiries.row_validation_failed id=%s err=%s",
+                row.get("id"), e,
+            )
+    if skipped:
+        logger.warning("list_inquiries.skipped_rows=%d total=%d", skipped, len(raw_rows))
+    return out
 
 
 @api.patch("/inquiries/{inquiry_id}")
@@ -830,6 +1062,64 @@ async def update_inquiry_status(inquiry_id: str, status: str = Query(...), admin
     if res.matched_count == 0:
         raise HTTPException(404, "Inquiry not found")
     return {"ok": True}
+
+
+class _IdList(BaseModel):
+    """Body payload for bulk-delete endpoints. IDs are deduplicated and
+    validated (non-empty, string) before use."""
+    ids: list[str]
+
+
+def _clean_ids(payload: _IdList) -> list[str]:
+    """Deduplicate + strip + drop blanks. Returns a stable ordered list."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in payload.ids or []:
+        s = (raw or "").strip()
+        if not s or s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+    if not out:
+        raise HTTPException(status_code=400, detail="No valid ids supplied")
+    if len(out) > 500:
+        raise HTTPException(status_code=413, detail="Too many ids (max 500)")
+    return out
+
+
+@api.delete("/inquiries/{inquiry_id}")
+async def admin_delete_inquiry(inquiry_id: str, admin: _AdminUser = Depends(require_admin)):
+    """Permanently remove a single enquiry. Enquiries are self-contained
+    (there is no owned child collection in the current data model), so no
+    cascade is performed — unrelated contact messages are untouched."""
+    res = await db.inquiries.delete_one({"id": inquiry_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Inquiry not found")
+    return {"ok": True, "deleted": 1}
+
+
+@api.post("/admin/inquiries/bulk-delete")
+async def admin_bulk_delete_inquiries(payload: _IdList, admin: _AdminUser = Depends(require_admin)):
+    """Bulk-delete enquiries. Reports the actual count Mongo removed —
+    non-existent IDs are silently skipped rather than aborting the batch."""
+    ids = _clean_ids(payload)
+    res = await db.inquiries.delete_many({"id": {"$in": ids}})
+    return {"ok": True, "requested": len(ids), "deleted": res.deleted_count}
+
+
+@api.delete("/contact-messages/{message_id}")
+async def admin_delete_contact_message(message_id: str, admin: _AdminUser = Depends(require_admin)):
+    res = await db.contact_messages.delete_one({"id": message_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"ok": True, "deleted": 1}
+
+
+@api.post("/admin/contact-messages/bulk-delete")
+async def admin_bulk_delete_messages(payload: _IdList, admin: _AdminUser = Depends(require_admin)):
+    ids = _clean_ids(payload)
+    res = await db.contact_messages.delete_many({"id": {"$in": ids}})
+    return {"ok": True, "requested": len(ids), "deleted": res.deleted_count}
 
 
 # --- Contact ---
@@ -849,9 +1139,29 @@ async def create_contact(payload: ContactCreate, _rl = Depends(rate_limit("conta
     return msg
 
 
-@api.get("/contact", response_model=List[ContactMessage])
+@api.get("/contact")
 async def list_contact(admin: _AdminUser = Depends(require_admin)):
-    return await db.contact_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    """Same defensive pattern as `list_inquiries`. Skips + logs any row
+    that fails ContactMessage validation instead of returning a 500."""
+    try:
+        raw_rows = await db.contact_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    except Exception as e:  # pragma: no cover
+        logger.exception("list_contact.mongo_error err=%s", e)
+        raise HTTPException(status_code=503, detail="Could not load messages")
+    out = []
+    skipped = 0
+    for row in raw_rows:
+        try:
+            out.append(ContactMessage(**row).model_dump())
+        except Exception as e:
+            skipped += 1
+            logger.warning(
+                "list_contact.row_validation_failed id=%s err=%s",
+                row.get("id"), e,
+            )
+    if skipped:
+        logger.warning("list_contact.skipped_rows=%d total=%d", skipped, len(raw_rows))
+    return out
 
 
 class CatalogueRequest(BaseModel):
@@ -860,29 +1170,52 @@ class CatalogueRequest(BaseModel):
     source: str = "contact_page"
 
 
+import re
+
+_INDIAN_MOBILE_RE = re.compile(r"^(?:\+?91)?([6-9]\d{9})$")
+
+
+def _normalize_indian_mobile(raw: str) -> str | None:
+    """Return `+91XXXXXXXXXX` or None if the input is not a valid Indian mobile.
+
+    Accepts 10 digits, `+91` + 10 digits, or `91` + 10 digits, tolerant of
+    embedded whitespace / dashes / brackets. First subscriber-digit must be
+    6-9 per TRAI numbering plan.
+    """
+    s = re.sub(r"[^\d+]", "", str(raw or ""))
+    m = _INDIAN_MOBILE_RE.match(s)
+    return f"+91{m.group(1)}" if m else None
+
+
 @api.post("/catalogue-request")
 async def create_catalogue_request(payload: CatalogueRequest, _rl = Depends(rate_limit("catreq", 10, 300))):
-    """Store a name + phone lead every time someone requests the PDF catalogue
-    via the "Send catalogue on WhatsApp" flow. Also visible under Admin →
-    Inquiries so the shop owner can follow up if the visitor never actually
-    sends the WhatsApp message."""
+    """Store a name + WhatsApp number every time someone requests the PDF
+    catalogue via the WhatsApp flow. WhatsApp is now mandatory and validated
+    both here and on the frontend."""
+    name = (payload.name or "").strip()[:120]
+    raw_phone = (payload.phone or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Please enter your name.")
+    if not raw_phone:
+        raise HTTPException(status_code=400, detail="Please enter your WhatsApp number.")
+    normalized = _normalize_indian_mobile(raw_phone)
+    if not normalized:
+        raise HTTPException(status_code=400,
+                            detail="Please enter a valid 10-digit WhatsApp number.")
     record = {
         "id": str(uuid.uuid4()),
-        "name": (payload.name or "").strip()[:120],
-        "phone": (payload.phone or "").strip()[:32],
+        "name": name,
+        "phone": normalized,
         "source": (payload.source or "contact_page")[:64],
         "created_at": now_iso(),
         "type": "catalogue_request",
     }
-    if not record["name"] or not record["phone"]:
-        raise HTTPException(status_code=400, detail="Name and phone are required")
-    # Reuse the inquiries collection so the shop owner sees these leads in the
-    # same admin table as regular inquiries.
     await db.inquiries.insert_one({
         **record,
         "customer_name": record["name"],
         "customer_email": "",
-        "customer_phone": record["phone"],
+        "customer_phone": normalized,
+        "customer_whatsapp": normalized,
         "message": f"Requested the PDF catalogue via WhatsApp from {record['source']}",
         "items": [],
         "total": 0.0,
@@ -936,6 +1269,9 @@ _STATIC_SITEMAP_ENTRIES: list[tuple[str, str, str]] = [
     ("/gallery",          "weekly",  "0.8"),
     ("/faq",              "monthly", "0.6"),
     ("/contact",          "yearly",  "0.6"),
+    # Dedicated commercial-lead landing pages — high-intent B2B traffic.
+    ("/custom-lighting-bulk-orders",     "monthly", "0.8"),
+    ("/architects-interior-designers",   "monthly", "0.8"),
     ("/legal/privacy",    "yearly",  "0.3"),
     ("/legal/terms",      "yearly",  "0.3"),
     ("/legal/shipping",   "yearly",  "0.3"),
@@ -1203,6 +1539,10 @@ CATEGORY_FEATURED_ALLOWED = {
     "Table Lamp",
     "Floor Lamp",
     "Candle Stand",
+    "Ceiling Light",
+    "Gate Light",
+    "Floor Chandelier",
+    "Table Chandelier",
 }
 
 
@@ -1365,14 +1705,34 @@ async def admin_reset_category_featured(category: str):
 
 
 # --- Settings ---
-@api.get("/settings", response_model=Settings)
+# PUBLIC endpoint — MUST return the reduced `PublicSettings` model only.
+# The full `Settings` object contains `google_maps_api_key` (a server-side
+# Google Places credential) and must never be exposed unauthenticated.
+@api.get("/settings", response_model=PublicSettings)
 async def get_settings():
+    doc = await db.settings.find_one({"id": "settings"}, {"_id": 0})
+    if not doc:
+        # Seed on first read so the admin has a row to edit.
+        s = Settings()
+        await db.settings.insert_one(s.model_dump())
+        doc = s.model_dump()
+    # Merge defaults for backward compat with older DB rows, then let
+    # PublicSettings strip out any field not explicitly whitelisted
+    # (google_maps_api_key, watermark, and any future secret additions).
+    merged = {**Settings().model_dump(), **doc}
+    return PublicSettings(**merged)
+
+
+# ADMIN-ONLY endpoint — full Settings object including
+# `google_maps_api_key`. Protected by `require_admin`; the frontend
+# admin panel now points here instead of the public /settings.
+@api.get("/admin/settings", response_model=Settings)
+async def get_admin_settings(admin: _AdminUser = Depends(require_admin)):
     doc = await db.settings.find_one({"id": "settings"}, {"_id": 0})
     if not doc:
         s = Settings()
         await db.settings.insert_one(s.model_dump())
         return s
-    # Merge in defaults for any newly added fields (backward compat)
     merged = {**Settings().model_dump(), **doc}
     return merged
 

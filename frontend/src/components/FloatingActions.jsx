@@ -3,8 +3,7 @@ import { useLocation } from "react-router-dom";
 import { ArrowUp } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { trackWhatsAppClick } from "../lib/analytics";
-
-const WA_PREFILLED = "Hi Rakshit ji, I am interested in Samrat Glass Emporium products. Please share more details.";
+import { waGeneralLink } from "../lib/whatsapp";
 
 // Official WhatsApp glyph (SVG) — brand-accurate
 const WhatsAppGlyph = ({ size = 24 }) => (
@@ -32,10 +31,7 @@ export default function FloatingActions() {
   const isCatalogue = location.pathname.startsWith("/catalogue");
   if (isCatalogue) return null;
 
-  const rawNumber = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-  const waLink = rawNumber
-    ? `https://wa.me/${rawNumber}?text=${encodeURIComponent(WA_PREFILLED)}`
-    : "";
+  const waLink = waGeneralLink(settings?.whatsapp_number);
 
   const scrollTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 

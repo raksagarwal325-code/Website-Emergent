@@ -31,13 +31,13 @@ export const LEGAL_PAGES = {
       {
         heading: "Analytics & Website Usage (Google Analytics 4)",
         text:
-          "We use Google Analytics 4 (GA4) to understand how visitors use this website — which pages are viewed, which products are opened, when items are added to the inquiry basket, favourites or WhatsApp is clicked, and which catalogue actions are used. This helps us improve product discovery, page performance, and the overall experience. GA4 stores anonymised usage data on Google's infrastructure with IP anonymisation enabled.",
+          "We use Google Analytics 4 (GA4) to understand how visitors use this website — which pages are viewed, which products are opened, link and button interactions, including WhatsApp links, and catalogue downloads. This helps us improve product discovery, page performance, and the overall experience. Google Analytics processes network and device information (such as browser, device type, and network-derived signals) to derive approximate location and aggregate usage statistics.",
         bullets: [
-          "Data collected: page URL, referrer, page title, approximate location (city/region), device type, browser, screen size, anonymised IP, and interaction events (product views, add-to-cart, wishlist, WhatsApp click, catalogue download, contact/inquiry submissions).",
+          "Data collected: page URL, referrer, page title, approximate location (city/region) derived by Google, device type, browser, screen size, and interaction events (product views, add-to-cart, wishlist, link and button interactions including WhatsApp links, catalogue downloads, contact/inquiry submissions).",
           "Data NOT collected by analytics: your name, email, phone number, address, inquiry message content, or any content you type into a form.",
           "Purpose: aggregated site analytics, product performance measurement, and improving customer experience — not for advertising or profile-building.",
           "Legal basis: our legitimate interest in operating and improving this website.",
-          "Retention: GA4 default (up to 14 months from the last user activity), after which data is auto-deleted.",
+          "Retention: Analytics data is retained according to the retention settings configured in our Google Analytics property.",
           "Your choices: we honour your browser's Do Not Track setting — if enabled, no analytics scripts load. You can also install any standard analytics-blocking extension without affecting site functionality.",
           "Google's privacy information: https://policies.google.com/privacy · How Google uses data: https://policies.google.com/technologies/partner-sites · Google Analytics opt-out: https://tools.google.com/dlpage/gaoptout",
         ],
@@ -47,7 +47,7 @@ export const LEGAL_PAGES = {
         bullets: [
           "To respond to product inquiries",
           "To share quotations and product details",
-          "To process catalogue/download requests",
+          "To process catalogue downloads",
           "To coordinate delivery and customer support",
           "To improve our website, catalogue, and product experience",
           "To send business-related communication when requested by the customer",
@@ -96,9 +96,14 @@ export const LEGAL_PAGES = {
           "Prices shown on the website may be indicative and can vary depending on size, finish, customization, quantity, packaging, and delivery location. Final quotation will be confirmed through WhatsApp, email, or direct communication.",
       },
       {
-        heading: "Custom Orders",
+        heading: "Order Confirmation & Cancellation",
         text:
-          "Customized products are made as per client requirements. Once confirmed, custom orders may not be cancelled after production has started.",
+          "Once an order has been confirmed by Samrat Glass Emporium, it cannot be cancelled. This applies to both standard and customized products. Customized products may enter production immediately after confirmation and/or receipt of the agreed advance.",
+      },
+      {
+        heading: "Spare / Replacement Components",
+        text:
+          "Spare or replacement glass/components may be supplied after delivery depending on stock availability, compatibility, and product design. Such replacements may be chargeable unless they form part of an accepted transit-damage or qualifying defect claim.",
       },
       {
         heading: "Website Use",
@@ -109,6 +114,11 @@ export const LEGAL_PAGES = {
         heading: "Intellectual Property",
         text:
           "All brand content, logo, product images, text, catalogue designs, and website content belong to Samrat Glass Emporium unless otherwise stated.",
+      },
+      {
+        heading: "Product Images & Usage Rights",
+        text:
+          "All product photographs, catalogue images, renders, graphics and other visual content displayed on this website are the property of Samrat Glass Emporium unless otherwise stated. Unauthorized copying, downloading, reproduction, redistribution, commercial use, modification, or removal of attribution is prohibited without prior written permission.",
       },
       {
         heading: "Limitation",
@@ -156,6 +166,11 @@ export const LEGAL_PAGES = {
       "Because our products include handcrafted glass lighting and customized decorative items, returns and replacements are handled carefully.",
     sections: [
       {
+        heading: "Warranty & Handcrafted Glass",
+        text:
+          "Our decorative lighting products predominantly contain handcrafted glass and fragile components and therefore do not carry a standard or general warranty against accidental breakage, mishandling, normal wear, installation damage, or damage occurring after delivery. Genuine manufacturing defects and accepted transit-damage claims will continue to be handled under this Return & Replacement Policy.",
+      },
+      {
         heading: "Eligible for Replacement",
         bullets: [
           "Product received damaged in transit",
@@ -182,6 +197,11 @@ export const LEGAL_PAGES = {
         heading: "Resolution",
         text:
           "Depending on the case, Samrat Glass Emporium may offer replacement part, repair support, replacement product, or another suitable resolution.",
+      },
+      {
+        heading: "Spare / Replacement Components",
+        text:
+          "Spare or replacement glass/components may be supplied after delivery depending on stock availability, compatibility, and product design. Such replacements may be chargeable unless they form part of an accepted transit-damage or qualifying defect claim.",
       },
       {
         heading: "Installation",
@@ -233,3 +253,50 @@ export const LEGAL_PAGES = {
 };
 
 export const LEGAL_ORDER = ["privacy", "terms", "shipping", "returns", "payment"];
+
+// Fixed default "Last updated" date associated with the currently shipped
+// default policy wording. The public page falls back to this constant when
+// an admin has not entered a value in Admin → Legal / Policies → Last updated.
+// Bump this ONLY when the code-shipped default wording in this file is
+// materially changed and you want that reflected on the live page. The
+// per-policy Admin field always wins when it is filled in.
+export const LEGAL_DEFAULT_UPDATED_AT = "20 February 2026";
+
+
+/**
+ * Serialize a shipped-default policy back into the same plain-text
+ * format the Admin editor and the LegalPage parser use
+ * (`## heading`, `- bullet`, blank-line separators).
+ *
+ * Used by the Admin editor to prefill each textarea with the actual
+ * current default body when no admin override has been saved yet,
+ * so admins see and edit the real wording rather than an empty box.
+ *
+ * The public LegalPage rendering path does NOT use this — it still
+ * reads the structured `LEGAL_PAGES[slug]` object directly. This
+ * serializer is only for populating the Admin UI.
+ */
+export function serializeLegalDefault(slug) {
+  const p = LEGAL_PAGES[slug];
+  if (!p) return "";
+  const out = [];
+  if (p.intro) out.push(p.intro);
+  for (const s of p.sections || []) {
+    if (out.length) out.push(""); // blank line between blocks
+    if (s.heading) out.push(`## ${s.heading}`);
+    if (s.text) out.push(s.text);
+    if (Array.isArray(s.bullets)) {
+      for (const b of s.bullets) out.push(`- ${b}`);
+    }
+    if (Array.isArray(s.blocks)) {
+      // `blocks` is used sparingly (e.g. the Privacy Contact block).
+      // Serialize subheadings as `## …` and each `text` on its own line
+      // so an admin can see and edit the exact wording.
+      for (const bl of s.blocks) {
+        if (bl.subheading) out.push(`## ${bl.subheading}`);
+        if (bl.text) out.push(bl.text);
+      }
+    }
+  }
+  return out.join("\n");
+}

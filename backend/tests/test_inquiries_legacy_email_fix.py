@@ -21,6 +21,7 @@ API = f"{BASE_URL}/api"
 
 ADMIN_COOKIES = {"session_token": "test_admin_session"}
 STATE_CHANGE_HEADERS = {"X-Requested-With": "fetch"}
+TEST_PRODUCT_ID = "TEST_legacy_email_product"
 
 
 def _mongo():
@@ -45,28 +46,35 @@ def _run_mongo(script):
 
 @pytest.fixture(scope="module", autouse=True)
 def _seed_and_cleanup():
-    # Seed the three legacy inquiry rows expected by the tests.
-    seed = """
+    # Seed the three legacy inquiry rows, admin session, and deterministic
+    # published product expected by the tests.
+    seed = f"""
     db.inquiries.insertMany([
-      {id:"TEST_legacy_blank_email", customer_name:"Legacy Test", customer_email:"",
+      {{id:"TEST_legacy_blank_email", customer_name:"Legacy Test", customer_email:"",
        customer_phone:"999", message:"", items:[], total:0, status:"new",
-       created_at:new Date().toISOString()},
-      {id:"TEST_legacy_null_email", customer_name:"Legacy Null", customer_email:null,
+       created_at:new Date().toISOString()}},
+      {{id:"TEST_legacy_null_email", customer_name:"Legacy Null", customer_email:null,
        customer_phone:"888", message:"", items:[], total:0, status:"new",
-       created_at:new Date().toISOString()},
-      {id:"TEST_legacy_whitespace_email", customer_name:"Legacy WS", customer_email:"   ",
+       created_at:new Date().toISOString()}},
+      {{id:"TEST_legacy_whitespace_email", customer_name:"Legacy WS", customer_email:"   ",
        customer_phone:"777", message:"", items:[], total:0, status:"new",
-       created_at:new Date().toISOString()}
+       created_at:new Date().toISOString()}}
     ]);
+    db.products.deleteMany({{id:"{TEST_PRODUCT_ID}"}});
+    db.products.insertOne({{
+      id:"{TEST_PRODUCT_ID}", name:"TEST Legacy Email Product", sku:"TEST-LEGACY-001",
+      category:"Chandelier", price:1800, currency:"INR", status:"published", images:[],
+      created_at:new Date().toISOString(), updated_at:new Date().toISOString()
+    }});
     // Ensure admin test session exists (matches ADMIN_EMAILS).
-    db.users.updateOne({user_id:"user_test"},
-      {$set:{user_id:"user_test", email:"raks.agarwal325@gmail.com", name:"Test Admin",
-             created_at:new Date().toISOString()}}, {upsert:true});
-    db.user_sessions.updateOne({session_token:"test_admin_session"},
-      {$set:{session_token:"test_admin_session", user_id:"user_test",
+    db.users.updateOne({{user_id:"user_test"}},
+      {{$set:{{user_id:"user_test", email:"raks.agarwal325@gmail.com", name:"Test Admin",
+             created_at:new Date().toISOString()}}}}, {{upsert:true}});
+    db.user_sessions.updateOne({{session_token:"test_admin_session"}},
+      {{$set:{{session_token:"test_admin_session", user_id:"user_test",
              email:"raks.agarwal325@gmail.com",
              expires_at:new Date(Date.now()+86400000).toISOString(),
-             created_at:new Date().toISOString()}}, {upsert:true});
+             created_at:new Date().toISOString()}}}}, {{upsert:true}});
     """
     _run_mongo(seed)
     yield
@@ -74,6 +82,7 @@ def _seed_and_cleanup():
         'db.inquiries.deleteMany({id:{$in:['
         '"TEST_legacy_blank_email","TEST_legacy_null_email","TEST_legacy_whitespace_email"]}});'
         'db.inquiries.deleteMany({customer_name:{$regex:"^TEST_"}});'
+        f'db.products.deleteOne({{id:"{TEST_PRODUCT_ID}"}});'
     )
 
 
@@ -109,12 +118,13 @@ def test_get_inquiries_requires_admin():
 
 # ---------- 2. POST /api/inquiries with valid email works ----------
 def test_post_inquiries_valid_email_creates_and_persists():
-    # Grab a real published product so the new server-side price/name lookup
-    # succeeds. `product_id` must exist in the products collection.
-    prods = requests.get(f"{API}/products?limit=1", timeout=30).json().get("items", [])
-    assert isinstance(prods, list) and prods, "No products seeded for test"
-    prod = prods[0]
-    real_price = float(prod.get("price") or 0)
+    prod = {
+        "id": TEST_PRODUCT_ID,
+        "name": "TEST Legacy Email Product",
+        "sku": "TEST-LEGACY-001",
+        "price": 1800,
+    }
+    real_price = float(prod["price"])
 
     email = f"TEST_valid_{uuid.uuid4().hex[:8]}@example.com"
     payload = {
@@ -147,7 +157,7 @@ def test_post_inquiries_valid_email_creates_and_persists():
     )
     # Server must overwrite name/sku from the DB.
     assert body["items"][0]["name"] == prod["name"]
-    assert body["items"][0]["sku"] == prod.get("sku")
+    assert body["items"][0]["sku"] == prod["sku"]
     assert body["items"][0]["price"] == real_price
     assert "id" in body
     created_id = body["id"]

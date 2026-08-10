@@ -1,0 +1,53 @@
+{
+  "summary": "Verified the InfluencerPromotions 'As Styled By' carousel fix on desktop (1920x1080), tablet (900x1000), and mobile (390x844) against live preview URL. This iteration goes beyond iter30 by also asserting the ACTUAL VISIBLE creator cards per page (not just transform/dot state) — the exact validation the user requested. ALL 9 desktop pages navigate correctly and show the expected 3-card window (page 0→indices [0,1,2], page 1→[3,4,5], …, page 8→[24,25,26]). Transform values match the (active × visible × 100) / total formula within ±0.1%. Regression checks (arrow wrap-around, /catalog pagination) also pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Homepage — InfluencerPromotions carousel",
+        "issues": [
+          "Autoplay pause UX issue (pre-existing, not the primary bug): The dot pagination container sits OUTSIDE the parent <div className='relative' onMouseEnter={()=>setPaused(true)}> wrapper (dots start at line 277 after the wrapper closes on line 272). Consequence: hovering the dots does NOT pause autoplay, so a user actively clicking dots can see the active page get bumped forward by the 5s autoplay tick between clicks. Fix: move the dot pagination block INSIDE the relative wrapper so its mouseenter is captured. This is a minor UX issue, not a functional regression of the primary fix.",
+          "Duplicate handle in seed data (data-side, not code): handles at index 0 and index 2 are both '@littlethings.sukriti'. This is real production data pulled from /api/settings — flagging so E1 knows if user reports it."
+        ]
+      }
+    ]
+  },
+  "primary_bug_verification": {
+    "status": "PASS — fix is working correctly on all breakpoints",
+    "desktop_1920x1080": {
+      "dot_count": 9,
+      "per_page_results": [
+        {"page": 0, "transform_pct": 0.0, "expected_pct": 0.0, "visible_indices": [0,1,2], "handles": ["@littlethings.sukriti","@decorating__mi_casa","@littlethings.sukriti"], "pass": true},
+        {"page": 1, "transform_pct": 11.111, "expected_pct": 11.111, "visible_indices": [3,4,5], "handles": ["@noveltyandinspire","@mysa_space","@the_dreamy_den"], "pass": true},
+        {"page": 2, "transform_pct": 22.222, "expected_pct": 22.222, "visible_indices": [6,7,8], "handles": ["@gulnoorhomes","@welcomtorajputgirlworld","@_myhappyplace24_"], "pass": true},
+        {"page": 3, "transform_pct": 33.333, "expected_pct": 33.333, "visible_indices": [9,10,11], "handles": ["@home_inside_decor","@creative_boho_home","@blossomgoodvibes"], "pass": true},
+        {"page": 4, "transform_pct": 44.444, "expected_pct": 44.444, "visible_indices": [12,13,14], "handles": ["@i_ananyaindu","@decor_by_dimpykaur","@housewife_to_homemaker"], "pass": true},
+        {"page": 5, "transform_pct": 55.556, "expected_pct": 55.556, "visible_indices": [15,16,17], "handles": ["@homewithsamreen","@home_entertainment_and_vlog","@decor_miniz"], "pass": true},
+        {"page": 6, "transform_pct": 66.667, "expected_pct": 66.667, "visible_indices": [18,19,20], "handles": ["@sunshine_window","@spruceupwithsushi","@variegatedpothos_"], "pass": true},
+        {"page": 7, "transform_pct": 77.778, "expected_pct": 77.778, "visible_indices": [21,22,23], "handles": ["@hina_raheja","@shivarchana_arsh","@stylewithanku"], "pass": true},
+        {"page": 8, "transform_pct": 88.889, "expected_pct": 88.889, "visible_indices": [24,25,26], "handles": ["@asopacharu","@riseandshinefamily","@mysa_thehomedecor"], "pass": true}
+      ]
+    },
+    "tablet_900x1000": {"dot_count": 14, "dot0_visible_indices": [0,1], "dot6_transform_pct": 44.444, "expected_pct": 44.444, "dot6_visible": [{"index": 12, "handle": "@i_ananyaindu"}, {"index": 13, "handle": "@decor_by_dimpykaur"}], "pass": true},
+    "mobile_390x844": {"dot_count": 27, "dot15_transform_pct": 55.556, "expected_pct": 55.556, "dot15_visible": [{"index": 15, "handle": "@homewithsamreen"}], "pass": true, "note": "First test run failed because scroll_into_view was called on the section (top) — dots row scrolled off-screen. When re-run with scrollIntoView({block:'center'}) on the specific dot, click landed correctly."},
+    "arrows_desktop_regression": {"after_8_next_clicks_transform": "translate3d(-88.8889%, 0, 0)", "after_8_visible_indices": [24,25,26], "wrap_to_page_0_transform": "translate3d(0%, 0, 0)", "wrap_visible_indices": [0,1,2], "pass": true},
+    "catalog_regression": {"pagination_text_found": true, "text": "Showing 1–24 of 116 pieces"}
+  },
+  "critical_code_review_comments": [
+    "InfluencerPromotions.jsx: dots are rendered outside the mouseenter/mouseleave wrapper (line 272 closes the wrapper, dots block starts line 277). Move the dots block inside the wrapper to fix autoplay-pause on dot interaction.",
+    "Consider swapping setInterval for a resettable timer that clears on any user interaction (dot click / arrow click) so the 5s autoplay counter restarts after user action — this is a common UX improvement for carousels."
+  ],
+  "test_report_links": ["/app/test_reports/iteration_31.json"],
+  "action_items": [
+    "OPTIONAL (not primary): Move the dot pagination block inside the relative wrapper so onMouseEnter pauses autoplay while user clicks dots. Non-blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only test)", "frontend": "100% (primary bug fix verified on all 3 breakpoints + regressions)"},
+  "seed_data_creation": "None — used live production data from /api/settings (27 valid items).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The InfluencerPromotions carousel translate3d fix (formula: translatePct = active × visible × 100 / total, clamped by (total-visible)×100/total) is verified working on 1920x1080 (9 pages), 900x1000 (14 pages), and 390x844 (27 pages). Actual card visibility per page confirmed against DOM bounding boxes. If retesting: hover the viewport (data-testid='influencer-carousel-viewport') BEFORE each dot click to pause autoplay — otherwise the 5s autoplay tick can race with your assertions (dots are outside the hover-pause zone). Also, on mobile, scroll the specific dot into view (block:'center') rather than the section — the dots row is at the bottom of the section and gets pushed off-screen if you scroll the section top into view.",
+  "rca_of_the_issue": "PRIMARY BUG (fixed): Old formula was `active × visible × cardWidthPct` which produced 100% per page — but CSS translateX(-100%) shifts by 100% of the element's OWN width (i.e. the whole 900%-wide track), not by 100% of the viewport. New formula `(active × visible × 100) / total` correctly converts 'viewports of shift' into 'percent of track width'. Confirmed by DOM inspection: page N transform = -(N × 3 × 100 / 27)% which equals 11.111% × N — and the visible cards' centers correctly fall within the viewport's horizontal bounds at every page."
+}

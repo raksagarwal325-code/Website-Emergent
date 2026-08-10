@@ -86,14 +86,12 @@ def admin_token():
     allow = (os.environ.get("ADMIN_EMAILS", "") or "").split(",")[0].strip().lower()
     if not allow:
         pytest.skip("ADMIN_EMAILS not configured")
-    return asyncio.get_event_loop().run_until_complete(_seed_session(allow))
+    return asyncio.run(_seed_session(allow))
 
 
 @pytest.fixture(scope="module")
 def visitor_token():
-    return asyncio.get_event_loop().run_until_complete(
-        _seed_session("visitor-catfeat@example.com"),
-    )
+    return asyncio.run(_seed_session("visitor-catfeat@example.com"))
 
 
 # --------------------------------------------------------------------------
@@ -166,9 +164,7 @@ def test_admin_rejects_unknown_category(admin_token):
 
 def test_admin_rejects_arbitrary_external_url(admin_token):
     hdr = {**CSRF, "Authorization": f"Bearer {admin_token}"}
-    pid = asyncio.get_event_loop().run_until_complete(
-        _seed_product("Wall Light", ["/api/files/legit.jpg"]),
-    )
+    pid = asyncio.run(_seed_product("Wall Light", ["/api/files/legit.jpg"]))
     try:
         with httpx.Client(base_url=API, timeout=15) as c:
             r = c.put("/admin/category-featured-images/Wall Light", headers=hdr,
@@ -176,23 +172,21 @@ def test_admin_rejects_arbitrary_external_url(admin_token):
                             "image_url": "https://evil.example.com/x.jpg"})
             assert r.status_code == 400
     finally:
-        asyncio.get_event_loop().run_until_complete(_cleanup_product(pid))
-        asyncio.get_event_loop().run_until_complete(_cleanup_category("Wall Light"))
+        asyncio.run(_cleanup_product(pid))
+        asyncio.run(_cleanup_category("Wall Light"))
 
 
 def test_admin_rejects_product_from_wrong_category(admin_token):
     hdr = {**CSRF, "Authorization": f"Bearer {admin_token}"}
-    pid = asyncio.get_event_loop().run_until_complete(
-        _seed_product("Table Lamp", ["/api/files/tablelamp.jpg"]),
-    )
+    pid = asyncio.run(_seed_product("Table Lamp", ["/api/files/tablelamp.jpg"]))
     try:
         with httpx.Client(base_url=API, timeout=15) as c:
             r = c.put("/admin/category-featured-images/Chandelier", headers=hdr,
                       json={"product_id": pid, "image_url": "/api/files/tablelamp.jpg"})
             assert r.status_code == 400
     finally:
-        asyncio.get_event_loop().run_until_complete(_cleanup_product(pid))
-        asyncio.get_event_loop().run_until_complete(_cleanup_category("Chandelier"))
+        asyncio.run(_cleanup_product(pid))
+        asyncio.run(_cleanup_category("Chandelier"))
 
 
 def test_admin_rejects_missing_product(admin_token):
@@ -212,9 +206,7 @@ def test_admin_rejects_missing_product(admin_token):
 def test_admin_can_set_reset_and_public_map_reflects(admin_token):
     hdr = {**CSRF, "Authorization": f"Bearer {admin_token}"}
     img = f"/api/files/candle-{uuid.uuid4().hex[:6]}.jpg"
-    pid = asyncio.get_event_loop().run_until_complete(
-        _seed_product("Candle Stand", [img]),
-    )
+    pid = asyncio.run(_seed_product("Candle Stand", [img]))
     try:
         with httpx.Client(base_url=API, timeout=15) as c:
             # 1) Set from an existing product's image
@@ -245,8 +237,8 @@ def test_admin_can_set_reset_and_public_map_reflects(admin_token):
             r = c.get("/category-featured-images")
             assert "Candle Stand" not in r.json()
     finally:
-        asyncio.get_event_loop().run_until_complete(_cleanup_product(pid))
-        asyncio.get_event_loop().run_until_complete(_cleanup_category("Candle Stand"))
+        asyncio.run(_cleanup_product(pid))
+        asyncio.run(_cleanup_category("Candle Stand"))
 
 
 # --------------------------------------------------------------------------

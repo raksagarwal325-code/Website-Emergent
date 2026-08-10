@@ -1,0 +1,21 @@
+{
+  "summary": "SEO structured-data + sitemap patch validated end-to-end. Backend: all 6 pytest cases in test_sitemap_commercial_landings.py PASS (custom-lighting-bulk-orders and architects-interior-designers each appear exactly once with monthly/0.8, pre-existing entries preserved, draft product excluded via live DB seed+cleanup, well-formed XML). Sitemap also confirmed to include 116 /product/<id> entries. Frontend: rendered /product/<published-id> on preview URL, extracted Product JSON-LD via Playwright — offers.hasMerchantReturnPolicy (MerchantReturnPolicy, applicableCountry=IN, MerchantReturnNotPermitted, merchantReturnLink ends /legal/returns) and offers.shippingDetails (OfferShippingDetails, addressCountry=IN, transitTime min=7 max=10 unitCode=DAY, shippingRate absent) all correct. Pre-existing fields (name, sku, brand, price, priceCurrency=INR, availability, seller) preserved with no regression.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_sitemap_commercial_landings.py",
+    "/app/test_reports/pytest/sitemap_commercial.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ProductDetail.jsx now 630 lines — approaching the 700-line guideline; consider extracting ProductTabs and the reviews section into separate files in a future refactor.",
+    "SSR fallback for siteOrigin (samratglass.com) in ProductDetail.jsx is a clean guard for the shippingDetails/returns links — good."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "test_sitemap_excludes_draft_products transiently inserts a draft product and deletes it in a finally block — no residual data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "SEO patch verified against preview URL https://glass-product-hub.preview.emergentagent.com. Sitemap emits canonical origin https://samratglass.com by design. Sample published product id used: b54c5837-6ead-4a66-9a00-a83b670ba946.",
+  "rca of the issue": "N/A — feature validation only, no defects found."
+}
