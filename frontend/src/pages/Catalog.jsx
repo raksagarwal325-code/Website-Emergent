@@ -6,7 +6,7 @@ import { CATEGORIES, getCategoryByDbName, NAV_CATEGORIES, mergeDynamicCategories
 import { api } from "../lib/api";
 
 /**
- * Catalog page.
+ * Main catalogue page.
  *
  * Two responsibilities beyond the shared `CatalogueBrowser`:
  *   1. Legacy-URL fallback: if a visitor lands on /catalog?category=<db_name>
@@ -34,23 +34,33 @@ export default function Catalog() {
   }, []);
 
   const legacyCategory = searchParams.get("category");
-  const mapped = legacyCategory ? getCategoryByDbName(legacyCategory) : null;
+  const mapped = legacyCategory
+    ? getCategoryByDbName(legacyCategory)
+    : null;
+
   if (mapped) {
     return <Navigate to={`/category/${mapped.slug}`} replace />;
   }
 
   return (
-    <div data-testid="page-catalog" className="max-w-7xl mx-auto px-6 py-16">
+    <div
+      data-testid="page-catalog"
+      className="max-w-7xl mx-auto px-6 py-16"
+    >
       <SEO
         title="Catalog · Chandeliers, Pendants & Decorative Lighting · Samrat Glass Emporium"
         description="Browse 1000+ handcrafted chandeliers, crystal hurricanes, pendant lights, wall sconces and table lamps — made in Firozabad since 1981."
         path="/catalog"
       />
+
       <div className="mb-12 fade-up">
         <div className="eyebrow mb-3">The Collection</div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl">Catalog</h1>
+        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl">
+          Catalog
+        </h1>
         <p className="mt-6 text-white/60 max-w-xl">
-          Browse, filter, and enquire on any piece. Add favorites for later or send us your inquiry basket.
+          Browse, filter, and enquire on any piece. Add favorites for later or
+          send us your inquiry basket.
         </p>
       </div>
 
@@ -83,4 +93,4 @@ export default function Catalog() {
       <CatalogueBrowser dynamicCategories={dynamicCats} />
     </div>
   );
-}
+} 
