@@ -106,7 +106,16 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
+          # `emergentintegrations` is an Emergent-internal package hosted on
+          # a private CloudFront index and is NOT available from public PyPI.
+          # It is intentionally kept in backend/requirements.txt so the
+          # production/preview deploy containers (which do have that index
+          # configured) install it correctly. In GitHub Actions we skip it
+          # here so pytest can still exercise the rest of the suite; any
+          # tests that require the LLM integration are already gated on
+          # the runtime module import.
+          grep -v -E '^\s*emergentintegrations([<>=!~ ].*)?$' backend/requirements.txt > /tmp/ci-requirements.txt
+          pip install -r /tmp/ci-requirements.txt
 
       - name: Wait for MongoDB to accept connections
         run: |
@@ -240,6 +249,8 @@ jobs:
             candle-stands
             floor-chandeliers
             table-chandeliers
+            ceiling-lights
+            gate-lights
           )
           missing=()
           for slug in "${expected_slugs[@]}"; do
@@ -262,5 +273,5 @@ jobs:
             echo "Found:";    printf '  %s\n' $found
             exit 1
           fi
-          echo "All 8 expected category HTML files present:"
+          echo "All 10 expected category HTML files present:"
           printf '  ✓ %s\n' "${expected_slugs[@]}"
