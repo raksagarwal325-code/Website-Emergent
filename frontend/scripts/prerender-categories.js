@@ -81,6 +81,14 @@ function fetchJson(url, timeoutMs = 15000) {
   });
 }
 
+function categoryCollectionSchemaId(cat) {
+  return `category-${cat.slug}`;
+}
+
+function categoryBreadcrumbSchemaId(cat) {
+  return `category-breadcrumb-${cat.slug}`;
+}
+
 function collectionSchema(cat, products) {
   const canonical = `${SITE_ORIGIN}/category/${cat.slug}`;
   return {
@@ -103,6 +111,34 @@ function collectionSchema(cat, products) {
         "name": p.name,
       })),
     },
+  };
+}
+
+function breadcrumbSchema(cat) {
+  const canonical = `${SITE_ORIGIN}/category/${cat.slug}`;
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": `${SITE_ORIGIN}/`,
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Catalog",
+        "item": `${SITE_ORIGIN}/catalog`,
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": cat.label,
+        "item": canonical,
+      },
+    ],
   };
 }
 
@@ -148,6 +184,7 @@ function buildBodyHtml(cat, products, allCategories, apiBase) {
 function inject(template, cat, products, allCategories, apiBase) {
   const canonical = `${SITE_ORIGIN}/category/${cat.slug}`;
   const schema = collectionSchema(cat, products);
+  const breadcrumbs = breadcrumbSchema(cat);
   const bodyHtml = buildBodyHtml(cat, products, allCategories, apiBase);
 
   let html = template;
@@ -183,7 +220,10 @@ function inject(template, cat, products, allCategories, apiBase) {
 
   html = html.replace(
     /<\/head>/i,
-    `${ogBlock}\n<script type="application/ld+json">${JSON.stringify(schema)}</script>\n</head>`,
+    `${ogBlock}\n` +
+      `<script type="application/ld+json" data-schema="${categoryCollectionSchemaId(cat)}">${JSON.stringify(schema)}</script>\n` +
+      `<script type="application/ld+json" data-schema="${categoryBreadcrumbSchemaId(cat)}">${JSON.stringify(breadcrumbs)}</script>\n` +
+      `</head>`,
   );
 
   html = html.replace(
@@ -346,6 +386,9 @@ module.exports = {
   buildBodyHtml,
   productTilesHtml,
   collectionSchema,
+  breadcrumbSchema,
+  categoryCollectionSchemaId,
+  categoryBreadcrumbSchemaId,
   escapeHtml,
   resolveImage,
   // Constants exposed for tests

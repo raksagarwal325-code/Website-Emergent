@@ -11,6 +11,8 @@
  * Also validates the pure-function output so we catch template drift:
  *   * ItemList `numberOfItems` matches emitted tiles.
  *   * At least one crawlable /product/<id> anchor per populated category.
+ *   * CollectionPage/BreadcrumbList scripts carry the same stable keys used
+ *     by runtime SchemaLD so hydration cannot leave duplicate schema blocks.
  */
 const path = require("path");
 const fs = require("fs");
@@ -19,6 +21,9 @@ const {
   runPrerender,
   productTilesHtml,
   collectionSchema,
+  breadcrumbSchema,
+  categoryCollectionSchemaId,
+  categoryBreadcrumbSchemaId,
   buildBodyHtml,
   inject,
   resolveApiBase,
@@ -51,7 +56,7 @@ const FAKE_PRODUCTS = [
 ];
 
 // --------------------------------------------------------------------------
-// Pure-function integrity: tiles ↔ ItemList count parity
+// Pure-function integrity: tiles ↔ ItemList count parity and schema keys
 // --------------------------------------------------------------------------
 
 describe("prerender pure functions", () => {
@@ -86,6 +91,43 @@ describe("prerender pure functions", () => {
     const schema = collectionSchema(FAKE_CAT, FAKE_PRODUCTS);
     expect(anchors).toBe(schema.mainEntity.numberOfItems);
     expect(anchors).toBe(FAKE_PRODUCTS.length);
+  });
+
+  test("prerender CollectionPage and BreadcrumbList use stable runtime-compatible keys", () => {
+    expect(categoryCollectionSchemaId(FAKE_CAT)).toBe("category-chandeliers");
+    expect(categoryBreadcrumbSchemaId(FAKE_CAT)).toBe("category-breadcrumb-chandeliers");
+
+    const template = `<!doctype html><html><head><title>orig</title><meta name="description" content="orig"/></head><body><div id="root"></div></body></html>`;
+    const html = inject(template, FAKE_CAT, FAKE_PRODUCTS, [FAKE_CAT], "http://example.com");
+    expect(html).toContain('data-schema="category-chandeliers"');
+    expect(html).toContain('data-schema="category-breadcrumb-chandeliers"');
+    expect((html.match(/data-schema="category-chandeliers"/g) || [])).toHaveLength(1);
+    expect((html.match(/data-schema="category-breadcrumb-chandeliers"/g) || [])).toHaveLength(1);
+  });
+
+  test("breadcrumbSchema labels and canonical URLs match the category breadcrumb", () => {
+    const schema = breadcrumbSchema(FAKE_CAT);
+    expect(schema["@type"]).toBe("BreadcrumbList");
+    expect(schema.itemListElement).toEqual([
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://samratglass.com/",
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Catalog",
+        "item": "https://samratglass.com/catalog",
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "Chandeliers",
+        "item": "https://samratglass.com/category/chandeliers",
+      },
+    ]);
   });
 });
 

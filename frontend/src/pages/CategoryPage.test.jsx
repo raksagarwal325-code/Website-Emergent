@@ -1,20 +1,9 @@
 /**
- * Regression: dynamic category slug resolution on `/category/<slug>`.
+ * Focused regressions for `/category/<slug>` resolution and structured data.
  *
- * Bug: `getCategoryBySlug` only checked the curated JSON registry, so a
- * slug like `ceiling-lights` (auto-generated for a published-product
- * category not in the registry) rendered NotFound.
- *
- * Fix: CategoryPage now falls back to `/api/products/categories` and
- * `mergeDynamicCategories` — the exact same source the Catalog page
- * uses — so any dynamically-discovered category with at least one
- * published product renders normally.
- *
- * These tests verify the four required outcomes:
- *   1. Curated slug still resolves (chandeliers).
- *   2. Dynamic published slug resolves (ceiling-lights).
- *   3. Draft-only category (absent from /api/products/categories) → NotFound.
- *   4. Nonexistent slug → NotFound.
+ * The page must resolve curated/dynamic categories exactly as before, while
+ * Product listing JSON-LD is driven only by the accepted CatalogueBrowser
+ * result — never by a second schema-only product fetch.
  */
 import React from "react";
 import { render, screen, waitFor, act } from "@testing-library/react";
@@ -33,23 +22,52 @@ jest.mock("../lib/api", () => ({
   formatProductPrice: (p) => `₹${p?.price || 0}`,
 }));
 
-// Stub SEO helper: it uses react-helmet-async which we don't need in JSDOM.
 jest.mock("../components/SEO", () => ({
   __esModule: true,
   default: () => null,
 }));
 
-// Stub CatalogueBrowser to something cheap — this test is about resolution,
-// not the browser UI. We still assert it receives the correct db_name so
-// dynamic categories filter products correctly.
-jest.mock("../components/CatalogueBrowser", () => ({
+// Capture SchemaLD props in the rendered test tree. The production component
+// still owns head insertion/deduplication; this mock only makes schema data
+// directly assertable.
+jest.mock("../components/SchemaLD", () => ({
   __esModule: true,
-  default: ({ lockedCategory }) => (
-    <div data-testid="catalogue-browser-stub" data-locked-category={lockedCategory} />
-  ),
+  default: ({ id, data }) => data ? (
+    <div data-testid={`schema-${id}`} data-schema-id={id}>
+      {JSON.stringify(data)}
+    </div>
+  ) : null,
 }));
 
-// Stub NotFound so we can assert on a stable testid.
+// Stub CatalogueBrowser cheaply but preserve the new contract: after mount it
+// reports one accepted visible result. Page 2 is deliberate so schema position
+// assertions prove global pagination offsets are used.
+jest.mock("../components/CatalogueBrowser", () => {
+  const React = require("react");
+  return {
+    __esModule: true,
+    default: ({ lockedCategory, onListingChange }) => {
+      React.useEffect(() => {
+        const timer = setTimeout(() => {
+          onListingChange?.({
+            products: [
+              { id: "visible-25", name: `${lockedCategory} Visible 25`, images: [] },
+              { id: "visible-26", name: `${lockedCategory} Visible 26`, images: [] },
+            ],
+            total: 50,
+            totalPages: 3,
+            page: 2,
+          });
+        }, 0);
+        return () => clearTimeout(timer);
+      }, [lockedCategory, onListingChange]);
+      return (
+        <div data-testid="catalogue-browser-stub" data-locked-category={lockedCategory} />
+      );
+    },
+  };
+});
+
 jest.mock("./NotFound", () => ({
   __esModule: true,
   default: () => <div data-testid="not-found-view">NotFound</div>,
@@ -66,39 +84,29 @@ const renderAt = (path) =>
     </MemoryRouter>,
   );
 
+const readSchema = (testId) => JSON.parse(screen.getByTestId(testId).textContent);
+
 beforeEach(() => {
   mockCategories.mockReset();
   mockListProducts.mockReset();
-  mockListProducts.mockResolvedValue({ items: [], total: 0, total_pages: 1 });
 });
 
 describe("CategoryPage — slug resolution", () => {
   test("curated slug resolves synchronously with hand-written H1", async () => {
-    // API list-categories is not needed for curated slugs — the sync path
-    // returns immediately. But if it IS called, return a value that
-    // would not accidentally satisfy the curated slug.
     mockCategories.mockResolvedValue(["Chandelier"]);
     await act(async () => {
       renderAt("/category/chandeliers");
     });
-    // No loading flash — curated resolution is sync.
     expect(screen.queryByTestId("page-category-loading")).toBeNull();
-    // Hand-written H1 from categories.data.json.
     expect(
       screen.getByTestId("category-h1-chandeliers").textContent,
     ).toMatch(/Handcrafted Crystal Chandeliers/);
-    // Locked category passed to browser is the exact DB name.
     expect(
       screen.getByTestId("catalogue-browser-stub").getAttribute("data-locked-category"),
     ).toBe("Chandelier");
-    // Let the product-list fetch settle to avoid an act() warning.
-    await waitFor(() => expect(mockListProducts).toHaveBeenCalled());
   });
 
   test("newly-curated slug (ceiling-lights) resolves synchronously", async () => {
-    // After Ceiling Lights was added to categories.data.json this became a
-    // curated slug. Ensure it resolves the same way as any other curated
-    // entry — no loading flash, hand-written H1.
     mockCategories.mockResolvedValue(["Chandelier", "Ceiling Light"]);
     await act(async () => {
       renderAt("/category/ceiling-lights");
@@ -110,7 +118,6 @@ describe("CategoryPage — slug resolution", () => {
     expect(
       screen.getByTestId("catalogue-browser-stub").getAttribute("data-locked-category"),
     ).toBe("Ceiling Light");
-    await waitFor(() => expect(mockListProducts).toHaveBeenCalled());
   });
 
   test("newly-curated slug (gate-lights) resolves synchronously", async () => {
@@ -125,19 +132,14 @@ describe("CategoryPage — slug resolution", () => {
     expect(
       screen.getByTestId("catalogue-browser-stub").getAttribute("data-locked-category"),
     ).toBe("Gate Light");
-    await waitFor(() => expect(mockListProducts).toHaveBeenCalled());
   });
 
   test("dynamic (uncurated) published category resolves and renders", async () => {
-    // Simulates a fresh admin who published a product with a NEW category
-    // value that is not (yet) in categories.data.json.
     mockCategories.mockResolvedValue(["Chandelier", "Novelty Lamp"]);
     renderAt("/category/novelty-lamps");
 
-    // Brief loading state before the API returns.
     expect(screen.getByTestId("page-category-loading")).toBeInTheDocument();
 
-    // After resolution, the page renders with the fallback H1.
     await waitFor(() =>
       expect(screen.queryByTestId("page-category-loading")).toBeNull(),
     );
@@ -148,25 +150,9 @@ describe("CategoryPage — slug resolution", () => {
     expect(
       screen.getByTestId("catalogue-browser-stub").getAttribute("data-locked-category"),
     ).toBe("Novelty Lamp");
-    await waitFor(() => expect(mockListProducts).toHaveBeenCalled());
-  });
-
-  test("dynamic category filters products by db_name (not slug)", async () => {
-    mockCategories.mockResolvedValue(["Novelty Lamp"]);
-    renderAt("/category/novelty-lamps");
-    await waitFor(() => {
-      // The JSON-LD ItemList fetch should query products by the exact
-      // canonical db_name, not the slug.
-      const call = mockListProducts.mock.calls[0]?.[0];
-      expect(call).toBeDefined();
-      expect(call.category).toBe("Novelty Lamp");
-    });
   });
 
   test("draft-only category (absent from /api/products/categories) shows NotFound", async () => {
-    // Backend already filters this endpoint to `status=published` for anon
-    // callers — a draft-only category cannot appear here. Simulate that:
-    // the slug is requested but the API only returned curated ones.
     mockCategories.mockResolvedValue(["Chandelier"]);
     renderAt("/category/floor-mirrors");
     await waitFor(() =>
@@ -188,5 +174,79 @@ describe("CategoryPage — slug resolution", () => {
     await waitFor(() =>
       expect(screen.getByTestId("not-found-view")).toBeInTheDocument(),
     );
+  });
+});
+
+describe("CategoryPage — listing structured data", () => {
+  test("does not perform a separate schema-only product fetch", async () => {
+    mockCategories.mockResolvedValue(["Chandelier"]);
+    renderAt("/category/chandeliers");
+    await waitFor(() =>
+      expect(screen.getByTestId("schema-category-chandeliers")).toBeInTheDocument(),
+    );
+    expect(mockListProducts).not.toHaveBeenCalled();
+  });
+
+  test("CollectionPage ItemList uses the accepted visible page and global positions", async () => {
+    mockCategories.mockResolvedValue(["Chandelier"]);
+    renderAt("/category/chandeliers");
+    await waitFor(() =>
+      expect(screen.getByTestId("schema-category-chandeliers")).toBeInTheDocument(),
+    );
+
+    const schema = readSchema("schema-category-chandeliers");
+    expect(schema["@type"]).toBe("CollectionPage");
+    expect(schema.mainEntity["@type"]).toBe("ItemList");
+    expect(schema.mainEntity.numberOfItems).toBe(2);
+    expect(schema.mainEntity.itemListElement.map((item) => item.position)).toEqual([25, 26]);
+    expect(schema.mainEntity.itemListElement.map((item) => item.url)).toEqual([
+      "https://samratglass.com/product/visible-25",
+      "https://samratglass.com/product/visible-26",
+    ]);
+  });
+
+  test("runtime schema uses stable category and breadcrumb keys", async () => {
+    mockCategories.mockResolvedValue(["Chandelier"]);
+    renderAt("/category/chandeliers");
+    await waitFor(() =>
+      expect(screen.getByTestId("schema-category-chandeliers")).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTestId("schema-category-chandeliers").getAttribute("data-schema-id"),
+    ).toBe("category-chandeliers");
+    expect(
+      screen.getByTestId("schema-category-breadcrumb-chandeliers").getAttribute("data-schema-id"),
+    ).toBe("category-breadcrumb-chandeliers");
+  });
+
+  test("BreadcrumbList labels and canonical URLs match the visible breadcrumb", async () => {
+    mockCategories.mockResolvedValue(["Chandelier"]);
+    renderAt("/category/chandeliers");
+    await waitFor(() =>
+      expect(screen.getByTestId("schema-category-breadcrumb-chandeliers")).toBeInTheDocument(),
+    );
+
+    const schema = readSchema("schema-category-breadcrumb-chandeliers");
+    expect(schema["@type"]).toBe("BreadcrumbList");
+    expect(schema.itemListElement).toEqual([
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://samratglass.com/",
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Catalog",
+        "item": "https://samratglass.com/catalog",
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "Chandeliers",
+        "item": "https://samratglass.com/category/chandeliers",
+      },
+    ]);
   });
 });
