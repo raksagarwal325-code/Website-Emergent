@@ -8,6 +8,9 @@ import { Slider } from "./ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 const PAGE_SIZE = 24;
+const VALID_SORTS = new Set(["newest", "price_asc", "price_desc", "rating", "name"]);
+
+const normalizeSort = (value) => (VALID_SORTS.has(value) ? value : "newest");
 
 /**
  * Shared product browser used by both `/catalog` and `/category/<slug>`.
@@ -45,12 +48,12 @@ export default function CatalogueBrowser({
   const [loading, setLoading] = useState(initialProducts.length === 0);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(initialTotal);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(() => searchParams.get("q") || "");
   const [category, setCategory] = useState(() => {
     if (lockedCategory) return lockedCategory;
     return searchParams.get("category") || "all";
   });
-  const [sort, setSort] = useState("newest");
+  const [sort, setSort] = useState(() => normalizeSort(searchParams.get("sort")));
   const [priceRange, setPriceRange] = useState([0, 60000]);
   const [showFilters, setShowFilters] = useState(true);
   const requestKeyRef = useRef(0);
@@ -63,6 +66,26 @@ export default function CatalogueBrowser({
     return n;
   };
   const currentPage = parsePage(searchParams.get("page"));
+
+  // Search and sort are URL-backed so refresh and browser Back/Forward
+  // restore the visible catalogue state. Default/invalid sort params are
+  // normalized away with replace so they do not add a history entry.
+  useEffect(() => {
+    const nextQ = searchParams.get("q") || "";
+    const rawSort = searchParams.get("sort");
+    const nextSort = normalizeSort(rawSort);
+
+    setQ((current) => (current === nextQ ? current : nextQ));
+    setSort((current) => (current === nextSort ? current : nextSort));
+
+    if (rawSort && nextSort === "newest") {
+      const next = new URLSearchParams(searchParams);
+      next.delete("sort");
+      if (next.toString() !== searchParams.toString()) {
+        setSearchParams(next, { replace: true });
+      }
+    }
+  }, [searchParams, setSearchParams]);
 
   // Whenever the caller changes `lockedCategory` (e.g. navigating between
   // /category/chandeliers and /category/floor-lamps), reset internal state
@@ -91,13 +114,12 @@ export default function CatalogueBrowser({
     return params;
   };
 
-  // Whenever a filter/search/sort/price/category changes → reset to page 1.
-  // We compare against the previously-seen filterKey so we do NOT reset on
-  // the very first render (React 18+ Strict Mode double-fires effects,
-  // which makes a plain `isFirstRender` ref unreliable).
+  // Category / price / lockedCategory retain their existing page-reset and
+  // URL behaviour. Search and sort update the URL in their own handlers so
+  // URL-driven Back/Forward changes do not accidentally reset `?page=`.
   const filterKey = useMemo(
-    () => JSON.stringify([q, category, sort, priceRange, lockedCategory || ""]),
-    [q, category, sort, priceRange, lockedCategory],
+    () => JSON.stringify([category, priceRange, lockedCategory || ""]),
+    [category, priceRange, lockedCategory],
   );
   const prevFilterKeyRef = useRef(filterKey);
   useEffect(() => {
@@ -157,6 +179,29 @@ export default function CatalogueBrowser({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, category, sort, priceRange, lockedCategory, currentPage]);
 
+  const updateSearch = (nextQ) => {
+    setQ(nextQ);
+    const next = new URLSearchParams(searchParams);
+    if (nextQ) next.set("q", nextQ);
+    else next.delete("q");
+    next.delete("page");
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next);
+    }
+  };
+
+  const updateSort = (nextValue) => {
+    const nextSort = normalizeSort(nextValue);
+    setSort(nextSort);
+    const next = new URLSearchParams(searchParams);
+    if (nextSort === "newest") next.delete("sort");
+    else next.set("sort", nextSort);
+    next.delete("page");
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next);
+    }
+  };
+
   const goToPage = (n) => {
     const target = Math.min(Math.max(1, n), totalPages);
     if (target === currentPage) return;
@@ -177,6 +222,15 @@ export default function CatalogueBrowser({
     if (!lockedCategory) setCategory("all");
     setSort("newest");
     setPriceRange([0, 60000]);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("q");
+    next.delete("sort");
+    next.delete("page");
+    if (!lockedCategory) next.delete("category");
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next);
+    }
   };
 
   // Compact page numbers: 1 … currentPage-1, currentPage, currentPage+1 … totalPages
@@ -199,7 +253,7 @@ export default function CatalogueBrowser({
           <input
             data-testid="catalog-search"
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => updateSearch(e.target.value)}
             placeholder="Search products, SKUs, tags…"
             className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none pl-11 pr-4 py-3 text-sm text-white placeholder:text-white/40"
           />
@@ -212,7 +266,7 @@ export default function CatalogueBrowser({
           <SlidersHorizontal size={14} /> Filters
         </button>
         <div className="w-full md:w-48">
-          <Select value={sort} onValueChange={setSort}>
+          <Select value={sort} onValueChange={updateSort}>
             <SelectTrigger data-testid="sort-select" className="rounded-none bg-[#0a0a0a] border-white/15 h-12 text-white">
               <SelectValue placeholder="Sort" />
             </SelectTrigger>
