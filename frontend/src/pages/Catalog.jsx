@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import SEO from "../components/SEO";
+import SchemaLD from "../components/SchemaLD";
 import CatalogueBrowser from "../components/CatalogueBrowser";
 import { CATEGORIES, getCategoryByDbName, NAV_CATEGORIES, mergeDynamicCategories } from "../lib/categories";
+import { buildItemList, CATALOG_PAGE_SIZE } from "../lib/listingSchema";
 import { api } from "../lib/api";
 
 /**
@@ -24,6 +26,7 @@ import { api } from "../lib/api";
 export default function Catalog() {
   const [searchParams] = useSearchParams();
   const [dynamicCats, setDynamicCats] = useState(NAV_CATEGORIES);
+  const [listing, setListing] = useState(null);
   useEffect(() => {
     let alive = true;
     api
@@ -31,6 +34,10 @@ export default function Catalog() {
       .then((dbNames) => { if (alive) setDynamicCats(mergeDynamicCategories(dbNames)); })
       .catch(() => { /* fall back to curated NAV_CATEGORIES already set */ });
     return () => { alive = false; };
+  }, []);
+
+  const handleListingChange = useCallback((nextListing) => {
+    setListing(nextListing);
   }, []);
 
   const legacyCategory = searchParams.get("category");
@@ -42,6 +49,14 @@ export default function Catalog() {
     return <Navigate to={`/category/${mapped.slug}`} replace />;
   }
 
+  const itemListSchema = listing ? {
+    "@context": "https://schema.org",
+    ...buildItemList(listing.products, {
+      page: listing.page,
+      pageSize: CATALOG_PAGE_SIZE,
+    }),
+  } : null;
+
   return (
     <div
       data-testid="page-catalog"
@@ -52,6 +67,7 @@ export default function Catalog() {
         description="Browse 1000+ handcrafted chandeliers, crystal hurricanes, pendant lights, wall sconces and table lamps — made in Firozabad since 1981."
         path="/catalog"
       />
+      <SchemaLD id="catalog-item-list" data={itemListSchema} />
 
       <div className="mb-12 fade-up">
         <div className="eyebrow mb-3">The Collection</div>
@@ -90,7 +106,10 @@ export default function Catalog() {
         </div>
       </nav>
 
-      <CatalogueBrowser dynamicCategories={dynamicCats} />
+      <CatalogueBrowser
+        dynamicCategories={dynamicCats}
+        onListingChange={handleListingChange}
+      />
     </div>
   );
-} 
+}
