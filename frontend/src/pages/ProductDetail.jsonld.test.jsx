@@ -114,6 +114,12 @@ jest.mock("../components/SeenInProjects", () => ({
 const { api } = require("../lib/api");
 const ProductDetail = require("./ProductDetail").default;
 
+beforeEach(() => {
+  api.getProduct.mockImplementation((id) =>
+    Promise.resolve({ ...fixtureProduct, id }),
+  );
+});
+
 async function renderAndGetProductJsonLd() {
   await act(async () => {
     render(
