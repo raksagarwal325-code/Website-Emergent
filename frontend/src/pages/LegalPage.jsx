@@ -3,6 +3,20 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { LEGAL_PAGES, LEGAL_ORDER, LEGAL_DEFAULT_UPDATED_AT } from "../lib/legalContent";
 import { api } from "../lib/api";
+import SEO from "../components/SEO";
+
+const LEGAL_META_DESCRIPTIONS = {
+  privacy:
+    "How Samrat Glass Emporium collects, uses, and protects information from website visitors, product inquiries, catalogue downloads, and WhatsApp conversations.",
+  terms:
+    "Terms & Conditions for using the Samrat Glass Emporium website, catalogue, and inquiry services — pricing, orders, product variations, and intellectual property.",
+  shipping:
+    "Pan-India shipping and delivery information for Samrat Glass Emporium — delivery timelines, packaging, charges, and transit damage handling.",
+  returns:
+    "Return and replacement policy for Samrat Glass Emporium — eligible cases, damage reporting timelines, and handling of handcrafted glass products.",
+  payment:
+    "Accepted payment methods, order confirmation, custom-order advances, and GST invoicing at Samrat Glass Emporium.",
+};
 
 /**
  * Parse an admin-authored plain-text policy body into the same
@@ -140,7 +154,6 @@ export default function LegalPage() {
 
   useEffect(() => {
     if (defaults) window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
-    if (defaults) document.title = `${defaults.title} · Samrat Glass Emporium`;
   }, [defaults]);
 
   if (!defaults) return <Navigate to="/" replace />;
@@ -155,6 +168,12 @@ export default function LegalPage() {
 
   return (
     <div data-testid={`legal-page-${slug}`} className="min-h-screen relative">
+      <SEO
+        title={`${defaults.title} · Samrat Glass Emporium`}
+        description={LEGAL_META_DESCRIPTIONS[slug]}
+        path={`/legal/${slug}`}
+      />
+
       {/* Ambient warm glow */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.06]" style={{ background: "radial-gradient(ellipse at 50% 0%, #D4AF37 0%, transparent 55%)" }}></div>
 
