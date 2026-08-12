@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { trackGenerateLead, trackWhatsAppClick } from "../lib/analytics";
 import { waCartLink } from "../lib/whatsapp";
 import { normalizePhone } from "../lib/phone";
+import SEO from "../components/SEO";
 
 export default function Cart() {
   const { cart, removeFromCart, updateQty, clearCart, cartTotal, hasOnRequestItems, hasPricedItems, isItemOnRequest } = useCatalog();
@@ -57,6 +58,13 @@ export default function Cart() {
 
   return (
     <div data-testid="page-cart" className="max-w-7xl mx-auto px-6 py-16">
+      <SEO
+        title="Inquiry Basket · Samrat Glass Emporium"
+        description="Review saved pieces and send a private inquiry to Samrat Glass Emporium for pricing, availability, and delivery."
+        path="/cart"
+        noindex
+      />
+
       <div className="mb-12">
         <div className="eyebrow mb-3">Basket</div>
         <h1 className="font-serif text-4xl sm:text-5xl">Inquiry Basket</h1>
