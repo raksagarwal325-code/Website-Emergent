@@ -3,9 +3,7 @@ import { SITE_ORIGIN } from "./categories";
 export const CATALOG_PAGE_SIZE = 24;
 
 export function buildItemList(products = [], { page = 1, pageSize = CATALOG_PAGE_SIZE } = {}) {
-  const safeProducts = Array.isArray(products)
-    ? products.filter((p) => p?.id && p?.name)
-    : [];
+  const visibleProducts = Array.isArray(products) ? products : [];
   const safePage = Number.isFinite(Number(page)) && Number(page) > 0 ? Number(page) : 1;
   const safePageSize = Number.isFinite(Number(pageSize)) && Number(pageSize) > 0
     ? Number(pageSize)
@@ -14,8 +12,8 @@ export function buildItemList(products = [], { page = 1, pageSize = CATALOG_PAGE
 
   return {
     "@type": "ItemList",
-    "numberOfItems": safeProducts.length,
-    "itemListElement": safeProducts.map((product, index) => ({
+    "numberOfItems": visibleProducts.length,
+    "itemListElement": visibleProducts.map((product, index) => ({
       "@type": "ListItem",
       "position": offset + index + 1,
       "url": `${SITE_ORIGIN}/product/${product.id}`,
