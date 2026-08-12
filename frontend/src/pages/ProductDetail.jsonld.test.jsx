@@ -1,7 +1,8 @@
 /**
  * Regression: Product JSON-LD must include Merchant listing fields
  * `hasMerchantReturnPolicy` and `shippingDetails` (Google Search Console
- * previously flagged these as missing).
+ * previously flagged these as missing), while never exposing a price for
+ * products whose visible pricing state is "Price on request".
  *
  * These tests exercise the exact structured-data emitted by
  * `<ProductDetail>`. We render the page with a fixture product and grab
@@ -34,7 +35,7 @@ jest.mock("../lib/api", () => {
   return {
     __esModule: true,
     api: {
-      getProduct: (id) => Promise.resolve({ ..._fixture, id }),
+      getProduct: jest.fn((id) => Promise.resolve({ ..._fixture, id })),
       listProducts: () => Promise.resolve({ items: [], total: 0 }),
       listReviews: () => Promise.resolve([]),
       createReview: () => Promise.resolve({}),
@@ -42,13 +43,19 @@ jest.mock("../lib/api", () => {
       resolveImage: (u) => u || "",
     },
     formatPrice: (n) => `₹${n || 0}`,
-    formatProductPrice: (p) => ({
-      onRequest: false,
-      primary: `₹${p?.price || 0}`,
-      label: "",
-      priceValue: p?.price || 0,
-    }),
-    schemaAvailabilityFor: () => "https://schema.org/InStock",
+    formatProductPrice: (p) => {
+      const numericPrice = Number(p?.price);
+      const onRequest =
+        !Number.isFinite(numericPrice) ||
+        numericPrice <= 0 ||
+        p?.price_display === "on_request";
+      return {
+        onRequest,
+        primary: onRequest ? "Price on request" : `₹${numericPrice}`,
+        label: "",
+        priceValue: onRequest ? null : numericPrice,
+      };
+    },
   };
 });
 
@@ -56,7 +63,16 @@ const fixtureProduct = {
   id: "p-1",
   name: "Antique Wine Chandelier",
   sku: "SGE-CH-101",
+  category: "Chandelier",
   price: 42000,
+  currency: "INR",
+  short_description: "Handcrafted crystal chandelier from Firozabad.",
+  description: "",
+  images: [],
+  rating: 0,
+  review_count: 0,
+  status: "published",
+  price_display: "starting_from",
 };
 
 jest.mock("../components/SEO", () => ({ __esModule: true, default: () => null }));
@@ -95,6 +111,7 @@ jest.mock("../components/SeenInProjects", () => ({
   default: () => null,
 }));
 
+const { api } = require("../lib/api");
 const ProductDetail = require("./ProductDetail").default;
 
 async function renderAndGetProductJsonLd() {
@@ -143,8 +160,27 @@ describe("Product JSON-LD — merchant listing fields", () => {
     expect(ld.name).toBe(fixtureProduct.name);
     expect(ld.sku).toBe(fixtureProduct.sku);
     expect(ld.offers["@type"]).toBe("Offer");
+    expect(ld.offers.price).toBe("42000");
     expect(ld.offers.priceCurrency).toBe("INR");
     expect(ld.offers.availability).toMatch(/^https:\/\/schema\.org\/(InStock|PreOrder|BackOrder|OutOfStock)$/);
+  });
+
+  test("omits price and currency when the visible price is zero/missing", async () => {
+    api.getProduct.mockResolvedValueOnce({ ...fixtureProduct, price: 0 });
+    const ld = await renderAndGetProductJsonLd();
+    expect(ld.offers.price).toBeUndefined();
+    expect(ld.offers.priceCurrency).toBeUndefined();
+  });
+
+  test("does not expose an internal price when price_display is on_request", async () => {
+    api.getProduct.mockResolvedValueOnce({
+      ...fixtureProduct,
+      price: 42000,
+      price_display: "on_request",
+    });
+    const ld = await renderAndGetProductJsonLd();
+    expect(ld.offers.price).toBeUndefined();
+    expect(ld.offers.priceCurrency).toBeUndefined();
   });
 
   test("Offer includes a valid hasMerchantReturnPolicy", async () => {
