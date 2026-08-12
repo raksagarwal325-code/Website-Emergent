@@ -136,6 +136,8 @@ export default function ProductDetail() {
   };
 
   const availabilityUrl = product ? schemaAvailabilityFor(product) : null;
+  const visiblePrice = formatProductPrice(product);
+  const hasPublicOfferPrice = !visiblePrice.onRequest && Number(product.price) > 0;
   // Site origin — used inside Offer.shippingDetails / hasMerchantReturnPolicy
   // links. Falls back to samratglass.com so the JSON-LD is complete even
   // in SSR/prerender contexts where `window` is not defined.
@@ -160,8 +162,10 @@ export default function ProductDetail() {
     } : {}),
     "offers": {
       "@type": "Offer",
-      "price": String(product.price || 0),
-      "priceCurrency": "INR",
+      ...(hasPublicOfferPrice ? {
+        "price": String(product.price),
+        "priceCurrency": "INR",
+      } : {}),
       "availability": availabilityUrl,
       "url": typeof window !== "undefined" ? window.location.href : "",
       "seller": { "@type": "Organization", "name": "Samrat Glass Emporium" },
