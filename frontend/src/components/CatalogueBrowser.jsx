@@ -32,6 +32,7 @@ export default function CatalogueBrowser({
   initialProducts = [],
   initialTotal = 0,
   dynamicCategories = null,
+  onListingChange = null,
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState(initialProducts);
@@ -153,11 +154,20 @@ export default function CatalogueBrowser({
         .then((res) => {
           if (myKey !== requestKeyRef.current) return;
           const items = res?.items || [];
+          const nextTotal = res?.total || 0;
           const tp = Math.max(1, res?.total_pages || 1);
           setProducts(items);
-          setTotal(res?.total || 0);
+          setTotal(nextTotal);
           setTotalPages(tp);
           setLoading(false);
+          if (typeof onListingChange === "function") {
+            onListingChange({
+              products: items,
+              total: nextTotal,
+              totalPages: tp,
+              page: currentPage,
+            });
+          }
           // Clamp URL page if it's now out of range (e.g. filters shrank
           // the result set below the requested page). We replace so
           // back-button behaviour still lands on the pre-filter state.
