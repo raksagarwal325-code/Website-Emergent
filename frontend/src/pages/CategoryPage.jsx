@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import SEO from "../components/SEO";
+import SchemaLD from "../components/SchemaLD";
 import CatalogueBrowser from "../components/CatalogueBrowser";
 import NotFound from "./NotFound";
 import {
@@ -9,6 +10,7 @@ import {
   NAV_CATEGORIES,
   SITE_ORIGIN,
 } from "../lib/categories";
+import { buildItemList, CATALOG_PAGE_SIZE } from "../lib/listingSchema";
 import { api } from "../lib/api";
 
 /**
@@ -30,17 +32,16 @@ import { api } from "../lib/api";
  */
 export default function CategoryPage() {
   const { slug } = useParams();
-  // Curated hit is synchronous — no loading flash for the 8 canonical slugs.
+  // Curated hit is synchronous — no loading flash for canonical slugs.
   const curated = getCategoryBySlug(slug);
   // For unknown slugs we probe the dynamic list. `undefined` = still
   // resolving, `null` = resolved to "not found".
   const [dynamicResolved, setDynamicResolved] = useState(
     curated ? curated : undefined,
   );
-  // Products list for the JSON-LD ItemList. We fetch a small first page so
-  // the schema block includes real, published products only. If the fetch
-  // fails we still render the page — just without the ItemList payload.
-  const [ldProducts, setLdProducts] = useState([]);
+  // Structured data is driven by the exact accepted result that
+  // CatalogueBrowser renders. No separate schema-only product request.
+  const [listing, setListing] = useState(null);
 
   // Resolve unknown slugs against /api/products/categories exactly like
   // the Catalog page does. Depending on `slug` also handles direct
@@ -68,20 +69,16 @@ export default function CategoryPage() {
 
   const category = dynamicResolved;
 
+  // Do not let a previous category's runtime ItemList survive while a newly
+  // locked category is loading. CatalogueBrowser will report the new accepted
+  // visible result as soon as it settles.
   useEffect(() => {
-    if (!category) return;
-    let alive = true;
-    api
-      .listProducts({ category: category.db_name, sort: "newest", limit: 24 })
-      .then((res) => {
-        if (!alive) return;
-        setLdProducts((res?.items || []).filter((p) => p?.id && p?.name));
-      })
-      .catch(() => {
-        if (alive) setLdProducts([]);
-      });
-    return () => { alive = false; };
-  }, [category]);
+    setListing(null);
+  }, [category?.db_name]);
+
+  const handleListingChange = useCallback((nextListing) => {
+    setListing(nextListing);
+  }, []);
 
   // Resolving — render a minimal shell instead of flashing NotFound.
   if (category === undefined) {
@@ -101,8 +98,10 @@ export default function CategoryPage() {
 
   const path = `/category/${category.slug}`;
   const canonical = `${SITE_ORIGIN}${path}`;
+  const categorySchemaId = `category-${category.slug}`;
+  const breadcrumbSchemaId = `category-breadcrumb-${category.slug}`;
 
-  const collectionSchema = {
+  const collectionSchema = listing ? {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
     "@id": `${canonical}#collection`,
@@ -111,17 +110,35 @@ export default function CategoryPage() {
     "description": category.metaDescription,
     "isPartOf": { "@id": `${SITE_ORIGIN}/#website` },
     "about": category.label,
-    "mainEntity": {
-      "@type": "ItemList",
-      "itemListOrder": "https://schema.org/ItemListOrderDescending",
-      "numberOfItems": ldProducts.length,
-      "itemListElement": ldProducts.map((p, idx) => ({
+    "mainEntity": buildItemList(listing.products, {
+      page: listing.page,
+      pageSize: CATALOG_PAGE_SIZE,
+    }),
+  } : null;
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
         "@type": "ListItem",
-        "position": idx + 1,
-        "url": `${SITE_ORIGIN}/product/${p.id}`,
-        "name": p.name,
-      })),
-    },
+        "position": 1,
+        "name": "Home",
+        "item": `${SITE_ORIGIN}/`,
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Catalog",
+        "item": `${SITE_ORIGIN}/catalog`,
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": category.label,
+        "item": canonical,
+      },
+    ],
   };
 
   return (
@@ -129,18 +146,12 @@ export default function CategoryPage() {
       <SEO
         title={category.seoTitle}
         description={category.metaDescription}
-        image={ldProducts[0] ? api.resolveImage(ldProducts[0].images?.[0]) : undefined}
+        image={listing?.products?.[0] ? api.resolveImage(listing.products[0].images?.[0]) : undefined}
         path={path}
         type="website"
       />
-      {/* JSON-LD is inlined in the head via a plain script tag so the
-          prerender pass can serialise a matching block from Node too. */}
-      <script
-        type="application/ld+json"
-        data-testid={`category-jsonld-${category.slug}`}
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionSchema) }}
-      />
+      <SchemaLD id={categorySchemaId} data={collectionSchema} />
+      <SchemaLD id={breadcrumbSchemaId} data={breadcrumbSchema} />
 
       <nav
         aria-label="Breadcrumb"
@@ -167,7 +178,10 @@ export default function CategoryPage() {
         </p>
       </div>
 
-      <CatalogueBrowser lockedCategory={category.db_name} />
+      <CatalogueBrowser
+        lockedCategory={category.db_name}
+        onListingChange={handleListingChange}
+      />
 
       {/* Crawlable strip pointing at every other category — keeps internal
           link equity flowing without introducing a new visual element. */}
