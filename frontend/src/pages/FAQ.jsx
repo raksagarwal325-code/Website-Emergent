@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, MessageCircle } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
@@ -7,22 +7,35 @@ import { waGeneralLink } from "../lib/whatsapp";
 
 function FAQItem({ q, a, defaultOpen = false, index }) {
   const [open, setOpen] = useState(defaultOpen);
+  const id = useId();
+  const buttonId = `${id}-button`;
+  const panelId = `${id}-panel`;
+
   return (
     <div data-testid={`faq-item-${index}`} className="border border-white/10 hover:border-[#D4AF37]/40 transition-colors">
       <button
+        id={buttonId}
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
         className="w-full flex items-center justify-between px-5 md:px-6 py-5 text-left group"
         data-testid={`faq-toggle-${index}`}
       >
         <span className="font-serif text-base md:text-lg text-white group-hover:text-[#D4AF37] transition-colors pr-4">{q}</span>
         <ChevronDown size={18} className={`flex-shrink-0 text-[#D4AF37] transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && (
+      <div
+        id={panelId}
+        role="region"
+        aria-labelledby={buttonId}
+        aria-hidden={!open}
+        className={`overflow-hidden transition-[max-height,opacity] duration-300 ${open ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"}`}
+      >
         <div className="px-5 md:px-6 pb-6 pt-1 text-white/70 leading-relaxed text-sm md:text-[15px] whitespace-pre-line">
           {a}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -33,7 +46,6 @@ export default function FAQ() {
   const items = (faq.items || []).filter((it) => (it?.q || "").trim() && (it?.a || "").trim());
 
   useEffect(() => {
-    document.title = "FAQ · Samrat Glass Emporium";
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
   }, []);
 
