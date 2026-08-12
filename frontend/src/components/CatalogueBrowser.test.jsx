@@ -126,6 +126,36 @@ describe("CatalogueBrowser — URL-based pagination", () => {
     expect(screen.getByTestId("page-indicator").textContent).toMatch(/Page 2 of 3/i);
   });
 
+  test("onListingChange reports the same accepted page that replaces the visible grid", async () => {
+    const onListingChange = jest.fn();
+    renderBrowser(["/catalog"], { onListingChange });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("product-card-p1-0")).toBeInTheDocument(),
+    );
+    expect(onListingChange).toHaveBeenCalled();
+    expect(onListingChange.mock.calls[onListingChange.mock.calls.length - 1][0]).toMatchObject({
+      total: 72,
+      totalPages: 3,
+      page: 1,
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("pagination-next"));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("product-card-p2-0")).toBeInTheDocument(),
+    );
+    const reported = onListingChange.mock.calls[onListingChange.mock.calls.length - 1][0];
+    expect(reported.page).toBe(2);
+    expect(reported.total).toBe(72);
+    expect(reported.totalPages).toBe(3);
+    expect(reported.products).toHaveLength(24);
+    expect(reported.products[0].id).toBe("p2-0");
+    expect(reported.products.some((p) => p.id === "p1-0")).toBe(false);
+  });
+
   test("Next is disabled on the last page", async () => {
     renderBrowser(["/catalog?page=3"]);
     await waitFor(() =>
