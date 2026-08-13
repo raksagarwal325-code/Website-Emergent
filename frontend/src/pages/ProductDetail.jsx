@@ -45,29 +45,17 @@ export default function ProductDetail() {
 
   if (notFound) {
     return (
-      <div
-        data-testid="product-not-found"
-        className="max-w-3xl mx-auto px-6 py-24 text-center"
-      >
+      <div data-testid="product-not-found" className="max-w-3xl mx-auto px-6 py-24 text-center">
         <div className="eyebrow mb-6">Error · 404</div>
         <h1 className="font-serif text-4xl sm:text-5xl leading-tight">Product not found</h1>
         <p className="mt-6 text-white/60 max-w-xl mx-auto leading-relaxed">
-          This piece may have been renamed, discontinued, or the link is
-          incorrect. Browse the full catalogue to find something similar.
+          This piece may have been renamed, discontinued, or the link is incorrect. Browse the full catalogue to find something similar.
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            to="/catalog"
-            data-testid="product-notfound-catalog-btn"
-            className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] transition-colors"
-          >
+          <Link to="/catalog" data-testid="product-notfound-catalog-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] transition-colors">
             <ShoppingBag size={14} /> Browse Catalogue
           </Link>
-          <Link
-            to="/"
-            data-testid="product-notfound-home-btn"
-            className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.28em]"
-          >
+          <Link to="/" data-testid="product-notfound-home-btn" className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.28em]">
             <ArrowLeft size={14} /> Home
           </Link>
         </div>
@@ -81,11 +69,7 @@ export default function ProductDetail() {
 
   const fav = isFavorite(product.id);
   const images = (product.images || []).map(api.resolveImage);
-
-  const productUrl =
-    typeof window !== "undefined" && window.location
-      ? `${window.location.origin}/product/${product.id}`
-      : "";
+  const productUrl = typeof window !== "undefined" && window.location ? `${window.location.origin}/product/${product.id}` : "";
   const waLink = waProductLink(settings?.whatsapp_number, product, productUrl) || "#";
 
   const handleAdd = () => {
@@ -95,7 +79,7 @@ export default function ProductDetail() {
 
   const handleSubmitReview = async (e) => {
     e.preventDefault();
-    if (reviewSubmitting) return; // prevent duplicate submissions
+    if (reviewSubmitting) return;
     setReviewError("");
     const author = (reviewForm.author || "").trim();
     const body = (reviewForm.body || "").trim();
@@ -109,25 +93,13 @@ export default function ProductDetail() {
     }
     setReviewSubmitting(true);
     try {
-      await api.createReview({
-        product_id: product.id,
-        author,
-        rating: reviewForm.rating,
-        title: (reviewForm.title || "").trim(),
-        body,
-      });
-      // Reviews go through moderation — do NOT add to the list or refetch
-      // the product rating. Just confirm the submission.
+      await api.createReview({ product_id: product.id, author, rating: reviewForm.rating, title: (reviewForm.title || "").trim(), body });
       setReviewForm({ author: "", rating: 5, title: "", body: "" });
       setReviewSubmitted(true);
       toast.success("Thank you. Your review has been submitted for approval.");
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      const msg = typeof detail === "string"
-        ? detail
-        : Array.isArray(detail) && detail[0]?.msg
-          ? detail[0].msg
-          : "Could not submit review. Please try again.";
+      const msg = typeof detail === "string" ? detail : Array.isArray(detail) && detail[0]?.msg ? detail[0].msg : "Could not submit review. Please try again.";
       setReviewError(msg);
       toast.error(msg);
     } finally {
@@ -138,12 +110,7 @@ export default function ProductDetail() {
   const availabilityUrl = product ? schemaAvailabilityFor(product) : null;
   const visiblePrice = formatProductPrice(product);
   const hasPublicOfferPrice = !visiblePrice.onRequest && Number(product.price) > 0;
-  // Site origin — used inside Offer.shippingDetails / hasMerchantReturnPolicy
-  // links. Falls back to samratglass.com so the JSON-LD is complete even
-  // in SSR/prerender contexts where `window` is not defined.
-  const siteOrigin =
-    (typeof window !== "undefined" && window.location?.origin) ||
-    "https://samratglass.com";
+  const siteOrigin = (typeof window !== "undefined" && window.location?.origin) || "https://samratglass.com";
   const productSchema = product && availabilityUrl ? {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -153,53 +120,23 @@ export default function ProductDetail() {
     "image": (product.images || []).map((u) => api.resolveImage(u)).filter(Boolean),
     "brand": { "@type": "Brand", "name": "Samrat Glass Emporium" },
     "category": product.category,
-    ...(product.rating > 0 ? {
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": String(product.rating.toFixed(1)),
-        "reviewCount": String(product.review_count || 0),
-      },
-    } : {}),
+    ...(product.rating > 0 ? { "aggregateRating": { "@type": "AggregateRating", "ratingValue": String(product.rating.toFixed(1)), "reviewCount": String(product.review_count || 0) } } : {}),
     "offers": {
       "@type": "Offer",
-      ...(hasPublicOfferPrice ? {
-        "price": String(product.price),
-        "priceCurrency": "INR",
-      } : {}),
+      ...(hasPublicOfferPrice ? { "price": String(product.price), "priceCurrency": "INR" } : {}),
       "availability": availabilityUrl,
       "url": typeof window !== "undefined" ? window.location.href : "",
       "seller": { "@type": "Organization", "name": "Samrat Glass Emporium" },
-      // Returns / replacements — handcrafted, fragile glass. We do NOT
-      // accept general returns; transit-damage replacements are handled
-      // per the linked policy page. `MerchantReturnNotPermitted` is the
-      // narrowest truthful enum value; the merchantReturnLink surfaces
-      // the damage-replacement carve-out to visitors and crawlers.
       "hasMerchantReturnPolicy": {
         "@type": "MerchantReturnPolicy",
         "applicableCountry": "IN",
         "returnPolicyCategory": "https://schema.org/MerchantReturnNotPermitted",
         "merchantReturnLink": `${siteOrigin}/legal/returns`
       },
-      // Shipping — India-only. Typical transit is 7-10 business days.
-      // We intentionally OMIT `shippingRate` because the business does
-      // not offer a fixed monetary shipping charge; per Google's guidance
-      // it is better to omit an optional pricing field than to invent
-      // one that isn't truthful.
       "shippingDetails": {
         "@type": "OfferShippingDetails",
-        "shippingDestination": {
-          "@type": "DefinedRegion",
-          "addressCountry": "IN"
-        },
-        "deliveryTime": {
-          "@type": "ShippingDeliveryTime",
-          "transitTime": {
-            "@type": "QuantitativeValue",
-            "minValue": 7,
-            "maxValue": 10,
-            "unitCode": "DAY"
-          }
-        }
+        "shippingDestination": { "@type": "DefinedRegion", "addressCountry": "IN" },
+        "deliveryTime": { "@type": "ShippingDeliveryTime", "transitTime": { "@type": "QuantitativeValue", "minValue": 7, "maxValue": 10, "unitCode": "DAY" } }
       }
     }
   } : null;
@@ -218,63 +155,30 @@ export default function ProductDetail() {
           <SchemaLD id={`product-${product.id}`} data={productSchema} />
         </>
       )}
+
       <Link to="/catalog" className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.28em] text-white/60 hover:text-white mb-10 link-underline">
         <ArrowLeft size={14} /> Back to catalog
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-        {/* Gallery */}
         <div className="lg:col-span-7">
-          <div
-            className="aspect-[4/5] overflow-hidden bg-[#0a0a0a] border border-white/5 flex items-center justify-center p-6 relative"
-            {...containerGuardProps}
-            style={containerGuardStyle}
-          >
+          <div className="aspect-[4/5] overflow-hidden bg-[#0a0a0a] border border-white/5 flex items-center justify-center p-6 relative" {...containerGuardProps} style={containerGuardStyle}>
             {images.length > 0 && (
-              <img
-                src={images[selectedImg]}
-                alt={product.name}
-                className="max-w-full max-h-full w-auto h-auto object-contain object-center"
-                data-testid="product-main-image"
-                {...imgGuardProps}
-                style={imgGuardStyle}
-              />
+              <img src={images[selectedImg]} alt={product.name} className="max-w-full max-h-full w-auto h-auto object-contain object-center" data-testid="product-main-image" {...imgGuardProps} style={imgGuardStyle} />
             )}
-            {/* Transparent interaction overlay — captures right-click / long-press
-                on the image area so browsers can't offer "Save image" on the raw
-                <img>. Purely deterrent; does not block screenshots. */}
-            <div
-              aria-hidden="true"
-              data-testid="product-image-guard-overlay"
-              className="absolute inset-0"
-              {...containerGuardProps}
-              style={{ ...containerGuardStyle, background: "transparent" }}
-            />
+            <div aria-hidden="true" data-testid="product-image-guard-overlay" className="absolute inset-0" {...containerGuardProps} style={{ ...containerGuardStyle, background: "transparent" }} />
           </div>
           {images.length > 1 && (
             <div className="grid grid-cols-4 gap-3 mt-4">
               {images.map((img, i) => (
-                <button
-                  key={i}
-                  data-testid={`thumb-${i}`}
-                  onClick={() => setSelectedImg(i)}
-                  {...containerGuardProps}
-                  className={`aspect-square overflow-hidden border flex items-center justify-center bg-[#0a0a0a] p-2 ${selectedImg === i ? "border-[#D4AF37]" : "border-white/10 hover:border-white/30"}`}
-                >
-                  <img
-                    src={img}
-                    alt={`thumb ${i + 1}`}
-                    className="max-w-full max-h-full w-auto h-auto object-contain object-center"
-                    {...imgGuardProps}
-                    style={imgGuardStyle}
-                  />
+                <button key={i} data-testid={`thumb-${i}`} onClick={() => setSelectedImg(i)} {...containerGuardProps} className={`aspect-square overflow-hidden border flex items-center justify-center bg-[#0a0a0a] p-2 ${selectedImg === i ? "border-[#D4AF37]" : "border-white/10 hover:border-white/30"}`}>
+                  <img src={img} alt={`thumb ${i + 1}`} className="max-w-full max-h-full w-auto h-auto object-contain object-center" {...imgGuardProps} style={imgGuardStyle} />
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* Info */}
         <div className="lg:col-span-5 space-y-8">
           <div>
             <div className="eyebrow mb-3">{product.category}</div>
@@ -286,24 +190,14 @@ export default function ProductDetail() {
             {(() => {
               const p = formatProductPrice(product);
               if (p.onRequest) {
-                return (
-                  <span data-testid="product-price" className="font-serif text-3xl text-[#D4AF37] italic">
-                    Price on request
-                  </span>
-                );
+                return <span data-testid="product-price" className="font-serif text-3xl text-[#D4AF37] italic">Price on request</span>;
               }
               return (
                 <>
-                  {p.label && (
-                    <span className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">{p.label}</span>
-                  )}
+                  {p.label && <span className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">{p.label}</span>}
                   <span data-testid="product-price" className="font-serif text-3xl text-[#D4AF37]">{p.primary}</span>
-                  {p.compareAt && (
-                    <span data-testid="product-mrp" className="text-white/40 line-through">{p.compareAt}</span>
-                  )}
-                  {p.label && (
-                    <span className="text-[11px] text-white/40 italic ml-1">· final quotation on inquiry</span>
-                  )}
+                  {p.compareAt && <span data-testid="product-mrp" className="text-white/40 line-through">{p.compareAt}</span>}
+                  {p.label && <span className="text-[11px] text-white/40 italic ml-1">· final quotation on inquiry</span>}
                 </>
               );
             })()}
@@ -312,58 +206,51 @@ export default function ProductDetail() {
           <p className="text-white/70 leading-relaxed">{product.short_description}</p>
 
           <div className="flex flex-wrap gap-3">
-            <button
-              data-testid="add-to-cart-btn"
-              onClick={handleAdd}
-              className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] transition-colors"
-            >
+            <button data-testid="add-to-cart-btn" onClick={handleAdd} className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] transition-colors">
               <ShoppingBag size={14} /> Add to inquiry
             </button>
-            <a
-              data-testid="whatsapp-btn"
-              href={waLink}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.28em]"
-            >
+            <a data-testid="whatsapp-btn" href={waLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.28em]">
               <MessageCircle size={14} /> WhatsApp
             </a>
-            <button
-              data-testid="detail-favorite-btn"
-              onClick={() => toggleFavorite(product)}
-              className={`inline-flex items-center justify-center h-14 w-14 border ${fav ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/25 text-white/70 hover:border-white/60"}`}
-              aria-label="Toggle favorite"
-            >
+            <button data-testid="detail-favorite-btn" onClick={() => toggleFavorite(product)} className={`inline-flex items-center justify-center h-14 w-14 border ${fav ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/25 text-white/70 hover:border-white/60"}`} aria-label="Toggle favorite">
               <Heart size={16} fill={fav ? "#D4AF37" : "none"} />
             </button>
           </div>
 
-          {/* Pre-order note — shown only for published items with no
-              current stock so ready-stock pieces are not mislabelled. */}
-          {isMadeToOrder(product) && (
-            <p
-              data-testid="made-to-order-note"
-              className="text-xs text-white/60 leading-relaxed max-w-md"
+          <div data-testid="buying-confidence" className="border border-white/10 bg-white/[0.02] p-5">
+            <div className="text-[10px] uppercase tracking-[0.24em] text-[#D4AF37] mb-3">Handcrafted in Firozabad · Since 1981</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-white/70">
+              <div>✓ Secure Pan-India delivery</div>
+              <div>✓ Transit-damage replacement</div>
+              <div>✓ Custom sizes &amp; finishes</div>
+              <div>✓ Installation guidance</div>
+              <div>✓ GST invoice available</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => document.querySelector('[data-testid="product-tabs"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              className="mt-4 text-[10px] uppercase tracking-[0.22em] text-[#BF9972] hover:text-[#D4AF37]"
             >
+              Shipping &amp; ordering details →
+            </button>
+          </div>
+
+          {isMadeToOrder(product) && (
+            <p data-testid="made-to-order-note" className="text-xs text-white/60 leading-relaxed max-w-md">
               <span className="text-[#D4AF37]">Pre-order.</span>{" "}
               Production and dispatch timelines will be confirmed after your enquiry.
             </p>
           )}
 
-          {/* Stock / availability — inquiry-based products never say "unavailable". */}
           <div className="text-xs text-white/50 border-t border-white/10 pt-6">
             {product.stock > 0 ? `${product.stock} in stock` : "Available on request"}
           </div>
         </div>
       </div>
 
-      {/* Tabbed details */}
       <ProductTabs product={product} settings={settings} waLink={waLink} />
-
-      {/* Seen in gallery projects (auto-hides when this product isn't tagged in any project) */}
       <SeenInProjects productId={product.id} />
 
-      {/* Reviews */}
       <section className="mt-24 border-t border-white/10 pt-16">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
           <div className="md:col-span-5">
@@ -376,95 +263,31 @@ export default function ProductDetail() {
             </div>
 
             {reviewSubmitted ? (
-              <div
-                role="status"
-                data-testid="review-submitted-thanks"
-                className="mt-8 border border-[#D4AF37]/50 bg-[#D4AF37]/[0.06] p-6 text-sm text-white/85 leading-relaxed"
-              >
-                Thank you. Your review has been submitted for approval.
-                It will appear here once our team has verified it.
+              <div role="status" data-testid="review-submitted-thanks" className="mt-8 border border-[#D4AF37]/50 bg-[#D4AF37]/[0.06] p-6 text-sm text-white/85 leading-relaxed">
+                Thank you. Your review has been submitted for approval. It will appear here once our team has verified it.
               </div>
             ) : (
               <form onSubmit={handleSubmitReview} className="mt-8 space-y-4" noValidate>
                 <label htmlFor="review-author-input" className="sr-only">Your name</label>
-                <input
-                  id="review-author-input"
-                  data-testid="review-author"
-                  placeholder="Your name"
-                  value={reviewForm.author}
-                  onChange={(e) => setReviewForm({ ...reviewForm, author: e.target.value })}
-                  maxLength={60}
-                  required
-                  aria-required="true"
-                  aria-invalid={reviewError ? "true" : undefined}
-                  className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/60 px-4 py-3 text-sm"
-                />
-                <div
-                  role="radiogroup"
-                  aria-label="Rate this product from 1 to 5 stars"
-                  className="flex items-center gap-2"
-                >
+                <input id="review-author-input" data-testid="review-author" placeholder="Your name" value={reviewForm.author} onChange={(e) => setReviewForm({ ...reviewForm, author: e.target.value })} maxLength={60} required aria-required="true" aria-invalid={reviewError ? "true" : undefined} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/60 px-4 py-3 text-sm" />
+                <div role="radiogroup" aria-label="Rate this product from 1 to 5 stars" className="flex items-center gap-2">
                   {[1,2,3,4,5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      role="radio"
-                      aria-checked={reviewForm.rating === n}
-                      aria-label={`Rate ${n} star${n === 1 ? "" : "s"}`}
-                      data-testid={`review-star-${n}`}
-                      onClick={() => setReviewForm({ ...reviewForm, rating: n })}
-                      className={`p-1 rounded transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/70 ${n <= reviewForm.rating ? "text-[#D4AF37]" : "text-white/25 hover:text-white/50"}`}
-                    >
+                    <button key={n} type="button" role="radio" aria-checked={reviewForm.rating === n} aria-label={`Rate ${n} star${n === 1 ? "" : "s"}`} data-testid={`review-star-${n}`} onClick={() => setReviewForm({ ...reviewForm, rating: n })} className={`p-1 rounded transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/70 ${n <= reviewForm.rating ? "text-[#D4AF37]" : "text-white/25 hover:text-white/50"}`}>
                       <Star size={20} fill={n <= reviewForm.rating ? "#D4AF37" : "none"} />
                     </button>
                   ))}
                 </div>
                 <label htmlFor="review-title-input" className="sr-only">Title (optional)</label>
-                <input
-                  id="review-title-input"
-                  data-testid="review-title"
-                  placeholder="Title (optional)"
-                  value={reviewForm.title}
-                  onChange={(e) => setReviewForm({ ...reviewForm, title: e.target.value })}
-                  maxLength={100}
-                  className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/60 px-4 py-3 text-sm"
-                />
+                <input id="review-title-input" data-testid="review-title" placeholder="Title (optional)" value={reviewForm.title} onChange={(e) => setReviewForm({ ...reviewForm, title: e.target.value })} maxLength={100} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/60 px-4 py-3 text-sm" />
                 <label htmlFor="review-body-input" className="sr-only">Your review</label>
-                <textarea
-                  id="review-body-input"
-                  data-testid="review-body"
-                  placeholder="Your thoughts (10–1000 characters)…"
-                  rows="4"
-                  value={reviewForm.body}
-                  onChange={(e) => setReviewForm({ ...reviewForm, body: e.target.value })}
-                  maxLength={1000}
-                  required
-                  aria-required="true"
-                  aria-invalid={reviewError ? "true" : undefined}
-                  className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/60 px-4 py-3 text-sm resize-none"
-                />
+                <textarea id="review-body-input" data-testid="review-body" placeholder="Your thoughts (10–1000 characters)…" rows="4" value={reviewForm.body} onChange={(e) => setReviewForm({ ...reviewForm, body: e.target.value })} maxLength={1000} required aria-required="true" aria-invalid={reviewError ? "true" : undefined} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/60 px-4 py-3 text-sm resize-none" />
                 {reviewError && (
-                  <div
-                    data-testid="review-error"
-                    role="alert"
-                    aria-live="assertive"
-                    className="text-xs text-red-300 border border-red-500/30 bg-red-500/10 px-3 py-2"
-                  >
-                    {reviewError}
-                  </div>
+                  <div data-testid="review-error" role="alert" aria-live="assertive" className="text-xs text-red-300 border border-red-500/30 bg-red-500/10 px-3 py-2">{reviewError}</div>
                 )}
-                <button
-                  type="submit"
-                  data-testid="submit-review-btn"
-                  disabled={reviewSubmitting}
-                  aria-busy={reviewSubmitting ? "true" : "false"}
-                  className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] hover:text-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/70 px-6 py-3 text-xs uppercase tracking-[0.28em] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                <button type="submit" data-testid="submit-review-btn" disabled={reviewSubmitting} aria-busy={reviewSubmitting ? "true" : "false"} className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] hover:text-[#D4AF37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/70 px-6 py-3 text-xs uppercase tracking-[0.28em] disabled:opacity-50 disabled:cursor-not-allowed">
                   {reviewSubmitting ? "Submitting…" : "Submit review"}
                 </button>
-                <p className="text-[10px] uppercase tracking-[0.22em] text-white/40">
-                  Reviews are reviewed by our team before appearing.
-                </p>
+                <p className="text-[10px] uppercase tracking-[0.22em] text-white/40">Reviews are reviewed by our team before appearing.</p>
               </form>
             )}
           </div>
@@ -490,9 +313,6 @@ export default function ProductDetail() {
   );
 }
 
-
-// Values that mean "no real content" — we hide these spec rows entirely so
-// the page never shows "N/A · —" filler. See requirements #1 & #2.
 const EMPTY_SPEC_VALUES = new Set(["", "-", "—", "n/a", "na", "not available", "unknown", "none", "null"]);
 function isMeaningfulSpec(v) {
   if (v == null) return false;
@@ -506,6 +326,22 @@ function filterSpecs(specs) {
   return Object.entries(specs).filter(([, v]) => isMeaningfulSpec(v));
 }
 
+const GLANCE_SPEC_KEYS = [
+  "Height",
+  "Width",
+  "Diameter",
+  "Dimensions",
+  "Material",
+  "Glass",
+  "Crystal",
+  "Finish",
+  "Lights",
+  "Number of Lights",
+  "Holder",
+  "Wattage",
+  "Weight",
+];
+
 const TABS = [
   { key: "description", label: "Description" },
   { key: "specifications", label: "Specifications" },
@@ -516,22 +352,17 @@ const TABS = [
 function ProductTabs({ product, settings, waLink }) {
   const [active, setActive] = useState("description");
   const specEntries = filterSpecs(product?.specs);
+  const glanceSpecs = GLANCE_SPEC_KEYS
+    .filter((key) => isMeaningfulSpec(product?.specs?.[key]))
+    .slice(0, 6);
 
   return (
     <section className="mt-20 border-t border-white/10 pt-12" data-testid="product-tabs">
-      {/* Editorial tab strip */}
       <div className="flex flex-wrap gap-x-8 gap-y-2 border-b border-white/10 mb-10">
         {TABS.map((t) => (
-          <button
-            key={t.key}
-            data-testid={`tab-${t.key}`}
-            onClick={() => setActive(t.key)}
-            className={`relative py-4 text-xs uppercase tracking-[0.28em] transition-colors ${active === t.key ? "text-[#D4AF37]" : "text-white/50 hover:text-white"}`}
-          >
+          <button key={t.key} data-testid={`tab-${t.key}`} onClick={() => setActive(t.key)} className={`relative py-4 text-xs uppercase tracking-[0.28em] transition-colors ${active === t.key ? "text-[#D4AF37]" : "text-white/50 hover:text-white"}`}>
             {t.label}
-            {active === t.key && (
-              <span className="absolute left-0 right-0 -bottom-px h-px bg-[#D4AF37]"></span>
-            )}
+            {active === t.key && <span className="absolute left-0 right-0 -bottom-px h-px bg-[#D4AF37]"></span>}
           </button>
         ))}
       </div>
@@ -541,14 +372,10 @@ function ProductTabs({ product, settings, waLink }) {
           <div data-testid="tab-content-description" className="grid grid-cols-1 md:grid-cols-12 gap-10">
             <div className="md:col-span-8">
               <div className="eyebrow mb-3">About this piece</div>
-              <p className="text-white/75 leading-relaxed whitespace-pre-wrap text-[15px]">
-                {product.description || product.short_description || "No description provided."}
-              </p>
+              <p className="text-white/75 leading-relaxed whitespace-pre-wrap text-[15px]">{product.description || product.short_description || "No description provided."}</p>
               {product.tags?.length > 0 && (
                 <div className="mt-8 flex flex-wrap gap-2">
-                  {product.tags.map((t) => (
-                    <span key={t} className="text-[10px] uppercase tracking-[0.24em] border border-white/15 px-3 py-1 text-white/70">{t}</span>
-                  ))}
+                  {product.tags.map((t) => <span key={t} className="text-[10px] uppercase tracking-[0.24em] border border-white/15 px-3 py-1 text-white/70">{t}</span>)}
                 </div>
               )}
             </div>
@@ -557,10 +384,11 @@ function ProductTabs({ product, settings, waLink }) {
               <ul className="space-y-2 text-sm text-white/70">
                 <li>Reference Code · <span className="text-white">{product.sku}</span></li>
                 <li>Category · <span className="text-white">{product.category}</span></li>
-                <li>Stock · <span className="text-white">{product.stock > 0 ? `${product.stock} available` : "Available on request"}</span></li>
-                {product.rating > 0 && (
-                  <li>Rating · <span className="text-white">{product.rating.toFixed(1)} / 5</span></li>
-                )}
+                {glanceSpecs.map((key) => (
+                  <li key={key}>{key} · <span className="text-white">{String(product.specs[key])}</span></li>
+                ))}
+                <li>Availability · <span className="text-white">{product.stock > 0 ? `${product.stock} available` : "Available on request"}</span></li>
+                {product.rating > 0 && <li>Rating · <span className="text-white">{product.rating.toFixed(1)} / 5</span></li>}
               </ul>
             </div>
           </div>
@@ -583,14 +411,9 @@ function ProductTabs({ product, settings, waLink }) {
                 </table>
               </div>
             )}
-            {/* Customization note — always shown (works for both fully-specced and inquiry-based pieces). */}
-            <div
-              data-testid="spec-customization-note"
-              className="mt-6 border-l-2 border-[#D4AF37] bg-white/[0.02] px-5 py-4 text-sm text-white/75 leading-relaxed"
-            >
+            <div data-testid="spec-customization-note" className="mt-6 border-l-2 border-[#D4AF37] bg-white/[0.02] px-5 py-4 text-sm text-white/75 leading-relaxed">
               <span className="text-[#D4AF37] font-serif italic">Pre-order — </span>
-              Specifications can be customised as per requirement. Please inquire for exact size,
-              holder type, finish, and pricing.
+              Specifications can be customised as per requirement. Please inquire for exact size, holder type, finish, and pricing.
             </div>
           </div>
         )}
@@ -600,23 +423,17 @@ function ProductTabs({ product, settings, waLink }) {
             <div className="border border-white/10 p-6">
               <div className="flex items-center gap-3 mb-3"><Truck size={16} className="text-[#D4AF37]" /><div className="eyebrow">Shipping</div></div>
               <div className="text-white text-sm mb-1">{settings?.delivery_info || "Pan-India shipping · 7–10 business days"}</div>
-              <p className="text-white/60 text-sm leading-relaxed mt-2">
-                All items are carefully packaged in double-corrugated boxes with foam inserts. Larger chandeliers ship in custom crates.
-              </p>
+              <p className="text-white/60 text-sm leading-relaxed mt-2">All items are carefully packaged in double-corrugated boxes with foam inserts. Larger chandeliers ship in custom crates.</p>
             </div>
             <div className="border border-white/10 p-6">
               <div className="flex items-center gap-3 mb-3"><CreditCard size={16} className="text-[#D4AF37]" /><div className="eyebrow">Payments</div></div>
               <div className="text-white text-sm mb-1">{settings?.payment_methods || "UPI · Net Banking"}</div>
-              <p className="text-white/60 text-sm leading-relaxed mt-2">
-                Confirm your order via WhatsApp — we&apos;ll share UPI ID or bank details. GST invoice provided.
-              </p>
+              <p className="text-white/60 text-sm leading-relaxed mt-2">Confirm your order via WhatsApp — we&apos;ll share UPI ID or bank details. GST invoice provided.</p>
             </div>
             <div className="border border-white/10 p-6">
               <div className="flex items-center gap-3 mb-3"><MapPin size={16} className="text-[#D4AF37]" /><div className="eyebrow">Origin</div></div>
               <div className="text-white text-sm mb-1">Firozabad, Uttar Pradesh</div>
-              <p className="text-white/60 text-sm leading-relaxed mt-2">
-                Ships from our workshop. Transit damage? We replace at our cost — just share an unboxing photo within 48 hours.
-              </p>
+              <p className="text-white/60 text-sm leading-relaxed mt-2">Ships from our workshop. Transit damage? We replace at our cost — just share an unboxing photo within 48 hours.</p>
             </div>
           </div>
         )}
@@ -626,32 +443,18 @@ function ProductTabs({ product, settings, waLink }) {
             <div className="border border-white/10 p-8">
               <div className="eyebrow mb-3">Chat instantly</div>
               <h3 className="font-serif text-2xl mb-3">Talk to us on WhatsApp</h3>
-              <p className="text-white/60 text-sm leading-relaxed mb-6">
-                Get availability, custom size quotes, bulk pricing, or installation advice within minutes.
-              </p>
-              <a
-                data-testid="tab-wa-btn"
-                href={waLink}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]"
-              >
+              <p className="text-white/60 text-sm leading-relaxed mb-6">Get availability, custom size quotes, bulk pricing, or installation advice within minutes.</p>
+              <a data-testid="tab-wa-btn" href={waLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]">
                 <MessageCircle size={14} /> Chat on WhatsApp
               </a>
             </div>
             <div className="border border-white/10 p-8">
               <div className="eyebrow mb-3">Email or basket</div>
               <h3 className="font-serif text-2xl mb-3">Send us a detailed inquiry</h3>
-              <p className="text-white/60 text-sm leading-relaxed mb-6">
-                Add this piece to your inquiry basket along with others, then submit — we&apos;ll respond by email or phone.
-              </p>
+              <p className="text-white/60 text-sm leading-relaxed mb-6">Add this piece to your inquiry basket along with others, then submit — we&apos;ll respond by email or phone.</p>
               <div className="flex flex-wrap gap-3">
-                <Link to="/cart" className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em]">
-                  <ShoppingBag size={14} /> Open basket
-                </Link>
-                <a href={`mailto:${settings?.admin_email || "samratglassemp@gmail.com"}?subject=${encodeURIComponent(`Inquiry: ${product.name} (${product.sku})`)}`} className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em]">
-                  Email us
-                </a>
+                <Link to="/cart" className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em]"><ShoppingBag size={14} /> Open basket</Link>
+                <a href={`mailto:${settings?.admin_email || "samratglassemp@gmail.com"}?subject=${encodeURIComponent(`Inquiry: ${product.name} (${product.sku})`)}`} className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em]">Email us</a>
               </div>
             </div>
           </div>
