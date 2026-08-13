@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, MapPin } from "lucide-react";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
@@ -23,6 +23,8 @@ export default function ProductDetail() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [reviewError, setReviewError] = useState("");
+  const [activeTab, setActiveTab] = useState("description");
+  const productTabsRef = useRef(null);
   const { addToCart, toggleFavorite, isFavorite } = useCatalog();
 
   useEffect(() => {
@@ -91,6 +93,13 @@ export default function ProductDetail() {
   const handleAdd = () => {
     addToCart(product);
     toast.success(`${product.name} added to inquiry`);
+  };
+
+  const openShippingTab = () => {
+    setActiveTab("shipping");
+    requestAnimationFrame(() => {
+      productTabsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   const handleSubmitReview = async (e) => {
@@ -352,11 +361,8 @@ export default function ProductDetail() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                document
-                  .querySelector('[data-testid="product-tabs"]')
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
+              data-testid="buying-confidence-shipping-link"
+              onClick={openShippingTab}
               className="mt-4 text-[10px] uppercase tracking-[0.22em] text-[#BF9972] hover:text-[#D4AF37]"
             >
               Shipping & ordering details →
@@ -383,7 +389,14 @@ export default function ProductDetail() {
       </div>
 
       {/* Tabbed details */}
-      <ProductTabs product={product} settings={settings} waLink={waLink} />
+      <ProductTabs
+        product={product}
+        settings={settings}
+        waLink={waLink}
+        active={activeTab}
+        onSelect={setActiveTab}
+        sectionRef={productTabsRef}
+      />
 
       {/* Seen in gallery projects (auto-hides when this product isn't tagged in any project) */}
       <SeenInProjects productId={product.id} />
@@ -495,7 +508,34 @@ export default function ProductDetail() {
           </div>
 
           <div className="md:col-span-7 space-y-6">
-            {reviews.length === 0 && <div className="text-white/40">Be the first to review.</div>}
+            {reviews.length === 0 && !reviewSubmitted && (
+              <div
+                data-testid="reviews-empty-prompt"
+                className="border border-white/10 bg-white/[0.02] p-6 md:p-7"
+              >
+                <div className="font-serif text-xl md:text-2xl text-white leading-snug">
+                  Purchased this piece?
+                </div>
+                <p className="mt-1 text-white/60 text-sm md:text-[15px]">
+                  Share your experience.
+                </p>
+                <button
+                  type="button"
+                  data-testid="write-review-cta"
+                  onClick={() => {
+                    const el = document.getElementById("review-author-input");
+                    if (!el) return;
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    // Focus after the smooth-scroll settles so the input
+                    // actually gets focus on mobile browsers.
+                    setTimeout(() => el.focus({ preventScroll: true }), 250);
+                  }}
+                  className="mt-5 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.28em] text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 hover:border-[#D4AF37] pb-1 transition-colors"
+                >
+                  Write a review →
+                </button>
+              </div>
+            )}
             {reviews.map((r) => (
               <div key={r.id} data-testid={`review-${r.id}`} className="border border-white/10 p-6">
                 <div className="flex items-center justify-between">
@@ -538,8 +578,7 @@ const TABS = [
   { key: "inquiry", label: "Inquiry" },
 ];
 
-function ProductTabs({ product, settings, waLink }) {
-  const [active, setActive] = useState("description");
+function ProductTabs({ product, settings, waLink, active, onSelect, sectionRef }) {
   const specEntries = filterSpecs(product?.specs);
   const glanceSpecKeys = [
     "Height",
@@ -561,14 +600,14 @@ function ProductTabs({ product, settings, waLink }) {
     .slice(0, 6);
 
   return (
-    <section className="mt-20 border-t border-white/10 pt-12" data-testid="product-tabs">
+    <section ref={sectionRef} className="mt-20 border-t border-white/10 pt-12" data-testid="product-tabs">
       {/* Editorial tab strip */}
       <div className="flex flex-wrap gap-x-8 gap-y-2 border-b border-white/10 mb-10">
         {TABS.map((t) => (
           <button
             key={t.key}
             data-testid={`tab-${t.key}`}
-            onClick={() => setActive(t.key)}
+            onClick={() => onSelect(t.key)}
             className={`relative py-4 text-xs uppercase tracking-[0.28em] transition-colors ${active === t.key ? "text-[#D4AF37]" : "text-white/50 hover:text-white"}`}
           >
             {t.label}
