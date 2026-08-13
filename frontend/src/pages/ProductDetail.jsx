@@ -406,12 +406,23 @@ export default function ProductDetail() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
           <div className="md:col-span-5">
             <div className="eyebrow mb-3">Reviews</div>
-            <h2 className="font-serif text-3xl mb-2">What clients say</h2>
-            <div className="flex items-center gap-2 text-white/70">
-              <span className="text-[#D4AF37] text-lg">★</span>
-              <span data-testid="avg-rating">{product.rating > 0 ? product.rating.toFixed(1) : "—"}</span>
-              <span className="text-white/40">({product.review_count} reviews)</span>
-            </div>
+            {reviews.length === 0 ? (
+              <>
+                <h2 data-testid="reviews-heading" className="font-serif text-3xl mb-2">Share your experience</h2>
+                <p data-testid="reviews-supporting" className="text-white/60 text-sm leading-relaxed">
+                  Purchased this piece? Tell us what you loved about it.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 data-testid="reviews-heading" className="font-serif text-3xl mb-2">What clients say</h2>
+                <div data-testid="reviews-rating-row" className="flex items-center gap-2 text-white/70">
+                  <span className="text-[#D4AF37] text-lg">★</span>
+                  <span data-testid="avg-rating">{product.rating > 0 ? product.rating.toFixed(1) : "—"}</span>
+                  <span className="text-white/40">({product.review_count} reviews)</span>
+                </div>
+              </>
+            )}
 
             {reviewSubmitted ? (
               <div
@@ -514,10 +525,10 @@ export default function ProductDetail() {
                 className="border border-white/10 bg-white/[0.02] p-6 md:p-7"
               >
                 <div className="font-serif text-xl md:text-2xl text-white leading-snug">
-                  Purchased this piece?
+                  Your feedback matters
                 </div>
                 <p className="mt-1 text-white/60 text-sm md:text-[15px]">
-                  Share your experience.
+                  Reviews are moderated before appearing publicly.
                 </p>
                 <button
                   type="button"
