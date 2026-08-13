@@ -338,6 +338,31 @@ export default function ProductDetail() {
             </button>
           </div>
 
+          {/* Buying confidence — surface reassurance at the decision point instead of hiding it in tabs. */}
+          <div data-testid="buying-confidence" className="border border-white/10 bg-white/[0.02] p-5">
+            <div className="text-[10px] uppercase tracking-[0.24em] text-[#D4AF37] mb-3">
+              Handcrafted in Firozabad · Since 1981
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-white/70">
+              <div>✓ Secure Pan-India delivery</div>
+              <div>✓ Transit-damage replacement</div>
+              <div>✓ Custom sizes & finishes</div>
+              <div>✓ Installation guidance</div>
+              <div>✓ GST invoice available</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                document
+                  .querySelector('[data-testid="product-tabs"]')
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              className="mt-4 text-[10px] uppercase tracking-[0.22em] text-[#BF9972] hover:text-[#D4AF37]"
+            >
+              Shipping & ordering details →
+            </button>
+          </div>
+
           {/* Pre-order note — shown only for published items with no
               current stock so ready-stock pieces are not mislabelled. */}
           {isMadeToOrder(product) && (
@@ -516,6 +541,24 @@ const TABS = [
 function ProductTabs({ product, settings, waLink }) {
   const [active, setActive] = useState("description");
   const specEntries = filterSpecs(product?.specs);
+  const glanceSpecKeys = [
+    "Height",
+    "Width",
+    "Diameter",
+    "Dimensions",
+    "Material",
+    "Glass",
+    "Crystal",
+    "Finish",
+    "Lights",
+    "Number of Lights",
+    "Holder",
+    "Wattage",
+    "Weight",
+  ];
+  const glanceSpecs = glanceSpecKeys
+    .filter((key) => isMeaningfulSpec(product?.specs?.[key]))
+    .slice(0, 6);
 
   return (
     <section className="mt-20 border-t border-white/10 pt-12" data-testid="product-tabs">
@@ -557,7 +600,10 @@ function ProductTabs({ product, settings, waLink }) {
               <ul className="space-y-2 text-sm text-white/70">
                 <li>Reference Code · <span className="text-white">{product.sku}</span></li>
                 <li>Category · <span className="text-white">{product.category}</span></li>
-                <li>Stock · <span className="text-white">{product.stock > 0 ? `${product.stock} available` : "Available on request"}</span></li>
+                {glanceSpecs.map((key) => (
+                  <li key={key}>{key} · <span className="text-white">{String(product.specs[key])}</span></li>
+                ))}
+                <li>Availability · <span className="text-white">{product.stock > 0 ? `${product.stock} available` : "Available on request"}</span></li>
                 {product.rating > 0 && (
                   <li>Rating · <span className="text-white">{product.rating.toFixed(1)} / 5</span></li>
                 )}
