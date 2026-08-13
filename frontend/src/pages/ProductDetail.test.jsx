@@ -127,11 +127,9 @@ describe("ProductDetail — availability regression (hotfix)", () => {
   test("renders an in-stock product without a ReferenceError and shows no made-to-order note", async () => {
     mockCurrentFixture = inStockFixture;
     renderProduct();
-    // Product name appears once the mocked getProduct resolves.
     await waitFor(() =>
       expect(screen.getByText(inStockFixture.name)).toBeInTheDocument(),
     );
-    // The made-to-order note MUST NOT appear for an in-stock product.
     expect(screen.queryByTestId("made-to-order-note")).toBeNull();
   });
 
@@ -141,7 +139,6 @@ describe("ProductDetail — availability regression (hotfix)", () => {
     await waitFor(() =>
       expect(screen.getByText(preOrderFixture.name)).toBeInTheDocument(),
     );
-    // The visible note is rendered when isMadeToOrder(product) === true.
     const note = await screen.findByTestId("made-to-order-note");
     expect(note).toBeInTheDocument();
     expect(note.textContent).toMatch(/pre-?order/i);
@@ -175,12 +172,25 @@ describe("ProductDetail — zero-review UX", () => {
     expect(screen.queryByText(/Be the first to review/i)).not.toBeInTheDocument();
   });
 
-  test("zero reviews renders Purchased this piece? Share your experience.", async () => {
+  test("zero reviews uses an invitation heading and removes the empty rating state", async () => {
     renderProduct();
     await screen.findByText(inStockFixture.name);
-    expect(screen.getByText("Purchased this piece?")).toBeInTheDocument();
-    expect(screen.getByText("Share your experience.")).toBeInTheDocument();
+    expect(screen.getByTestId("reviews-heading")).toHaveTextContent("Share your experience");
+    expect(screen.getByTestId("reviews-supporting")).toHaveTextContent("Purchased this piece? Tell us what you loved about it.");
+    expect(screen.queryByText("What clients say")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("reviews-rating-row")).not.toBeInTheDocument();
+    expect(screen.queryByText("(0 reviews)")).not.toBeInTheDocument();
+  });
+
+  test("zero reviews shows the feedback card and keeps the Write a review CTA", async () => {
+    renderProduct();
+    await screen.findByText(inStockFixture.name);
+    const prompt = screen.getByTestId("reviews-empty-prompt");
+    expect(prompt).toHaveTextContent("Your feedback matters");
+    expect(prompt).toHaveTextContent("Reviews are moderated before appearing publicly.");
     expect(screen.getByTestId("write-review-cta")).toBeInTheDocument();
+    expect(prompt).not.toHaveTextContent("Purchased this piece?");
+    expect(prompt).not.toHaveTextContent("Share your experience.");
   });
 
   test("customer can still submit the review form when reviews are zero", async () => {
@@ -199,7 +209,8 @@ describe("ProductDetail — zero-review UX", () => {
     ];
     renderProduct();
     await screen.findByText(inStockFixture.name);
-    expect(screen.getByText("What clients say")).toBeInTheDocument();
+    expect(screen.getByTestId("reviews-heading")).toHaveTextContent("What clients say");
+    expect(screen.getByTestId("reviews-rating-row")).toHaveTextContent("(1 reviews)");
     expect(screen.getByTestId("review-review-1")).toBeInTheDocument();
     expect(screen.queryByTestId("reviews-empty-prompt")).not.toBeInTheDocument();
   });
