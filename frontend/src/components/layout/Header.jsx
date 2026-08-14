@@ -38,9 +38,10 @@ export default function Header() {
           </span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-10">
+        <nav className="hidden md:flex items-center gap-8">
           <NavLink to="/" end className={linkClass} data-testid="nav-home">Home</NavLink>
           <NavLink to="/catalog" className={linkClass} data-testid="nav-catalog">Catalog</NavLink>
+          <NavLink to="/collections" className={linkClass} data-testid="nav-collections">Collections</NavLink>
           <NavLink to="/craft" className={linkClass} data-testid="nav-craft">The Craft</NavLink>
           <NavLink to="/gallery" className={linkClass} data-testid="nav-gallery">Gallery</NavLink>
           <NavLink to="/about" className={linkClass} data-testid="nav-about">About</NavLink>
@@ -75,7 +76,7 @@ export default function Header() {
       </div>
       {open && (
         <div className="md:hidden border-t border-[#BF9972]/20 px-6 py-6 flex flex-col gap-4 bg-[#16070f]">
-          {[["/", "Home"],["/catalog", "Catalog"],["/craft", "The Craft"],["/gallery", "Gallery"],["/about", "About"],["/contact", "Contact"]].map(([to, label]) => (
+          {[["/", "Home"],["/catalog", "Catalog"],["/collections", "Collections"],["/craft", "The Craft"],["/gallery", "Gallery"],["/about", "About"],["/contact", "Contact"]].map(([to, label]) => (
             <NavLink key={to} to={to} end={to === "/"} onClick={() => setOpen(false)} className={linkClass}>{label}</NavLink>
           ))}
         </div>
