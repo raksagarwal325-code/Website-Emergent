@@ -5,61 +5,62 @@ import ProductCard from "./ProductCard";
 import { api } from "../lib/api";
 import {
   filterCollectionProducts,
-  getCollection,
+  getCollectionForProduct,
   selectDiverseCollectionPreview,
 } from "../constants/collections";
 
-const COLLECTION = getCollection("gulzar");
-
 export default function CompleteCollection({ productId }) {
-  const [products, setProducts] = useState([]);
+  const [state, setState] = useState({ collection: null, products: [] });
 
   useEffect(() => {
     let active = true;
-    setProducts([]);
+    setState({ collection: null, products: [] });
+    if (!productId) return () => { active = false; };
 
-    if (!productId || !COLLECTION) return () => { active = false; };
-
-    api.getProduct(productId)
-      .then(async (product) => {
-        if (!active || !COLLECTION.memberSkus.includes(product?.sku)) return null;
-        const items = await api.listAllProducts({ limit: 48 });
-        return {
-          currentSku: product.sku,
-          matches: filterCollectionProducts(items, COLLECTION),
-        };
-      })
-      .then((result) => {
-        if (!active || !result) return;
-        setProducts(selectDiverseCollectionPreview(result.matches, result.currentSku, 5));
+    Promise.all([
+      api.getProduct(productId),
+      api.listAllProducts({ limit: 48 }),
+    ])
+      .then(([product, items]) => {
+        if (!active) return;
+        const collection = getCollectionForProduct(items, product);
+        if (!collection) return;
+        const matches = filterCollectionProducts(items, collection);
+        const preview = selectDiverseCollectionPreview(
+          matches,
+          product.sku,
+          5,
+          collection.featuredSkus,
+        );
+        setState({ collection, products: preview });
       })
       .catch(() => {
-        if (active) setProducts([]);
+        if (active) setState({ collection: null, products: [] });
       });
 
     return () => { active = false; };
   }, [productId]);
 
-  if (products.length === 0) return null;
-
+  const { collection, products } = state;
+  if (!collection || products.length === 0) return null;
   const categoryCount = new Set(products.map((product) => product.category)).size;
 
   return (
     <section
-      data-testid="complete-gulzar-collection"
+      data-testid="complete-collection"
       className="mt-20 md:mt-24 border-t border-white/10 pt-14 md:pt-16"
     >
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 mb-8 md:mb-10">
         <div className="max-w-2xl">
           <div className="eyebrow mb-3 text-[#D4AF37]">Designed to coordinate</div>
-          <h2 className="font-serif text-3xl md:text-4xl">Complete the Gulzar Collection</h2>
+          <h2 className="font-serif text-3xl md:text-4xl">Complete the {collection.name} Collection</h2>
           <p className="text-white/50 text-sm mt-3 leading-relaxed">
-            Explore confirmed Gulzar pieces across as many lighting categories as are currently available, then see the full family on its dedicated collection page.
+            Explore confirmed {collection.name} pieces across as many lighting categories as are currently available, then see the full family on its dedicated collection page.
           </p>
         </div>
         <Link
-          to="/collection/gulzar"
-          data-testid="view-gulzar-collection"
+          to={`/collection/${collection.slug}`}
+          data-testid="view-full-collection"
           className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.26em] text-[#D4AF37] hover:text-white link-underline shrink-0"
         >
           View full collection <ArrowUpRight size={14} />
