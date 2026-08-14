@@ -46,16 +46,16 @@ export default function CollectionsIndex() {
   return (
     <div data-testid="collections-index" className="max-w-7xl mx-auto px-6 py-16 md:py-20">
       <SEO
-        title="Lighting Collections · Samrat Glass Emporium"
-        description="Explore coordinated decorative lighting families from Samrat Glass Emporium across chandeliers, floor chandeliers, table lamps and more."
+        title="Design Collections · Samrat Glass Emporium"
+        description="Explore coordinated design collections from Samrat Glass Emporium across chandeliers, floor chandeliers, table lamps and more."
         path="/collections"
       />
 
       <header className="max-w-4xl mb-12 md:mb-16">
-        <div className="eyebrow text-[#D4AF37] mb-4">Coordinated lighting families</div>
-        <h1 className="font-serif text-5xl md:text-7xl leading-[0.95]">Collections</h1>
+        <div className="eyebrow text-[#D4AF37] mb-4">Coordinated lighting series</div>
+        <h1 className="font-serif text-5xl md:text-7xl leading-[0.95]">Design Collections</h1>
         <p className="text-white/55 mt-6 max-w-2xl text-base md:text-lg leading-relaxed">
-          Discover product families designed to coordinate across multiple lighting forms, finishes and glass colours.
+          Explore coordinated lighting collections united by shared forms, finishes and glass colours across chandeliers, lamps and decorative pieces.
         </p>
       </header>
 
