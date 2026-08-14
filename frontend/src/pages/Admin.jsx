@@ -134,6 +134,8 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
   const [uploadingCount, setUploadingCount] = useState(0);
   // Category filter for the right-hand product list. "" == show all.
   const [catFilter, setCatFilter] = useState("");
+  // Publication status filter. "" == show all.
+  const [statusFilter, setStatusFilter] = useState("");
   // Free-text search — matches product name, SKU, or category (case-insensitive).
   const [search, setSearch] = useState("");
   // Sort order for the list. Default = SKU low→high per owner's request.
@@ -157,6 +159,7 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
     const q = search.trim().toLowerCase();
     const filtered = products.filter((p) => {
       if (catFilter && (p.category || "") !== catFilter) return false;
+      if (statusFilter && (p.status || "published") !== statusFilter) return false;
       if (!q) return true;
       return (
         (p.name || "").toLowerCase().includes(q) ||
@@ -191,7 +194,7 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
         break;
     }
     return sorted;
-  }, [products, catFilter, search, sortMode]);
+  }, [products, catFilter, statusFilter, search, sortMode]);
 
   // Category → SKU prefix used across the catalogue. Falls back to the
   // uppercase first two letters of the category name for anything we
@@ -601,6 +604,20 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
               {CATEGORY_OPTIONS.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
+            </select>
+            <label htmlFor="admin-status-filter" className="text-[10px] uppercase tracking-[0.24em] text-white/40">
+              Status
+            </label>
+            <select
+              id="admin-status-filter"
+              data-testid="admin-status-filter"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-[#0a0a0a] border border-white/15 hover:border-[#BF9972] px-3 py-1.5 text-xs uppercase tracking-[0.14em] cursor-pointer"
+            >
+              <option value="">All statuses</option>
+              <option value="draft">Drafts</option>
+              <option value="published">Published</option>
             </select>
             <label htmlFor="admin-sort-select" className="text-[10px] uppercase tracking-[0.24em] text-white/40">
               Sort
