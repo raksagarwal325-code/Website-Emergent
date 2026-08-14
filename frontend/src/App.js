@@ -10,6 +10,7 @@ import Footer from "@/components/layout/Footer";
 import Home from "@/pages/Home";
 import Catalog from "@/pages/Catalog";
 import CategoryPage from "@/pages/CategoryPage";
+import CollectionsIndex from "@/pages/CollectionsIndex";
 import CollectionPage from "@/pages/CollectionPage";
 import ProductDetail from "@/pages/ProductDetail";
 import Favorites from "@/pages/Favorites";
@@ -58,6 +59,7 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/catalog" element={<Catalog />} />
               <Route path="/category/:slug" element={<CategoryPage />} />
+              <Route path="/collections" element={<CollectionsIndex />} />
               <Route path="/collection/:slug" element={<CollectionPage />} />
               <Route path="/about" element={<About />} />
               <Route path="/craft" element={<Craft />} />
