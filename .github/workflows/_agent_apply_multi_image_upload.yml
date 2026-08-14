@@ -1,0 +1,67 @@
+name: Agent apply multi image upload patch
+
+on:
+  push:
+    branches:
+      - agent/admin-multi-image-upload
+
+permissions:
+  contents: write
+
+jobs:
+  patch-admin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/admin-multi-image-upload
+          fetch-depth: 0
+      - name: Patch Admin product image uploader
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('frontend/src/pages/Admin.jsx')
+          text = path.read_text()
+
+          old_import = 'import { gmailComposeUrl } from "../lib/gmailCompose";\n'
+          new_import = old_import + 'import { uploadProductImages } from "../lib/uploadProductImages";\n'
+          if 'import { uploadProductImages } from "../lib/uploadProductImages";' not in text:
+              if old_import not in text:
+                  raise SystemExit('Could not find gmailCompose import anchor')
+              text = text.replace(old_import, new_import, 1)
+
+          old_state = '  const [uploading, setUploading] = useState(false);\n'
+          new_state = old_state + '  const [uploadingCount, setUploadingCount] = useState(0);\n'
+          if 'const [uploadingCount, setUploadingCount]' not in text:
+              if old_state not in text:
+                  raise SystemExit('Could not find uploading state anchor')
+              text = text.replace(old_state, new_state, 1)
+
+          old_handler = '''  const upload = async (e) => {\n    const file = e.target.files?.[0];\n    if (!file) return;\n    setUploading(true);\n    try {\n      const { url } = await api.upload(file);\n      setForm((f) => ({ ...f, images: [...(f.images || []), url] }));\n      toast.success("Image uploaded");\n    } catch { toast.error("Upload failed"); }\n    finally { setUploading(false); e.target.value = ""; }\n  };\n'''
+          new_handler = '''  const upload = async (e) => {\n    const files = Array.from(e.target.files || []);\n    if (files.length === 0) return;\n    setUploading(true);\n    setUploadingCount(files.length);\n    try {\n      const { urls, failed } = await uploadProductImages(files, api.upload);\n      if (urls.length > 0) {\n        setForm((f) => ({ ...f, images: [...(f.images || []), ...urls] }));\n        toast.success(`${urls.length} image${urls.length === 1 ? "" : "s"} uploaded`);\n      }\n      if (failed > 0) {\n        toast.error(`${failed} image${failed === 1 ? "" : "s"} failed to upload`);\n      }\n    } catch {\n      toast.error("Upload failed");\n    } finally {\n      setUploading(false);\n      setUploadingCount(0);\n      e.target.value = "";\n    }\n  };\n'''
+          if 'const files = Array.from(e.target.files || []);' not in text:
+              if old_handler not in text:
+                  raise SystemExit('Could not find single-image upload handler')
+              text = text.replace(old_handler, new_handler, 1)
+
+          old_ui = '''          <label className="inline-flex items-center gap-2 border border-white/15 hover:border-[#D4AF37] px-4 py-2 text-xs uppercase tracking-[0.2em] cursor-pointer">\n            <Upload size={12} /> {uploading ? "Uploading…" : "Upload image"}\n            <input data-testid="p-upload" type="file" accept="image/*" onChange={upload} className="hidden" />\n          </label>\n'''
+          new_ui = '''          <label className={`inline-flex items-center gap-2 border border-white/15 hover:border-[#D4AF37] px-4 py-2 text-xs uppercase tracking-[0.2em] ${uploading ? "opacity-60 cursor-wait" : "cursor-pointer"}`}>\n            <Upload size={12} /> {uploading ? `Uploading ${uploadingCount} image${uploadingCount === 1 ? "" : "s"}…` : "Upload images"}\n            <input data-testid="p-upload" type="file" accept="image/*" multiple disabled={uploading} onChange={upload} className="hidden" />\n          </label>\n'''
+          if 'multiple disabled={uploading} onChange={upload}' not in text:
+              if old_ui not in text:
+                  raise SystemExit('Could not find image upload input')
+              text = text.replace(old_ui, new_ui, 1)
+
+          path.write_text(text)
+          PY
+      - name: Commit patched Admin.jsx
+        run: |
+          if git diff --quiet -- frontend/src/pages/Admin.jsx; then
+            echo "Admin.jsx already patched; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/pages/Admin.jsx
+          git commit -m "Enable multiple product image uploads"
+          git push origin HEAD:agent/admin-multi-image-upload
