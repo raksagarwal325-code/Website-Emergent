@@ -1,64 +1,73 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { ArrowUpRight } from "lucide-react";
 import ProductCard from "./ProductCard";
 import { api } from "../lib/api";
+import {
+  filterCollectionProducts,
+  getCollection,
+  selectDiverseCollectionPreview,
+} from "../constants/collections";
 
-const GULZAR_ANCHOR_SKU = "SGE-FL-015";
-const GULZAR_MEMBER_SKUS = new Set([
-  "SGE-TL-017",
-  "SGE-TL-018",
-  "SGE-TL-019",
-  "SGE-TL-020",
-  "SGE-TL-021",
-]);
-
-export function selectGulzarCollection(items = []) {
-  return items.filter((product) => GULZAR_MEMBER_SKUS.has(product?.sku));
-}
+const COLLECTION = getCollection("gulzar");
 
 export default function CompleteCollection({ productId }) {
   const [products, setProducts] = useState([]);
-  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     let active = true;
     setProducts([]);
-    setVisible(false);
 
-    if (!productId) return () => { active = false; };
+    if (!productId || !COLLECTION) return () => { active = false; };
 
     api.getProduct(productId)
       .then(async (product) => {
-        if (!active || product?.sku !== GULZAR_ANCHOR_SKU) return null;
-        const items = await api.listAllProducts({ category: "Table Lamp", limit: 100 });
-        return selectGulzarCollection(items);
+        if (!active || !COLLECTION.memberSkus.includes(product?.sku)) return null;
+        const items = await api.listAllProducts({ limit: 48 });
+        return {
+          currentSku: product.sku,
+          matches: filterCollectionProducts(items, COLLECTION),
+        };
       })
-      .then((matches) => {
-        if (!active || !matches) return;
-        setProducts(matches);
-        setVisible(matches.length > 0);
+      .then((result) => {
+        if (!active || !result) return;
+        setProducts(selectDiverseCollectionPreview(result.matches, result.currentSku, 5));
       })
       .catch(() => {
-        if (!active) return;
-        setProducts([]);
-        setVisible(false);
+        if (active) setProducts([]);
       });
 
     return () => { active = false; };
   }, [productId]);
 
-  if (!visible) return null;
+  if (products.length === 0) return null;
+
+  const categoryCount = new Set(products.map((product) => product.category)).size;
 
   return (
     <section
       data-testid="complete-gulzar-collection"
       className="mt-20 md:mt-24 border-t border-white/10 pt-14 md:pt-16"
     >
-      <div className="mb-8 md:mb-10 max-w-2xl">
-        <div className="eyebrow mb-3 text-[#D4AF37]">Designed to coordinate</div>
-        <h2 className="font-serif text-3xl md:text-4xl">Complete the Gulzar Collection</h2>
-        <p className="text-white/50 text-sm mt-3 leading-relaxed">
-          Pair this statement piece with coordinated Gulzar table lamps in complementary glass colours for a more considered, collected interior.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 mb-8 md:mb-10">
+        <div className="max-w-2xl">
+          <div className="eyebrow mb-3 text-[#D4AF37]">Designed to coordinate</div>
+          <h2 className="font-serif text-3xl md:text-4xl">Complete the Gulzar Collection</h2>
+          <p className="text-white/50 text-sm mt-3 leading-relaxed">
+            Explore confirmed Gulzar pieces across as many lighting categories as are currently available, then see the full family on its dedicated collection page.
+          </p>
+        </div>
+        <Link
+          to="/collection/gulzar"
+          data-testid="view-gulzar-collection"
+          className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.26em] text-[#D4AF37] hover:text-white link-underline shrink-0"
+        >
+          View full collection <ArrowUpRight size={14} />
+        </Link>
+      </div>
+
+      <div className="mb-5 text-[10px] uppercase tracking-[0.22em] text-white/35">
+        {categoryCount} {categoryCount === 1 ? "category" : "categories"} represented in this preview
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 md:gap-6">
