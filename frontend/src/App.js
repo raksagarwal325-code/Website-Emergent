@@ -16,6 +16,7 @@ import Favorites from "@/pages/Favorites";
 import Cart from "@/pages/Cart";
 import Contact from "@/pages/Contact";
 import Admin from "@/pages/Admin";
+import CollectionsAdmin from "@/pages/CollectionsAdmin";
 import AdminAuthGate from "@/components/AdminAuthGate";
 import Catalogue from "@/pages/Catalogue";
 import About from "@/pages/About";
@@ -35,7 +36,6 @@ import ScrollToTop from "@/components/ScrollToTop";
 
 function App() {
   React.useEffect(() => {
-    // Remove Emergent-injected badge on public site
     const remove = () => {
       const el = document.getElementById("emergent-badge");
       if (el) el.remove();
@@ -72,6 +72,7 @@ function App() {
               <Route path="/custom-lighting-bulk-orders" element={<CustomLighting />} />
               <Route path="/architects-interior-designers" element={<ArchitectsDesigners />} />
               <Route path="/admin" element={<AdminAuthGate><Admin /></AdminAuthGate>} />
+              <Route path="/admin/collections" element={<AdminAuthGate><CollectionsAdmin /></AdminAuthGate>} />
               <Route path="/catalogue" element={<AdminAuthGate><Catalogue /></AdminAuthGate>} />
               <Route path="/legal/:slug" element={<LegalPage />} />
               <Route path="*" element={<NotFound />} />

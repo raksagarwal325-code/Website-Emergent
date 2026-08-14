@@ -1,71 +1,58 @@
 import {
+  collectionDisplayTag,
+  collectionLabelTag,
+  collectionMembershipTag,
   filterCollectionProducts,
-  getCollection,
+  getCollectionFromProducts,
+  getCollectionForProduct,
   selectDiverseCollectionPreview,
 } from "../constants/collections";
 
-describe("Gulzar collection v2", () => {
-  const gulzar = getCollection("gulzar");
-
-  test("uses only owner-confirmed Gulzar SKUs and corrects display names in collection UI", () => {
+describe("data-driven collections", () => {
+  test("keeps the legacy Gulzar mapping until Admin saves explicit tags", () => {
     const items = [
-      { id: "ch54", sku: "SGE-CH-054", name: "Gulzar Neelam Six-Light Glass Chandelier", category: "Chandelier" },
-      { id: "ch55", sku: "SGE-CH-055", name: "Gulzar Clear Six-Light Glass Chandelier", category: "Chandelier" },
-      { id: "fl15", sku: "SGE-FL-015", name: "Gulzar Clear Glass Floor Chandelier — Five Light", category: "Floor Chandelier" },
-      { id: "17", sku: "SGE-TL-017", name: "Pankhuri Ribbed Glass Table Lamp — Crystal Clear", category: "Table Lamp" },
-      { id: "18", sku: "SGE-TL-018", name: "Pankhuri Ribbed Glass Table Lamp — Ruby Red", category: "Table Lamp" },
-      { id: "19", sku: "SGE-TL-019", name: "Pankhuri Ribbed Glass Table Lamp — Cobalt Blue", category: "Table Lamp" },
-      { id: "20", sku: "SGE-TL-020", name: "Pankhuri Ribbed Glass Table Lamp — Amber Gold", category: "Table Lamp" },
-      { id: "21", sku: "SGE-TL-021", name: "Pankhuri Ribbed Glass Table Lamp — Emerald Green", category: "Table Lamp" },
-      { id: "wrong-hanging", sku: "SGE-HL-021", name: "Gulzar Opaline...", category: "Hanging Light" },
-      { id: "wrong-chandelier", sku: "SGE-CH-005", name: "Ruby Red Prism...", category: "Chandelier" },
+      { id: "ch54", sku: "SGE-CH-054", name: "Gulzar Neelam Six-Light Glass Chandelier", category: "Chandelier", tags: [] },
+      { id: "fl15", sku: "SGE-FL-015", name: "Gulzar Clear Glass Floor Chandelier — Five Light", category: "Floor Chandelier", tags: [] },
+      { id: "17", sku: "SGE-TL-017", name: "Pankhuri Ribbed Glass Table Lamp — Crystal Clear", category: "Table Lamp", tags: [] },
+      { id: "wrong", sku: "SGE-HL-021", name: "Not Gulzar", category: "Hanging Light", tags: [] },
     ];
-
-    const filtered = filterCollectionProducts(items, gulzar);
-
-    expect(filtered.map((product) => product.sku)).toEqual([
-      "SGE-CH-054",
-      "SGE-CH-055",
-      "SGE-FL-015",
-      "SGE-TL-017",
-      "SGE-TL-018",
-      "SGE-TL-019",
-      "SGE-TL-020",
-      "SGE-TL-021",
+    const gulzar = getCollectionFromProducts(items, "gulzar");
+    expect(filterCollectionProducts(items, gulzar).map((p) => p.sku)).toEqual([
+      "SGE-CH-054", "SGE-FL-015", "SGE-TL-017",
     ]);
-    expect(filtered.find((product) => product.sku === "SGE-TL-017").name)
+    expect(filterCollectionProducts(items, gulzar).find((p) => p.sku === "SGE-TL-017").name)
       .toBe("Gulzar Ribbed Glass Table Lamp — Crystal Clear");
   });
 
-  test("preview represents CH, FL and TL before adding same-category variants", () => {
+  test("explicit Admin tags become the source of truth and support new collections", () => {
     const items = [
-      { id: "current", sku: "SGE-FL-015", category: "Floor Chandelier" },
-      { id: "ch54", sku: "SGE-CH-054", category: "Chandelier" },
-      { id: "ch55", sku: "SGE-CH-055", category: "Chandelier" },
-      { id: "tl17", sku: "SGE-TL-017", category: "Table Lamp" },
-      { id: "tl18", sku: "SGE-TL-018", category: "Table Lamp" },
+      { id: "a", sku: "A-1", name: "Stored Name", category: "Chandelier", tags: [
+        collectionMembershipTag("rajdarbar"),
+        collectionLabelTag("rajdarbar", "Rajdarbar"),
+        collectionDisplayTag("rajdarbar", "Rajdarbar Display Name"),
+      ] },
+      { id: "b", sku: "B-1", name: "Lamp", category: "Table Lamp", tags: [collectionMembershipTag("rajdarbar")] },
+      { id: "c", sku: "C-1", name: "Other", category: "Floor Lamp", tags: [] },
     ];
-
-    const selected = selectDiverseCollectionPreview(items, "SGE-FL-015", 5);
-
-    expect(selected.slice(0, 3).map((product) => product.category)).toEqual([
-      "Floor Chandelier",
-      "Chandelier",
-      "Table Lamp",
-    ]);
+    const collection = getCollectionFromProducts(items, "rajdarbar");
+    expect(collection.name).toBe("Rajdarbar");
+    expect(filterCollectionProducts(items, collection).map((p) => p.sku)).toEqual(["A-1", "B-1"]);
+    expect(filterCollectionProducts(items, collection)[0].name).toBe("Rajdarbar Display Name");
+    expect(getCollectionForProduct(items, items[1]).slug).toBe("rajdarbar");
   });
 
-  test("current piece may represent its category when it is the only confirmed member of that category", () => {
+  test("preview represents different categories before additional variants", () => {
     const items = [
-      { id: "current", sku: "SGE-FL-015", category: "Floor Chandelier" },
-      { id: "ch54", sku: "SGE-CH-054", category: "Chandelier" },
-      { id: "tl17", sku: "SGE-TL-017", category: "Table Lamp" },
+      { sku: "FL", category: "Floor Chandelier" },
+      { sku: "CH1", category: "Chandelier" },
+      { sku: "CH2", category: "Chandelier" },
+      { sku: "TL1", category: "Table Lamp" },
+      { sku: "TL2", category: "Table Lamp" },
     ];
-
-    expect(selectDiverseCollectionPreview(items, "SGE-FL-015", 3).map((p) => p.sku)).toEqual([
-      "SGE-FL-015",
-      "SGE-CH-054",
-      "SGE-TL-017",
+    const selected = selectDiverseCollectionPreview(items, "FL", 5, ["CH2"]);
+    expect(selected.slice(0, 3).map((p) => p.category)).toEqual([
+      "Floor Chandelier", "Chandelier", "Table Lamp",
     ]);
+    expect(selected[1].sku).toBe("CH2");
   });
 });
