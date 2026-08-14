@@ -4,6 +4,7 @@ import { ArrowUpRight, MapPin } from "lucide-react";
 import { api } from "../lib/api";
 import { useSettings } from "../context/SettingsContext";
 import { buildProjectSlugs } from "../lib/slug";
+import CompleteCollection from "./CompleteCollection";
 import RelatedProducts from "./RelatedProducts";
 
 export default function SeenInProjects({ productId }) {
@@ -88,6 +89,7 @@ export default function SeenInProjects({ productId }) {
         </section>
       )}
 
+      <CompleteCollection productId={productId} />
       <RelatedProducts productId={productId} />
     </>
   );
