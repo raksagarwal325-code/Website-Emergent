@@ -6,7 +6,7 @@ import SEO from "../components/SEO";
 import { api } from "../lib/api";
 import {
   filterCollectionProducts,
-  getCollection,
+  getCollectionFromProducts,
   groupCollectionProducts,
 } from "../constants/collections";
 
@@ -23,34 +23,35 @@ const CATEGORY_ORDER = [
 
 export default function CollectionPage() {
   const { slug } = useParams();
-  const collection = getCollection(slug);
+  const [collection, setCollection] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setCollection(null);
     setProducts([]);
-
-    if (!collection) {
-      setLoading(false);
-      return () => { active = false; };
-    }
 
     api.listAllProducts({ limit: 48 })
       .then((items) => {
         if (!active) return;
-        setProducts(filterCollectionProducts(items, collection));
+        const nextCollection = getCollectionFromProducts(items, slug);
+        setCollection(nextCollection);
+        setProducts(filterCollectionProducts(items, nextCollection));
       })
       .catch(() => {
-        if (active) setProducts([]);
+        if (active) {
+          setCollection(null);
+          setProducts([]);
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
       });
 
     return () => { active = false; };
-  }, [collection]);
+  }, [slug]);
 
   const groups = useMemo(() => groupCollectionProducts(products), [products]);
   const categories = useMemo(() => {
@@ -64,7 +65,7 @@ export default function CollectionPage() {
     });
   }, [groups]);
 
-  if (!collection) {
+  if (!loading && !collection) {
     return (
       <div className="max-w-4xl mx-auto px-6 py-24 text-center">
         <div className="eyebrow mb-4">Collection not found</div>
@@ -74,6 +75,10 @@ export default function CollectionPage() {
         </Link>
       </div>
     );
+  }
+
+  if (loading || !collection) {
+    return <div className="max-w-7xl mx-auto px-6 py-20 text-white/40">Loading collection…</div>;
   }
 
   return (
@@ -94,16 +99,14 @@ export default function CollectionPage() {
         <p className="text-white/60 leading-relaxed mt-6 max-w-2xl text-base md:text-lg">
           {collection.description}
         </p>
-        {!loading && products.length > 0 && (
+        {products.length > 0 && (
           <div className="mt-7 text-xs uppercase tracking-[0.24em] text-[#BF9972]">
             {products.length} confirmed pieces · {categories.length} {categories.length === 1 ? "category" : "categories"}
           </div>
         )}
       </header>
 
-      {loading ? (
-        <div className="py-20 text-white/40">Loading collection…</div>
-      ) : products.length === 0 ? (
+      {products.length === 0 ? (
         <div className="py-20 text-white/50">Collection pieces are being prepared.</div>
       ) : (
         <div className="space-y-20 md:space-y-24 py-16 md:py-20">
