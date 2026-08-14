@@ -1,5 +1,4 @@
 import {
-  collectionDisplayTag,
   collectionLabelTag,
   collectionMembershipTag,
   filterCollectionProducts,
@@ -9,7 +8,7 @@ import {
 } from "../constants/collections";
 
 describe("data-driven collections", () => {
-  test("keeps the legacy Gulzar mapping until Admin saves explicit tags", () => {
+  test("keeps the legacy Gulzar mapping until Admin saves explicit tags and uses actual product names", () => {
     const items = [
       { id: "ch54", sku: "SGE-CH-054", name: "Gulzar Neelam Six-Light Glass Chandelier", category: "Chandelier", tags: [] },
       { id: "fl15", sku: "SGE-FL-015", name: "Gulzar Clear Glass Floor Chandelier — Five Light", category: "Floor Chandelier", tags: [] },
@@ -21,15 +20,15 @@ describe("data-driven collections", () => {
       "SGE-CH-054", "SGE-FL-015", "SGE-TL-017",
     ]);
     expect(filterCollectionProducts(items, gulzar).find((p) => p.sku === "SGE-TL-017").name)
-      .toBe("Gulzar Ribbed Glass Table Lamp — Crystal Clear");
+      .toBe("Pankhuri Ribbed Glass Table Lamp — Crystal Clear");
   });
 
-  test("explicit Admin tags become the source of truth and support new collections", () => {
+  test("explicit Admin tags become the source of truth and old display tags cannot rename products", () => {
     const items = [
       { id: "a", sku: "A-1", name: "Stored Name", category: "Chandelier", tags: [
         collectionMembershipTag("rajdarbar"),
         collectionLabelTag("rajdarbar", "Rajdarbar"),
-        collectionDisplayTag("rajdarbar", "Rajdarbar Display Name"),
+        "collection-display:rajdarbar:Rajdarbar%20Display%20Name",
       ] },
       { id: "b", sku: "B-1", name: "Lamp", category: "Table Lamp", tags: [collectionMembershipTag("rajdarbar")] },
       { id: "c", sku: "C-1", name: "Other", category: "Floor Lamp", tags: [] },
@@ -37,7 +36,7 @@ describe("data-driven collections", () => {
     const collection = getCollectionFromProducts(items, "rajdarbar");
     expect(collection.name).toBe("Rajdarbar");
     expect(filterCollectionProducts(items, collection).map((p) => p.sku)).toEqual(["A-1", "B-1"]);
-    expect(filterCollectionProducts(items, collection)[0].name).toBe("Rajdarbar Display Name");
+    expect(filterCollectionProducts(items, collection)[0].name).toBe("Stored Name");
     expect(getCollectionForProduct(items, items[1]).slug).toBe("rajdarbar");
   });
 

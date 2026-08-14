@@ -8,13 +8,6 @@ export const LEGACY_COLLECTIONS = {
       "SGE-CH-072", "SGE-CH-074", "SGE-CH-075", "SGE-FL-015",
       "SGE-TL-017", "SGE-TL-018", "SGE-TL-019", "SGE-TL-020", "SGE-TL-021",
     ],
-    displayNameOverrides: {
-      "SGE-TL-017": "Gulzar Ribbed Glass Table Lamp — Crystal Clear",
-      "SGE-TL-018": "Gulzar Ribbed Glass Table Lamp — Ruby Red",
-      "SGE-TL-019": "Gulzar Ribbed Glass Table Lamp — Cobalt Blue",
-      "SGE-TL-020": "Gulzar Ribbed Glass Table Lamp — Amber Gold",
-      "SGE-TL-021": "Gulzar Ribbed Glass Table Lamp — Emerald Green",
-    },
   },
 };
 
@@ -46,9 +39,6 @@ export function collectionMembershipTag(slug) {
 }
 export function collectionLabelTag(slug, label) {
   return `${LABEL_PREFIX}${normalizeCollectionSlug(slug)}:${encode(label)}`;
-}
-export function collectionDisplayTag(slug, label) {
-  return `${DISPLAY_PREFIX}${normalizeCollectionSlug(slug)}:${encode(label)}`;
 }
 export function collectionFeaturedTag(slug) {
   return `${FEATURED_PREFIX}${normalizeCollectionSlug(slug)}`;
@@ -96,13 +86,9 @@ export function getCollectionFromProducts(products = [], slug) {
     }
   }
 
-  const displayNameOverrides = { ...(legacy?.displayNameOverrides || {}) };
-  const featuredSkus = [];
-  source.forEach((product) => {
-    const display = tagsOf(product).find((tag) => tag.startsWith(`${DISPLAY_PREFIX}${normalized}:`));
-    if (display) displayNameOverrides[product.sku] = decode(display.slice(`${DISPLAY_PREFIX}${normalized}:`.length));
-    if (tagsOf(product).includes(collectionFeaturedTag(normalized))) featuredSkus.push(product.sku);
-  });
+  const featuredSkus = source
+    .filter((product) => tagsOf(product).includes(collectionFeaturedTag(normalized)))
+    .map((product) => product.sku);
 
   return {
     slug: normalized,
@@ -111,7 +97,6 @@ export function getCollectionFromProducts(products = [], slug) {
     eyebrow: "A coordinated lighting family",
     description: `Explore the ${name} family across coordinated lighting forms, categories and variants designed to work together throughout an interior.`,
     memberSkus: source.map((product) => product.sku),
-    displayNameOverrides,
     featuredSkus,
     isLegacyFallback: explicit.length === 0 && Boolean(legacy),
   };
@@ -127,16 +112,10 @@ export function getCollectionForProduct(products = [], product) {
   return null;
 }
 
-export function decorateCollectionProduct(product, collection) {
-  if (!product || !collection) return product;
-  const name = collection.displayNameOverrides?.[product.sku];
-  return name ? { ...product, name } : product;
-}
-
 export function filterCollectionProducts(items = [], collection) {
   if (!collection) return [];
   const allowed = new Set(collection.memberSkus || []);
-  return items.filter((product) => allowed.has(product?.sku)).map((product) => decorateCollectionProduct(product, collection));
+  return items.filter((product) => allowed.has(product?.sku));
 }
 
 export function groupCollectionProducts(items = []) {
