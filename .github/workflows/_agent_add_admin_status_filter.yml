@@ -1,0 +1,67 @@
+name: Agent add admin status filter
+
+on:
+  push:
+    branches:
+      - agent/admin-draft-status-filter
+
+permissions:
+  contents: write
+
+jobs:
+  patch-admin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/admin-draft-status-filter
+          fetch-depth: 0
+      - name: Add product status filter
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('frontend/src/pages/Admin.jsx')
+          text = path.read_text()
+
+          old_state = '  // Category filter for the right-hand product list. "" == show all.\n  const [catFilter, setCatFilter] = useState("");\n'
+          new_state = old_state + '  // Publication status filter. "" == show all.\n  const [statusFilter, setStatusFilter] = useState("");\n'
+          if 'const [statusFilter, setStatusFilter]' not in text:
+              if old_state not in text:
+                  raise SystemExit('Could not find category filter state anchor')
+              text = text.replace(old_state, new_state, 1)
+
+          old_filter = '''    const filtered = products.filter((p) => {\n      if (catFilter && (p.category || "") !== catFilter) return false;\n      if (!q) return true;\n'''
+          new_filter = '''    const filtered = products.filter((p) => {\n      if (catFilter && (p.category || "") !== catFilter) return false;\n      if (statusFilter && (p.status || "published") !== statusFilter) return false;\n      if (!q) return true;\n'''
+          if 'if (statusFilter && (p.status || "published") !== statusFilter)' not in text:
+              if old_filter not in text:
+                  raise SystemExit('Could not find product filter anchor')
+              text = text.replace(old_filter, new_filter, 1)
+
+          old_deps = '  }, [products, catFilter, search, sortMode]);\n'
+          new_deps = '  }, [products, catFilter, statusFilter, search, sortMode]);\n'
+          if new_deps not in text:
+              if old_deps not in text:
+                  raise SystemExit('Could not find visibleProducts dependency anchor')
+              text = text.replace(old_deps, new_deps, 1)
+
+          old_toolbar = '''            <label htmlFor="admin-sort-select" className="text-[10px] uppercase tracking-[0.24em] text-white/40">\n              Sort\n            </label>\n'''
+          new_toolbar = '''            <label htmlFor="admin-status-filter" className="text-[10px] uppercase tracking-[0.24em] text-white/40">\n              Status\n            </label>\n            <select\n              id="admin-status-filter"\n              data-testid="admin-status-filter"\n              value={statusFilter}\n              onChange={(e) => setStatusFilter(e.target.value)}\n              className="bg-[#0a0a0a] border border-white/15 hover:border-[#BF9972] px-3 py-1.5 text-xs uppercase tracking-[0.14em] cursor-pointer"\n            >\n              <option value="">All statuses</option>\n              <option value="draft">Drafts</option>\n              <option value="published">Published</option>\n            </select>\n            <label htmlFor="admin-sort-select" className="text-[10px] uppercase tracking-[0.24em] text-white/40">\n              Sort\n            </label>\n'''
+          if 'data-testid="admin-status-filter"' not in text:
+              if old_toolbar not in text:
+                  raise SystemExit('Could not find toolbar sort anchor')
+              text = text.replace(old_toolbar, new_toolbar, 1)
+
+          path.write_text(text)
+          PY
+      - name: Commit Admin status filter
+        run: |
+          if git diff --quiet -- frontend/src/pages/Admin.jsx; then
+            echo "Admin.jsx already patched; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/pages/Admin.jsx
+          git commit -m "Add draft and published filters to Admin products"
+          git push origin HEAD:agent/admin-draft-status-filter
