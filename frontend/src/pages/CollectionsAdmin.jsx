@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Check, Search, Star, X } from "lucide-react";
+import { ArrowLeft, Check, Search, Star } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import {
   LEGACY_COLLECTIONS,
-  collectionDisplayTag,
   collectionFeaturedTag,
   collectionLabelTag,
   collectionMembershipTag,
@@ -35,7 +34,6 @@ export default function CollectionsAdmin() {
   const [label, setLabel] = useState("Gulzar");
   const [draftSlug, setDraftSlug] = useState("gulzar");
   const [selectedSkus, setSelectedSkus] = useState(new Set());
-  const [displayNames, setDisplayNames] = useState({});
   const [featuredSkus, setFeaturedSkus] = useState(new Set());
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
@@ -63,7 +61,6 @@ export default function CollectionsAdmin() {
     setDraftSlug(selectedSlug);
     setLabel(collection?.name || titleCaseCollectionSlug(selectedSlug));
     setSelectedSkus(new Set(collection?.memberSkus || []));
-    setDisplayNames(collection?.displayNameOverrides || {});
     setFeaturedSkus(new Set(collection?.featuredSkus || []));
   }, [selectedSlug, products]);
 
@@ -109,7 +106,6 @@ export default function CollectionsAdmin() {
     setDraftSlug(slug);
     setLabel(name.trim());
     setSelectedSkus(new Set());
-    setDisplayNames({});
     setFeaturedSkus(new Set());
   };
 
@@ -143,8 +139,6 @@ export default function CollectionsAdmin() {
         if (belongs) {
           nextTags.push(collectionMembershipTag(slug));
           nextTags.push(collectionLabelTag(slug, label.trim()));
-          const override = (displayNames[product.sku] || "").trim();
-          if (override && override !== product.name) nextTags.push(collectionDisplayTag(slug, override));
           if (featuredSkus.has(product.sku)) nextTags.push(collectionFeaturedTag(slug));
         }
         if (JSON.stringify(originalTags) !== JSON.stringify(nextTags)) {
@@ -182,7 +176,7 @@ export default function CollectionsAdmin() {
           </Link>
           <div className="eyebrow mb-3">Catalogue merchandising</div>
           <h1 className="font-serif text-4xl">Collection Manager</h1>
-          <p className="text-white/50 text-sm mt-3 max-w-2xl">Assign products to coordinated families without changing code. Saving writes collection metadata into the products' existing tags.</p>
+          <p className="text-white/50 text-sm mt-3 max-w-2xl">Assign products to coordinated families without changing code. Product cards always use the product's actual catalogue name.</p>
         </div>
         <button onClick={startNew} className="border border-[#D4AF37]/60 text-[#D4AF37] px-5 py-3 text-xs uppercase tracking-[0.22em] hover:bg-[#D4AF37] hover:text-black">New collection</button>
       </div>
@@ -217,10 +211,9 @@ export default function CollectionsAdmin() {
               {visibleProducts.map((product) => {
                 const selected = selectedSkus.has(product.sku);
                 return (
-                  <div key={product.id} className="py-4 grid grid-cols-[36px_1fr] md:grid-cols-[36px_1fr_260px_90px] gap-3 items-center">
+                  <div key={product.id} className="py-4 grid grid-cols-[36px_1fr] md:grid-cols-[36px_1fr_110px] gap-3 items-center">
                     <button onClick={() => toggleSku(product.sku)} className={`w-7 h-7 border flex items-center justify-center ${selected ? "border-[#D4AF37] bg-[#D4AF37] text-black" : "border-white/20"}`}>{selected ? <Check size={15} /> : null}</button>
                     <div className="min-w-0"><div className="font-serif text-lg truncate">{product.name}</div><div className="text-[10px] uppercase tracking-[0.18em] text-white/40">{product.sku} · {product.category}</div></div>
-                    {selected ? <input value={displayNames[product.sku] || ""} onChange={(e) => setDisplayNames((d) => ({ ...d, [product.sku]: e.target.value }))} placeholder="Optional collection display name" className="bg-transparent border border-white/15 px-3 py-2 text-xs" /> : <div />}
                     {selected ? <button title="Prefer in 5-card preview" onClick={() => toggleFeatured(product.sku)} className={`inline-flex items-center justify-center gap-1 text-[10px] uppercase tracking-[0.14em] ${featuredSkus.has(product.sku) ? "text-[#D4AF37]" : "text-white/35"}`}><Star size={14} fill={featuredSkus.has(product.sku) ? "currentColor" : "none"} /> Featured</button> : <div />}
                   </div>
                 );
@@ -229,7 +222,7 @@ export default function CollectionsAdmin() {
           </div>
 
           <div className="flex items-center justify-between gap-4 border-t border-white/10 pt-5">
-            <div className="text-xs text-white/40">No GitHub or code edit is needed after this manager is deployed.</div>
+            <div className="text-xs text-white/40">Names come directly from Products. Collection Manager controls membership and featured preview only.</div>
             <button disabled={saving} onClick={save} className="bg-[#D4AF37] text-black px-7 py-3 uppercase text-xs tracking-[0.22em] disabled:opacity-50">{saving ? "Saving…" : "Save collection"}</button>
           </div>
         </div>
