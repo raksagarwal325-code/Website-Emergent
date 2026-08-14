@@ -13,32 +13,32 @@ const COLLECTION = getCollection("gulzar");
 
 export default function CompleteCollection({ productId }) {
   const [products, setProducts] = useState([]);
-  const [currentSku, setCurrentSku] = useState("");
 
   useEffect(() => {
     let active = true;
     setProducts([]);
-    setCurrentSku("");
 
     if (!productId || !COLLECTION) return () => { active = false; };
 
     api.getProduct(productId)
       .then(async (product) => {
         if (!active || !COLLECTION.memberSkus.includes(product?.sku)) return null;
-        setCurrentSku(product.sku);
         const items = await api.listAllProducts({ limit: 48 });
-        return filterCollectionProducts(items, COLLECTION);
+        return {
+          currentSku: product.sku,
+          matches: filterCollectionProducts(items, COLLECTION),
+        };
       })
-      .then((matches) => {
-        if (!active || !matches) return;
-        setProducts(selectDiverseCollectionPreview(matches, currentSku || undefined, 5));
+      .then((result) => {
+        if (!active || !result) return;
+        setProducts(selectDiverseCollectionPreview(result.matches, result.currentSku, 5));
       })
       .catch(() => {
         if (active) setProducts([]);
       });
 
     return () => { active = false; };
-  }, [productId, currentSku]);
+  }, [productId]);
 
   if (products.length === 0) return null;
 
