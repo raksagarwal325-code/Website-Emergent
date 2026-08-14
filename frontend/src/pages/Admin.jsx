@@ -3,6 +3,7 @@ import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare
 import { api } from "../lib/api";
 import { compareBySku } from "../lib/api";
 import { gmailComposeUrl } from "../lib/gmailCompose";
+import { uploadProductImages } from "../lib/uploadProductImages";
 import { toast } from "sonner";
 import AdminHomepage from "../components/AdminHomepage";
 import AIProductGenerator from "../components/AIProductGenerator";
@@ -130,6 +131,7 @@ export default function Admin() {
 function ProductsAdmin({ products, categories = [], refresh, editing, setEditing }) {
   const [form, setForm] = useState(emptyProduct);
   const [uploading, setUploading] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
   // Category filter for the right-hand product list. "" == show all.
   const [catFilter, setCatFilter] = useState("");
   // Free-text search — matches product name, SKU, or category (case-insensitive).
@@ -269,15 +271,26 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
   };
 
   const upload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
     setUploading(true);
+    setUploadingCount(files.length);
     try {
-      const { url } = await api.upload(file);
-      setForm((f) => ({ ...f, images: [...(f.images || []), url] }));
-      toast.success("Image uploaded");
-    } catch { toast.error("Upload failed"); }
-    finally { setUploading(false); e.target.value = ""; }
+      const { urls, failed } = await uploadProductImages(files, api.upload);
+      if (urls.length > 0) {
+        setForm((f) => ({ ...f, images: [...(f.images || []), ...urls] }));
+        toast.success(`${urls.length} image${urls.length === 1 ? "" : "s"} uploaded`);
+      }
+      if (failed > 0) {
+        toast.error(`${failed} image${failed === 1 ? "" : "s"} failed to upload`);
+      }
+    } catch {
+      toast.error("Upload failed");
+    } finally {
+      setUploading(false);
+      setUploadingCount(0);
+      e.target.value = "";
+    }
   };
 
   const setTag = (v) => setForm({ ...form, tags: v.split(",").map((s) => s.trim()).filter(Boolean) });
@@ -547,9 +560,9 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
               e.currentTarget.value = "";
             }
           }} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm mb-2" />
-          <label className="inline-flex items-center gap-2 border border-white/15 hover:border-[#D4AF37] px-4 py-2 text-xs uppercase tracking-[0.2em] cursor-pointer">
-            <Upload size={12} /> {uploading ? "Uploading…" : "Upload image"}
-            <input data-testid="p-upload" type="file" accept="image/*" onChange={upload} className="hidden" />
+          <label className={`inline-flex items-center gap-2 border border-white/15 hover:border-[#D4AF37] px-4 py-2 text-xs uppercase tracking-[0.2em] ${uploading ? "opacity-60 cursor-wait" : "cursor-pointer"}`}>
+            <Upload size={12} /> {uploading ? `Uploading ${uploadingCount} image${uploadingCount === 1 ? "" : "s"}…` : "Upload images"}
+            <input data-testid="p-upload" type="file" accept="image/*" multiple disabled={uploading} onChange={upload} className="hidden" />
           </label>
         </div>
 
