@@ -67,9 +67,13 @@ export function productCollectionSlugs(product) {
     .filter(Boolean);
 }
 
-export function getCollectionFromProducts(products = [], slug) {
+export function getCollectionFromProducts(products = [], slug, registeredCollections = null) {
   const normalized = normalizeCollectionSlug(slug);
   if (!normalized) return null;
+  if (Array.isArray(registeredCollections) && !registeredCollections.some((item) => normalizeCollectionSlug(item?.slug) === normalized)) {
+    return null;
+  }
+
   const explicit = products.filter((product) => productCollectionSlugs(product).includes(normalized));
   const legacy = LEGACY_COLLECTIONS[normalized];
   const source = explicit.length > 0
@@ -77,7 +81,10 @@ export function getCollectionFromProducts(products = [], slug) {
     : (legacy ? products.filter((product) => legacy.memberSkus.includes(product?.sku)) : []);
   if (source.length === 0) return null;
 
-  let name = legacy?.name || titleCaseCollectionSlug(normalized);
+  const registered = Array.isArray(registeredCollections)
+    ? registeredCollections.find((item) => normalizeCollectionSlug(item?.slug) === normalized)
+    : null;
+  let name = registered?.name || legacy?.name || titleCaseCollectionSlug(normalized);
   for (const product of source) {
     const label = tagsOf(product).find((tag) => tag.startsWith(`${LABEL_PREFIX}${normalized}:`));
     if (label) {
@@ -98,16 +105,17 @@ export function getCollectionFromProducts(products = [], slug) {
     description: `Explore the ${name} family across coordinated lighting forms, categories and variants designed to work together throughout an interior.`,
     memberSkus: source.map((product) => product.sku),
     featuredSkus,
-    isLegacyFallback: explicit.length === 0 && Boolean(legacy),
+    isLegacyFallback: !Array.isArray(registeredCollections) && explicit.length === 0 && Boolean(legacy),
   };
 }
 
-export function getCollectionForProduct(products = [], product) {
+export function getCollectionForProduct(products = [], product, registeredCollections = null) {
   if (!product) return null;
   const explicit = productCollectionSlugs(product);
-  if (explicit.length) return getCollectionFromProducts(products, explicit[0]);
+  if (explicit.length) return getCollectionFromProducts(products, explicit[0], registeredCollections);
+  if (Array.isArray(registeredCollections)) return null;
   for (const [slug, legacy] of Object.entries(LEGACY_COLLECTIONS)) {
-    if (legacy.memberSkus.includes(product.sku)) return getCollectionFromProducts(products, slug);
+    if (legacy.memberSkus.includes(product.sku)) return getCollectionFromProducts(products, slug, registeredCollections);
   }
   return null;
 }
