@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, MapPin } from "lucide-react";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { schemaAvailabilityFor, isMadeToOrder } from "../lib/productAvailability";
@@ -11,9 +11,11 @@ import SeenInProjects from "../components/SeenInProjects";
 import { trackViewItem } from "../lib/analytics";
 import { waProductLink } from "../lib/whatsapp";
 import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
+import { productPath } from "../lib/productUrl";
 
 export default function ProductDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [reviews, setReviews] = useState([]);
@@ -36,14 +38,19 @@ export default function ProductDetail() {
         setProduct(p);
         setSelectedImg(0);
         trackViewItem(p);
+        const canonicalPath = productPath(p);
+        if (window.location.pathname !== canonicalPath) {
+          navigate(canonicalPath, { replace: true });
+        }
+        return api.listReviews(p.id);
       })
+      .then(setReviews)
       .catch((err) => {
         const status = err?.response?.status ?? err?.status;
         if (status === 404) setNotFound(true);
       });
-    api.listReviews(id).then(setReviews).catch(() => {});
     api.getSettings().then(setSettings).catch(() => {});
-  }, [id]);
+  }, [id, navigate]);
 
   if (notFound) {
     return (
@@ -86,7 +93,7 @@ export default function ProductDetail() {
 
   const productUrl =
     typeof window !== "undefined" && window.location
-      ? `${window.location.origin}/product/${product.id}`
+      ? `${window.location.origin}${productPath(product)}`
       : "";
   const waLink = waProductLink(settings?.whatsapp_number, product, productUrl) || "#";
 
@@ -156,6 +163,8 @@ export default function ProductDetail() {
   const productSchema = product && availabilityUrl ? {
     "@context": "https://schema.org",
     "@type": "Product",
+    "@id": `${siteOrigin}${productPath(product)}#product`,
+    "url": `${siteOrigin}${productPath(product)}`,
     "name": product.name,
     "sku": product.sku,
     "description": product.short_description || product.description || "",
@@ -176,7 +185,7 @@ export default function ProductDetail() {
         "priceCurrency": "INR",
       } : {}),
       "availability": availabilityUrl,
-      "url": typeof window !== "undefined" ? window.location.href : "",
+      "url": `${siteOrigin}${productPath(product)}`,
       "seller": { "@type": "Organization", "name": "Samrat Glass Emporium" },
       // Returns / replacements — handcrafted, fragile glass. We do NOT
       // accept general returns; transit-damage replacements are handled
@@ -221,7 +230,7 @@ export default function ProductDetail() {
             title={`${product.name} · Samrat Glass Emporium`}
             description={(product.short_description || product.description || "").slice(0, 155) || `${product.name} — handcrafted in Firozabad by Samrat Glass Emporium.`}
             image={api.resolveImage(product.images?.[0])}
-            path={`/product/${product.id}`}
+            path={productPath(product)}
             type="product"
           />
           <SchemaLD id={`product-${product.id}`} data={productSchema} />

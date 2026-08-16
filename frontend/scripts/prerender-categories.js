@@ -37,6 +37,19 @@ const CATEGORIES_JSON = path.join(ROOT, "src/lib/categories.data.json");
 const TEMPLATE_PATH = path.join(BUILD_DIR, "index.html");
 const SITE_ORIGIN = "https://samratglass.com";
 
+function slugifyProductPart(value = "") {
+  return String(value).normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/-{2,}/g, "-");
+}
+
+function productPath(p) {
+  const sku = slugifyProductPart(p.sku);
+  const usableSku = sku && !["tbd", "na", "n-a", "unknown"].includes(sku);
+  const identity = usableSku ? sku : slugifyProductPart(p.id);
+  return `/product/${slugifyProductPart(p.name) || "product"}${identity ? `-${identity}` : ""}`;
+}
+
 // ---------------------------------------------------------------------------
 // Small helpers (pure) — exported for test coverage
 // ---------------------------------------------------------------------------
@@ -107,7 +120,7 @@ function collectionSchema(cat, products) {
       "itemListElement": products.map((p, idx) => ({
         "@type": "ListItem",
         "position": idx + 1,
-        "url": `${SITE_ORIGIN}/product/${p.id}`,
+        "url": `${SITE_ORIGIN}${productPath(p)}`,
         "name": p.name,
       })),
     },
@@ -147,7 +160,7 @@ function productTilesHtml(products, apiBase) {
   const tiles = products
     .map((p) => {
       const img = resolveImage((p.images || [])[0], apiBase);
-      const href = `/product/${p.id}`;
+      const href = productPath(p);
       return `<li class="prerender-tile"><a href="${escapeHtml(href)}">${
         img ? `<img loading="lazy" decoding="async" src="${escapeHtml(img)}" alt="${escapeHtml(p.name)}"/>` : ""
       }<span class="prerender-tile-name">${escapeHtml(p.name)}</span>${
@@ -385,6 +398,7 @@ module.exports = {
   inject,
   buildBodyHtml,
   productTilesHtml,
+  productPath,
   collectionSchema,
   breadcrumbSchema,
   categoryCollectionSchemaId,

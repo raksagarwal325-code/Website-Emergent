@@ -20,6 +20,7 @@ const os = require("os");
 const {
   runPrerender,
   productTilesHtml,
+  productPath,
   collectionSchema,
   breadcrumbSchema,
   categoryCollectionSchemaId,
@@ -65,7 +66,7 @@ describe("prerender pure functions", () => {
     const anchors = html.match(/<a href="\/product\/[^"]+"/g) || [];
     expect(anchors).toHaveLength(FAKE_PRODUCTS.length);
     for (const p of FAKE_PRODUCTS) {
-      expect(html).toContain(`href="/product/${p.id}"`);
+      expect(html).toContain(`href="${productPath(p)}"`);
     }
     // The prerender-product-grid wrapper is present exactly once.
     expect(html.match(/<ul class="prerender-product-grid">/g)).toHaveLength(1);

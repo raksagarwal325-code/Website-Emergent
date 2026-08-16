@@ -1,4 +1,5 @@
 import { SITE_ORIGIN } from "./categories";
+import { productPath } from "./productUrl";
 
 export const CATALOG_PAGE_SIZE = 24;
 
@@ -16,7 +17,7 @@ export function buildItemList(products = [], { page = 1, pageSize = CATALOG_PAGE
     "itemListElement": visibleProducts.map((product, index) => ({
       "@type": "ListItem",
       "position": offset + index + 1,
-      "url": `${SITE_ORIGIN}/product/${product.id}`,
+      "url": `${SITE_ORIGIN}${productPath(product)}`,
       "name": product.name,
     })),
   };

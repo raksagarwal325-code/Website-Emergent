@@ -18,13 +18,13 @@ describe("buildItemList", () => {
       {
         "@type": "ListItem",
         "position": 25,
-        "url": "https://samratglass.com/product/p-25",
+        "url": "https://samratglass.com/product/visible-product-25-p-25",
         "name": "Visible Product 25",
       },
       {
         "@type": "ListItem",
         "position": 26,
-        "url": "https://samratglass.com/product/p-26",
+        "url": "https://samratglass.com/product/visible-product-26-p-26",
         "name": "Visible Product 26",
       },
     ]);

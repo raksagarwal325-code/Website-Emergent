@@ -5,6 +5,7 @@ import { useCatalog } from "../context/CatalogContext";
 import { useSettings } from "../context/SettingsContext";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
+import { productPath } from "../lib/productUrl";
 import { toast } from "sonner";
 
 // Elegant fallback: a subtle gold "S" monogram on solid black
@@ -80,7 +81,7 @@ export default function ProductCard({ product, index = 0 }) {
         <Heart size={15} fill={fav ? "#D4AF37" : "none"} strokeWidth={1.5} />
       </button>
 
-      <Link to={`/product/${product.id}`} className="block" data-testid={`product-link-${product.id}`}>
+      <Link to={productPath(product)} className="block" data-testid={`product-link-${product.id}`}>
         <div
           className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center relative p-4"
           {...containerGuardProps}
@@ -113,7 +114,7 @@ export default function ProductCard({ product, index = 0 }) {
 
       <div className="flex flex-col flex-1 p-5 space-y-2">
         <div className="eyebrow truncate">{product.category}</div>
-        <Link to={`/product/${product.id}`} className="font-serif text-lg leading-snug text-white hover:text-[#D4AF37] transition-colors line-clamp-2 min-h-[3.5rem]">
+        <Link to={productPath(product)} className="font-serif text-lg leading-snug text-white hover:text-[#D4AF37] transition-colors line-clamp-2 min-h-[3.5rem]">
           {product.name}
         </Link>
         <div className="text-[10px] uppercase tracking-widest text-white/40">{product.category}</div>
@@ -159,7 +160,7 @@ export default function ProductCard({ product, index = 0 }) {
         </div>
         <div className="pt-3 mt-auto grid grid-cols-2 gap-2">
           <Link
-            to={`/product/${product.id}`}
+            to={productPath(product)}
             data-testid={`view-btn-${product.id}`}
             className="inline-flex items-center justify-center gap-1 border border-white/20 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/80 px-2 py-2.5 text-[10px] uppercase tracking-[0.16em] transition-colors"
           >

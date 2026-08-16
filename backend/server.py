@@ -253,6 +253,24 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _slug_part(value: str) -> str:
+    """Return the ASCII URL segment used by public product permalinks."""
+    import unicodedata
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.lower().replace("&", " and ")
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return re.sub(r"-{2,}", "-", text)
+
+
+def product_slug(doc: dict) -> str:
+    name = _slug_part(doc.get("name")) or "product"
+    sku = _slug_part(doc.get("sku"))
+    usable_sku = sku and sku not in {"tbd", "na", "n-a", "unknown"}
+    identity = sku if usable_sku else _slug_part(doc.get("id"))
+    return f"{name}-{identity}" if identity else name
+
+
 class Product(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -280,6 +298,7 @@ class Product(BaseModel):
     # "draft"     — hidden from the public site; awaiting admin review
     #               (e.g. AI-generated products default to this).
     status: str = "published"
+    seo_slug: str = ""
 
 
 class ProductCreate(BaseModel):
@@ -716,6 +735,15 @@ async def list_categories(admin: Optional["_AdminUser"] = Depends(maybe_admin)):
 async def get_product(product_id: str, admin: Optional["_AdminUser"] = Depends(maybe_admin)):
     doc = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not doc:
+        # New readable permalink lookup. The direct id lookup above preserves
+        # every existing UUID link without exposing UUIDs in new links.
+        query = {} if admin else {"status": "published"}
+        cursor = db.products.find(query, {"_id": 0})
+        async for candidate in cursor:
+            if product_slug(candidate) == product_id:
+                doc = candidate
+                break
+    if not doc:
         raise HTTPException(404, "Product not found")
     # SECURITY — strict allow-list. Only rows with `status == "published"` are
     # served to anonymous callers. Everything else (draft, archived, pending,
@@ -724,6 +752,7 @@ async def get_product(product_id: str, admin: Optional["_AdminUser"] = Depends(m
     # unpublished inventory via a distinguishable 403.
     if admin is None and doc.get("status") != "published":
         raise HTTPException(404, "Product not found")
+    doc["seo_slug"] = product_slug(doc)
     return doc
 
 
@@ -1301,16 +1330,16 @@ async def sitemap_xml():
         )
     cursor = db.products.find(
         {"status": "published"},
-        {"_id": 0, "id": 1, "updated_at": 1},
+        {"_id": 0, "id": 1, "name": 1, "sku": 1, "updated_at": 1},
     )
     async for doc in cursor:
-        pid = doc.get("id")
-        if not pid:
+        slug = product_slug(doc)
+        if not slug:
             continue
         lastmod = doc.get("updated_at") or ""
         lastmod_tag = f"<lastmod>{lastmod[:10]}</lastmod>" if lastmod else ""
         parts.append(
-            f"<url><loc>{_SITE_ORIGIN}/product/{pid}</loc>"
+            f"<url><loc>{_SITE_ORIGIN}/product/{slug}</loc>"
             f"{lastmod_tag}<changefreq>weekly</changefreq><priority>0.7</priority></url>"
         )
     parts.append("</urlset>")
