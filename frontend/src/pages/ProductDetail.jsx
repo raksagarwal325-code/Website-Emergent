@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, MapPin } from "lucide-react";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { schemaAvailabilityFor, isMadeToOrder } from "../lib/productAvailability";
@@ -15,7 +15,6 @@ import { productPath } from "../lib/productUrl";
 
 export default function ProductDetail() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [reviews, setReviews] = useState([]);
@@ -40,7 +39,10 @@ export default function ProductDetail() {
         trackViewItem(p);
         const canonicalPath = productPath(p);
         if (window.location.pathname !== canonicalPath) {
-          navigate(canonicalPath, { replace: true });
+          // Normalize legacy UUID links without remounting/refetching the
+          // product. BrowserRouter picks up the readable path on the next
+          // navigation, while this page keeps its already-resolved record.
+          window.history.replaceState(window.history.state, "", canonicalPath);
         }
         return api.listReviews(p.id);
       })
@@ -50,7 +52,7 @@ export default function ProductDetail() {
         if (status === 404) setNotFound(true);
       });
     api.getSettings().then(setSettings).catch(() => {});
-  }, [id, navigate]);
+  }, [id]);
 
   if (notFound) {
     return (

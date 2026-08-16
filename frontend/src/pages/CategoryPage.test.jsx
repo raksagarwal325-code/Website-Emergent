@@ -200,8 +200,8 @@ describe("CategoryPage — listing structured data", () => {
     expect(schema.mainEntity.numberOfItems).toBe(2);
     expect(schema.mainEntity.itemListElement.map((item) => item.position)).toEqual([25, 26]);
     expect(schema.mainEntity.itemListElement.map((item) => item.url)).toEqual([
-      "https://samratglass.com/product/visible-25",
-      "https://samratglass.com/product/visible-26",
+      "https://samratglass.com/product/chandelier-visible-25-visible-25",
+      "https://samratglass.com/product/chandelier-visible-26-visible-26",
     ]);
   });
 
