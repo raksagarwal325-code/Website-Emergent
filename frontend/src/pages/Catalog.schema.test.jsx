@@ -94,8 +94,8 @@ test("/catalog ItemList replaces page data and keeps global positions", async ()
   expect(firstPage.numberOfItems).toBe(2);
   expect(firstPage.itemListElement.map((item) => item.position)).toEqual([1, 2]);
   expect(firstPage.itemListElement.map((item) => item.url)).toEqual([
-    "https://samratglass.com/product/catalog-1",
-    "https://samratglass.com/product/catalog-2",
+    "https://samratglass.com/product/catalog-visible-1-catalog-1",
+    "https://samratglass.com/product/catalog-visible-2-catalog-2",
   ]);
 
   fireEvent.click(screen.getByTestId("catalogue-browser-next-stub"));
@@ -103,7 +103,7 @@ test("/catalog ItemList replaces page data and keeps global positions", async ()
   await waitFor(() => {
     const secondPage = readCatalogSchema();
     expect(secondPage.itemListElement[0].url).toBe(
-      "https://samratglass.com/product/catalog-25",
+      "https://samratglass.com/product/catalog-visible-25-catalog-25",
     );
   });
 
@@ -111,8 +111,8 @@ test("/catalog ItemList replaces page data and keeps global positions", async ()
   expect(secondPage.numberOfItems).toBe(2);
   expect(secondPage.itemListElement.map((item) => item.position)).toEqual([25, 26]);
   expect(secondPage.itemListElement.map((item) => item.url)).toEqual([
-    "https://samratglass.com/product/catalog-25",
-    "https://samratglass.com/product/catalog-26",
+    "https://samratglass.com/product/catalog-visible-25-catalog-25",
+    "https://samratglass.com/product/catalog-visible-26-catalog-26",
   ]);
   expect(secondPage.itemListElement.some((item) => item.url.endsWith("/catalog-1"))).toBe(false);
 });

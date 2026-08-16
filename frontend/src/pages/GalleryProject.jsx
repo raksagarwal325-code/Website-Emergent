@@ -7,6 +7,7 @@ import { useCatalog } from "../context/CatalogContext";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { findProjectBySlug, buildProjectSlugs } from "../lib/slug";
 import { waGalleryProductLink } from "../lib/whatsapp";
+import { productPath } from "../lib/productUrl";
 import SEO from "../components/SEO";
 import { toast } from "sonner";
 
@@ -183,7 +184,7 @@ export default function GalleryProject() {
                 const handleAdd = (e) => { e.preventDefault(); e.stopPropagation(); addToCart(p); toast.success(`${p.name} added to inquiry`); };
                 return (
                   <div key={p.id} data-testid={`project-product-${p.id}`} className="group border border-white/8 hover:border-[#D4AF37]/50 bg-[#0e0510] transition-colors flex flex-col">
-                    <Link to={`/product/${p.id}`} className="block">
+                    <Link to={productPath(p)} className="block">
                       <div className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center">
                         {img ? (
                           <img src={img} alt={p.name} loading="lazy" className="w-full h-full object-cover opacity-95 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700" />
@@ -194,7 +195,7 @@ export default function GalleryProject() {
                     </Link>
                     <div className="p-5 flex flex-col flex-1">
                       <div className="eyebrow truncate">{p.category}</div>
-                      <Link to={`/product/${p.id}`} className="font-serif text-lg leading-snug text-white group-hover:text-[#D4AF37] transition-colors line-clamp-2 mt-2 min-h-[3rem]">{p.name}</Link>
+                      <Link to={productPath(p)} className="font-serif text-lg leading-snug text-white group-hover:text-[#D4AF37] transition-colors line-clamp-2 mt-2 min-h-[3rem]">{p.name}</Link>
                       {p.short_description && <p className="text-xs text-white/50 mt-2 line-clamp-2">{p.short_description}</p>}
                       <div className="mt-3 flex items-baseline gap-2 flex-wrap">
                         {(() => {

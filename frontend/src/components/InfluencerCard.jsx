@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Instagram, Play, ShoppingBag } from "lucide-react";
 import { api } from "../lib/api";
+import { productPath } from "../lib/productUrl";
 
 // --- URL / handle helpers --------------------------------------------------
 
@@ -200,7 +201,7 @@ export function InfluencerCard({ item, product, index = 0, animate = true }) {
         {/* Shop this look pill */}
         {product && (
           <Link
-            to={`/product/${product.id}`}
+            to={productPath(product)}
             data-testid={`influencer-card-${index}-shop-btn`}
             aria-label={`Shop this look — ${product.name}`}
             onClick={(e) => e.stopPropagation()}
@@ -246,7 +247,7 @@ export function InfluencerCard({ item, product, index = 0, animate = true }) {
           )}
           {product ? (
             <Link
-              to={`/product/${product.id}`}
+              to={productPath(product)}
               data-testid={`influencer-card-${index}-product-link`}
               className="mt-1 text-[11px] text-white/60 hover:text-[#D4AF37] leading-snug line-clamp-2 transition-colors block"
             >

@@ -4,6 +4,7 @@ import { ArrowUpRight, MessageCircle } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api, formatProductPrice } from "../lib/api";
 import { buildWaLink, productMessage } from "../lib/whatsapp";
+import { productPath } from "../lib/productUrl";
 
 function buildAtelierWaLink(phone, product) {
   if (!product) return null;
@@ -11,7 +12,7 @@ function buildAtelierWaLink(phone, product) {
   const priceLine = priceInfo.onRequest
     ? "Price: Price on request"
     : `Price: ${priceInfo.label ? priceInfo.label + " " : ""}${priceInfo.primary}`;
-  const link = `${typeof window !== "undefined" ? window.location.origin : ""}/product/${product.id}`;
+  const link = `${typeof window !== "undefined" ? window.location.origin : ""}${productPath(product)}`;
   // Extend the brand-led product message with an itemised price + link
   // block. Keeps casing/greeting consistent with the rest of the site.
   const base = productMessage(product, link);
@@ -69,7 +70,7 @@ export default function AtelierShowcase() {
   const activeProduct = current?.product || null;
   const activeCaption = current?.caption || activeProduct?.name || "";
   const activeImg = current?.src || activeProduct?.images?.[0] || "";
-  const productHref = activeProduct ? `/product/${activeProduct.id}` : null;
+  const productHref = activeProduct ? productPath(activeProduct) : null;
   const waLink = buildAtelierWaLink(settings?.whatsapp_number, activeProduct);
 
   const HeroWrap = productHref ? Link : "div";

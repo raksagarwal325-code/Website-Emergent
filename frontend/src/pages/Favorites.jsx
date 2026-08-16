@@ -5,6 +5,7 @@ import { useCatalog } from "../context/CatalogContext";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
 import SEO from "../components/SEO";
+import { productPath } from "../lib/productUrl";
 
 export default function Favorites() {
   const { favorites, toggleFavorite } = useCatalog();
@@ -32,7 +33,7 @@ export default function Favorites() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
           {favorites.map((p) => (
             <div key={p.id} data-testid={`fav-card-${p.id}`} className="group border border-white/5 hover:border-white/25 transition-all">
-              <Link to={`/product/${p.id}`} className="block">
+              <Link to={productPath(p)} className="block">
                 <div
                   className="aspect-[4/5] overflow-hidden bg-[#0a0a0a] flex items-center justify-center p-4"
                   {...containerGuardProps}
