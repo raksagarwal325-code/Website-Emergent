@@ -35,7 +35,8 @@ def test_every_image_entry_has_a_non_empty_absolute_loc():
     body = _get_sitemap()
     root = ET.fromstring(body)
     images = root.findall(".//image:image", NS)
-    if not images:\n        pytest.skip("CI catalogue has no published product images")
+    if not images:
+        pytest.skip("CI catalogue has no published product images")
     for img in images:
         loc = img.find("image:loc", NS)
         assert loc is not None and loc.text and loc.text.strip(), (
@@ -63,7 +64,8 @@ def test_sitemap_preserves_readable_sku_slug_urls():
         for loc in root.findall(".//sm:url/sm:loc", NS)
         if "/product/" in (loc.text or "")
     ]
-    if not product_locs:\n        pytest.skip("CI catalogue has no published products")
+    if not product_locs:
+        pytest.skip("CI catalogue has no published products")
     # PR #39 URL shape: /product/<slug>-<sku-lower>
     assert any(re.search(r"/product/.+-sge-[a-z]+-\d+$", url) for url in product_locs), (
         "expected at least one product URL to use the readable SKU slug form"
