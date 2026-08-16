@@ -12,6 +12,7 @@ import { trackViewItem } from "../lib/analytics";
 import { waProductLink } from "../lib/whatsapp";
 import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
 import { productPath } from "../lib/productUrl";
+import { productImageAlt } from "../lib/imageSeo";
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -253,7 +254,7 @@ export default function ProductDetail() {
             {images.length > 0 && (
               <img
                 src={images[selectedImg]}
-                alt={product.name}
+                alt={productImageAlt({ name: product.name, category: product.category, sku: product.sku, view: selectedImg + 1 })}
                 className="max-w-full max-h-full w-auto h-auto object-contain object-center"
                 data-testid="product-main-image"
                 {...imgGuardProps}
@@ -283,7 +284,7 @@ export default function ProductDetail() {
                 >
                   <img
                     src={img}
-                    alt={`thumb ${i + 1}`}
+                    alt={productImageAlt({ name: product.name, category: product.category, sku: product.sku, view: i + 1 })}
                     className="max-w-full max-h-full w-auto h-auto object-contain object-center"
                     {...imgGuardProps}
                     style={imgGuardStyle}

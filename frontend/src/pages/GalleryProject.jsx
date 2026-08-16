@@ -8,6 +8,7 @@ import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { findProjectBySlug, buildProjectSlugs } from "../lib/slug";
 import { waGalleryProductLink } from "../lib/whatsapp";
 import { productPath } from "../lib/productUrl";
+import { productImageAlt, galleryImageAlt } from "../lib/imageSeo";
 import SEO from "../components/SEO";
 import { toast } from "sonner";
 
@@ -42,7 +43,7 @@ function Lightbox({ open, index, images, onClose, onNav }) {
           </button>
         </>
       )}
-      <img src={api.resolveImage(images[index])} alt="" className="max-w-full max-h-full object-contain" onClick={(e) => e.stopPropagation()} />
+      <img src={api.resolveImage(images[index])} alt={galleryImageAlt({ title: project.title, location: project.location, view: index + 1 })} className="max-w-full max-h-full object-contain" onClick={(e) => e.stopPropagation()} />
       {images.length > 1 && (
         <div className="absolute bottom-6 left-0 right-0 text-center text-[10px] uppercase tracking-[0.28em] text-white/60">
           {String(index + 1).padStart(2, "0")} / {String(images.length).padStart(2, "0")}
@@ -127,7 +128,7 @@ export default function GalleryProject() {
           <div className="max-w-7xl mx-auto px-6">
             <button type="button" onClick={() => openLightbox(0)} className="block w-full group" data-testid="project-cover">
               <div className="aspect-[16/9] md:aspect-[21/9] overflow-hidden bg-black">
-                <img src={api.resolveImage(cover)} alt={project.title} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-700" />
+                <img src={api.resolveImage(cover)} alt={galleryImageAlt({ title: project.title, location: project.location })} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-700" />
               </div>
             </button>
           </div>
@@ -155,7 +156,7 @@ export default function GalleryProject() {
                 data-testid={`project-thumb-${i}`}
                 className="aspect-[4/3] overflow-hidden bg-black group"
               >
-                <img src={api.resolveImage(img)} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                <img src={api.resolveImage(img)} alt={galleryImageAlt({ title: project.title, location: project.location, view: i + 2 })} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
               </button>
             ))}
           </div>
@@ -187,7 +188,7 @@ export default function GalleryProject() {
                     <Link to={productPath(p)} className="block">
                       <div className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center">
                         {img ? (
-                          <img src={img} alt={p.name} loading="lazy" className="w-full h-full object-cover opacity-95 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700" />
+                          <img src={img} alt={productImageAlt({ name: p.name, category: p.category, sku: p.sku })} loading="lazy" className="w-full h-full object-cover opacity-95 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700" />
                         ) : (
                           <span className="font-serif italic text-[#D4AF37]/15 text-8xl">S</span>
                         )}

@@ -1309,13 +1309,37 @@ _STATIC_SITEMAP_ENTRIES: list[tuple[str, str, str]] = [
 ]
 
 
+from xml.sax.saxutils import escape as xml_escape
+
+
+def _absolute_image_url(url: str) -> str:
+    """Return an absolute URL for a stored image reference.
+
+    Accepts absolute http(s) URLs and internal /api/files/… paths. Empty or
+    obviously invalid values return an empty string so callers can skip them.
+    """
+    if not url or not isinstance(url, str):
+        return ""
+    s = url.strip()
+    if not s:
+        return ""
+    if s.startswith("http://") or s.startswith("https://"):
+        return s
+    if s.startswith("/"):
+        return f"{_SITE_ORIGIN}{s}"
+    return ""
+
+
 @api.get("/sitemap.xml")
 async def sitemap_xml():
     """Return the site sitemap as XML — static pages + every published
-    product. Cached briefly via HTTP headers so crawlers don't hammer the
-    endpoint on every visit."""
-    parts: list[str] = ['<?xml version="1.0" encoding="UTF-8"?>',
-                        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    product, with a Google image-sitemap entry per valid product image so
+    the images can be indexed alongside the pages."""
+    parts: list[str] = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'
+        ' xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">',
+    ]
     # Static + SEO categories (categories read from the shared JSON so this
     # list can never fall out of sync with the pages themselves).
     all_entries = list(_STATIC_SITEMAP_ENTRIES) + _load_seo_category_paths()
@@ -1330,7 +1354,7 @@ async def sitemap_xml():
         )
     cursor = db.products.find(
         {"status": "published"},
-        {"_id": 0, "id": 1, "name": 1, "sku": 1, "updated_at": 1},
+        {"_id": 0, "id": 1, "name": 1, "sku": 1, "images": 1, "updated_at": 1},
     )
     async for doc in cursor:
         slug = product_slug(doc)
@@ -1338,9 +1362,20 @@ async def sitemap_xml():
             continue
         lastmod = doc.get("updated_at") or ""
         lastmod_tag = f"<lastmod>{lastmod[:10]}</lastmod>" if lastmod else ""
+        image_tags = ""
+        for raw in (doc.get("images") or []):
+            abs_url = _absolute_image_url(raw)
+            if not abs_url:
+                continue
+            image_tags += (
+                "<image:image>"
+                f"<image:loc>{xml_escape(abs_url)}</image:loc>"
+                "</image:image>"
+            )
         parts.append(
             f"<url><loc>{_SITE_ORIGIN}/product/{slug}</loc>"
-            f"{lastmod_tag}<changefreq>weekly</changefreq><priority>0.7</priority></url>"
+            f"{lastmod_tag}<changefreq>weekly</changefreq><priority>0.7</priority>"
+            f"{image_tags}</url>"
         )
     parts.append("</urlset>")
     body = "\n".join(parts)
