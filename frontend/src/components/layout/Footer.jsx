@@ -101,6 +101,7 @@ const LEGAL_LINKS = [
   { label: "Shipping & Delivery Policy", href: "/legal/shipping" },
   { label: "Return & Replacement Policy", href: "/legal/returns" },
   { label: "Payment Policy", href: "/legal/payment" },
+  { label: "Handcrafted Product Disclaimer", href: "/legal/handcrafted-disclaimer" },
 ];
 
 function FooterLink({ label, href, external, icon: Icon, testId }) {
@@ -296,7 +297,10 @@ export default function Footer() {
 
         {/* Bottom row — single-line combined copyright */}
         <div className="mt-14 pt-6 border-t border-[#BF9972]/15 text-center text-[11px] text-white/40 tracking-wide" data-testid="footer-copyright">
-          © {new Date().getFullYear()} {settings?.brand_name || "Samrat Glass Emporium"}. All rights reserved. <span className="text-white/30 mx-1">·</span> Handcrafted in Firozabad.
+          © {new Date().getFullYear()} {settings?.brand_name || "Samrat Glass Emporium"}, Firozabad. All rights reserved.
+          <div className="mt-2 text-[10px] text-white/25 max-w-2xl mx-auto leading-relaxed" data-testid="footer-copyright-notice">
+            Product photographs and original website content may not be reproduced, modified, republished or used commercially without prior written permission.
+          </div>
         </div>
       </div>
     </footer>
