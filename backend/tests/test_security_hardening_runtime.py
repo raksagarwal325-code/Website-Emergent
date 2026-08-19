@@ -1,7 +1,7 @@
 """Regression tests for the final security-hardening layer.
 
 These tests hit the running backend, matching the rest of the integration
-security suite.  They are intentionally non-destructive.
+security suite. They are intentionally non-destructive.
 """
 
 from __future__ import annotations
@@ -62,7 +62,9 @@ async def _seed_admin_session() -> str:
 
 @pytest.fixture(scope="module")
 def admin_token():
-    return asyncio.get_event_loop().run_until_complete(_seed_admin_session())
+    # Python 3.13 no longer guarantees an implicit event loop in sync code.
+    # asyncio.run creates and closes a dedicated loop for this one-time fixture.
+    return asyncio.run(_seed_admin_session())
 
 
 def test_api_security_headers_present():
