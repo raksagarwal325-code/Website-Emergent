@@ -154,3 +154,11 @@ def require_csrf(request: Request) -> None:
     val = (request.headers.get(_CSRF_HEADER) or "").lower()
     if val != _CSRF_VALUE:
         raise HTTPException(status_code=403, detail="Missing CSRF header")
+
+
+# Install the remaining defence-in-depth controls while server.py is still
+# initialising. The installer is a no-op when auth.py is imported standalone
+# by unit tests, so auth tests remain independent of the API module.
+from security_runtime import install_runtime_hardening  # noqa: E402
+
+install_runtime_hardening()
