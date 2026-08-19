@@ -125,6 +125,11 @@ export const LEGAL_PAGES = {
         text:
           "Samrat Glass Emporium is not responsible for delays caused by courier issues, natural events, incorrect customer details, or circumstances beyond our control.",
       },
+      {
+        heading: "Copyright & Content Notice",
+        text:
+          "© 2026 Samrat Glass Emporium, Firozabad. All rights reserved.\n\nProduct photographs, original website text, graphics, layouts and other original content created for Samrat Glass Emporium are the property of Samrat Glass Emporium unless otherwise stated.\n\nUnauthorized reproduction, copying, republication, modification, distribution or commercial use of such content, in whole or in part, is prohibited without prior written permission.",
+      },
     ],
   },
   shipping: {
@@ -250,9 +255,52 @@ export const LEGAL_PAGES = {
       },
     ],
   },
+  "handcrafted-disclaimer": {
+    slug: "handcrafted-disclaimer",
+    title: "Handcrafted Product Disclaimer",
+    summary:
+      "Every Samrat Glass piece is individually handcrafted. Natural variations in dimensions, colour, finish and detailing between pieces are inherent to the craft, not manufacturing defects.",
+    sections: [
+      {
+        heading: "Individually handcrafted",
+        text:
+          "Each Samrat Glass product is individually handcrafted using glass, metal and other artisanal components. As these products are made and finished largely by hand, no two pieces will be exactly identical.",
+      },
+      {
+        heading: "Natural variations",
+        text:
+          "Minor variations may occur in shape, height, width, proportions, dimensions, symmetry, alignment, glass thickness, curvature, colour, texture, pattern, detailing, metalwork, polish, plating, patina and overall finish from one piece to another.",
+      },
+      {
+        heading: "Characteristics of handcrafted glass & metal",
+        text:
+          "Handcrafted glass may naturally exhibit characteristics such as small air bubbles, slight waves, ripples, surface marks, mould or tool impressions, minor irregularities in thickness, texture, shape or clarity. Similarly, handcrafted metal components and finishes may show minor marks, tonal variations, polishing differences, patina variations, joints, tool marks or slight irregularities in surface and finish.",
+      },
+      {
+        heading: "Product photographs",
+        text:
+          "Product photographs displayed on our website are intended to represent the overall design, style and appearance of the product. Due to handcrafted production, photographic lighting, viewing angle, screen/display settings and natural material variations, the actual product may appear slightly different in colour, proportions, finish, texture and other visual details.",
+      },
+      {
+        heading: "Dimensions",
+        text:
+          "All dimensions provided are approximate unless specifically stated otherwise, and reasonable variations may occur as part of the handcrafted manufacturing process.",
+      },
+      {
+        heading: "Not defects",
+        text:
+          "These minor variations and artisanal characteristics are inherent to handcrafted products and, where they do not materially affect the product's functionality, structural integrity, safety or fundamental design, should not be regarded as manufacturing defects.",
+      },
+      {
+        heading: "Substantial issues",
+        text:
+          "Any substantial damage, breakage, functional defect, safety issue or material deviation from the ordered product will be addressed separately in accordance with our applicable terms and policies.",
+      },
+    ],
+  },
 };
 
-export const LEGAL_ORDER = ["privacy", "terms", "shipping", "returns", "payment"];
+export const LEGAL_ORDER = ["privacy", "terms", "shipping", "returns", "payment", "handcrafted-disclaimer"];
 
 // Fixed default "Last updated" date associated with the currently shipped
 // default policy wording. The public page falls back to this constant when

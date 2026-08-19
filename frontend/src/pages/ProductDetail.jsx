@@ -293,6 +293,12 @@ export default function ProductDetail() {
               ))}
             </div>
           )}
+          <p
+            data-testid="product-image-copyright"
+            className="mt-4 text-[10px] leading-relaxed text-white/35 tracking-wide"
+          >
+            © Samrat Glass Emporium. Product photographs are original content and may not be copied, reproduced, modified, republished or used commercially without prior written permission.
+          </p>
         </div>
 
         {/* Info */}
@@ -409,6 +415,29 @@ export default function ProductDetail() {
         onSelect={setActiveTab}
         sectionRef={productTabsRef}
       />
+
+      {/* Handcrafted note — shown on every product detail page via the shared template. */}
+      <aside
+        data-testid="handcrafted-note"
+        aria-labelledby="handcrafted-note-heading"
+        className="mt-12 md:mt-14 border border-[#BF9972]/25 bg-white/[0.02] px-4 py-4 md:px-6 md:py-5"
+      >
+        <div className="eyebrow mb-2 text-[#D4AF37]">Handcrafted Note</div>
+        <h2 id="handcrafted-note-heading" className="font-serif text-lg md:text-[23px] leading-tight mb-2">Handcrafted in Firozabad — variations by design</h2>
+        <div className="space-y-2 text-white/70 text-[13px] md:text-sm leading-[1.55] max-w-[92ch] md:pr-16">
+          <p>This product is individually handcrafted using glass, metal and artisanal components. Minor variations in dimensions, proportions, shape, glass characteristics, colour, texture, alignment and finish may naturally occur from piece to piece.</p>
+          <p>Handcrafted glass and metal may also display small bubbles, waves, surface marks, tonal variations, tool impressions or other minor artisanal irregularities. Product images represent the overall design, and actual pieces may vary slightly in appearance. All dimensions are approximate unless specifically stated otherwise.</p>
+        </div>
+        <div className="mt-3">
+          <Link
+            to="/legal/handcrafted-disclaimer"
+            data-testid="handcrafted-note-full-disclaimer-link"
+            className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.24em] text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 hover:border-[#D4AF37] pb-1 transition-colors"
+          >
+            Read the full Handcrafted Product Disclaimer →
+          </Link>
+        </div>
+      </aside>
 
       {/* Seen in gallery projects (auto-hides when this product isn't tagged in any project) */}
       <SeenInProjects productId={product.id} />
@@ -663,7 +692,7 @@ function ProductTabs({ product, settings, waLink, active, onSelect, sectionRef }
                 <li>Reference Code · <span className="text-white">{product.sku}</span></li>
                 <li>Category · <span className="text-white">{product.category}</span></li>
                 {glanceSpecs.map((key) => (
-                  <li key={key}>{key} · <span className="text-white">{String(product.specs[key])}</span></li>
+                  <li key={key}>{key === "Dimensions" ? "Approx. Dimensions" : key} · <span className="text-white">{String(product.specs[key])}</span></li>
                 ))}
                 <li>Availability · <span className="text-white">{product.stock > 0 ? `${product.stock} available` : "Available on request"}</span></li>
                 {product.rating > 0 && (
@@ -683,7 +712,7 @@ function ProductTabs({ product, settings, waLink, active, onSelect, sectionRef }
                   <tbody>
                     {specEntries.map(([k, v], i) => (
                       <tr key={k} data-testid={`spec-row-${k}`} className={`${i % 2 === 0 ? "bg-white/[0.02]" : "bg-transparent"} border-b border-white/5 last:border-b-0`}>
-                        <th scope="row" className="text-left align-top py-4 px-6 md:w-1/3 text-white/50 uppercase text-[11px] tracking-[0.22em] font-normal">{k}</th>
+                        <th scope="row" className="text-left align-top py-4 px-6 md:w-1/3 text-white/50 uppercase text-[11px] tracking-[0.22em] font-normal">{k === "Dimensions" ? "Approx. Dimensions" : k}</th>
                         <td className="py-4 px-6 text-white leading-relaxed whitespace-pre-wrap">{String(v)}</td>
                       </tr>
                     ))}
