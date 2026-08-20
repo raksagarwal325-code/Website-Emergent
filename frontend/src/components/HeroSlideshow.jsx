@@ -6,19 +6,19 @@ import { api } from "../lib/api";
  * Homepage hero background slideshow.
  *
  * Performance notes:
- *  - The base CMS hero image is already rendered by Home.jsx, so this
- *    component stays empty while slide data is loading or unavailable.
- *    This avoids requesting/rendering the same fallback image twice.
- *  - Only the currently visible slide is requested. We intentionally do not
- *    preload the entire slideshow because those large images compete with the
- *    LCP image on mobile connections.
- *  - The first configured slide is high priority; later slides lazy-load only
- *    when they become active.
+ *  - Home.jsx owns the initial LCP image (`settings.hero_image`) and loads it
+ *    eagerly/high priority. This component deliberately stays empty during the
+ *    initial hero interval so a second slideshow image cannot compete with it.
+ *  - After the first display interval, slideshow images are introduced lazily
+ *    and at low fetch priority. Only the currently visible slide is requested.
+ *  - Reduced-motion users keep the stable CMS hero and do not start the
+ *    background slideshow.
  */
-export default function HeroSlideshow({ fallbackSrc }) {
+export default function HeroSlideshow() {
   const [slides, setSlides] = useState(null); // null = still loading
   const [settings, setSettings] = useState({ display_duration: 6, transition_duration: 1.5 });
   const [idx, setIdx] = useState(0);
+  const [started, setStarted] = useState(false);
   const [errored, setErrored] = useState(false);
   const prefersReducedMotion = useReducedMotion();
 
@@ -37,9 +37,21 @@ export default function HeroSlideshow({ fallbackSrc }) {
     };
   }, []);
 
+  // Preserve a single high-priority LCP candidate on initial page load. The
+  // CMS hero remains visible for its normal display interval before we begin
+  // requesting any slideshow image.
   useEffect(() => {
-    if (!slides || slides.length <= 1) return;
+    if (!slides || slides.length === 0) return;
     if (prefersReducedMotion) return;
+
+    const totalMs = Math.max(2, Number(settings.display_duration) || 6) * 1000;
+    const t = setTimeout(() => setStarted(true), totalMs);
+    return () => clearTimeout(t);
+  }, [slides, settings.display_duration, prefersReducedMotion]);
+
+  // Once the slideshow has started, advance on the configured cadence.
+  useEffect(() => {
+    if (!started || !slides || slides.length <= 1) return;
 
     const totalMs = Math.max(2, Number(settings.display_duration) || 6) * 1000;
     const t = setInterval(
@@ -48,26 +60,16 @@ export default function HeroSlideshow({ fallbackSrc }) {
     );
 
     return () => clearInterval(t);
-  }, [slides, settings.display_duration, prefersReducedMotion]);
+  }, [started, slides, settings.display_duration]);
 
-  // Home.jsx already paints fallbackSrc underneath this component. Returning
-  // nothing here prevents a duplicate eager request while the API resolves.
-  if (errored || slides === null || slides.length === 0) {
+  if (
+    errored ||
+    slides === null ||
+    slides.length === 0 ||
+    prefersReducedMotion ||
+    !started
+  ) {
     return null;
-  }
-
-  if (slides.length === 1 || prefersReducedMotion) {
-    const s = slides[0];
-    return (
-      <img
-        src={s.image_url}
-        alt={s.alt_text || ""}
-        loading="eager"
-        fetchPriority="high"
-        decoding="async"
-        className="absolute inset-0 w-full h-full object-cover"
-      />
-    );
   }
 
   const transitionSec = Math.max(0.1, Number(settings.transition_duration) || 1.5);
@@ -79,8 +81,8 @@ export default function HeroSlideshow({ fallbackSrc }) {
         key={activeSlide.id}
         src={activeSlide.image_url}
         alt={activeSlide.alt_text || ""}
-        loading={idx === 0 ? "eager" : "lazy"}
-        fetchPriority={idx === 0 ? "high" : "low"}
+        loading="lazy"
+        fetchPriority="low"
         decoding="async"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
