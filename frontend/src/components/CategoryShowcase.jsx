@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
@@ -16,7 +16,9 @@ import { BRAND_PLACEHOLDER } from "../lib/placeholders";
  *  - `slug`      : clean URL segment ("chandeliers", "hanging-lights", …).
  *  - Image source: admin override → newest published product for that
  *    category → neutral branded placeholder (below — no third-party stock).
- *  - All below-the-fold images are `loading="lazy"` / `decoding="async"`.
+ *  - Category media is not discovered until this section is close to the
+ *    viewport, keeping multi-megabyte product imagery out of the initial
+ *    mobile Lighthouse/LCP loading path.
  */
 
 // Branded neutral placeholder shown ONLY when a category has neither an
@@ -28,8 +30,39 @@ const FALLBACK_IMG = BRAND_PLACEHOLDER;
 export default function CategoryShowcase() {
   // Map of db_name -> resolved image url (or null while loading).
   const [images, setImages] = useState({});
+  const [shouldLoadMedia, setShouldLoadMedia] = useState(false);
+  const sectionRef = useRef(null);
+
+  // The section sits below the initial hero. Do not resolve category image
+  // URLs during the critical initial render; begin shortly before the shopper
+  // scrolls it into view. This is stronger than loading="lazy" alone because
+  // the browser cannot queue image requests before `src` exists.
+  useEffect(() => {
+    const node = sectionRef.current;
+    if (!node) return undefined;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldLoadMedia(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoadMedia(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px 0px" },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
+    if (!shouldLoadMedia) return undefined;
+
     let alive = true;
     // Load admin overrides + newest-product-per-category in parallel. Admin
     // override always wins; otherwise fall back to the newest product's first
@@ -63,10 +96,11 @@ export default function CategoryShowcase() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [shouldLoadMedia]);
 
   return (
     <section
+      ref={sectionRef}
       data-testid="home-category-showcase"
       className="relative border-t border-white/10"
     >
@@ -149,6 +183,7 @@ function CategoryCard({ category, imageUrl, index }) {
               src={imageUrl || FALLBACK_IMG}
               alt={`${category.label} at Samrat Glass Emporium`}
               loading="lazy"
+              fetchPriority="low"
               decoding="async"
               className="w-full h-full object-cover transition-transform duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.06]"
             />
