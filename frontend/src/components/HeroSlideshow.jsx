@@ -5,12 +5,11 @@ import { api } from "../lib/api";
 /**
  * Homepage hero background slideshow.
  *
- * Performance notes:
- *  - Home.jsx owns the initial LCP image (`settings.hero_image`) and loads it
- *    eagerly/high priority. This component deliberately stays empty during the
- *    initial hero interval so a second slideshow image cannot compete with it.
- *  - After the first display interval, slideshow images are introduced lazily
- *    and at low fetch priority. Only the currently visible slide is requested.
+ * Mobile performance policy:
+ *  - Mobile (<768px) deliberately keeps the lightweight inline hero backdrop
+ *    from Home.jsx and never requests slideshow media. Lighthouse has shown
+ *    the large hero assets are the dominant mobile LCP bottleneck.
+ *  - Desktop/tablet keeps the normal admin-managed slideshow behaviour.
  *  - Reduced-motion users keep the stable CMS hero and do not start the
  *    background slideshow.
  */
@@ -19,10 +18,26 @@ export default function HeroSlideshow() {
   const [settings, setSettings] = useState({ display_duration: 6, transition_duration: 1.5 });
   const [idx, setIdx] = useState(0);
   const [started, setStarted] = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 767px)").matches : false,
+  );
   const [errored, setErrored] = useState(false);
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const onChange = (event) => setIsMobile(event.matches);
+    setIsMobile(mq.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile) {
+      setSlides([]);
+      return undefined;
+    }
+
     let alive = true;
     api
       .getHeroSlideshow()
@@ -35,23 +50,21 @@ export default function HeroSlideshow() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [isMobile]);
 
-  // Preserve a single high-priority LCP candidate on initial page load. The
-  // CMS hero remains visible for its normal display interval before we begin
-  // requesting any slideshow image.
+  // Preserve a single high-priority LCP candidate on desktop initial load.
   useEffect(() => {
-    if (!slides || slides.length === 0) return;
+    if (isMobile || !slides || slides.length === 0) return;
     if (prefersReducedMotion) return;
 
     const totalMs = Math.max(2, Number(settings.display_duration) || 6) * 1000;
     const t = setTimeout(() => setStarted(true), totalMs);
     return () => clearTimeout(t);
-  }, [slides, settings.display_duration, prefersReducedMotion]);
+  }, [isMobile, slides, settings.display_duration, prefersReducedMotion]);
 
-  // Once the slideshow has started, advance on the configured cadence.
+  // Once the desktop slideshow has started, advance on the configured cadence.
   useEffect(() => {
-    if (!started || !slides || slides.length <= 1) return;
+    if (isMobile || !started || !slides || slides.length <= 1) return;
 
     const totalMs = Math.max(2, Number(settings.display_duration) || 6) * 1000;
     const t = setInterval(
@@ -60,9 +73,10 @@ export default function HeroSlideshow() {
     );
 
     return () => clearInterval(t);
-  }, [started, slides, settings.display_duration]);
+  }, [isMobile, started, slides, settings.display_duration]);
 
   if (
+    isMobile ||
     errored ||
     slides === null ||
     slides.length === 0 ||

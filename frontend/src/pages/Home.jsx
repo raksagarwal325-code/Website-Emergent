@@ -62,19 +62,22 @@ export default function Home() {
           animate={{ opacity: 0.45, scale: 1 }}
           transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
         >
-          <img
-            src={settings?.hero_image || BRAND_PLACEHOLDER_HERO}
-            alt=""
-            className="w-full h-full object-cover"
-            loading="eager"
-            fetchpriority="high"
-            decoding="async"
-          />
-          {/* Hero-slider background: crossfades between admin-managed
-              images. Renders on top of the CMS `hero_image` fallback so if
-              the network call fails or no slides are configured, the
-              existing hero image stays visible. */}
-          <HeroSlideshow fallbackSrc={settings?.hero_image} />
+          {/* Mobile performance: use the inline zero-network branded backdrop
+              instead of downloading a multi-megabyte hero asset. Desktop keeps
+              the CMS hero exactly as before. A dedicated optimized mobile hero
+              can replace this source later without changing the layout. */}
+          <picture>
+            <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
+            <img
+              src={settings?.hero_image || BRAND_PLACEHOLDER_HERO}
+              alt=""
+              className="w-full h-full object-cover"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+            />
+          </picture>
+          <HeroSlideshow />
           <div className="absolute inset-0" style={{background: "linear-gradient(180deg, rgba(42,17,37,0.55) 0%, rgba(22,7,15,0.85) 60%, #16070f 100%)"}}></div>
           <div className="absolute inset-0" style={{background: "radial-gradient(circle at 80% 20%, rgba(163,99,80,0.35), transparent 45%)"}}></div>
         </motion.div>
