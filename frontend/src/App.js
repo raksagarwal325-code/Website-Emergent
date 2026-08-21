@@ -30,6 +30,7 @@ import LegalPage from "@/pages/LegalPage";
 import NotFound from "@/pages/NotFound";
 import CustomLighting from "@/pages/CustomLighting";
 import ArchitectsDesigners from "@/pages/ArchitectsDesigners";
+import ChandelierManufacturerIndia from "@/pages/ChandelierManufacturerIndia";
 import FloatingActions from "@/components/FloatingActions";
 import MobileReachStrip from "@/components/MobileReachStrip";
 import AnalyticsRouteTracker from "@/components/AnalyticsRouteTracker";
@@ -73,6 +74,7 @@ function App() {
               <Route path="/contact" element={<Contact />} />
               <Route path="/custom-lighting-bulk-orders" element={<CustomLighting />} />
               <Route path="/architects-interior-designers" element={<ArchitectsDesigners />} />
+              <Route path="/chandelier-manufacturer-india" element={<ChandelierManufacturerIndia />} />
               <Route path="/admin" element={<AdminAuthGate><Admin /></AdminAuthGate>} />
               <Route path="/admin/collections" element={<AdminAuthGate><CollectionsAdmin /></AdminAuthGate>} />
               <Route path="/catalogue" element={<AdminAuthGate><Catalogue /></AdminAuthGate>} />
