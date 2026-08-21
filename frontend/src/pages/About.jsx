@@ -25,7 +25,6 @@ export default function About() {
         description="Since 1981, our craftsmen in Firozabad have shaped glass into decorative lighting for homes, hotels and luxury interiors across India."
         path="/about"
       />
-      {/* Hero */}
       <section className="relative overflow-hidden grain">
         <div className="absolute inset-0 opacity-25">
           <img src="/collage.png" alt="" className="w-full h-full object-cover" />
@@ -46,7 +45,6 @@ export default function About() {
         </div>
       </section>
 
-      {/* Story */}
       {paragraphs.length > 0 && (
         <section className="max-w-4xl mx-auto px-6 py-20 space-y-8 text-white/80 leading-relaxed">
           {paragraphs.map((p, i) => (
@@ -60,7 +58,6 @@ export default function About() {
         </section>
       )}
 
-      {/* Founder callout */}
       <section className="max-w-5xl mx-auto px-6 pb-16">
         <div className="warm-panel border-l-2 border-[#D4AF37] p-8 md:p-10 flex flex-col md:flex-row gap-6 md:items-center relative overflow-hidden">
           <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-30 pointer-events-none" style={{background:"radial-gradient(circle at 80% 50%, rgba(191,153,114,0.35), transparent 60%)"}}></div>
@@ -107,7 +104,6 @@ export default function About() {
         )}
       </section>
 
-      {/* Stats */}
       {stats.length > 0 && (
         <section className="max-w-7xl mx-auto px-6 pb-16">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -127,7 +123,6 @@ export default function About() {
 
       <ReasonsSection compact />
 
-      {/* Behind the scenes video */}
       {showAboutVideo && (
         <section data-testid="about-video-section" className="max-w-4xl mx-auto px-6 pb-16">
           <div className="text-center mb-8">
@@ -147,10 +142,14 @@ export default function About() {
               data-testid="about-video"
             />
           </div>
+          <div className="mt-8 text-center">
+            <Link to="/craft#workshop" className="inline-flex items-center gap-2 text-[#D4AF37] hover:text-[#B5952F] text-xs uppercase tracking-[0.24em]">
+              See our Firozabad workshop proof <ArrowUpRight size={14} />
+            </Link>
+          </div>
         </section>
       )}
 
-      {/* CTA */}
       <section className="max-w-4xl mx-auto px-6 py-20 text-center">
         <h2 className="font-serif text-3xl md:text-4xl mb-6">{a.cta_heading}</h2>
         <div className="flex flex-wrap justify-center gap-3">
