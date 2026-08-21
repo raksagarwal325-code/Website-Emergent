@@ -21,22 +21,13 @@ import { BRAND_PLACEHOLDER } from "../lib/placeholders";
  *    mobile Lighthouse/LCP loading path.
  */
 
-// Branded neutral placeholder shown ONLY when a category has neither an
-// admin-override image nor any published product with imagery. Encoded as
-// an inline SVG data URI so it renders synchronously with no external
-// network fetch (no more Unsplash flash before the real image loads).
 const FALLBACK_IMG = BRAND_PLACEHOLDER;
 
 export default function CategoryShowcase() {
-  // Map of db_name -> resolved image url (or null while loading).
   const [images, setImages] = useState({});
   const [shouldLoadMedia, setShouldLoadMedia] = useState(false);
   const sectionRef = useRef(null);
 
-  // The section sits below the initial hero. Do not resolve category image
-  // URLs during the critical initial render; begin shortly before the shopper
-  // scrolls it into view. This is stronger than loading="lazy" alone because
-  // the browser cannot queue image requests before `src` exists.
   useEffect(() => {
     const node = sectionRef.current;
     if (!node) return undefined;
@@ -64,9 +55,6 @@ export default function CategoryShowcase() {
     if (!shouldLoadMedia) return undefined;
 
     let alive = true;
-    // Load admin overrides + newest-product-per-category in parallel. Admin
-    // override always wins; otherwise fall back to the newest product's first
-    // image. If a category has neither, the tile shows the stock fallback.
     Promise.all([
       api.getCategoryFeaturedImages().catch(() => ({})),
       Promise.all(
@@ -104,8 +92,6 @@ export default function CategoryShowcase() {
       data-testid="home-category-showcase"
       className="relative border-t border-white/10"
     >
-      {/* Subtle radial wash so the section reads as its own "chapter" against
-          the dark background without introducing new colour tokens. */}
       <div
         aria-hidden
         className="absolute inset-0 opacity-40 pointer-events-none"
@@ -116,7 +102,7 @@ export default function CategoryShowcase() {
       />
       <div className="relative max-w-7xl mx-auto px-6 py-20 md:py-24">
         <motion.div
-          className="mb-12 md:mb-14 flex flex-col md:flex-row md:items-end md:justify-between gap-4"
+          className="mb-12 md:mb-14"
           initial={{ opacity: 0, y: 14 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
@@ -131,17 +117,17 @@ export default function CategoryShowcase() {
               From soaring crystal chandeliers to intimate candle stands — a
               curated way to find the piece your space is asking for.
             </p>
+            <Link
+              to="/catalog"
+              data-testid="category-showcase-view-all"
+              className="hidden md:inline-flex mt-5 items-center gap-2 text-[#D4AF37] hover:text-[#E0C15D] text-xs uppercase tracking-[0.28em] link-underline"
+            >
+              View full catalog <ArrowUpRight size={14} />
+            </Link>
           </div>
-          <Link
-            to="/catalog"
-            data-testid="category-showcase-view-all"
-            className="hidden md:inline-flex items-center gap-2 text-white/70 hover:text-white text-xs uppercase tracking-[0.28em] link-underline self-end"
-          >
-            View full catalog <ArrowUpRight size={14} />
-          </Link>
         </motion.div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 md:gap-8">
           {CATEGORIES.map((c, i) => (
             <CategoryCard
               key={c.db_name}
@@ -174,7 +160,6 @@ function CategoryCard({ category, imageUrl, index }) {
         data-testid={`category-card-${category.db_name.toLowerCase().replace(/\s+/g, "-")}`}
         className="group relative block overflow-hidden border border-[#BF9972]/20 bg-[#1a0a12] hover:border-[#D4AF37]/60 transition-colors duration-500"
       >
-        {/* Image */}
         <div className="relative aspect-[4/5] overflow-hidden">
           {imageUrl === undefined ? (
             <div className="w-full h-full bg-white/[0.03] animate-pulse" />
@@ -188,34 +173,28 @@ function CategoryCard({ category, imageUrl, index }) {
               className="w-full h-full object-cover transition-transform duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.06]"
             />
           )}
-          {/* Bottom gradient for legibility */}
           <div
             aria-hidden
             className="absolute inset-0"
             style={{
               background:
-                "linear-gradient(180deg, rgba(22,7,15,0) 40%, rgba(22,7,15,0.55) 72%, rgba(22,7,15,0.92) 100%)",
+                "linear-gradient(180deg, rgba(22,7,15,0) 34%, rgba(22,7,15,0.62) 70%, rgba(22,7,15,0.96) 100%)",
             }}
           />
-          {/* Gold hairline that reveals on hover */}
           <div
             aria-hidden
             className="absolute inset-x-6 bottom-[92px] h-px bg-[#D4AF37]/0 group-hover:bg-[#D4AF37]/60 transition-colors duration-500"
           />
         </div>
 
-        {/* Caption */}
-        <div className="absolute inset-x-0 bottom-0 p-6 md:p-7 flex items-end justify-between gap-4">
-          <div>
-            <div className="eyebrow mb-2 text-[#BF9972]/90">Category</div>
-            <div className="font-serif text-2xl md:text-[26px] leading-tight text-white">
-              {category.label}
-            </div>
+        <div className="absolute inset-x-0 bottom-0 p-5 md:p-6">
+          <div className="font-serif text-xl md:text-[22px] leading-tight text-white">
+            {category.label}
           </div>
-          <span className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-[#D4AF37] whitespace-nowrap pb-1">
+          <span className="mt-3 inline-flex items-center gap-2 border-b border-[#D4AF37]/40 group-hover:border-[#D4AF37] pb-1 text-[11px] uppercase tracking-[0.22em] text-[#D4AF37] whitespace-nowrap transition-colors">
             Explore Collection
             <ArrowUpRight
-              size={14}
+              size={13}
               className="transition-transform duration-500 group-hover:translate-x-1 group-hover:-translate-y-1"
             />
           </span>
