@@ -106,7 +106,6 @@ export default function GalleryProject() {
 
   const images = (project.images || []).filter(Boolean);
   const cover = images[0];
-  const rest = images.slice(1);
   const prevIdx = (index - 1 + items.length) % items.length;
   const nextIdx = (index + 1) % items.length;
   const prevProject = items[prevIdx];
@@ -174,7 +173,7 @@ export default function GalleryProject() {
             {primaryProduct && <div className="mt-5 text-[10px] uppercase tracking-[0.22em] text-white/45">Catalogue piece · {primaryProduct.sku}</div>}
           </motion.div>
         </div>
-        {cover && <div className="max-w-7xl mx-auto px-6 pb-10 md:pb-14"><button type="button" onClick={() => setLbIdx(0)} className="block w-full group" data-testid="project-cover"><div className="aspect-[16/9] md:aspect-[21/9] overflow-hidden bg-black"><img src={api.resolveImage(cover)} alt={galleryImageAlt({ title: project.title, location: project.location })} className="w-full h-full object-cover group-hover:scale-[1.015] transition-transform duration-700" /></div></button></div>}
+        {cover && <div className="max-w-7xl mx-auto px-6 pb-10 md:pb-14"><button type="button" onClick={() => setLbIdx(0)} className="block w-full group" data-testid="project-cover"><div className="bg-black flex items-center justify-center overflow-hidden"><img src={api.resolveImage(cover)} alt={galleryImageAlt({ title: project.title, location: project.location })} className="w-full max-h-[78vh] object-contain transition-opacity duration-300" /></div></button></div>}
       </section>
 
       <section className="max-w-5xl mx-auto px-6 py-12 md:py-16">
@@ -220,7 +219,7 @@ export default function GalleryProject() {
 
       <ProductStory product={primaryProduct} />
 
-      {images.length > 0 && <section id="installed-views" className="border-t border-[#BF9972]/15 scroll-mt-28"><div className="max-w-7xl mx-auto px-6 py-14 md:py-18"><div className="eyebrow mb-3">Real photos from the site</div><h2 className="font-serif text-3xl md:text-5xl">Installed in the client space.</h2><p className="mt-3 text-white/60 max-w-2xl">These are project photographs from the actual installation, not stock-room renders.</p><div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">{images.map((img, i) => <button key={i} onClick={() => setLbIdx(i)} data-testid={`project-thumb-${i}`} className={`${i === 0 && images.length > 2 ? "md:col-span-2 aspect-[16/8]" : "aspect-[4/3]"} overflow-hidden bg-black group`}><img src={api.resolveImage(img)} alt={galleryImageAlt({ title: project.title, location: project.location, view: i + 1 })} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" /></button>)}</div></div></section>}
+      {images.length > 0 && <section id="installed-views" className="border-t border-[#BF9972]/15 scroll-mt-28"><div className="max-w-7xl mx-auto px-6 py-14 md:py-18"><div className="eyebrow mb-3">Real photos from the site</div><h2 className="font-serif text-3xl md:text-5xl">Installed in the client space.</h2><p className="mt-3 text-white/60 max-w-2xl">These are project photographs from the actual installation, not stock-room renders.</p><div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">{images.map((img, i) => <button key={i} onClick={() => setLbIdx(i)} data-testid={`project-thumb-${i}`} className={`${i === 0 && images.length > 2 ? "md:col-span-2" : ""} min-h-[260px] md:min-h-[360px] overflow-hidden bg-black group flex items-center justify-center`}><img src={api.resolveImage(img)} alt={galleryImageAlt({ title: project.title, location: project.location, view: i + 1 })} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full max-h-[75vh] object-contain transition-opacity duration-300" /></button>)}</div></div></section>}
 
       <section id="manufacturer" className="border-t border-[#BF9972]/15 scroll-mt-28">
         <div className="max-w-5xl mx-auto px-6 py-14 md:py-18">
