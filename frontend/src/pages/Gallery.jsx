@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { MapPin, ArrowUpRight, X } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
@@ -6,11 +6,6 @@ import { api } from "../lib/api";
 import { buildProjectSlugs } from "../lib/slug";
 import SEO from "../components/SEO";
 
-/**
- * Project gallery — CMS-driven "Our work in the wild".
- * Each item: { title, location, note, images:[url,...] }.
- * The page auto-hides itself when there are zero items (empty state message).
- */
 function Lightbox({ open, onClose, src, alt }) {
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -28,106 +23,115 @@ function Lightbox({ open, onClose, src, alt }) {
   );
 }
 
-function ProjectCard({ project, index, slug }) {
-  const [openIdx, setOpenIdx] = useState(null);
+function ProjectCard({ project, index, slug, linkedProducts }) {
+  const [open, setOpen] = useState(false);
   const images = (project.images || []).filter(Boolean);
   const cover = images[0];
-  const rest = images.slice(1);
+  const primaryProduct = linkedProducts?.[0];
   return (
-    <article data-testid={`gallery-project-${index}`} className="border border-white/8 hover:border-[#D4AF37]/40 transition-colors bg-[#0e0510]">
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-0">
-        <div className="md:col-span-3 aspect-[4/3] md:aspect-auto md:min-h-[340px] overflow-hidden bg-black">
-          {cover ? (
-            <img
-              src={api.resolveImage(cover)}
-              alt={project.title || "Project"}
-              className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-700"
-              onClick={() => setOpenIdx(0)}
-              loading="lazy"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-white/25 font-serif italic">Image pending</div>
-          )}
-        </div>
-        <div className="md:col-span-2 p-8 md:p-10 flex flex-col justify-center">
-          {project.location && (
-            <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mb-4">
-              <MapPin size={12} strokeWidth={1.5} /> {project.location}
-            </div>
-          )}
-          <Link to={`/gallery/${slug}`} data-testid={`gallery-project-link-${index}`} className="group">
-            <h3 className="font-serif text-2xl md:text-3xl leading-tight text-white group-hover:text-[#D4AF37] transition-colors mb-4">{project.title}</h3>
-          </Link>
-          {project.note && (
-            <p className="text-white/70 leading-relaxed text-sm md:text-[15px] line-clamp-4">{project.note}</p>
-          )}
-          <div className="mt-5">
-            <Link to={`/gallery/${slug}`} className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-[#D4AF37] hover:text-[#B5952F]">
-              View project <ArrowUpRight size={12} />
-            </Link>
+    <article data-testid={`gallery-project-${index}`} className="group border border-white/8 hover:border-[#D4AF37]/40 transition-colors bg-[#0e0510] overflow-hidden flex flex-col">
+      <button type="button" onClick={() => cover && setOpen(true)} className="aspect-[4/3] overflow-hidden bg-black text-left" aria-label={`Open ${project.title || "project"} image`}>
+        {cover ? (
+          <img
+            src={api.resolveImage(cover)}
+            alt={project.title || "Samrat Glass installation project"}
+            className="w-full h-full object-cover group-hover:scale-[1.025] transition-transform duration-700"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-white/25 font-serif italic">Image pending</div>
+        )}
+      </button>
+
+      <div className="p-5 md:p-6 flex flex-col flex-1">
+        {project.location && (
+          <div className="inline-flex items-center gap-2 text-[9px] uppercase tracking-[0.26em] text-[#BF9972] mb-3">
+            <MapPin size={11} strokeWidth={1.5} /> {project.location}
           </div>
-          {rest.length > 0 && (
-            <div className="mt-6 grid grid-cols-4 gap-2">
-              {rest.slice(0, 4).map((img, i) => (
-                <button
-                  key={i}
-                  onClick={() => setOpenIdx(i + 1)}
-                  className="aspect-square overflow-hidden bg-black hover:opacity-90"
-                  data-testid={`gallery-thumb-${index}-${i + 1}`}
-                >
-                  <img src={api.resolveImage(img)} alt="" className="w-full h-full object-cover" loading="lazy" />
-                </button>
-              ))}
-            </div>
-          )}
+        )}
+        <Link to={`/gallery/${slug}`} data-testid={`gallery-project-link-${index}`}>
+          <h2 className="font-serif text-xl md:text-2xl leading-tight text-white group-hover:text-[#D4AF37] transition-colors line-clamp-3">{project.title}</h2>
+        </Link>
+
+        {primaryProduct && (
+          <div className="mt-3 text-[10px] uppercase tracking-[0.16em] text-white/45 line-clamp-2">
+            {primaryProduct.name} · {primaryProduct.sku}
+          </div>
+        )}
+
+        {project.note && (
+          <p className="text-white/58 leading-relaxed text-sm mt-3 line-clamp-3">{project.note}</p>
+        )}
+
+        <div className="mt-auto pt-5">
+          <Link to={`/gallery/${slug}`} className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-[#D4AF37] hover:text-[#B5952F]">
+            View project <ArrowUpRight size={12} />
+          </Link>
         </div>
       </div>
-      <Lightbox open={openIdx !== null} onClose={() => setOpenIdx(null)} src={openIdx !== null ? api.resolveImage(images[openIdx]) : ""} alt={project.title} />
+
+      <Lightbox open={open} onClose={() => setOpen(false)} src={cover ? api.resolveImage(cover) : ""} alt={project.title} />
     </article>
   );
 }
 
 export default function Gallery() {
-  const { hp, settings } = useSettings();
+  const { hp } = useSettings();
   const g = hp.gallery || {};
   const items = (g.items || []).filter((p) => (p?.title || "").trim() || (p?.images || []).some(Boolean));
   const slugs = buildProjectSlugs(items);
+  const [products, setProducts] = useState([]);
+
+  useEffect(() => {
+    api.listAllProducts().then(setProducts).catch(() => setProducts([]));
+  }, []);
+
+  const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  const productsByProject = useMemo(() => items.map((project) => (project.products || []).map((id) => productMap.get(id)).filter(Boolean)), [items, productMap]);
 
   return (
     <div data-testid="page-gallery">
       <SEO
-        title={`${g.title_pre || "Our Work"} ${g.title_highlight || "in the wild"} · Samrat Glass Emporium`}
-        description={g.tagline || "Handcrafted chandeliers and decorative lighting installed in homes, hotels, and luxury interiors across India."}
+        title={`Projects & Installations · Samrat Glass Emporium`}
+        description={g.tagline || "Real Samrat Glass Emporium chandelier and decorative-lighting installations in homes, hotels and luxury interiors across India."}
         path="/gallery"
       />
 
-      {/* Hero */}
-      <section className="relative overflow-hidden grain">
+      <section className="relative overflow-hidden grain border-b border-white/5">
         <div className="absolute inset-0 opacity-30">
-          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,7,15,0.6) 0%, rgba(22,7,15,0.9) 60%, #16070f 100%)" }}></div>
-          <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 30% 30%, rgba(163,99,80,0.35), transparent 55%)" }}></div>
+          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,7,15,0.55) 0%, rgba(22,7,15,0.88) 70%, #16070f 100%)" }}></div>
+          <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 30% 30%, rgba(163,99,80,0.3), transparent 55%)" }}></div>
         </div>
-        <div className="relative max-w-5xl mx-auto px-6 pt-24 pb-16 md:pt-32 md:pb-20 text-center">
-          <div className="eyebrow mb-6">{g.eyebrow || "Installations"}</div>
+        <div className="relative max-w-5xl mx-auto px-6 pt-16 pb-12 md:pt-20 md:pb-14 text-center">
+          <div className="eyebrow mb-4">Projects & Installations</div>
           <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05]">
-            {g.title_pre || "Our Work"} <span className="brand-gradient-text italic">{g.title_highlight || "in the wild."}</span>
+            Real spaces. <span className="brand-gradient-text italic">Real Samrat lighting.</span>
           </h1>
-          {g.tagline && (
-            <p className="mt-6 max-w-2xl mx-auto text-white/70 text-base md:text-lg leading-relaxed">{g.tagline}</p>
-          )}
+          <p className="mt-5 max-w-2xl mx-auto text-white/65 text-sm md:text-base leading-relaxed">
+            Client installations linked to the actual pieces from our catalogue — including custom finishes, residential projects and statement lighting across India.
+          </p>
         </div>
       </section>
 
-      {/* Projects */}
-      <section className="max-w-6xl mx-auto px-6 py-10 md:py-16">
+      <section className="max-w-7xl mx-auto px-6 py-10 md:py-14">
+        <div className="flex items-end justify-between gap-4 mb-7 md:mb-9">
+          <div>
+            <div className="eyebrow mb-2">Project archive</div>
+            <h2 className="font-serif text-2xl md:text-3xl">Installed across India</h2>
+          </div>
+          <div className="text-[10px] uppercase tracking-[0.22em] text-white/40">{items.length} project{items.length === 1 ? "" : "s"}</div>
+        </div>
+
         {items.length > 0 ? (
-          <div className="space-y-10 md:space-y-14">
-            {items.map((p, i) => <ProjectCard key={i} project={p} index={i} slug={slugs[i]} />)}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
+            {items.map((p, i) => (
+              <ProjectCard key={i} project={p} index={i} slug={slugs[i]} linkedProducts={productsByProject[i]} />
+            ))}
           </div>
         ) : (
           <div className="border border-white/10 py-20 text-center text-white/50">
             <p className="font-serif italic max-w-md mx-auto leading-relaxed">
-              Our recent installations will appear here soon — homes, hotels, and luxury interiors that carry a piece from our atelier.
+              Our recent installations will appear here soon — homes, hotels and luxury interiors that carry a piece from our atelier.
             </p>
             <Link to="/contact" className="mt-6 inline-flex items-center gap-2 text-xs uppercase tracking-[0.28em] text-[#D4AF37] hover:text-[#B5952F]">
               Have a project for us? <ArrowUpRight size={14} />
