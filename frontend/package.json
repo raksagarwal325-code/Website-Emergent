@@ -66,7 +66,7 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
-    "postbuild": "node scripts/prerender-categories.js",
+    "postbuild": "node scripts/prerender-categories.js && node scripts/prerender-authority-pages.js",
     "test": "craco test"
   },
   "browserslist": {
@@ -124,7 +124,7 @@
     "**/resolve-url-loader/postcss": "8.5.10",
     "**/axios/form-data": "4.0.4",
     "**/jsdom/form-data": "3.0.4",
-    "**/postcss-svgo/svgo": "2.8.1",
+    "**/postcss-svgo/svgo": "2.8.3",
     "**/webpack-dev-server/ws": "8.20.1",
     "**/postcss-load-config/yaml": "2.8.3",
     "**/cosmiconfig/yaml": "1.10.3",
@@ -132,7 +132,7 @@
     "**/eslint/js-yaml": "4.1.1",
     "**/@eslint/eslintrc/js-yaml": "4.1.1",
     "**/svgo/js-yaml": "3.14.2",
-    "**/@istanbuljs/load-nyc-config/js-yaml": "3.14.2",
+    "**/@istanbuljs/load-nyc-config/js-yaml": "4.1.1",
     "**/css-loader/postcss": "8.5.10",
     "**/css-minimizer-webpack-plugin/postcss": "8.5.10",
     "**/react-scripts/postcss": "8.5.10",
