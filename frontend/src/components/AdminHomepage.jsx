@@ -1,12 +1,11 @@
 import React from "react";
 import AdminHomepageBase from "./AdminHomepageBase";
-import AdminProjectCaseStudies from "./AdminProjectCaseStudies";
 
 export default function AdminHomepage() {
   return (
-    <div className="space-y-8">
+    <div className="admin-homepage-without-projects">
+      <style>{`\n        .admin-homepage-without-projects [data-testid=\"hp-section-gallery\"] { display: none; }\n      `}</style>
       <AdminHomepageBase />
-      <AdminProjectCaseStudies />
     </div>
   );
 }
