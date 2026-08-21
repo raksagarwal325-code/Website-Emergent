@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import AdminHomepageBase from "./AdminHomepageBase";
 import AdminProjectGallery from "./AdminProjectGallery";
+import AdminCraftProof from "./AdminCraftProof";
 
 export default function AdminHomepage() {
   const [mode, setMode] = useState(() => window.location.hash === "#project-gallery" ? "projects" : "homepage");
@@ -20,6 +21,7 @@ export default function AdminHomepage() {
         <ProjectGalleryMode />
       ) : (
         <div className="admin-homepage-without-projects">
+          <AdminCraftProof />
           <AdminHomepageBase />
         </div>
       )}
