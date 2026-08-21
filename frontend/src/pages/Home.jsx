@@ -11,13 +11,6 @@ import ReasonsSection from "../components/ReasonsSection";
 import AtelierShowcase from "../components/AtelierShowcase";
 import TrustedBySection from "../components/TrustedBySection";
 import GalleryPreview from "../components/GalleryPreview";
-// InfluencerPromotions is the largest below-the-fold homepage component
-// (~353 lines + framer-motion + IntersectionObserver + product fetch).
-// It renders at the very bottom of the homepage and is well below the
-// fold on every viewport, so we ship it as a separate JS chunk and
-// defer its download until React reaches its position in the tree.
-// A stable-height fallback (`min-h-[600px]`) keeps the below-the-fold
-// scroll geometry identical so there is no visible layout shift.
 const InfluencerPromotions = lazy(() =>
   import(/* webpackChunkName: "influencer" */ "../components/InfluencerPromotions"),
 );
@@ -39,7 +32,6 @@ export default function Home() {
   }, []);
 
   const waLink = waGeneralLink(settings?.whatsapp_number) || "#";
-
   const H = hp.hero;
   const F = hp.featured;
 
@@ -54,7 +46,6 @@ export default function Home() {
         image={settings?.hero_image}
         path="/"
       />
-      {/* Hero */}
       <section className="relative overflow-hidden grain">
         <motion.div
           className="absolute inset-0 opacity-45"
@@ -62,10 +53,6 @@ export default function Home() {
           animate={{ opacity: 0.45, scale: 1 }}
           transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
         >
-          {/* Mobile performance: use the inline zero-network branded backdrop
-              instead of downloading a multi-megabyte hero asset. Desktop keeps
-              the CMS hero exactly as before. A dedicated optimized mobile hero
-              can replace this source later without changing the layout. */}
           <picture>
             <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
             <img
@@ -97,7 +84,7 @@ export default function Home() {
               className="mb-6 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]"></span>
-              <span className="text-[10px] uppercase tracking-[0.32em] text-[#BF9972]">{H.eyebrow}</span>
+              <span className="text-xs uppercase tracking-[0.28em] text-[#BF9972]">{H.eyebrow}</span>
             </motion.div>
             <motion.h1
               variants={{ hidden: { opacity: 0, y: 26 }, visible: { opacity: 1, y: 0, transition: { duration: 1.05, ease: [0.22, 1, 0.36, 1] } } }}
@@ -116,21 +103,20 @@ export default function Home() {
               variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] } } }}
               className="mt-10 flex flex-wrap gap-3"
             >
-              <Link to={H.primary_cta_link || "/catalog"} data-testid="hero-explore-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] transition-colors">
+              <Link to={H.primary_cta_link || "/catalog"} data-testid="hero-explore-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] transition-colors">
                 {H.primary_cta_text} <ArrowUpRight size={14} />
               </Link>
               {H.secondary_cta_text && (heroSecondaryExternal ? (
-                <a href={heroSecondaryHref} target="_blank" rel="noreferrer" data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-white/25 text-white px-8 py-4 uppercase text-xs tracking-[0.28em] hover:border-[#D4AF37] transition-colors">
+                <a href={heroSecondaryHref} target="_blank" rel="noreferrer" data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors">
                   <MessageCircle size={14} /> {H.secondary_cta_text}
                 </a>
               ) : (
-                <Link to={heroSecondaryHref} data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-white/25 text-white px-8 py-4 uppercase text-xs tracking-[0.28em] hover:border-[#D4AF37] transition-colors">
+                <Link to={heroSecondaryHref} data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors">
                   <MessageCircle size={14} /> {H.secondary_cta_text}
                 </Link>
               ))}
             </motion.div>
 
-            {/* Trust points strip */}
             <motion.div
               variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] } } }}
               className="mt-14 pt-8 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg"
@@ -138,7 +124,7 @@ export default function Home() {
               {(H.trust || []).map((t, i) => (
                 <div key={i}>
                   <div className="font-serif text-xl md:text-2xl brand-gradient-text leading-none">{t.value}</div>
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-white/50 mt-2">{t.label}</div>
+                  <div className="text-xs font-medium uppercase tracking-[0.18em] text-white/60 mt-2">{t.label}</div>
                 </div>
               ))}
             </motion.div>
@@ -146,16 +132,10 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Shop by Category — editorial grid, deep-links into /catalog?category= */}
       <CategoryShowcase />
-
-      {/* Trusted-by strip (hidden until admin adds at least one entry) */}
       <TrustedBySection />
-
-      {/* 1000+ Light Options Collage */}
       <CollageSection />
 
-      {/* Value strip */}
       <section className="border-y border-white/10">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-white/10">
           {[
@@ -174,15 +154,14 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Featured */}
       <section className="max-w-7xl mx-auto px-6 py-16 md:py-20">
         <div className="flex items-end justify-between mb-10">
           <div>
             <div className="eyebrow mb-3">{F.eyebrow}</div>
             <h2 className="font-serif text-3xl sm:text-4xl">{F.title}</h2>
           </div>
-          <Link to={F.view_all_link || "/catalog"} className="hidden sm:inline-flex items-center gap-2 text-white/70 hover:text-white text-xs uppercase tracking-[0.28em] link-underline">
-            {F.view_all_text} <ArrowUpRight size={14} />
+          <Link to={F.view_all_link || "/catalog"} className="hidden sm:inline-flex items-center gap-2 text-[#D4AF37] hover:text-[#E0C15D] text-sm font-medium uppercase tracking-[0.22em] link-underline">
+            {F.view_all_text} <ArrowUpRight size={15} />
           </Link>
         </div>
 
@@ -193,24 +172,15 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Google Reviews */}
       <section className="max-w-7xl mx-auto px-6 pb-6">
         <GoogleReviews />
       </section>
 
-      {/* Reasons Why We Are Better */}
       <ReasonsSection />
-
-      {/* Meet the founder teaser */}
       <FounderTeaser />
-
-      {/* Editorial banner / Atelier auto-rotating showcase */}
       <AtelierShowcase />
-
-      {/* Featured Projects (auto-hides when Gallery has no items) */}
       <GalleryPreview />
 
-      {/* Influencer Promotions — auto-hides when no items are configured */}
       <Suspense fallback={<div aria-hidden="true" className="min-h-[600px]" />}>
         <InfluencerPromotions />
       </Suspense>
