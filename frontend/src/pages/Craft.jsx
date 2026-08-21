@@ -15,10 +15,9 @@ const CUSTOMISATION_EXAMPLES = [
 ];
 
 export default function Craft() {
-  const { hp } = useSettings();
-  const c = hp.craft || {};
+  const { hp, settings } = useSettings();
   const cv = hp.craft_video || {};
-  const proof = hp.craft_proof || {};
+  const proof = settings?.homepage_content?.craft_proof || {};
 
   return (
     <div data-testid="page-craft">
