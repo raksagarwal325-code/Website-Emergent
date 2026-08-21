@@ -178,6 +178,25 @@ export default function CategoryPage() {
         </p>
       </div>
 
+      {category.slug === "chandeliers" && (
+        <aside
+          data-testid="chandelier-manufacturer-authority-link"
+          className="mb-10 border-l border-[#D4AF37]/50 bg-[#0d0510] px-6 py-5 max-w-4xl"
+        >
+          <p className="text-sm text-white/60 leading-relaxed">
+            Looking beyond the collection itself? Read how Samrat Glass Emporium approaches
+            chandelier making, customisation and Firozabad glass craftsmanship as a decorative
+            lighting manufacturer established in 1981.
+          </p>
+          <Link
+            to="/chandelier-manufacturer-india"
+            className="inline-block mt-3 text-xs uppercase tracking-[0.22em] text-[#D4AF37] hover:text-white link-underline"
+          >
+            Chandelier manufacturer in India — our Firozabad story
+          </Link>
+        </aside>
+      )}
+
       <CatalogueBrowser
         lockedCategory={category.db_name}
         onListingChange={handleListingChange}
