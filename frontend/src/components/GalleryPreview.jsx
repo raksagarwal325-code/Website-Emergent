@@ -123,14 +123,14 @@ export default function GalleryPreview() {
           <Link
             to="/gallery"
             data-testid="home-gallery-view-all"
-            className="mt-5 inline-flex items-center gap-2 text-xs uppercase tracking-[0.28em] text-[#D4AF37] hover:text-[#B5952F] transition-colors"
+            className="mt-5 inline-flex items-center gap-2 text-sm font-medium uppercase tracking-[0.22em] text-[#D4AF37] hover:text-[#E0C15D] transition-colors"
           >
-            View full gallery <ArrowUpRight size={14} />
+            View full gallery <ArrowUpRight size={15} />
           </Link>
         </div>
 
         <div
-          className="relative"
+          className="relative px-5 lg:px-7"
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
           data-testid="home-gallery-carousel"
@@ -180,8 +180,8 @@ export default function GalleryPreview() {
                             </div>
                             <div className="p-5 md:p-6">
                               {p.location && (
-                                <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mb-3">
-                                  <MapPin size={11} strokeWidth={1.5} /> {p.location}
+                                <div className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.24em] text-[#BF9972] mb-3">
+                                  <MapPin size={12} strokeWidth={1.5} /> {p.location}
                                 </div>
                               )}
                               <h3 className="font-serif text-lg md:text-xl leading-snug text-white group-hover:text-[#D4AF37] transition-colors line-clamp-2">
@@ -205,7 +205,7 @@ export default function GalleryPreview() {
                 aria-label="Previous projects"
                 onClick={() => { go(-1); setPaused(true); }}
                 data-testid="home-gallery-prev"
-                className="hidden md:flex absolute left-0 bottom-6 md:bottom-8 -translate-x-4 lg:-translate-x-8 items-center justify-center w-11 h-11 rounded-full bg-black/70 backdrop-blur border border-[#D4AF37]/40 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"
+                className="hidden md:flex absolute left-0 top-[42%] -translate-y-1/2 items-center justify-center w-11 h-11 rounded-full bg-black/75 backdrop-blur border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"
               >
                 <ChevronLeft size={20} />
               </button>
@@ -214,7 +214,7 @@ export default function GalleryPreview() {
                 aria-label="Next projects"
                 onClick={() => { go(1); setPaused(true); }}
                 data-testid="home-gallery-next"
-                className="hidden md:flex absolute right-0 bottom-6 md:bottom-8 translate-x-4 lg:translate-x-8 items-center justify-center w-11 h-11 rounded-full bg-black/70 backdrop-blur border border-[#D4AF37]/40 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"
+                className="hidden md:flex absolute right-0 top-[42%] -translate-y-1/2 items-center justify-center w-11 h-11 rounded-full bg-black/75 backdrop-blur border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"
               >
                 <ChevronRight size={20} />
               </button>
@@ -231,8 +231,8 @@ export default function GalleryPreview() {
                 aria-label={`Go to slide ${i + 1}`}
                 onClick={() => { jumpTo(i); setPaused(true); }}
                 data-testid={`home-gallery-dot-${i}`}
-                className={`h-1.5 rounded-full transition-all ${
-                  i === active ? "w-8 bg-[#D4AF37]" : "w-4 bg-white/25 hover:bg-white/50"
+                className={`h-2 rounded-full transition-all ${
+                  i === active ? "w-9 bg-[#D4AF37]" : "w-5 bg-white/30 hover:bg-white/55"
                 }`}
               />
             ))}
