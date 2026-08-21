@@ -1,14 +1,18 @@
 import React, { useEffect, useState } from "react";
-import { Link, NavLink } from "react-router-dom";
-import { Heart, ShoppingBag, Search, Menu, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
+import { Heart, ShoppingBag, Search, Menu, X, Images } from "lucide-react";
 import { useCatalog } from "../../context/CatalogContext";
 import { api } from "../../lib/api";
 
 export default function Header() {
   const { cart, favorites } = useCatalog();
+  const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [brand, setBrand] = useState("Samrat Glass Emporium");
+  const [projectTabHost, setProjectTabHost] = useState(null);
+  const [projectTabActive, setProjectTabActive] = useState(() => window.location.hash === "#project-gallery");
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -16,6 +20,70 @@ export default function Header() {
     api.getSettings().then((s) => setBrand(s.brand_name || "Lumière")).catch(() => {});
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    const onHashChange = () => setProjectTabActive(window.location.hash === "#project-gallery");
+    window.addEventListener("hashchange", onHashChange);
+    onHashChange();
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  useEffect(() => {
+    if (location.pathname !== "/admin") {
+      setProjectTabHost(null);
+      return undefined;
+    }
+
+    let host = null;
+    let nav = null;
+    let retryTimer = null;
+
+    const clearProjectState = (event) => {
+      const button = event.target.closest('button[data-testid^="admin-tab-"]');
+      if (!button || button.dataset.testid === "admin-tab-project-gallery") return;
+      if (window.location.hash === "#project-gallery") {
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+        setProjectTabActive(false);
+      }
+    };
+
+    const attach = () => {
+      const homepageButton = document.querySelector('[data-testid="admin-tab-homepage"]');
+      const nextNav = homepageButton?.parentElement;
+      if (!homepageButton || !nextNav) {
+        retryTimer = window.setTimeout(attach, 50);
+        return;
+      }
+
+      nav = nextNav;
+      const existing = nav.querySelector('[data-persistent-project-gallery-tab-host="true"]');
+      host = existing || document.createElement("span");
+      host.setAttribute("data-persistent-project-gallery-tab-host", "true");
+      host.style.display = "contents";
+      if (!existing) homepageButton.insertAdjacentElement("afterend", host);
+      nav.addEventListener("click", clearProjectState);
+      setProjectTabHost(host);
+    };
+
+    attach();
+
+    return () => {
+      if (retryTimer) window.clearTimeout(retryTimer);
+      if (nav) nav.removeEventListener("click", clearProjectState);
+      if (host?.parentNode) host.parentNode.removeChild(host);
+      setProjectTabHost(null);
+    };
+  }, [location.pathname]);
+
+  const openProjectGallery = () => {
+    const homepageButton = document.querySelector('[data-testid="admin-tab-homepage"]');
+    if (!homepageButton) return;
+    homepageButton.click();
+    window.setTimeout(() => {
+      window.location.hash = "project-gallery";
+      setProjectTabActive(true);
+    }, 0);
+  };
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
@@ -31,6 +99,18 @@ export default function Header() {
       data-testid="site-header"
       className={`sticky top-0 z-50 w-full backdrop-blur-2xl transition-all duration-300 ${scrolled ? "bg-[#16070f]/90 border-b border-[#BF9972]/20" : "bg-[#16070f]/50"}`}
     >
+      {projectTabHost && createPortal(
+        <button
+          type="button"
+          data-testid="admin-tab-project-gallery"
+          onClick={openProjectGallery}
+          className={`inline-flex items-center gap-2 px-5 py-3 text-xs uppercase tracking-[0.24em] border-b-2 transition-colors ${projectTabActive ? "border-[#D4AF37] text-[#D4AF37]" : "border-transparent text-white/60 hover:text-white"}`}
+        >
+          <Images size={14} /> Project Gallery
+        </button>,
+        projectTabHost
+      )}
+
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
         <Link to="/" data-testid="header-brand" className="flex items-center gap-3 whitespace-nowrap">
           <span className="logo-badge inline-flex h-10 w-10 flex-shrink-0">
