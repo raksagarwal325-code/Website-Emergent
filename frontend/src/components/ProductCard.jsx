@@ -3,12 +3,11 @@ import { Link } from "react-router-dom";
 import { Heart, ShoppingBag, ArrowUpRight, Sparkles } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
 import { useSettings } from "../context/SettingsContext";
-import { api, formatPrice, formatProductPrice } from "../lib/api";
+import { api, formatProductPrice } from "../lib/api";
 import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
 import { productPath } from "../lib/productUrl";
 import { toast } from "sonner";
 
-// Elegant fallback: a subtle gold "S" monogram on solid black
 function ProductPlaceholder({ name }) {
   return (
     <div className="relative w-full h-full flex items-center justify-center bg-[#0a0510] overflow-hidden">
@@ -25,8 +24,8 @@ function ProductPlaceholder({ name }) {
         S
       </span>
       <div className="absolute bottom-4 left-0 right-0 text-center">
-        <div className="text-[9px] uppercase tracking-[0.42em] text-[#BF9972]/70">Image forthcoming</div>
-        {name && <div className="mt-1 text-[10px] text-white/40 italic px-4 truncate">{name}</div>}
+        <div className="text-[10px] uppercase tracking-[0.36em] text-[#BF9972]/70">Image forthcoming</div>
+        {name && <div className="mt-1 text-xs text-white/40 italic px-4 truncate">{name}</div>}
       </div>
     </div>
   );
@@ -61,11 +60,10 @@ export default function ProductCard({ product, index = 0 }) {
       className="group relative flex flex-col border border-white/8 hover:border-[#D4AF37]/50 bg-[#1a0a17]/60 transition-all duration-500 fade-up h-full"
       style={{ animationDelay: `${index * 60}ms` }}
     >
-      {/* Signature badge (top-left, over the image) */}
       {badge && (
         <div
           data-testid={`product-badge-${product.id}`}
-          className="absolute top-4 left-4 z-10 inline-flex items-center gap-1.5 border border-[#BF9972]/50 bg-black/60 backdrop-blur-sm px-2.5 py-1 text-[9px] uppercase tracking-[0.24em] text-[#D4AF37]"
+          className="absolute top-4 left-4 z-10 inline-flex items-center gap-1.5 border border-[#BF9972]/50 bg-black/60 backdrop-blur-sm px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]"
         >
           <span className="w-1 h-1 rounded-full bg-[#D4AF37]"></span>
           {badge}
@@ -76,9 +74,13 @@ export default function ProductCard({ product, index = 0 }) {
         onClick={(e) => { e.preventDefault(); toggleFavorite(product); }}
         aria-label={fav ? "Remove favorite" : "Add favorite"}
         data-testid={`favorite-toggle-${product.id}`}
-        className={`absolute top-4 right-4 z-10 h-9 w-9 flex items-center justify-center border border-white/10 backdrop-blur bg-black/50 transition-colors ${fav ? "text-[#D4AF37]" : "text-white/60 hover:text-white"}`}
+        className={`absolute top-4 right-4 z-10 h-10 w-10 rounded-full flex items-center justify-center border backdrop-blur-md transition-all ${
+          fav
+            ? "border-[#D4AF37]/70 bg-black/80 text-[#D4AF37]"
+            : "border-white/25 bg-black/70 text-white/80 hover:border-[#D4AF37]/60 hover:text-[#D4AF37]"
+        }`}
       >
-        <Heart size={15} fill={fav ? "#D4AF37" : "none"} strokeWidth={1.5} />
+        <Heart size={17} fill={fav ? "#D4AF37" : "none"} strokeWidth={1.6} />
       </button>
 
       <Link to={productPath(product)} className="block" data-testid={`product-link-${product.id}`}>
@@ -102,7 +104,7 @@ export default function ProductCard({ product, index = 0 }) {
           {projectCount > 0 && (
             <div
               data-testid={`product-projects-badge-${product.id}`}
-              className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 border border-[#D4AF37]/40 bg-black/70 backdrop-blur-sm px-2.5 py-1 text-[9px] uppercase tracking-[0.22em] text-[#D4AF37]"
+              className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 border border-[#D4AF37]/40 bg-black/70 backdrop-blur-sm px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-[#D4AF37]"
               title={`Featured in ${projectCount} real installation${projectCount === 1 ? "" : "s"}`}
             >
               <Sparkles size={10} strokeWidth={1.6} />
@@ -117,7 +119,7 @@ export default function ProductCard({ product, index = 0 }) {
         <Link to={productPath(product)} className="font-serif text-lg leading-snug text-white hover:text-[#D4AF37] transition-colors line-clamp-2 min-h-[3.5rem]">
           {product.name}
         </Link>
-        <div className="text-[10px] uppercase tracking-widest text-white/40">{product.category}</div>
+        <div className="text-xs uppercase tracking-widest text-white/45">{product.category}</div>
         <div className="flex items-baseline justify-between pt-1">
           <div className="flex items-baseline gap-2 min-w-0">
             {(() => {
@@ -139,7 +141,7 @@ export default function ProductCard({ product, index = 0 }) {
                     className="text-[#D4AF37] font-serif text-lg truncate"
                   >
                     {p.label && (
-                      <span className="text-[10px] uppercase tracking-[0.24em] text-[#BF9972] mr-1 font-sans not-italic">
+                      <span className="text-[10px] uppercase tracking-[0.22em] text-[#BF9972] mr-1 font-sans not-italic">
                         {p.label}
                       </span>
                     )}
@@ -162,16 +164,16 @@ export default function ProductCard({ product, index = 0 }) {
           <Link
             to={productPath(product)}
             data-testid={`view-btn-${product.id}`}
-            className="inline-flex items-center justify-center gap-1 border border-white/20 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/80 px-2 py-2.5 text-[10px] uppercase tracking-[0.16em] transition-colors"
+            className="inline-flex items-center justify-center gap-1 bg-[#D4AF37] text-black px-3 py-2.5 text-[11px] uppercase tracking-[0.16em] hover:bg-[#B5952F] transition-colors"
           >
-            View <ArrowUpRight size={11} />
+            View <ArrowUpRight size={12} />
           </Link>
           <button
             onClick={handleAdd}
             data-testid={`quick-add-${product.id}`}
-            className="inline-flex items-center justify-center gap-1 bg-[#D4AF37] text-black px-2 py-2.5 text-[10px] uppercase tracking-[0.16em] hover:bg-[#B5952F] transition-colors"
+            className="inline-flex items-center justify-center gap-1 border border-[#D4AF37]/60 text-[#D4AF37] hover:bg-[#D4AF37]/10 px-3 py-2.5 text-[11px] uppercase tracking-[0.16em] transition-colors"
           >
-            <ShoppingBag size={11} /> Inquire
+            <ShoppingBag size={12} /> Inquire
           </button>
         </div>
       </div>
