@@ -31,7 +31,7 @@ export default function ReasonsSection({ compact = false }) {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[i % ICONS.length]}/></svg>
               </div>
               <div className="font-serif text-base md:text-lg leading-snug text-white mb-2">{it.title}</div>
-              <p className="text-white/60 text-xs md:text-sm leading-relaxed">{it.body}</p>
+              <p className="text-sm md:text-[15px] text-white/70 leading-relaxed">{it.body}</p>
             </div>
           ))}
         </div>
@@ -39,4 +39,3 @@ export default function ReasonsSection({ compact = false }) {
     </section>
   );
 }
-

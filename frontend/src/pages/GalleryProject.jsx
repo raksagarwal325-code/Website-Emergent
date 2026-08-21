@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { MapPin, ArrowLeft, X, ChevronLeft, ChevronRight, ArrowUpRight, ShoppingBag } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { useCatalog } from "../context/CatalogContext";
-import { api, formatPrice, formatProductPrice } from "../lib/api";
+import { api, formatProductPrice } from "../lib/api";
 import { findProjectBySlug, buildProjectSlugs } from "../lib/slug";
 import { waGalleryProductLink } from "../lib/whatsapp";
 import { productPath } from "../lib/productUrl";
@@ -16,7 +16,7 @@ import { toast } from "sonner";
  * Single-project view at /gallery/:slug
  * Large editorial layout: cover hero → story → image grid with lightbox → prev/next projects.
  */
-function Lightbox({ open, index, images, onClose, onNav }) {
+function Lightbox({ open, index, images, project, onClose, onNav }) {
   useEffect(() => {
     const onKey = (e) => {
       if (!open) return;
@@ -74,9 +74,6 @@ export default function GalleryProject() {
     return allProducts.filter((p) => ids.has(p.id));
   }, [project, allProducts]);
 
-  const waRaw = (settings?.whatsapp_number || "").replace(/[^0-9]/g, "");
-
-  // Settings still loading — don't redirect yet
   if (settings === null) {
     return <div className="max-w-7xl mx-auto px-6 py-24 text-white/40 text-sm">Loading project…</div>;
   }
@@ -104,7 +101,6 @@ export default function GalleryProject() {
         type="article"
       />
 
-      {/* Cover hero */}
       <section className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 pt-14 md:pt-20 pb-6">
           <Link to="/gallery" data-testid="project-back-link" className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.28em] text-white/60 hover:text-white mb-6 link-underline">
@@ -135,7 +131,6 @@ export default function GalleryProject() {
         )}
       </section>
 
-      {/* Story */}
       {project.note && (
         <section className="max-w-3xl mx-auto px-6 py-14 md:py-20">
           <p className="text-white/80 leading-relaxed text-lg md:text-xl first-letter:font-serif first-letter:text-5xl first-letter:text-[#D4AF37] first-letter:float-left first-letter:mr-3 first-letter:leading-none first-letter:mt-1 whitespace-pre-line">
@@ -144,18 +139,12 @@ export default function GalleryProject() {
         </section>
       )}
 
-      {/* Additional images grid */}
       {rest.length > 0 && (
         <section className="max-w-7xl mx-auto px-6 pb-16 md:pb-24">
           <div className="eyebrow mb-6">Detail views</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
             {rest.map((img, i) => (
-              <button
-                key={i}
-                onClick={() => openLightbox(i + 1)}
-                data-testid={`project-thumb-${i}`}
-                className="aspect-[4/3] overflow-hidden bg-black group"
-              >
+              <button key={i} onClick={() => openLightbox(i + 1)} data-testid={`project-thumb-${i}`} className="aspect-[4/3] overflow-hidden bg-black group">
                 <img src={api.resolveImage(img)} alt={galleryImageAlt({ title: project.title, location: project.location, view: i + 2 })} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
               </button>
             ))}
@@ -163,7 +152,6 @@ export default function GalleryProject() {
         </section>
       )}
 
-      {/* Featured products in this project */}
       {linkedProducts.length > 0 && (
         <section className="border-t border-[#BF9972]/15" data-testid="project-linked-products">
           <div className="max-w-7xl mx-auto px-6 py-16 md:py-20">
@@ -177,11 +165,7 @@ export default function GalleryProject() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {linkedProducts.map((p) => {
                 const img = api.resolveImage(p.images?.[0]);
-                const waHref = waGalleryProductLink(
-                  settings?.whatsapp_number,
-                  p,
-                  project,
-                );
+                const waHref = waGalleryProductLink(settings?.whatsapp_number, p, project);
                 const handleAdd = (e) => { e.preventDefault(); e.stopPropagation(); addToCart(p); toast.success(`${p.name} added to inquiry`); };
                 return (
                   <div key={p.id} data-testid={`project-product-${p.id}`} className="group border border-white/8 hover:border-[#D4AF37]/50 bg-[#0e0510] transition-colors flex flex-col">
@@ -201,9 +185,7 @@ export default function GalleryProject() {
                       <div className="mt-3 flex items-baseline gap-2 flex-wrap">
                         {(() => {
                           const fp = formatProductPrice(p);
-                          if (fp.onRequest) {
-                            return <span className="text-[#D4AF37] font-serif text-base italic">Price on request</span>;
-                          }
+                          if (fp.onRequest) return <span className="text-[#D4AF37] font-serif text-base italic">Price on request</span>;
                           return (
                             <>
                               {fp.label && <span className="text-[10px] uppercase tracking-[0.22em] text-[#BF9972]">{fp.label}</span>}
@@ -232,7 +214,6 @@ export default function GalleryProject() {
         </section>
       )}
 
-      {/* Prev / next projects */}
       {items.length > 1 && (
         <section className="border-t border-[#BF9972]/15">
           <div className="max-w-7xl mx-auto px-6 py-10 md:py-14 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -250,7 +231,7 @@ export default function GalleryProject() {
         </section>
       )}
 
-      <Lightbox open={lbIdx !== null} index={lbIdx ?? 0} images={images} onClose={closeLightbox} onNav={navLightbox} />
+      <Lightbox open={lbIdx !== null} index={lbIdx ?? 0} images={images} project={project} onClose={closeLightbox} onNav={navLightbox} />
     </div>
   );
 }
