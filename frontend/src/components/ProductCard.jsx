@@ -114,13 +114,12 @@ export default function ProductCard({ product, index = 0 }) {
         </div>
       </Link>
 
-      <div className="flex flex-col flex-1 p-5 space-y-2">
-        <div className="eyebrow truncate">{product.category}</div>
+      <div className="flex flex-col flex-1 p-5">
+        <div className="eyebrow truncate mb-2">{product.category}</div>
         <Link to={productPath(product)} className="font-serif text-lg leading-snug text-white hover:text-[#D4AF37] transition-colors line-clamp-2 min-h-[3.5rem]">
           {product.name}
         </Link>
-        <div className="text-xs uppercase tracking-widest text-white/45">{product.category}</div>
-        <div className="flex items-baseline justify-between pt-1">
+        <div className="flex items-baseline justify-between pt-3 min-h-[2.1rem]">
           <div className="flex items-baseline gap-2 min-w-0">
             {(() => {
               const p = formatProductPrice(product);
@@ -128,7 +127,7 @@ export default function ProductCard({ product, index = 0 }) {
                 return (
                   <span
                     data-testid={`product-price-${product.id}`}
-                    className="text-[#D4AF37] font-serif text-base italic truncate"
+                    className="text-[#D4AF37] font-serif text-base font-medium truncate"
                   >
                     Price on request
                   </span>
