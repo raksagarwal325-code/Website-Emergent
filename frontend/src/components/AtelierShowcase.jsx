@@ -13,8 +13,6 @@ function buildAtelierWaLink(phone, product) {
     ? "Price: Price on request"
     : `Price: ${priceInfo.label ? priceInfo.label + " " : ""}${priceInfo.primary}`;
   const link = `${typeof window !== "undefined" ? window.location.origin : ""}${productPath(product)}`;
-  // Extend the brand-led product message with an itemised price + link
-  // block. Keeps casing/greeting consistent with the rest of the site.
   const base = productMessage(product, link);
   const msg = `${base}\n\n${priceLine}`;
   return buildWaLink(phone, msg);
@@ -37,20 +35,14 @@ export default function AtelierShowcase() {
 
   const byId = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p])), [products]);
 
-  // Filter rules (from spec):
-  //   - Slide with `product_id` set → keep only if that product still exists.
-  //   - Slide without `product_id` → keep as informational (no CTA row) — until products load, keep everything.
   const slides = useMemo(() => {
     return rawSlides
       .map((s) => {
         const p = s?.product_id ? byId[s.product_id] : null;
-        // If products haven't loaded yet, don't drop anything — otherwise the
-        // section flashes empty for a beat while catalog fetch is in flight.
         if (!productsLoaded && s?.product_id) return { ...s, product: null };
         return { ...s, product: p || null };
       })
       .filter((s) => {
-        // Require either an image, a linked product, or (if unlinked) a caption.
         if (s?.product_id && !s.product && productsLoaded) return false;
         return !!(s.src || s.product);
       });
@@ -69,7 +61,6 @@ export default function AtelierShowcase() {
   const current = slides[active] || slides[0];
   const activeProduct = current?.product || null;
   const activeCaption = current?.caption || activeProduct?.name || "";
-  const activeImg = current?.src || activeProduct?.images?.[0] || "";
   const productHref = activeProduct ? productPath(activeProduct) : null;
   const waLink = buildAtelierWaLink(settings?.whatsapp_number, activeProduct);
 
@@ -81,7 +72,6 @@ export default function AtelierShowcase() {
   return (
     <section data-testid="atelier-section" className="max-w-7xl mx-auto px-6 py-16 md:py-20">
       <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
-        {/* Cross-fade showcase */}
         <div className="md:col-span-7">
           <HeroWrap
             {...heroWrapProps}
@@ -108,13 +98,11 @@ export default function AtelierShowcase() {
               );
             })}
 
-            {/* Warm gold ambient glow */}
             <div className="absolute inset-0 pointer-events-none mix-blend-screen"
               style={{ background: "radial-gradient(circle at 50% 60%, rgba(212,175,55,0.16), transparent 55%)" }} />
             <div className="absolute inset-x-6 top-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/40 to-transparent" />
             <div className="absolute inset-x-6 bottom-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/40 to-transparent" />
 
-            {/* Caption chip + progress dots */}
             <div className="absolute bottom-4 left-6 right-6 flex items-end justify-between gap-4 pointer-events-none">
               <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]/90 backdrop-blur bg-black/40 px-2 py-1 max-w-[70%] truncate">
                 {activeCaption}
@@ -131,7 +119,7 @@ export default function AtelierShowcase() {
                   >
                     <span
                       aria-hidden="true"
-                      className={`h-1.5 transition-all ${i === active ? "w-6 bg-[#D4AF37]" : "w-1.5 bg-white/25 group-hover:bg-white/50"}`}
+                      className={`h-2 transition-all ${i === active ? "w-7 bg-[#D4AF37]" : "w-2 bg-white/30 group-hover:bg-white/55"}`}
                     />
                   </button>
                 ))}
@@ -139,7 +127,6 @@ export default function AtelierShowcase() {
             </div>
           </HeroWrap>
 
-          {/* Mini showcase strip */}
           {slides.length > 1 && (
             <div className="mt-4 grid gap-2" style={{ gridTemplateColumns: `repeat(${slides.length}, minmax(0, 1fr))` }}>
               {slides.map((s, i) => {
@@ -163,7 +150,6 @@ export default function AtelierShowcase() {
           )}
         </div>
 
-        {/* Copy + CTAs */}
         <div className="md:col-span-5">
           <div className="eyebrow mb-3">{A.eyebrow}</div>
           <h2 className="font-serif text-3xl sm:text-4xl leading-tight">{A.headline}</h2>
@@ -171,7 +157,6 @@ export default function AtelierShowcase() {
 
           {activeProduct ? (
             <>
-              {/* Currently featured product name — updates as the slider advances */}
               <div className="mt-8 pt-6 border-t border-white/10">
                 <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mb-2">Currently featured</div>
                 <Link
@@ -184,7 +169,7 @@ export default function AtelierShowcase() {
                 <div className="mt-3 text-sm text-white/60">
                   {(() => {
                     const fp = formatProductPrice(activeProduct);
-                    if (fp.onRequest) return <span className="italic text-[#BF9972]">Price on request</span>;
+                    if (fp.onRequest) return <span className="text-[#D4AF37] font-serif text-base font-medium">Price on request</span>;
                     return (
                       <>
                         {fp.label && <span className="text-[10px] uppercase tracking-[0.24em] text-[#BF9972] mr-1">{fp.label}</span>}
@@ -199,7 +184,7 @@ export default function AtelierShowcase() {
                 <Link
                   to={productHref}
                   data-testid="atelier-view-product"
-                  className="inline-flex items-center gap-2 bg-[#D4AF37] text-black hover:bg-[#B5952F] px-6 py-3 uppercase text-xs tracking-[0.28em]"
+                  className="inline-flex items-center gap-2 bg-[#D4AF37] text-black hover:bg-[#B5952F] px-6 py-3 uppercase text-xs tracking-[0.24em] transition-colors"
                 >
                   View Product <ArrowUpRight size={14} />
                 </Link>
@@ -209,7 +194,7 @@ export default function AtelierShowcase() {
                     target="_blank"
                     rel="noreferrer"
                     data-testid="atelier-inquire-wa"
-                    className="inline-flex items-center gap-2 border border-[#25D366] text-[#25D366] hover:bg-[#25D366] hover:text-black px-6 py-3 uppercase text-xs tracking-[0.28em] transition-colors"
+                    className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] hover:bg-[#D4AF37]/10 px-6 py-3 uppercase text-xs tracking-[0.24em] transition-colors"
                   >
                     <MessageCircle size={14} /> Inquire on WhatsApp
                   </a>
