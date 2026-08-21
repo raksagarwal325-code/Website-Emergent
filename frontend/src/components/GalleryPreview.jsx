@@ -205,7 +205,7 @@ export default function GalleryPreview() {
                 aria-label="Previous projects"
                 onClick={() => { go(-1); setPaused(true); }}
                 data-testid="home-gallery-prev"
-                className="hidden md:flex absolute left-0 bottom-6 md:bottom-8 -translate-x-4 lg:-translate-x-8 items-center justify-center w-11 h-11 rounded-full bg-black/65 backdrop-blur-md border border-[#D4AF37]/40 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"
+                className="hidden md:flex absolute left-0 bottom-6 md:bottom-8 -translate-x-4 lg:-translate-x-8 items-center justify-center w-11 h-11 rounded-full bg-black/70 backdrop-blur border border-[#D4AF37]/40 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"
               >
                 <ChevronLeft size={20} />
               </button>
@@ -214,7 +214,7 @@ export default function GalleryPreview() {
                 aria-label="Next projects"
                 onClick={() => { go(1); setPaused(true); }}
                 data-testid="home-gallery-next"
-                className="hidden md:flex absolute right-0 bottom-6 md:bottom-8 translate-x-4 lg:translate-x-8 items-center justify-center w-11 h-11 rounded-full bg-black/65 backdrop-blur-md border border-[#D4AF37]/40 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"
+                className="hidden md:flex absolute right-0 bottom-6 md:bottom-8 translate-x-4 lg:translate-x-8 items-center justify-center w-11 h-11 rounded-full bg-black/70 backdrop-blur border border-[#D4AF37]/40 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"
               >
                 <ChevronRight size={20} />
               </button>
