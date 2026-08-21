@@ -1,6 +1,6 @@
 /**
  * Accessibility regression: Atelier carousel dots must have a 44×44 CSS
- * px tap target while preserving the small visual pill.
+ * px tap target while keeping the visual pill clearly visible.
  */
 import React from "react";
 import { render, screen, act, waitFor } from "@testing-library/react";
@@ -53,7 +53,7 @@ jest.mock("../context/SettingsContext", () => ({
 const AtelierShowcase = require("./AtelierShowcase").default;
 
 describe("AtelierShowcase — dot tap-target accessibility", () => {
-  test("each carousel dot exposes a 44×44 hit target and a visually small pill", async () => {
+  test("each carousel dot exposes a 44×44 hit target and a visible pill", async () => {
     await act(async () => {
       render(
         <MemoryRouter>
@@ -70,8 +70,8 @@ describe("AtelierShowcase — dot tap-target accessibility", () => {
       expect(btn.className).toMatch(/min-h-\[44px\]/);
       const pill = btn.querySelector("span");
       expect(pill).toBeTruthy();
-      // Visual pill remains the same small size (h-1.5).
-      expect(pill.className).toMatch(/h-1\.5/);
+      // Visual pill is intentionally thicker after the usability pass.
+      expect(pill.className).toMatch(/h-2/);
       // Pill hidden from AT — button aria-label announces "View slide N".
       expect(pill.getAttribute("aria-hidden")).toBe("true");
       expect(btn.getAttribute("aria-label")).toMatch(/^View slide \d+$/);
