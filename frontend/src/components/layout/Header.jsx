@@ -20,7 +20,11 @@ export default function Header() {
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
   const linkClass = ({ isActive }) =>
-    `text-xs uppercase tracking-[0.28em] transition-colors ${isActive ? "text-white" : "text-white/60 hover:text-white"}`;
+    `relative text-[13px] font-medium uppercase tracking-[0.22em] transition-colors pb-1 ${
+      isActive
+        ? "text-[#F4E6CC] after:absolute after:left-0 after:right-0 after:-bottom-1 after:h-px after:bg-[#D4AF37]"
+        : "text-white/65 hover:text-white"
+    }`;
 
   return (
     <header
@@ -38,7 +42,7 @@ export default function Header() {
           </span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-8">
+        <nav className="hidden md:flex items-center gap-7">
           <NavLink to="/" end className={linkClass} data-testid="nav-home">Home</NavLink>
           <NavLink to="/catalog" className={linkClass} data-testid="nav-catalog">Catalog</NavLink>
           <NavLink to="/collections" className={linkClass} data-testid="nav-collections">Collections</NavLink>
@@ -48,29 +52,29 @@ export default function Header() {
           <NavLink to="/contact" className={linkClass} data-testid="nav-contact">Contact</NavLink>
         </nav>
 
-        <div className="flex items-center gap-5">
-          <Link to="/catalog" aria-label="Search" data-testid="header-search" className="text-white/70 hover:text-[#D4AF37]">
-            <Search size={18} strokeWidth={1.5} />
+        <div className="flex items-center gap-4">
+          <Link to="/catalog" aria-label="Search" data-testid="header-search" className="h-10 w-10 flex items-center justify-center text-white/75 hover:text-[#D4AF37] transition-colors">
+            <Search size={20} strokeWidth={1.6} />
           </Link>
-          <Link to="/favorites" aria-label="Favorites" data-testid="header-favorites" className="relative text-white/70 hover:text-[#D4AF37]">
-            <Heart size={18} strokeWidth={1.5} />
+          <Link to="/favorites" aria-label="Favorites" data-testid="header-favorites" className="relative h-10 w-10 flex items-center justify-center text-white/75 hover:text-[#D4AF37] transition-colors">
+            <Heart size={20} strokeWidth={1.6} />
             {favorites.length > 0 && (
-              <span className="absolute -top-2 -right-3 text-[10px] bg-[#D4AF37] text-black px-1.5 py-0.5">{favorites.length}</span>
+              <span className="absolute top-0 right-0 text-[10px] bg-[#D4AF37] text-black px-1.5 py-0.5">{favorites.length}</span>
             )}
           </Link>
-          <Link to="/cart" aria-label="Cart" data-testid="header-cart" className="relative text-white/70 hover:text-[#D4AF37]">
-            <ShoppingBag size={18} strokeWidth={1.5} />
+          <Link to="/cart" aria-label="Cart" data-testid="header-cart" className="relative h-10 w-10 flex items-center justify-center text-white/75 hover:text-[#D4AF37] transition-colors">
+            <ShoppingBag size={20} strokeWidth={1.6} />
             {cartCount > 0 && (
-              <span data-testid="cart-count" className="absolute -top-2 -right-3 text-[10px] bg-[#D4AF37] text-black px-1.5 py-0.5">{cartCount}</span>
+              <span data-testid="cart-count" className="absolute top-0 right-0 text-[10px] bg-[#D4AF37] text-black px-1.5 py-0.5">{cartCount}</span>
             )}
           </Link>
           <button
-            className="md:hidden text-white/70"
+            className="md:hidden h-10 w-10 flex items-center justify-center text-white/75"
             data-testid="header-menu-toggle"
             onClick={() => setOpen(!open)}
             aria-label="Menu"
           >
-            {open ? <X size={20} /> : <Menu size={20} />}
+            {open ? <X size={22} /> : <Menu size={22} />}
           </button>
         </div>
       </div>
