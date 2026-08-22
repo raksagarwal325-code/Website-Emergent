@@ -16,10 +16,10 @@ const SITE_ORIGIN = "https://samratglass.com";
 const PATH = "/styled-by";
 const META_TITLE = "As Styled By | Creator-Featured Samrat Glass Lighting";
 const META_DESCRIPTION =
-  "Explore Samrat Glass lighting styled in real creator spaces, with links to the original Instagram features and selected catalogue products where verified.";
+  "Explore Samrat Glass lighting styled by creators in real homes and considered interiors, showcasing handcrafted decorative lighting across distinctive spaces.";
 const PAGE_SUBTITLE = "Real homes. Distinctive spaces. Samrat Glass lighting, styled by creators.";
 const PAGE_INTRO =
-  "Discover our lighting as it appears in thoughtfully styled interiors, with original creator features and selected product links where available.";
+  "Explore how Samrat Glass lighting finds its place in beautifully considered interiors, from refined living spaces to dramatic statement settings. Each feature offers a glimpse into how our designs interact with different materials, proportions and moods, revealing the versatility of handcrafted decorative lighting in real homes. Together, these spaces reflect individual style while showing how the right light can add warmth, character and presence to an interior.";
 
 function JsonLd({ items }) {
   useEffect(() => {
