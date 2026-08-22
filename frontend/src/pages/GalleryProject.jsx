@@ -9,6 +9,7 @@ import { findProjectBySlug, buildProjectSlugs } from "../lib/slug";
 import { waGalleryProductLink } from "../lib/whatsapp";
 import { productPath } from "../lib/productUrl";
 import { productImageAlt, galleryImageAlt } from "../lib/imageSeo";
+import { projectProductPresentation, projectQuickAnswer } from "../lib/projectProducts";
 import SEO from "../components/SEO";
 import { toast } from "sonner";
 
@@ -50,33 +51,44 @@ const TocLink = ({ href, children }) => (
   </a>
 );
 
-function ProductStory({ product }) {
-  if (!product) return null;
-  const description = product.short_description || product.description;
-  const specs = product.specs && typeof product.specs === "object"
-    ? Object.entries(product.specs).filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "").slice(0, 8)
-    : [];
+function ProductStories({ products }) {
+  if (!products?.length) return null;
+  const isMulti = products.length > 1;
 
   return (
     <section id="catalogue-piece" className="border-t border-[#BF9972]/15 scroll-mt-28">
       <div className="max-w-5xl mx-auto px-6 py-14 md:py-18">
-        <div className="eyebrow mb-3">The catalogue piece</div>
-        <h2 className="font-serif text-3xl md:text-5xl leading-tight">{product.name}</h2>
-        <div className="mt-3 text-[10px] uppercase tracking-[0.24em] text-[#BF9972]">{product.category} · {product.sku}</div>
-        {description && <p className="mt-6 text-white/70 text-base md:text-lg leading-relaxed max-w-3xl">{description}</p>}
-        {specs.length > 0 && (
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0 border-y border-white/8">
-            {specs.map(([label, value]) => (
-              <div key={label} className="py-3 border-b border-white/8 sm:[&:nth-last-child(-n+2)]:border-b-0">
-                <div className="text-[9px] uppercase tracking-[0.22em] text-white/40">{label.replace(/_/g, " ")}</div>
-                <div className="mt-1 text-sm text-white/75">{String(value)}</div>
-              </div>
-            ))}
-          </div>
-        )}
-        <Link to={productPath(product)} className="mt-7 inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-[#D4AF37] hover:text-[#B5952F]">
-          View catalogue piece <ArrowUpRight size={12} />
-        </Link>
+        <div className="eyebrow mb-3">{isMulti ? "The catalogue pieces" : "The catalogue piece"}</div>
+        <div className={isMulti ? "space-y-12" : ""}>
+          {products.map((product, productIndex) => {
+            const description = product.short_description || product.description;
+            const specs = product.specs && typeof product.specs === "object"
+              ? Object.entries(product.specs).filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "").slice(0, 8)
+              : [];
+
+            return (
+              <article key={product.id || product.sku || product.name} className={productIndex > 0 ? "pt-10 border-t border-white/8" : ""}>
+                {isMulti && <div className="text-[9px] uppercase tracking-[0.24em] text-white/35 mb-3">Catalogue piece {productIndex + 1} of {products.length}</div>}
+                <h2 className="font-serif text-3xl md:text-5xl leading-tight">{product.name}</h2>
+                <div className="mt-3 text-[10px] uppercase tracking-[0.24em] text-[#BF9972]">{product.category} · {product.sku}</div>
+                {description && <p className="mt-6 text-white/70 text-base md:text-lg leading-relaxed max-w-3xl">{description}</p>}
+                {specs.length > 0 && (
+                  <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0 border-y border-white/8">
+                    {specs.map(([label, value]) => (
+                      <div key={label} className="py-3 border-b border-white/8 sm:[&:nth-last-child(-n+2)]:border-b-0">
+                        <div className="text-[9px] uppercase tracking-[0.22em] text-white/40">{label.replace(/_/g, " ")}</div>
+                        <div className="mt-1 text-sm text-white/75">{String(value)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Link to={productPath(product)} className="mt-7 inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-[#D4AF37] hover:text-[#B5952F]">
+                  View catalogue piece <ArrowUpRight size={12} />
+                </Link>
+              </article>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -110,7 +122,7 @@ export default function GalleryProject() {
   const nextIdx = (index + 1) % items.length;
   const prevProject = items[prevIdx];
   const nextProject = items[nextIdx];
-  const primaryProduct = linkedProducts[0];
+  const productPresentation = projectProductPresentation(linkedProducts);
 
   const optionalSnapshot = [
     ["Project type", project.project_type],
@@ -122,9 +134,11 @@ export default function GalleryProject() {
   ];
   const hasExtendedSnapshot = optionalSnapshot.some(([, value]) => Boolean(value));
 
-  const quickAnswer = primaryProduct
-    ? `${project.location ? `This ${project.location} installation uses` : "This installation uses"} the ${primaryProduct.name} (${primaryProduct.sku}), linked directly to the exact Samrat Glass Emporium catalogue piece. The photographs on this page are from the real client space${project.customisation ? `, with ${project.customisation}` : ""}.`
-    : `${project.location ? `This ${project.location} project` : "This project"} documents a real Samrat Glass Emporium client installation with photographs from the completed space.`;
+  const quickAnswer = projectQuickAnswer({
+    location: project.location,
+    customisation: project.customisation,
+    products: linkedProducts,
+  });
 
   const creativeWorkSchema = {
     "@context": "https://schema.org",
@@ -139,9 +153,9 @@ export default function GalleryProject() {
   };
 
   const faqItems = [
-    primaryProduct ? {
-      q: "Can I view the exact chandelier used in this project?",
-      a: `Yes. This project is linked to ${primaryProduct.name} (${primaryProduct.sku}) in the Samrat Glass Emporium catalogue.`,
+    linkedProducts.length ? {
+      q: productPresentation.faqQuestion,
+      a: productPresentation.faqAnswer,
     } : null,
     {
       q: "Can Samrat Glass Emporium discuss a similar installation for my space?",
@@ -170,7 +184,7 @@ export default function GalleryProject() {
           <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }} className="max-w-4xl">
             {project.location && <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-[#BF9972] mb-4"><MapPin size={12} strokeWidth={1.5} /> {project.location}</div>}
             <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl leading-[1.04] text-white">{project.title}</h1>
-            {primaryProduct && <div className="mt-5 text-[10px] uppercase tracking-[0.22em] text-white/45">Catalogue piece · {primaryProduct.sku}</div>}
+            {linkedProducts.length > 0 && <div className="mt-5 text-[10px] uppercase tracking-[0.22em] text-white/45">{productPresentation.heroLabel}</div>}
           </motion.div>
         </div>
         {cover && <div className="max-w-7xl mx-auto px-6 pb-10 md:pb-14"><button type="button" onClick={() => setLbIdx(0)} className="block w-full group" data-testid="project-cover"><div className="bg-black flex items-center justify-center overflow-hidden"><img src={api.resolveImage(cover)} alt={galleryImageAlt({ title: project.title, location: project.location })} className="w-full max-h-[78vh] object-contain transition-opacity duration-300" /></div></button></div>}
@@ -184,7 +198,7 @@ export default function GalleryProject() {
             <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm md:text-base">
               <li>• <TocLink href="#project-story">Project story</TocLink></li>
               <li>• <TocLink href="#project-at-a-glance">Project at a glance</TocLink></li>
-              {primaryProduct && <li>• <TocLink href="#catalogue-piece">The exact catalogue piece</TocLink></li>}
+              {linkedProducts.length > 0 && <li>• <TocLink href="#catalogue-piece">{productPresentation.tocLabel}</TocLink></li>}
               <li>• <TocLink href="#installed-views">Real photos from the site</TocLink></li>
               {(project.customisation || project.fixture_details) && <li>• <TocLink href="#project-details">Fixture & customisation details</TocLink></li>}
               <li>• <TocLink href="#manufacturer">Made in Firozabad since 1981</TocLink></li>
@@ -210,14 +224,14 @@ export default function GalleryProject() {
             <div className="eyebrow mb-5">Project at a glance</div>
             <div className="space-y-4">
               <SnapshotItem label="Location" value={project.location} />
-              {primaryProduct && <SnapshotItem label="Product" value={`${primaryProduct.name} · ${primaryProduct.sku}`} />}
+              {linkedProducts.length > 0 && <SnapshotItem label={productPresentation.snapshotLabel} value={productPresentation.snapshotValue} />}
               {hasExtendedSnapshot && optionalSnapshot.map(([label, value]) => <SnapshotItem key={label} label={label} value={value} />)}
             </div>
           </div>
         </aside>
       </section>
 
-      <ProductStory product={primaryProduct} />
+      <ProductStories products={linkedProducts} />
 
       {images.length > 0 && <section id="installed-views" className="border-t border-[#BF9972]/15 scroll-mt-28"><div className="max-w-7xl mx-auto px-6 py-14 md:py-18"><div className="eyebrow mb-3">Real photos from the site</div><h2 className="font-serif text-3xl md:text-5xl">Installed in the client space.</h2><p className="mt-3 text-white/60 max-w-2xl">These are project photographs from the actual installation, not stock-room renders.</p><div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">{images.map((img, i) => <button key={i} onClick={() => setLbIdx(i)} data-testid={`project-thumb-${i}`} className={`${i === 0 && images.length > 2 ? "md:col-span-2" : ""} min-h-[260px] md:min-h-[360px] overflow-hidden bg-black group flex items-center justify-center`}><img src={api.resolveImage(img)} alt={galleryImageAlt({ title: project.title, location: project.location, view: i + 1 })} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full max-h-[75vh] object-contain transition-opacity duration-300" /></button>)}</div></div></section>}
 
@@ -230,7 +244,7 @@ export default function GalleryProject() {
         </div>
       </section>
 
-      {linkedProducts.length > 0 && <section className="border-t border-[#BF9972]/15" data-testid="project-linked-products"><div className="max-w-7xl mx-auto px-6 py-14 md:py-18"><div className="mb-8"><div className="eyebrow mb-3">Products in this project</div><h2 className="font-serif text-2xl md:text-4xl leading-tight">The exact catalogue pieces <span className="brand-gradient-text italic">used here.</span></h2><p className="mt-3 text-white/60 max-w-2xl text-sm md:text-base">Explore the linked product, then inquire about sizing, finish options or adapting the same piece for your space.</p></div><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">{linkedProducts.map((p) => {
+      {linkedProducts.length > 0 && <section className="border-t border-[#BF9972]/15" data-testid="project-linked-products"><div className="max-w-7xl mx-auto px-6 py-14 md:py-18"><div className="mb-8"><div className="eyebrow mb-3">Products in this project</div><h2 className="font-serif text-2xl md:text-4xl leading-tight">The exact catalogue pieces <span className="brand-gradient-text italic">used here.</span></h2><p className="mt-3 text-white/60 max-w-2xl text-sm md:text-base">Explore the linked {linkedProducts.length > 1 ? "products" : "product"}, then inquire about sizing, finish options or adapting the same {linkedProducts.length > 1 ? "pieces" : "piece"} for your space.</p></div><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">{linkedProducts.map((p) => {
         const img = api.resolveImage(p.images?.[0]);
         const waHref = waGalleryProductLink(settings?.whatsapp_number, p, project);
         const handleAdd = (e) => { e.preventDefault(); e.stopPropagation(); addToCart(p); toast.success(`${p.name} added to inquiry`); };
