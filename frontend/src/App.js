@@ -12,6 +12,7 @@ import Catalog from "@/pages/Catalog";
 import CategoryPage from "@/pages/CategoryPage";
 import CollectionsIndex from "@/pages/CollectionsIndex";
 import CollectionPage from "@/pages/CollectionPage";
+import SpacesIndex from "@/pages/SpacesIndex";
 import ProductDetail from "@/pages/ProductDetail";
 import Favorites from "@/pages/Favorites";
 import Cart from "@/pages/Cart";
@@ -62,6 +63,7 @@ function App() {
               <Route path="/category/:slug" element={<CategoryPage />} />
               <Route path="/collections" element={<CollectionsIndex />} />
               <Route path="/collection/:slug" element={<CollectionPage />} />
+              <Route path="/spaces" element={<SpacesIndex />} />
               <Route path="/about" element={<About />} />
               <Route path="/craft" element={<Craft />} />
               <Route path="/faq" element={<FAQ />} />
