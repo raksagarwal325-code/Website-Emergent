@@ -78,7 +78,10 @@ describe("StyledBy", () => {
       screen.getByText("Real homes. Distinctive spaces. Samrat Glass lighting, styled by creators."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Discover our lighting as it appears in thoughtfully styled interiors/i),
+      screen.getByText(/Explore how Samrat Glass lighting finds its place in beautifully considered interiors/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/from refined living spaces to dramatic statement settings/i),
     ).toBeInTheDocument();
     expect(screen.getByText("Discover more")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Inside our workshop/i })).toHaveAttribute(
