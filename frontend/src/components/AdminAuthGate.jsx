@@ -122,6 +122,7 @@ export default function AdminAuthGate({ children }) {
         <div className="flex items-center gap-4">
           <Link to="/admin" className="hover:text-[#D4AF37]">Dashboard</Link>
           <Link to="/admin/collections" className="hover:text-[#D4AF37]">Collections</Link>
+          <Link to="/admin/spaces" className="hover:text-[#D4AF37]">Spaces</Link>
           <button onClick={signOut} data-testid="admin-signout-btn" className="inline-flex items-center gap-1 hover:text-[#D4AF37]"><LogOut size={12} /> Sign out</button>
         </div>
       </div>
