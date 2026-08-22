@@ -17,6 +17,9 @@ const PATH = "/styled-by";
 const META_TITLE = "As Styled By | Creator-Featured Samrat Glass Lighting";
 const META_DESCRIPTION =
   "Explore Samrat Glass lighting styled in real creator spaces, with links to the original Instagram features and selected catalogue products where verified.";
+const PAGE_SUBTITLE = "Real homes. Distinctive spaces. Samrat Glass lighting, styled by creators.";
+const PAGE_INTRO =
+  "Discover our lighting as it appears in thoughtfully styled interiors, with original creator features and selected product links where available.";
 
 function JsonLd({ items }) {
   useEffect(() => {
@@ -150,13 +153,11 @@ export default function StyledBy() {
           >
             {titlePre} <span className="italic brand-gradient-text">{titleHi}</span>
           </h1>
-          {P.subtitle && (
-            <p className="mt-4 md:mt-5 text-white/60 max-w-2xl mx-auto leading-relaxed text-sm md:text-base">
-              {P.subtitle}
-            </p>
-          )}
+          <p className="mt-4 md:mt-5 text-white/60 max-w-2xl mx-auto leading-relaxed text-sm md:text-base">
+            {PAGE_SUBTITLE}
+          </p>
           <p className="mt-4 text-white/55 max-w-3xl mx-auto leading-relaxed text-sm md:text-base">
-            A curated record of Samrat Glass lighting shared in creator-styled spaces. Each card links to the original Instagram feature; verified catalogue products can also be linked directly as they are identified.
+            {PAGE_INTRO}
           </p>
           <div className="mt-6 text-[11px] uppercase tracking-[0.32em] text-[#BF9972]/70">
             {validItems.length} {validItems.length === 1 ? "creator" : "creators"}
@@ -167,7 +168,7 @@ export default function StyledBy() {
           data-testid="styled-by-proof-context"
           className="mb-14 md:mb-16 border-y border-white/10 py-5 flex flex-wrap items-center justify-center gap-x-7 gap-y-3 text-[10px] uppercase tracking-[0.24em] text-white/55"
         >
-          <span className="text-[#BF9972]">Explore more proof</span>
+          <span className="text-[#BF9972]">Discover more</span>
           <Link to="/craft#workshop" className="hover:text-[#D4AF37] transition-colors">Inside our workshop</Link>
           <Link to="/gallery" className="hover:text-[#D4AF37] transition-colors">Real installations</Link>
           <Link to="/chandelier-manufacturer-india" className="hover:text-[#D4AF37] transition-colors">Manufacturer profile</Link>
