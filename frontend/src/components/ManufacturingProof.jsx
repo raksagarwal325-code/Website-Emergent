@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, CheckCircle2, Factory } from "lucide-react";
 import CraftVideoBlock from "./CraftVideoBlock";
+import { api } from "../lib/api";
 
 const VERIFIED_STEPS = [
   ["01", "Component preparation", "Decorative glass components are handled and prepared by hand before later finishing and assembly stages."],
@@ -13,8 +14,8 @@ const VERIFIED_STEPS = [
 ];
 
 function ProofClip({ item, index }) {
-  const video = item?.video_url || "";
-  const poster = item?.thumbnail_url || "";
+  const video = api.resolveImage(item?.video_url || "");
+  const poster = api.resolveImage(item?.thumbnail_url || "");
   const caption = item?.caption || "";
   if (!video && !poster) return null;
 
