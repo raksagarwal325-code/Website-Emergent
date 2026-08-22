@@ -17,6 +17,7 @@ const InfluencerPromotions = lazy(() =>
 import FounderTeaser from "../components/FounderTeaser";
 import HeroSlideshow from "../components/HeroSlideshow";
 import CategoryShowcase from "../components/CategoryShowcase";
+import ShopBySpaceSection from "../components/ShopBySpaceSection";
 import { useSettings } from "../context/SettingsContext";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
 import { waGeneralLink } from "../lib/whatsapp";
@@ -133,6 +134,7 @@ export default function Home() {
       </section>
 
       <CategoryShowcase />
+      <ShopBySpaceSection />
       <TrustedBySection />
       <CollageSection />
 
