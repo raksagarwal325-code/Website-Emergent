@@ -2,6 +2,15 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
+class MockIntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords() { return []; }
+}
+
+global.IntersectionObserver = MockIntersectionObserver;
+
 jest.mock("../context/SettingsContext", () => ({
   useSettings: () => ({
     hp: {
