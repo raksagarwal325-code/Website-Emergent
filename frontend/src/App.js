@@ -13,12 +13,14 @@ import CategoryPage from "@/pages/CategoryPage";
 import CollectionsIndex from "@/pages/CollectionsIndex";
 import CollectionPage from "@/pages/CollectionPage";
 import SpacesIndex from "@/pages/SpacesIndex";
+import SpacePage from "@/pages/SpacePage";
 import ProductDetail from "@/pages/ProductDetail";
 import Favorites from "@/pages/Favorites";
 import Cart from "@/pages/Cart";
 import Contact from "@/pages/Contact";
 import Admin from "@/pages/Admin";
 import CollectionsAdmin from "@/pages/CollectionsAdmin";
+import SpacesAdmin from "@/pages/SpacesAdmin";
 import AdminAuthGate from "@/components/AdminAuthGate";
 import Catalogue from "@/pages/Catalogue";
 import About from "@/pages/About";
@@ -64,6 +66,7 @@ function App() {
               <Route path="/collections" element={<CollectionsIndex />} />
               <Route path="/collection/:slug" element={<CollectionPage />} />
               <Route path="/spaces" element={<SpacesIndex />} />
+              <Route path="/space/:slug" element={<SpacePage />} />
               <Route path="/about" element={<About />} />
               <Route path="/craft" element={<Craft />} />
               <Route path="/faq" element={<FAQ />} />
@@ -79,6 +82,7 @@ function App() {
               <Route path="/chandelier-manufacturer-india" element={<ChandelierManufacturerIndia />} />
               <Route path="/admin" element={<AdminAuthGate><Admin /></AdminAuthGate>} />
               <Route path="/admin/collections" element={<AdminAuthGate><CollectionsAdmin /></AdminAuthGate>} />
+              <Route path="/admin/spaces" element={<AdminAuthGate><SpacesAdmin /></AdminAuthGate>} />
               <Route path="/catalogue" element={<AdminAuthGate><Catalogue /></AdminAuthGate>} />
               <Route path="/legal/:slug" element={<LegalPage />} />
               <Route path="*" element={<NotFound />} />
