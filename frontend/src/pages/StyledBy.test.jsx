@@ -67,14 +67,20 @@ describe("StyledBy", () => {
     expect(JSON.parse(breadcrumb.textContent)["@type"]).toBe("BreadcrumbList");
   });
 
-  test("adds factual creator context and links to supporting authority pages", () => {
+  test("uses premium creator copy and links to supporting authority pages", () => {
     render(
       <MemoryRouter>
         <StyledBy />
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/curated record of Samrat Glass lighting/i)).toBeInTheDocument();
+    expect(
+      screen.getByText("Real homes. Distinctive spaces. Samrat Glass lighting, styled by creators."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Discover our lighting as it appears in thoughtfully styled interiors/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Discover more")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Inside our workshop/i })).toHaveAttribute(
       "href",
       "/craft#workshop",
