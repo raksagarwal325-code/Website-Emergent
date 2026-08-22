@@ -29,7 +29,7 @@ export default function SpacePage() {
       .catch(() => { if (active) setProducts([]); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [space?.slug]);
+  }, [space]);
 
   const itemList = useMemo(() => ({
     "@context": "https://schema.org",
