@@ -13,10 +13,10 @@ describe("SpacesIndex", () => {
 
     expect(container.querySelectorAll("h1")).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1, name: /Shop by Space/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Living Room/i })).toHaveAttribute("href", "/catalog?q=living%20room");
-    expect(screen.getByRole("link", { name: /Double-Height & Staircase/i })).toHaveAttribute("href", "/catalog?q=double%20height");
-    expect(screen.getByRole("link", { name: /Hotel & Hospitality/i })).toHaveAttribute("href", "/catalog?q=hotel");
-    expect(screen.getByRole("link", { name: /Banquet & Event Space/i })).toHaveAttribute("href", "/catalog?q=banquet");
+    expect(screen.getByRole("link", { name: /Living Room/i })).toHaveAttribute("href", "/space/living-room");
+    expect(screen.getByRole("link", { name: /Double-Height & Staircase/i })).toHaveAttribute("href", "/space/double-height-staircase");
+    expect(screen.getByRole("link", { name: /Hotel & Hospitality/i })).toHaveAttribute("href", "/space/hotel-hospitality");
+    expect(screen.getByRole("link", { name: /Banquet & Event Space/i })).toHaveAttribute("href", "/space/banquet-event-space");
   });
 
   test("sets canonical metadata and ItemList schema", () => {
