@@ -32,12 +32,12 @@ describe("SpacePage", () => {
       { id: "2", name: "Other Chandelier", tags: ["space:living-room"] },
     ]);
 
-    renderAt("/space/double-height-staircase");
+    const { container } = renderAt("/space/double-height-staircase");
 
     expect(screen.getByRole("heading", { level: 1, name: /Double-Height & Staircase/i })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Tagged Chandelier")).toBeInTheDocument());
     expect(screen.queryByText("Other Chandelier")).not.toBeInTheDocument();
-    expect(screen.getByText(/1 verified piece/i)).toBeInTheDocument();
+    expect(container.textContent).toMatch(/1\s+verified\s+piece/i);
   });
 
   test("does not guess relevance when no product has the exact space tag", async () => {
