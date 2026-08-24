@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { ArrowUpRight, MessageCircle } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api, formatProductPrice } from "../lib/api";
@@ -22,6 +23,14 @@ export default function AtelierShowcase() {
   const { hp, settings } = useSettings();
   const A = hp.atelier || {};
   const rawSlides = A.images || [];
+  const sectionRef = useRef(null);
+  const prefersReducedMotion = useReducedMotion();
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start end", "end start"],
+  });
+  const mediaY = useTransform(scrollYProgress, [0, 1], [24, -24]);
+  const mediaScale = useTransform(scrollYProgress, [0, 0.5, 1], [0.97, 1.02, 1]);
 
   const [products, setProducts] = useState([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
@@ -70,9 +79,19 @@ export default function AtelierShowcase() {
     : {};
 
   return (
-    <section data-testid="atelier-section" className="max-w-7xl mx-auto px-6 py-16 md:py-20">
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
-        <div className="md:col-span-7">
+    <section
+      ref={sectionRef}
+      data-testid="atelier-section"
+      className="max-w-7xl mx-auto px-6 py-16 md:py-20 md:min-h-[110vh]"
+    >
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-start">
+        <motion.div
+          className="md:col-span-7 md:sticky md:top-24"
+          style={{
+            y: prefersReducedMotion ? 0 : mediaY,
+            scale: prefersReducedMotion ? 1 : mediaScale,
+          }}
+        >
           <HeroWrap
             {...heroWrapProps}
             data-testid="atelier-hero-frame"
@@ -148,9 +167,15 @@ export default function AtelierShowcase() {
               })}
             </div>
           )}
-        </div>
+        </motion.div>
 
-        <div className="md:col-span-5">
+        <motion.div
+          className="md:col-span-5 md:pt-16"
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 32 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.35 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+        >
           <div className="eyebrow mb-3">{A.eyebrow}</div>
           <h2 className="font-serif text-3xl sm:text-4xl leading-tight">{A.headline}</h2>
           <p className="mt-6 text-white/70 leading-relaxed whitespace-pre-wrap">{A.paragraph}</p>
@@ -206,7 +231,7 @@ export default function AtelierShowcase() {
               {A.cta_text || "Discover the Collection"} <ArrowUpRight size={14} />
             </Link>
           )}
-        </div>
+        </motion.div>
       </div>
     </section>
   );
