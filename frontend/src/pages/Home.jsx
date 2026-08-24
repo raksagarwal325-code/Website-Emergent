@@ -11,6 +11,7 @@ import ReasonsSection from "../components/ReasonsSection";
 import AtelierShowcase from "../components/AtelierShowcase";
 import TrustedBySection from "../components/TrustedBySection";
 import GalleryPreview from "../components/GalleryPreview";
+import WelcomeIntro from "../components/WelcomeIntro";
 const InfluencerPromotions = lazy(() =>
   import(/* webpackChunkName: "influencer" */ "../components/InfluencerPromotions"),
 );
@@ -57,6 +58,7 @@ export default function Home() {
         image={settings?.hero_image}
         path="/"
       />
+      <WelcomeIntro />
       <section ref={heroRef} className="relative overflow-hidden grain">
         <motion.div
           className="absolute inset-0 opacity-45 will-change-transform"
