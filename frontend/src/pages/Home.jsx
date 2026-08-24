@@ -31,7 +31,10 @@ export default function Home() {
     target: heroRef,
     offset: ["start start", "end start"],
   });
-  const heroScale = useTransform(heroScrollProgress, [0, 1], [1, 1.03]);
+  const heroScale = useTransform(heroScrollProgress, [0, 1], [1, 1.12]);
+  const heroMediaY = useTransform(heroScrollProgress, [0, 1], [0, 95]);
+  const heroContentY = useTransform(heroScrollProgress, [0, 1], [0, -120]);
+  const heroContentOpacity = useTransform(heroScrollProgress, [0, 0.58, 1], [1, 0.82, 0]);
 
   useEffect(() => {
     api.listProducts({ featured: true, limit: 48 })
@@ -59,7 +62,10 @@ export default function Home() {
           className="absolute inset-0 opacity-45 will-change-transform"
           initial={prefersReducedMotion ? false : { opacity: 0 }}
           animate={{ opacity: 0.45 }}
-          style={{ scale: prefersReducedMotion ? 1 : heroScale }}
+          style={{
+            scale: prefersReducedMotion ? 1 : heroScale,
+            y: prefersReducedMotion ? 0 : heroMediaY,
+          }}
           transition={prefersReducedMotion ? { duration: 0 } : { duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
         >
           <picture>
@@ -78,7 +84,13 @@ export default function Home() {
           <div className="absolute inset-0" style={{background: "radial-gradient(circle at 80% 20%, rgba(163,99,80,0.35), transparent 45%)"}}></div>
         </motion.div>
 
-        <div className="relative max-w-7xl mx-auto px-6 pt-20 pb-24 md:pt-24 md:pb-28">
+        <motion.div
+          className="relative max-w-7xl mx-auto px-6 pt-20 pb-24 md:pt-24 md:pb-28 will-change-transform"
+          style={{
+            y: prefersReducedMotion ? 0 : heroContentY,
+            opacity: prefersReducedMotion ? 1 : heroContentOpacity,
+          }}
+        >
           <motion.div
             className="max-w-2xl"
             initial={prefersReducedMotion ? false : "hidden"}
@@ -138,7 +150,7 @@ export default function Home() {
               ))}
             </motion.div>
           </motion.div>
-        </div>
+        </motion.div>
       </section>
 
       <CategoryShowcase />
