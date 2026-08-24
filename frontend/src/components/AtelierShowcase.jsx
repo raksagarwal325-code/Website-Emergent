@@ -29,8 +29,12 @@ export default function AtelierShowcase() {
     target: sectionRef,
     offset: ["start end", "end start"],
   });
-  const mediaY = useTransform(scrollYProgress, [0, 1], [24, -24]);
-  const mediaScale = useTransform(scrollYProgress, [0, 0.5, 1], [0.97, 1.02, 1]);
+  const mediaY = useTransform(scrollYProgress, [0, 1], [95, -125]);
+  const mediaScale = useTransform(scrollYProgress, [0, 0.48, 1], [0.88, 1.09, 0.98]);
+  const mediaRotate = useTransform(scrollYProgress, [0, 0.5, 1], [-1.2, 0, 1.1]);
+  const copyX = useTransform(scrollYProgress, [0, 0.28, 0.72, 1], [90, 0, 0, -35]);
+  const copyY = useTransform(scrollYProgress, [0, 0.5, 1], [45, 0, -35]);
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.26, 0.78, 1], [0.15, 1, 1, 0.45]);
 
   const [products, setProducts] = useState([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
@@ -82,14 +86,16 @@ export default function AtelierShowcase() {
     <section
       ref={sectionRef}
       data-testid="atelier-section"
-      className="max-w-7xl mx-auto px-6 py-16 md:py-20 md:min-h-[110vh]"
+      className="max-w-7xl mx-auto px-6 py-20 md:py-28 md:min-h-[165vh]"
     >
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-14 items-start">
         <motion.div
-          className="md:col-span-7 md:sticky md:top-24"
+          className="md:col-span-7 md:sticky md:top-20 will-change-transform"
           style={{
             y: prefersReducedMotion ? 0 : mediaY,
             scale: prefersReducedMotion ? 1 : mediaScale,
+            rotate: prefersReducedMotion ? 0 : mediaRotate,
+            transformOrigin: "50% 50%",
           }}
         >
           <HeroWrap
@@ -110,7 +116,7 @@ export default function AtelierShowcase() {
                   key={`${src}-${i}`}
                   src={api.resolveImage(src)}
                   alt={`Samrat Glass Emporium — ${s.caption || s.product?.name || ""}`}
-                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-1000 ${productHref && i === active ? "group-hover:scale-[1.02]" : ""}`}
+                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-1000 ${productHref && i === active ? "group-hover:scale-[1.03]" : ""}`}
                   style={{ opacity: i === active ? 1 : 0 }}
                   loading={i === 0 ? "eager" : "lazy"}
                 />
@@ -118,9 +124,9 @@ export default function AtelierShowcase() {
             })}
 
             <div className="absolute inset-0 pointer-events-none mix-blend-screen"
-              style={{ background: "radial-gradient(circle at 50% 60%, rgba(212,175,55,0.16), transparent 55%)" }} />
-            <div className="absolute inset-x-6 top-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/40 to-transparent" />
-            <div className="absolute inset-x-6 bottom-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/40 to-transparent" />
+              style={{ background: "radial-gradient(circle at 50% 60%, rgba(212,175,55,0.22), transparent 55%)" }} />
+            <div className="absolute inset-x-6 top-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
+            <div className="absolute inset-x-6 bottom-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
 
             <div className="absolute bottom-4 left-6 right-6 flex items-end justify-between gap-4 pointer-events-none">
               <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]/90 backdrop-blur bg-black/40 px-2 py-1 max-w-[70%] truncate">
@@ -170,13 +176,15 @@ export default function AtelierShowcase() {
         </motion.div>
 
         <motion.div
-          className="md:col-span-5 md:pt-16"
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 32 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+          className="md:col-span-5 md:sticky md:top-32 md:pt-14 will-change-transform"
+          style={{
+            x: prefersReducedMotion ? 0 : copyX,
+            y: prefersReducedMotion ? 0 : copyY,
+            opacity: prefersReducedMotion ? 1 : copyOpacity,
+          }}
         >
           <div className="eyebrow mb-3">{A.eyebrow}</div>
-          <h2 className="font-serif text-3xl sm:text-4xl leading-tight">{A.headline}</h2>
+          <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl leading-tight">{A.headline}</h2>
           <p className="mt-6 text-white/70 leading-relaxed whitespace-pre-wrap">{A.paragraph}</p>
 
           {activeProduct ? (
