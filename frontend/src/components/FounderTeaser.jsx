@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useRef } from "react";
 import { Link } from "react-router-dom";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 
@@ -7,6 +8,14 @@ export default function FounderTeaser() {
   const { hp } = useSettings();
   const f = hp?.about?.founder || {};
   const t = hp?.founder_teaser || {};
+  const sectionRef = useRef(null);
+  const prefersReducedMotion = useReducedMotion();
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start end", "end start"],
+  });
+  const photoY = useTransform(scrollYProgress, [0, 1], [22, -22]);
+  const photoScale = useTransform(scrollYProgress, [0, 0.5, 1], [0.96, 1.03, 1]);
 
   // Honour the CMS toggle (defaults to enabled) and require at minimum a photo.
   if (t.enabled === false || !f.image) return null;
@@ -21,10 +30,17 @@ export default function FounderTeaser() {
 
   return (
     <section
+      ref={sectionRef}
       data-testid="founder-teaser"
       className="max-w-7xl mx-auto px-6 py-20 md:py-24"
     >
-      <div className="relative warm-panel overflow-hidden">
+      <motion.div
+        className="relative warm-panel overflow-hidden"
+        initial={prefersReducedMotion ? false : { opacity: 0, y: 34 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.25 }}
+        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+      >
         <div
           className="absolute -top-24 -right-24 w-96 h-96 rounded-full opacity-20 pointer-events-none"
           style={{ background: "radial-gradient(circle, rgba(212,175,55,0.55), transparent 65%)" }}
@@ -35,8 +51,13 @@ export default function FounderTeaser() {
         />
 
         <div className="relative grid md:grid-cols-[280px_1fr] gap-8 md:gap-12 items-center p-8 md:p-14">
-          {/* Photo */}
-          <div className="flex justify-center md:justify-start">
+          <motion.div
+            className="flex justify-center md:justify-start"
+            style={{
+              y: prefersReducedMotion ? 0 : photoY,
+              scale: prefersReducedMotion ? 1 : photoScale,
+            }}
+          >
             <div
               data-testid="founder-teaser-photo"
               className="rounded-full overflow-hidden brand-glow ring-2 ring-[#D4AF37]/40"
@@ -49,10 +70,15 @@ export default function FounderTeaser() {
                 style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 50%", display: "block" }}
               />
             </div>
-          </div>
+          </motion.div>
 
-          {/* Copy */}
-          <div className="text-center md:text-left">
+          <motion.div
+            className="text-center md:text-left"
+            initial={prefersReducedMotion ? false : { opacity: 0, x: 28 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, amount: 0.35 }}
+            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.85, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+          >
             <div className="eyebrow mb-4 text-[#D4AF37]">{eyebrow}</div>
             <h2 className="font-serif text-3xl md:text-4xl lg:text-5xl leading-[1.1] mb-5">
               {title}
@@ -83,9 +109,9 @@ export default function FounderTeaser() {
                 />
               </Link>
             </div>
-          </div>
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 }
