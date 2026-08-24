@@ -5,16 +5,19 @@ import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
 
-const SESSION_KEY = "sge-welcome-intro-seen-v3";
+const SESSION_KEY = "sge-welcome-intro-seen-v4";
 
-const PRODUCT_CONFIGS = [
-  { x: "-43vw", y: 46, scale: 0.62, rotate: -4.5, opacity: 0.34, z: 1, delay: 0.95 },
-  { x: "-30vw", y: 24, scale: 0.76, rotate: -2.6, opacity: 0.58, z: 2, delay: 0.78 },
-  { x: "-17vw", y: 10, scale: 0.88, rotate: -1.2, opacity: 0.82, z: 4, delay: 0.62 },
-  { x: "0vw", y: 20, scale: 1.04, rotate: 0, opacity: 1, z: 7, delay: 0.42 },
-  { x: "17vw", y: 10, scale: 0.88, rotate: 1.2, opacity: 0.82, z: 4, delay: 0.68 },
-  { x: "30vw", y: 24, scale: 0.76, rotate: 2.6, opacity: 0.58, z: 2, delay: 0.84 },
-  { x: "43vw", y: 46, scale: 0.62, rotate: 4.5, opacity: 0.34, z: 1, delay: 1.02 },
+const BACKDROP_CONFIGS = [
+  { index: 0, x: "-41vw", y: 42, scale: 0.76, opacity: 0.16, delay: 0.86 },
+  { index: 1, x: "-30vw", y: 12, scale: 0.88, opacity: 0.22, delay: 0.72 },
+  { index: 5, x: "30vw", y: 12, scale: 0.88, opacity: 0.22, delay: 0.78 },
+  { index: 6, x: "41vw", y: 42, scale: 0.76, opacity: 0.16, delay: 0.94 },
+];
+
+const FEATURE_CONFIGS = [
+  { index: 2, x: "-21vw", y: 34, scale: 0.84, opacity: 0.82, delay: 0.64 },
+  { index: 3, x: "0vw", y: 12, scale: 1.18, opacity: 1, delay: 0.38 },
+  { index: 4, x: "21vw", y: 34, scale: 0.84, opacity: 0.82, delay: 0.7 },
 ];
 
 export default function WelcomeIntro() {
@@ -82,7 +85,7 @@ export default function WelcomeIntro() {
           className="fixed inset-0 z-[100] overflow-hidden bg-[#070206]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 1.018, filter: "blur(5px)" }}
+          exit={{ opacity: 0, scale: 1.015, filter: "blur(4px)" }}
           transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
         >
           <motion.img
@@ -91,7 +94,7 @@ export default function WelcomeIntro() {
             aria-hidden
             className="absolute inset-0 h-full w-full object-cover"
             initial={{ scale: 1.14, opacity: 0 }}
-            animate={{ scale: 1.025, opacity: 0.2 }}
+            animate={{ scale: 1.03, opacity: 0.16 }}
             transition={{ duration: 5.4, ease: [0.16, 1, 0.3, 1] }}
           />
 
@@ -100,22 +103,22 @@ export default function WelcomeIntro() {
             aria-hidden
             style={{
               background:
-                "radial-gradient(ellipse at 50% 69%, rgba(212,175,55,0.15), transparent 31%), radial-gradient(circle at 50% 0%, rgba(111,43,76,0.28), transparent 42%), linear-gradient(180deg, rgba(5,1,4,0.78) 0%, rgba(9,3,8,0.70) 42%, rgba(15,5,12,0.9) 78%, #070206 100%)",
+                "radial-gradient(ellipse at 50% 73%, rgba(212,175,55,0.18), transparent 28%), radial-gradient(circle at 50% 0%, rgba(111,43,76,0.24), transparent 40%), linear-gradient(180deg, rgba(5,1,4,0.9) 0%, rgba(8,3,7,0.76) 38%, rgba(14,5,11,0.9) 78%, #070206 100%)",
             }}
           />
 
           <div
             aria-hidden
-            className="absolute left-1/2 top-[7vh] z-[8] h-[38vh] w-[92vw] max-w-6xl -translate-x-1/2 rounded-[50%] blur-3xl"
-            style={{ background: "rgba(4,1,4,0.42)" }}
+            className="absolute left-1/2 top-[5vh] z-[8] h-[34vh] w-[90vw] max-w-5xl -translate-x-1/2 rounded-[50%] blur-3xl"
+            style={{ background: "rgba(4,1,4,0.58)" }}
           />
 
           <motion.div
             aria-hidden
             className="absolute inset-y-0 w-[17vw] min-w-[140px]"
             initial={{ x: "-28vw", opacity: 0 }}
-            animate={{ x: "120vw", opacity: [0, 0.55, 0] }}
-            transition={{ duration: 3.4, delay: 1.55, ease: "easeInOut" }}
+            animate={{ x: "120vw", opacity: [0, 0.5, 0] }}
+            transition={{ duration: 3.25, delay: 1.65, ease: "easeInOut" }}
             style={{
               background: "linear-gradient(90deg, transparent, rgba(255,235,183,0.11), transparent)",
               filter: "blur(24px)",
@@ -123,58 +126,80 @@ export default function WelcomeIntro() {
             }}
           />
 
-          <div className="absolute inset-x-0 bottom-[5.5vh] top-[31vh] pointer-events-none">
-            {productImages.map((src, index) => {
-              const c = PRODUCT_CONFIGS[index];
-              const isHero = index === 3;
+          <div className="absolute inset-x-0 bottom-[4.5vh] top-[32vh] pointer-events-none">
+            {BACKDROP_CONFIGS.map((c) => {
+              const src = productImages[c.index];
               return (
                 <motion.div
-                  key={`${src}-${index}`}
-                  className="absolute left-1/2 top-1/2 flex h-[47vh] w-[27vw] min-w-[150px] max-w-[390px] -translate-x-1/2 -translate-y-1/2 items-center justify-center will-change-transform"
-                  style={{ zIndex: c.z }}
-                  initial={{ opacity: 0, x: c.x, y: c.y + 105, scale: c.scale * 0.77, rotate: c.rotate * 1.5, filter: "blur(10px)" }}
-                  animate={{ opacity: c.opacity, x: c.x, y: c.y, scale: c.scale, rotate: c.rotate, filter: "blur(0px)" }}
-                  transition={{ duration: 1.5, delay: c.delay, ease: [0.16, 1, 0.3, 1] }}
+                  key={`backdrop-${c.index}`}
+                  className="absolute left-1/2 top-1/2 flex h-[48vh] w-[24vw] min-w-[140px] max-w-[320px] -translate-x-1/2 -translate-y-1/2 items-end justify-center"
+                  initial={{ opacity: 0, x: c.x, y: c.y + 80, scale: c.scale * 0.84, filter: "blur(13px) brightness(0.35)" }}
+                  animate={{ opacity: c.opacity, x: c.x, y: c.y, scale: c.scale, filter: "blur(3px) brightness(0.68)" }}
+                  transition={{ duration: 1.55, delay: c.delay, ease: [0.16, 1, 0.3, 1] }}
                 >
-                  <motion.div
-                    className={`relative flex h-full w-full items-end justify-center overflow-hidden border ${
-                      isHero
-                        ? "rounded-t-[12rem] border-[#D4AF37]/45 bg-black/20 shadow-[0_0_80px_rgba(212,175,55,0.11)]"
-                        : "rounded-t-[9rem] border-[#D4AF37]/18 bg-black/15"
-                    }`}
-                  >
-                    <motion.img
-                      src={src}
-                      alt=""
-                      className="h-full w-full object-contain px-2 pt-3 drop-shadow-[0_14px_35px_rgba(0,0,0,0.55)]"
-                      initial={{ scale: 1.1, filter: "brightness(0.26) saturate(0.62)" }}
-                      animate={{
-                        scale: 1,
-                        filter: [
-                          "brightness(0.26) saturate(0.62)",
-                          "brightness(0.56) saturate(0.78)",
-                          "brightness(1.12) saturate(1.03)",
-                          "brightness(0.9) saturate(0.95)",
-                        ],
-                      }}
-                      transition={{
-                        scale: { duration: 4.2, delay: c.delay, ease: [0.16, 1, 0.3, 1] },
-                        filter: { duration: 2.55, delay: 1.25 + index * 0.09, times: [0, 0.34, 0.66, 1] },
-                      }}
+                  <img
+                    src={src}
+                    alt=""
+                    className="h-full w-full object-contain drop-shadow-[0_18px_45px_rgba(0,0,0,0.65)]"
+                  />
+                </motion.div>
+              );
+            })}
+
+            {FEATURE_CONFIGS.map((c) => {
+              const src = productImages[c.index];
+              const isHero = c.index === 3;
+              return (
+                <motion.div
+                  key={`feature-${c.index}`}
+                  className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-end justify-center ${
+                    isHero
+                      ? "z-20 h-[56vh] w-[35vw] min-w-[220px] max-w-[500px]"
+                      : "z-10 h-[46vh] w-[27vw] min-w-[170px] max-w-[360px]"
+                  }`}
+                  initial={{ opacity: 0, x: c.x, y: c.y + 92, scale: c.scale * 0.8, filter: "blur(9px)" }}
+                  animate={{ opacity: c.opacity, x: c.x, y: c.y, scale: c.scale, filter: "blur(0px)" }}
+                  transition={{ duration: 1.55, delay: c.delay, ease: [0.16, 1, 0.3, 1] }}
+                >
+                  <motion.img
+                    src={src}
+                    alt=""
+                    className="h-full w-full object-contain drop-shadow-[0_20px_55px_rgba(0,0,0,0.72)]"
+                    initial={{ scale: 1.08, filter: "brightness(0.24) saturate(0.6)" }}
+                    animate={{
+                      scale: 1,
+                      filter: [
+                        "brightness(0.24) saturate(0.6)",
+                        "brightness(0.52) saturate(0.78)",
+                        "brightness(1.14) saturate(1.04)",
+                        "brightness(0.92) saturate(0.96)",
+                      ],
+                    }}
+                    transition={{
+                      scale: { duration: 4.2, delay: c.delay, ease: [0.16, 1, 0.3, 1] },
+                      filter: { duration: 2.5, delay: isHero ? 1.1 : 1.35, times: [0, 0.34, 0.67, 1] },
+                    }}
+                  />
+                  {isHero && (
+                    <motion.div
+                      aria-hidden
+                      className="absolute bottom-[8%] left-1/2 h-[34%] w-[70%] -translate-x-1/2 rounded-full blur-3xl"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: [0, 0.28, 0.16] }}
+                      transition={{ duration: 2.4, delay: 1.35, times: [0, 0.55, 1] }}
+                      style={{ background: "rgba(212,175,55,0.28)" }}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/42" />
-                    <div className="absolute inset-x-[12%] bottom-0 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/75 to-transparent" />
-                  </motion.div>
+                  )}
                 </motion.div>
               );
             })}
           </div>
 
           <motion.div
-            className="absolute inset-x-0 top-[8.5vh] z-20 px-5 text-center pointer-events-none"
+            className="absolute inset-x-0 top-[7.5vh] z-30 px-5 text-center pointer-events-none"
             initial="hidden"
             animate="visible"
-            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.18, delayChildren: 0.72 } } }}
+            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.18, delayChildren: 0.7 } } }}
           >
             <motion.div
               className="text-[9px] uppercase tracking-[0.48em] text-[#D4AF37] sm:text-[10px] md:text-xs"
@@ -207,7 +232,7 @@ export default function WelcomeIntro() {
             type="button"
             onClick={dismiss}
             data-testid="welcome-intro-skip"
-            className="absolute right-4 top-4 z-30 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[#D4AF37]/50 bg-black/45 px-4 py-2 text-[10px] uppercase tracking-[0.24em] text-white/85 backdrop-blur-md transition-all hover:border-[#D4AF37] hover:bg-[#D4AF37]/10 hover:text-[#D4AF37] md:right-8 md:top-8 md:px-5"
+            className="absolute right-4 top-4 z-40 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[#D4AF37]/50 bg-black/45 px-4 py-2 text-[10px] uppercase tracking-[0.24em] text-white/85 backdrop-blur-md transition-all hover:border-[#D4AF37] hover:bg-[#D4AF37]/10 hover:text-[#D4AF37] md:right-8 md:top-8 md:px-5"
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.78, duration: 0.6 }}
@@ -217,7 +242,7 @@ export default function WelcomeIntro() {
 
           <motion.div
             aria-hidden
-            className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap text-[8px] uppercase tracking-[0.38em] text-white/38 sm:text-[9px] md:bottom-6"
+            className="absolute bottom-4 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap text-[8px] uppercase tracking-[0.38em] text-white/38 sm:text-[9px] md:bottom-6"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 2.6, duration: 0.85 }}
