@@ -172,8 +172,7 @@ export default function AtelierShowcase() {
         <motion.div
           className="md:col-span-5 md:pt-16"
           initial={prefersReducedMotion ? false : { opacity: 0, y: 32 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.35 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
         >
           <div className="eyebrow mb-3">{A.eyebrow}</div>
