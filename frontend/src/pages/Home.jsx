@@ -57,7 +57,7 @@ export default function Home() {
       <section ref={heroRef} className="relative overflow-hidden grain">
         <motion.div
           className="absolute inset-0 opacity-45 will-change-transform"
-          initial={prefersReducedMotion ? false : { opacity: 0, scale: 1.06 }}
+          initial={prefersReducedMotion ? false : { opacity: 0 }}
           animate={{ opacity: 0.45 }}
           style={{ scale: prefersReducedMotion ? 1 : heroScale }}
           transition={prefersReducedMotion ? { duration: 0 } : { duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
