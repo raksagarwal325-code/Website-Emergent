@@ -1,6 +1,6 @@
-import React, { useEffect, useState, Suspense, lazy } from "react";
+import React, { useEffect, useRef, useState, Suspense, lazy } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
 import SEO from "../components/SEO";
 import { api } from "../lib/api";
@@ -25,6 +25,13 @@ import { waGeneralLink } from "../lib/whatsapp";
 export default function Home() {
   const [featured, setFeatured] = useState([]);
   const { settings, hp } = useSettings();
+  const heroRef = useRef(null);
+  const prefersReducedMotion = useReducedMotion();
+  const { scrollYProgress: heroScrollProgress } = useScroll({
+    target: heroRef,
+    offset: ["start start", "end start"],
+  });
+  const heroScale = useTransform(heroScrollProgress, [0, 1], [1, 1.03]);
 
   useEffect(() => {
     api.listProducts({ featured: true, limit: 48 })
@@ -47,12 +54,13 @@ export default function Home() {
         image={settings?.hero_image}
         path="/"
       />
-      <section className="relative overflow-hidden grain">
+      <section ref={heroRef} className="relative overflow-hidden grain">
         <motion.div
-          className="absolute inset-0 opacity-45"
-          initial={{ opacity: 0, scale: 1.06 }}
-          animate={{ opacity: 0.45, scale: 1 }}
-          transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
+          className="absolute inset-0 opacity-45 will-change-transform"
+          initial={prefersReducedMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 0.45 }}
+          style={{ scale: prefersReducedMotion ? 1 : heroScale }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
         >
           <picture>
             <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
@@ -73,35 +81,35 @@ export default function Home() {
         <div className="relative max-w-7xl mx-auto px-6 pt-20 pb-24 md:pt-24 md:pb-28">
           <motion.div
             className="max-w-2xl"
-            initial="hidden"
+            initial={prefersReducedMotion ? false : "hidden"}
             animate="visible"
             variants={{
               hidden: {},
-              visible: { transition: { staggerChildren: 0.14, delayChildren: 0.1 } },
+              visible: { transition: { staggerChildren: prefersReducedMotion ? 0 : 0.14, delayChildren: prefersReducedMotion ? 0 : 0.1 } },
             }}
           >
             <motion.div
-              variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } } }}
+              variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 0.8, ease: [0.22, 1, 0.36, 1] } } }}
               className="mb-6 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]"></span>
               <span className="text-xs uppercase tracking-[0.28em] text-[#BF9972]">{H.eyebrow}</span>
             </motion.div>
             <motion.h1
-              variants={{ hidden: { opacity: 0, y: 26 }, visible: { opacity: 1, y: 0, transition: { duration: 1.05, ease: [0.22, 1, 0.36, 1] } } }}
+              variants={{ hidden: { opacity: 0, y: 26 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 1.05, ease: [0.22, 1, 0.36, 1] } } }}
               className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05]"
             >
               {H.headline_line1}<br />
               <span className="italic brand-gradient-text">{H.headline_line2}</span>
             </motion.h1>
             <motion.p
-              variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] } } }}
+              variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 0.9, ease: [0.22, 1, 0.36, 1] } } }}
               className="mt-6 text-white/70 max-w-lg leading-relaxed"
             >
               {H.description}
             </motion.p>
             <motion.div
-              variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] } } }}
+              variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 0.9, ease: [0.22, 1, 0.36, 1] } } }}
               className="mt-10 flex flex-wrap gap-3"
             >
               <Link to={H.primary_cta_link || "/catalog"} data-testid="hero-explore-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] transition-colors">
@@ -119,7 +127,7 @@ export default function Home() {
             </motion.div>
 
             <motion.div
-              variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] } } }}
+              variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 0.9, ease: [0.22, 1, 0.36, 1] } } }}
               className="mt-14 pt-8 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg"
             >
               {(H.trust || []).map((t, i) => (
