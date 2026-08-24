@@ -191,7 +191,7 @@ export default function WelcomeIntro() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.6 }}
           >
-            Skip intro <ArrowRight size={13} />
+            Explore the Legacy <ArrowRight size={13} />
           </motion.button>
         </motion.div>
       )}
