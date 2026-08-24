@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { api } from "../lib/api";
 import { NAV_CATEGORIES as CATEGORIES } from "../lib/categories";
@@ -27,6 +27,7 @@ export default function CategoryShowcase() {
   const [images, setImages] = useState({});
   const [shouldLoadMedia, setShouldLoadMedia] = useState(false);
   const sectionRef = useRef(null);
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     const node = sectionRef.current;
@@ -103,10 +104,10 @@ export default function CategoryShowcase() {
       <div className="relative max-w-7xl mx-auto px-6 py-20 md:py-24">
         <motion.div
           className="mb-12 md:mb-14"
-          initial={{ opacity: 0, y: 14 }}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
         >
           <div>
             <div className="eyebrow mb-3">The Collection</div>
@@ -134,6 +135,7 @@ export default function CategoryShowcase() {
               category={c}
               imageUrl={images[c.db_name]}
               index={i}
+              reducedMotion={prefersReducedMotion}
             />
           ))}
         </div>
@@ -142,16 +144,16 @@ export default function CategoryShowcase() {
   );
 }
 
-function CategoryCard({ category, imageUrl, index }) {
+function CategoryCard({ category, imageUrl, index, reducedMotion }) {
   const href = `/category/${category.slug}`;
   return (
     <motion.div
-      initial={{ opacity: 0, y: 22 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{
-        duration: 0.7,
-        delay: 0.05 * index,
+      initial={reducedMotion ? false : { opacity: 0, y: 42, scale: 0.96 }}
+      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={reducedMotion ? { duration: 0 } : {
+        duration: 0.75,
+        delay: Math.min(0.08 * index, 0.48),
         ease: [0.22, 1, 0.36, 1],
       }}
     >

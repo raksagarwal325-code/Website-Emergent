@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { MapPin, ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
@@ -20,6 +20,7 @@ function shuffleInPlace(arr) {
 export default function GalleryPreview() {
   const { hp } = useSettings();
   const g = hp?.gallery || {};
+  const prefersReducedMotion = useReducedMotion();
 
   const rawItems = g.items || [];
   const slugsAll = useMemo(() => buildProjectSlugs(rawItems), [rawItems]);
@@ -114,7 +115,13 @@ export default function GalleryPreview() {
     >
       <div className="absolute inset-0 pointer-events-none opacity-25" style={{ background: "radial-gradient(ellipse at 20% 40%, rgba(163,99,80,0.3), transparent 55%)" }} />
       <div className="relative max-w-7xl mx-auto px-6">
-        <div className="mb-10 md:mb-14">
+        <motion.div
+          className="mb-10 md:mb-14"
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.35 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+        >
           <div className="eyebrow mb-3">{g.eyebrow || "Installations"}</div>
           <h2 className="font-serif text-3xl md:text-5xl leading-tight">
             {g.title_pre || "Our Work"}{" "}
@@ -127,19 +134,23 @@ export default function GalleryPreview() {
           >
             View full gallery <ArrowUpRight size={15} />
           </Link>
-        </div>
+        </motion.div>
 
-        <div
+        <motion.div
           className="relative px-5 lg:px-7"
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
           data-testid="home-gallery-carousel"
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 36, scale: 0.985 }}
+          whileInView={{ opacity: 1, y: 0, scale: 1 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
         >
           <div className="overflow-hidden">
             <motion.div
               className="flex"
               animate={{ x: `-${active * (100 / Math.max(1, total))}%` }}
-              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
               style={{ width: `${total * 100}%` }}
             >
               {slides.map((slide, sIdx) => (
@@ -154,9 +165,9 @@ export default function GalleryPreview() {
                       return (
                         <motion.div
                           key={`${sIdx}-${p.__idx}-${i}`}
-                          initial={{ opacity: 0, y: 24 }}
-                          animate={sIdx === active ? { opacity: 1, y: 0 } : { opacity: 0.3, y: 0 }}
-                          transition={{ duration: 0.6, delay: sIdx === active ? i * 0.06 : 0, ease: [0.22, 1, 0.36, 1] }}
+                          initial={prefersReducedMotion ? false : { opacity: 0, y: 28, scale: 0.98 }}
+                          animate={sIdx === active ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0.3, y: 0, scale: 1 }}
+                          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.65, delay: sIdx === active ? i * 0.08 : 0, ease: [0.22, 1, 0.36, 1] }}
                           data-testid={`home-gallery-card-${sIdx}-${i}`}
                           className="group border border-white/8 hover:border-[#D4AF37]/50 transition-colors bg-[#0e0510]"
                         >
@@ -220,7 +231,7 @@ export default function GalleryPreview() {
               </button>
             </>
           )}
-        </div>
+        </motion.div>
 
         {total > 1 && (
           <div className="flex items-center justify-center gap-2 mt-8" data-testid="home-gallery-dots">
