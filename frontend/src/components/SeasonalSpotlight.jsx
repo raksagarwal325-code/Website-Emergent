@@ -54,6 +54,9 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
   const nextIndex = (currentIndex + 1) % items.length;
   const price = formatProductPrice(current);
   const progress = (currentIndex + 1) / items.length;
+  const currentImage = current.images?.[0] ? api.resolveImage(current.images[0]) : null;
+  const prevImage = items[prevIndex]?.images?.[0] ? api.resolveImage(items[prevIndex].images[0]) : null;
+  const nextImage = items[nextIndex]?.images?.[0] ? api.resolveImage(items[nextIndex].images[0]) : null;
 
   return (
     <section ref={sectionRef} data-testid="seasonal-spotlight" aria-label="Pieces of the season" className="relative overflow-hidden border-y border-white/10 py-20 md:py-24">
@@ -73,11 +76,19 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
           <div className="relative min-h-[450px] sm:min-h-[540px]" style={{ perspective: "1500px" }}>
             {items.length > 1 && (
               <>
-                <button type="button" onClick={() => setActive(prevIndex)} aria-label={`Show ${items[prevIndex].name}`} className="absolute left-0 top-1/2 z-0 hidden h-[70%] w-[27%] -translate-y-1/2 overflow-hidden border border-white/8 bg-black/40 opacity-38 transition hover:opacity-70 md:block" style={{ transform: "translateY(-50%) rotateY(12deg) scale(.88)", transformOrigin: "right center" }}>
-                  <img src={api.resolveImage(items[prevIndex].images?.[0])} alt="" className="h-full w-full object-contain p-6" loading="lazy" />
+                <button type="button" onClick={() => setActive(prevIndex)} aria-label={`Show ${items[prevIndex].name}`} className="absolute left-0 top-1/2 z-0 hidden h-[70%] w-[27%] -translate-y-1/2 overflow-hidden border border-white/8 bg-[#0b0508] opacity-[.38] transition hover:opacity-[.72] md:block" style={{ transform: "translateY(-50%) rotateY(12deg) scale(.88)", transformOrigin: "right center" }}>
+                  {prevImage && <>
+                    <img src={prevImage} alt="" aria-hidden className="absolute -inset-[12%] h-[124%] w-[124%] object-cover blur-2xl opacity-45 scale-110" loading="lazy" />
+                    <div className="absolute inset-0 bg-[#13080f]/45" />
+                    <img src={prevImage} alt="" className="relative z-10 h-full w-full object-contain p-6" loading="lazy" />
+                  </>}
                 </button>
-                <button type="button" onClick={() => setActive(nextIndex)} aria-label={`Show ${items[nextIndex].name}`} className="absolute right-0 top-1/2 z-0 hidden h-[70%] w-[27%] -translate-y-1/2 overflow-hidden border border-white/8 bg-black/40 opacity-38 transition hover:opacity-70 md:block" style={{ transform: "translateY(-50%) rotateY(-12deg) scale(.88)", transformOrigin: "left center" }}>
-                  <img src={api.resolveImage(items[nextIndex].images?.[0])} alt="" className="h-full w-full object-contain p-6" loading="lazy" />
+                <button type="button" onClick={() => setActive(nextIndex)} aria-label={`Show ${items[nextIndex].name}`} className="absolute right-0 top-1/2 z-0 hidden h-[70%] w-[27%] -translate-y-1/2 overflow-hidden border border-white/8 bg-[#0b0508] opacity-[.38] transition hover:opacity-[.72] md:block" style={{ transform: "translateY(-50%) rotateY(-12deg) scale(.88)", transformOrigin: "left center" }}>
+                  {nextImage && <>
+                    <img src={nextImage} alt="" aria-hidden className="absolute -inset-[12%] h-[124%] w-[124%] object-cover blur-2xl opacity-45 scale-110" loading="lazy" />
+                    <div className="absolute inset-0 bg-[#13080f]/45" />
+                    <img src={nextImage} alt="" className="relative z-10 h-full w-full object-contain p-6" loading="lazy" />
+                  </>}
                 </button>
               </>
             )}
@@ -86,17 +97,35 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
               <AnimatePresence mode="wait">
                 <motion.div
                   key={current.id}
-                  initial={prefersReducedMotion ? false : { opacity: 0, x: 45, scale: 0.92, rotateY: -8 }}
+                  initial={prefersReducedMotion ? false : { opacity: 0, x: 55, scale: 0.92, rotateY: -8 }}
                   animate={{ opacity: 1, x: 0, scale: 1, rotateY: 0 }}
-                  exit={prefersReducedMotion ? undefined : { opacity: 0, x: -45, scale: 0.94, rotateY: 8 }}
-                  transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.68, ease: LUXURY_EASE }}
-                  className="relative flex h-full items-center justify-center overflow-hidden border border-[#D4AF37]/30 bg-[#08030a] shadow-[0_35px_90px_-25px_rgba(0,0,0,.95)]"
+                  exit={prefersReducedMotion ? undefined : { opacity: 0, x: -55, scale: 0.94, rotateY: 8 }}
+                  transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.72, ease: LUXURY_EASE }}
+                  className="relative flex h-full items-center justify-center overflow-hidden border border-[#D4AF37]/30 bg-[#0b0508] shadow-[0_35px_90px_-25px_rgba(0,0,0,.95)]"
                   style={{ transformStyle: "preserve-3d" }}
                 >
-                  <div aria-hidden className="absolute inset-0" style={{ background: "radial-gradient(circle at 50% 62%, rgba(212,175,55,0.16), transparent 43%)" }} />
-                  {current.images?.[0] ? (
-                    <img src={api.resolveImage(current.images[0])} alt={current.name} className="relative z-10 max-h-[92%] max-w-[92%] object-contain p-4 md:p-8" loading="lazy" />
-                  ) : null}
+                  {currentImage && <>
+                    <motion.img
+                      src={currentImage}
+                      alt=""
+                      aria-hidden
+                      className="absolute -inset-[12%] h-[124%] w-[124%] object-cover blur-3xl opacity-45"
+                      initial={prefersReducedMotion ? false : { scale: 1.08, opacity: 0.2 }}
+                      animate={prefersReducedMotion ? { scale: 1.08, opacity: 0.42 } : { scale: [1.08, 1.14, 1.08], opacity: 0.42 }}
+                      transition={prefersReducedMotion ? { duration: 0 } : { duration: 9, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                    <div className="absolute inset-0 bg-[#12070d]/38" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#12070d]/35 via-transparent to-[#12070d]/16" />
+                    <motion.img
+                      src={currentImage}
+                      alt={current.name}
+                      className="relative z-10 max-h-[92%] max-w-[92%] object-contain p-4 md:p-8 drop-shadow-[0_18px_32px_rgba(0,0,0,.45)]"
+                      loading="lazy"
+                      initial={prefersReducedMotion ? false : { scale: 0.965, opacity: 0.72 }}
+                      animate={prefersReducedMotion ? { scale: 1, opacity: 1 } : { scale: [0.985, 1.018, 0.985], opacity: 1 }}
+                      transition={prefersReducedMotion ? { duration: 0 } : { duration: 8, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                  </>}
                   <div className="absolute bottom-4 left-4 z-20 text-[10px] uppercase tracking-[0.3em] text-[#BF9972]">{String(currentIndex + 1).padStart(2, "0")} / {String(items.length).padStart(2, "0")}</div>
                 </motion.div>
               </AnimatePresence>
@@ -104,7 +133,7 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
           </div>
 
           <AnimatePresence mode="wait">
-            <motion.div key={`copy-${current.id}`} initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={prefersReducedMotion ? undefined : { opacity: 0, y: -14 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.5, ease: LUXURY_EASE }} className="min-w-0">
+            <motion.div key={`copy-${current.id}`} initial={prefersReducedMotion ? false : { opacity: 0, y: 26 }} animate={{ opacity: 1, y: 0 }} exit={prefersReducedMotion ? undefined : { opacity: 0, y: -18 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.55, ease: LUXURY_EASE }} className="min-w-0">
               <div className="text-[10px] uppercase tracking-[0.3em] text-[#BF9972]">{current.category}</div>
               <h3 className="mt-4 max-w-xl font-serif text-3xl leading-[1.08] text-white sm:text-4xl lg:text-5xl">{current.name}</h3>
               <div className="mt-6 text-[#D4AF37]">
@@ -119,7 +148,7 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
               </div>
               {items.length > 1 && <div className="mt-8 max-w-md">
                 <div className="h-1 bg-white/12 overflow-hidden"><div className="h-full bg-[#D4AF37] transition-[width] duration-500" style={{ width: `${progress * 100}%` }} /></div>
-                <div className="mt-3 flex items-center justify-between text-[9px] uppercase tracking-[0.26em] text-white/35"><span>← → keyboard</span><span>{currentIndex + 1} of {items.length}</span></div>
+                <div className="mt-3 flex items-center justify-end text-[9px] uppercase tracking-[0.26em] text-white/35"><span>{currentIndex + 1} of {items.length}</span></div>
               </div>}
             </motion.div>
           </AnimatePresence>
