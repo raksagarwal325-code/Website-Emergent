@@ -5,8 +5,8 @@ import { MapPin, ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
 import { buildProjectSlugs } from "../lib/slug";
+import { editorialGroup, editorialItem, imageReveal, LUXURY_EASE } from "../lib/motion";
 
-const AUTOPLAY_MS = 4500;
 const SWIPE_THRESHOLD = 40;
 
 function shuffleInPlace(arr) {
@@ -36,7 +36,6 @@ export default function GalleryPreview() {
     ? Number(g.home_per_view)
     : 3;
   const randomize = g.home_randomize !== false;
-  const autoplay = g.home_autoplay !== false;
   const featured = Array.isArray(g.home_featured_indices) ? g.home_featured_indices : [];
 
   const pool = useMemo(() => {
@@ -78,19 +77,12 @@ export default function GalleryPreview() {
   const [active, setActive] = useState(0);
   useEffect(() => { setActive(0); }, [isMobile, total]);
 
-  const [paused, setPaused] = useState(false);
   const touchStartX = useRef(null);
   const go = useCallback(
     (delta) => setActive((i) => (total ? (i + delta + total) % total : 0)),
     [total]
   );
   const jumpTo = useCallback((i) => setActive(i), []);
-
-  useEffect(() => {
-    if (!autoplay || paused || total <= 1) return undefined;
-    const t = setInterval(() => setActive((i) => (i + 1) % total), AUTOPLAY_MS);
-    return () => clearInterval(t);
-  }, [autoplay, paused, total]);
 
   const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
   const onTouchEnd = (e) => {
@@ -99,7 +91,6 @@ export default function GalleryPreview() {
     touchStartX.current = null;
     if (Math.abs(dx) < SWIPE_THRESHOLD) return;
     go(dx < 0 ? 1 : -1);
-    setPaused(true);
   };
 
   if (pool.length === 0) return null;
@@ -110,30 +101,30 @@ export default function GalleryPreview() {
     <section
       data-testid="home-gallery-preview"
       className="relative py-20 md:py-28 border-t border-[#BF9972]/15 overflow-hidden"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
     >
       <div className="absolute inset-0 pointer-events-none opacity-25" style={{ background: "radial-gradient(ellipse at 20% 40%, rgba(163,99,80,0.3), transparent 55%)" }} />
       <div className="relative max-w-7xl mx-auto px-6">
         <motion.div
           className="mb-10 md:mb-14"
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
+          initial={prefersReducedMotion ? false : "hidden"}
+          whileInView="visible"
           viewport={{ once: true, amount: 0.35 }}
-          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+          variants={editorialGroup}
         >
-          <div className="eyebrow mb-3">{g.eyebrow || "Installations"}</div>
-          <h2 className="font-serif text-3xl md:text-5xl leading-tight">
-            {g.title_pre || "Our Work"}{" "}
-            <span className="brand-gradient-text italic">{g.title_highlight || "in the wild."}</span>
-          </h2>
-          <Link
-            to="/gallery"
-            data-testid="home-gallery-view-all"
-            className="mt-5 inline-flex items-center gap-2 text-sm font-medium uppercase tracking-[0.22em] text-[#D4AF37] hover:text-[#E0C15D] transition-colors"
-          >
-            View full gallery <ArrowUpRight size={15} />
-          </Link>
+          <motion.div variants={prefersReducedMotion ? undefined : editorialItem}>
+            <div className="eyebrow mb-3">{g.eyebrow || "Installations"}</div>
+            <h2 className="font-serif text-3xl md:text-5xl leading-tight">
+              {g.title_pre || "Our Work"}{" "}
+              <span className="brand-gradient-text italic">{g.title_highlight || "in the wild."}</span>
+            </h2>
+            <Link
+              to="/gallery"
+              data-testid="home-gallery-view-all"
+              className="mt-5 inline-flex items-center gap-2 text-sm font-medium uppercase tracking-[0.22em] text-[#D4AF37] hover:text-[#E0C15D] transition-colors"
+            >
+              View full gallery <ArrowUpRight size={15} />
+            </Link>
+          </motion.div>
         </motion.div>
 
         <motion.div
@@ -141,16 +132,16 @@ export default function GalleryPreview() {
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
           data-testid="home-gallery-carousel"
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 36, scale: 0.985 }}
-          whileInView={{ opacity: 1, y: 0, scale: 1 }}
+          initial={prefersReducedMotion ? false : "hidden"}
+          whileInView="visible"
           viewport={{ once: true, amount: 0.2 }}
-          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+          variants={prefersReducedMotion ? undefined : imageReveal}
         >
           <div className="overflow-hidden">
             <motion.div
               className="flex"
               animate={{ x: `-${active * (100 / Math.max(1, total))}%` }}
-              transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.85, ease: LUXURY_EASE }}
               style={{ width: `${total * 100}%` }}
             >
               {slides.map((slide, sIdx) => (
@@ -163,11 +154,8 @@ export default function GalleryPreview() {
                     {slide.map((p, i) => {
                       const cover = (p.images || []).filter(Boolean)[0];
                       return (
-                        <motion.div
+                        <div
                           key={`${sIdx}-${p.__idx}-${i}`}
-                          initial={prefersReducedMotion ? false : { opacity: 0, y: 28, scale: 0.98 }}
-                          animate={sIdx === active ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0.3, y: 0, scale: 1 }}
-                          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.65, delay: sIdx === active ? i * 0.08 : 0, ease: [0.22, 1, 0.36, 1] }}
                           data-testid={`home-gallery-card-${sIdx}-${i}`}
                           className="group border border-white/8 hover:border-[#D4AF37]/50 transition-colors bg-[#0e0510]"
                         >
@@ -183,7 +171,7 @@ export default function GalleryPreview() {
                                   src={api.resolveImage(cover)}
                                   alt={p.title || "Project"}
                                   loading="lazy"
-                                  className="w-full h-full object-cover opacity-95 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700"
+                                  className="w-full h-full object-cover opacity-95 group-hover:opacity-100 group-hover:scale-[1.035] transition-all duration-1000"
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-white/25 font-serif italic">Image pending</div>
@@ -200,7 +188,7 @@ export default function GalleryPreview() {
                               </h3>
                             </div>
                           </Link>
-                        </motion.div>
+                        </div>
                       );
                     })}
                   </div>
@@ -214,7 +202,7 @@ export default function GalleryPreview() {
               <button
                 type="button"
                 aria-label="Previous projects"
-                onClick={() => { go(-1); setPaused(true); }}
+                onClick={() => go(-1)}
                 data-testid="home-gallery-prev"
                 className="hidden md:flex absolute left-0 top-[42%] -translate-y-1/2 items-center justify-center w-11 h-11 rounded-full bg-black/75 backdrop-blur border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"
               >
@@ -223,7 +211,7 @@ export default function GalleryPreview() {
               <button
                 type="button"
                 aria-label="Next projects"
-                onClick={() => { go(1); setPaused(true); }}
+                onClick={() => go(1)}
                 data-testid="home-gallery-next"
                 className="hidden md:flex absolute right-0 top-[42%] -translate-y-1/2 items-center justify-center w-11 h-11 rounded-full bg-black/75 backdrop-blur border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"
               >
@@ -240,7 +228,7 @@ export default function GalleryPreview() {
                 key={i}
                 type="button"
                 aria-label={`Go to slide ${i + 1}`}
-                onClick={() => { jumpTo(i); setPaused(true); }}
+                onClick={() => jumpTo(i)}
                 data-testid={`home-gallery-dot-${i}`}
                 className={`h-2 rounded-full transition-all ${
                   i === active ? "w-9 bg-[#D4AF37]" : "w-5 bg-white/30 hover:bg-white/55"

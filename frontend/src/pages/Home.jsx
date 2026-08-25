@@ -21,6 +21,7 @@ import CategoryShowcase from "../components/CategoryShowcase";
 import ShopBySpaceSection from "../components/ShopBySpaceSection";
 import { useSettings } from "../context/SettingsContext";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
+import { editorialGroup, editorialItem, editorialItemSoft, LUXURY_EASE } from "../lib/motion";
 import { waGeneralLink } from "../lib/whatsapp";
 
 export default function Home() {
@@ -32,10 +33,10 @@ export default function Home() {
     target: heroRef,
     offset: ["start start", "end start"],
   });
-  const heroScale = useTransform(heroScrollProgress, [0, 1], [1, 1.12]);
-  const heroMediaY = useTransform(heroScrollProgress, [0, 1], [0, 95]);
-  const heroContentY = useTransform(heroScrollProgress, [0, 1], [0, -120]);
-  const heroContentOpacity = useTransform(heroScrollProgress, [0, 0.58, 1], [1, 0.82, 0]);
+  const heroScale = useTransform(heroScrollProgress, [0, 1], [1, 1.1]);
+  const heroMediaY = useTransform(heroScrollProgress, [0, 1], [0, 78]);
+  const heroContentY = useTransform(heroScrollProgress, [0, 1], [0, -96]);
+  const heroContentOpacity = useTransform(heroScrollProgress, [0, 0.62, 1], [1, 0.9, 0]);
 
   useEffect(() => {
     api.listProducts({ featured: true, limit: 48 })
@@ -68,7 +69,7 @@ export default function Home() {
             scale: prefersReducedMotion ? 1 : heroScale,
             y: prefersReducedMotion ? 0 : heroMediaY,
           }}
-          transition={prefersReducedMotion ? { duration: 0 } : { duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 1.4, ease: LUXURY_EASE }}
         >
           <picture>
             <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
@@ -97,51 +98,41 @@ export default function Home() {
             className="max-w-2xl"
             initial={prefersReducedMotion ? false : "hidden"}
             animate="visible"
-            variants={{
-              hidden: {},
-              visible: { transition: { staggerChildren: prefersReducedMotion ? 0 : 0.14, delayChildren: prefersReducedMotion ? 0 : 0.1 } },
-            }}
+            variants={editorialGroup}
           >
-            <motion.div
-              variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 0.8, ease: [0.22, 1, 0.36, 1] } } }}
-              className="mb-6 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]"></span>
-              <span className="text-xs uppercase tracking-[0.28em] text-[#BF9972]">{H.eyebrow}</span>
+            <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft}>
+              <div className="mb-6 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]"></span>
+                <span className="text-xs uppercase tracking-[0.28em] text-[#BF9972]">{H.eyebrow}</span>
+              </div>
+              <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05]">
+                {H.headline_line1}<br />
+                <span className="italic brand-gradient-text">{H.headline_line2}</span>
+              </h1>
             </motion.div>
-            <motion.h1
-              variants={{ hidden: { opacity: 0, y: 26 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 1.05, ease: [0.22, 1, 0.36, 1] } } }}
-              className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05]"
-            >
-              {H.headline_line1}<br />
-              <span className="italic brand-gradient-text">{H.headline_line2}</span>
-            </motion.h1>
-            <motion.p
-              variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 0.9, ease: [0.22, 1, 0.36, 1] } } }}
-              className="mt-6 text-white/70 max-w-lg leading-relaxed"
-            >
-              {H.description}
-            </motion.p>
-            <motion.div
-              variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 0.9, ease: [0.22, 1, 0.36, 1] } } }}
-              className="mt-10 flex flex-wrap gap-3"
-            >
-              <Link to={H.primary_cta_link || "/catalog"} data-testid="hero-explore-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] transition-colors">
-                {H.primary_cta_text} <ArrowUpRight size={14} />
-              </Link>
-              {H.secondary_cta_text && (heroSecondaryExternal ? (
-                <a href={heroSecondaryHref} target="_blank" rel="noreferrer" data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors">
-                  <MessageCircle size={14} /> {H.secondary_cta_text}
-                </a>
-              ) : (
-                <Link to={heroSecondaryHref} data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors">
-                  <MessageCircle size={14} /> {H.secondary_cta_text}
+
+            <motion.div variants={prefersReducedMotion ? undefined : editorialItem}>
+              <p className="mt-6 text-white/70 max-w-lg leading-relaxed">
+                {H.description}
+              </p>
+              <div className="mt-10 flex flex-wrap gap-3">
+                <Link to={H.primary_cta_link || "/catalog"} data-testid="hero-explore-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] transition-colors">
+                  {H.primary_cta_text} <ArrowUpRight size={14} />
                 </Link>
-              ))}
+                {H.secondary_cta_text && (heroSecondaryExternal ? (
+                  <a href={heroSecondaryHref} target="_blank" rel="noreferrer" data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors">
+                    <MessageCircle size={14} /> {H.secondary_cta_text}
+                  </a>
+                ) : (
+                  <Link to={heroSecondaryHref} data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors">
+                    <MessageCircle size={14} /> {H.secondary_cta_text}
+                  </Link>
+                ))}
+              </div>
             </motion.div>
 
             <motion.div
-              variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 0.9, ease: [0.22, 1, 0.36, 1] } } }}
+              variants={prefersReducedMotion ? undefined : editorialItemSoft}
               className="mt-14 pt-8 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg"
             >
               {(H.trust || []).map((t, i) => (
