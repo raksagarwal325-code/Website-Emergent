@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
+import { editorialGroup, editorialItem, editorialItemSoft } from "../lib/motion";
 
 export default function FounderTeaser() {
   const { hp } = useSettings();
@@ -14,10 +15,9 @@ export default function FounderTeaser() {
     target: sectionRef,
     offset: ["start end", "end start"],
   });
-  const photoY = useTransform(scrollYProgress, [0, 1], [22, -22]);
-  const photoScale = useTransform(scrollYProgress, [0, 0.5, 1], [0.96, 1.03, 1]);
+  const photoY = useTransform(scrollYProgress, [0, 1], [14, -14]);
+  const photoScale = useTransform(scrollYProgress, [0, 0.5, 1], [0.985, 1.015, 1]);
 
-  // Honour the CMS toggle (defaults to enabled) and require at minimum a photo.
   if (t.enabled === false || !f.image) return null;
 
   const eyebrow = t.eyebrow || "Meet the founder";
@@ -36,10 +36,10 @@ export default function FounderTeaser() {
     >
       <motion.div
         className="relative warm-panel overflow-hidden"
-        initial={prefersReducedMotion ? false : { opacity: 0, y: 34 }}
-        whileInView={{ opacity: 1, y: 0 }}
+        initial={prefersReducedMotion ? false : "hidden"}
+        whileInView="visible"
         viewport={{ once: true, amount: 0.25 }}
-        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+        variants={editorialGroup}
       >
         <div
           className="absolute -top-24 -right-24 w-96 h-96 rounded-full opacity-20 pointer-events-none"
@@ -53,6 +53,7 @@ export default function FounderTeaser() {
         <div className="relative grid md:grid-cols-[280px_1fr] gap-8 md:gap-12 items-center p-8 md:p-14">
           <motion.div
             className="flex justify-center md:justify-start"
+            variants={prefersReducedMotion ? undefined : editorialItemSoft}
             style={{
               y: prefersReducedMotion ? 0 : photoY,
               scale: prefersReducedMotion ? 1 : photoScale,
@@ -74,10 +75,7 @@ export default function FounderTeaser() {
 
           <motion.div
             className="text-center md:text-left"
-            initial={prefersReducedMotion ? false : { opacity: 0, x: 28 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, amount: 0.35 }}
-            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.85, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+            variants={prefersReducedMotion ? undefined : editorialItem}
           >
             <div className="eyebrow mb-4 text-[#D4AF37]">{eyebrow}</div>
             <h2 className="font-serif text-3xl md:text-4xl lg:text-5xl leading-[1.1] mb-5">
