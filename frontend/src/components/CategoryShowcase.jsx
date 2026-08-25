@@ -147,7 +147,6 @@ export default function CategoryShowcase() {
 
         <div className="mt-5 flex items-center gap-5">
           <div className="h-px flex-1 overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} /></div>
-          <div className="min-w-[78px] text-right text-[10px] uppercase tracking-[0.25em] text-white/42">{String(active + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div>
           <Link to={`/category/${current.slug}`} className="hidden text-[10px] uppercase tracking-[0.22em] text-[#D4AF37] md:inline-flex">Open {current.label} <ArrowUpRight size={12} className="ml-1" /></Link>
         </div>
       </div>

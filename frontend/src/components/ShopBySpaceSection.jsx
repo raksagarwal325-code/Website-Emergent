@@ -76,7 +76,7 @@ export default function ShopBySpaceSection() {
                 {cover ? <motion.img src={cover} alt={`${space.label} lighting`} loading="lazy" className="h-full w-full object-cover" initial={prefersReducedMotion ? false : { scale: 1.08 }} animate={{ scale: 1 }} transition={{ duration: 1.15, ease: LUXURY_EASE }} /> : <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 70% 30%,rgba(212,175,55,.08),transparent 30%),linear-gradient(135deg,#35131f,#12070d 68%)" }} />}
                 <div className="absolute inset-0 bg-gradient-to-r from-[#12070d]/95 via-[#12070d]/55 to-[#12070d]/10" />
                 <div className="absolute inset-x-0 bottom-0 max-w-2xl p-7 md:p-10">
-                  <motion.div className="mb-3 text-[10px] uppercase tracking-[0.26em] text-[#D4AF37]" initial={prefersReducedMotion ? false : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .12, duration: .55, ease: LUXURY_EASE }}>By space · {String(active + 1).padStart(2, "0")}</motion.div>
+                  <motion.div className="mb-3 text-[10px] uppercase tracking-[0.26em] text-[#D4AF37]" initial={prefersReducedMotion ? false : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .12, duration: .55, ease: LUXURY_EASE }}>By space</motion.div>
                   <motion.h3 className="font-serif text-4xl leading-[.98] text-white md:text-6xl" initial={prefersReducedMotion ? false : { opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .18, duration: .62, ease: LUXURY_EASE }}>{space.label}</motion.h3>
                   <motion.p className="mt-4 max-w-xl text-sm leading-relaxed text-white/66 md:text-base" initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .26, duration: .62, ease: LUXURY_EASE }}>{space.description}</motion.p>
                   <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .34, duration: .55, ease: LUXURY_EASE }}><Link to={spaceCatalogHref(space)} className="mt-6 inline-flex items-center gap-2 border-b border-[#D4AF37]/50 pb-1 text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]">Explore lighting <ArrowUpRight size={13} /></Link></motion.div>
@@ -100,7 +100,7 @@ export default function ShopBySpaceSection() {
           </div>
         </motion.div>
 
-        <div className="mt-5 flex items-center gap-5"><div className="h-px flex-1 overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} /></div><div className="text-[10px] uppercase tracking-[0.25em] text-white/42">{String(active + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div></div>
+        <div className="mt-5 h-px overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} /></div>
       </div>
     </section>
   );
