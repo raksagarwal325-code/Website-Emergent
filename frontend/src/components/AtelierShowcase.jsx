@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { motion, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { ArrowUpRight, MessageCircle } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api, formatProductPrice } from "../lib/api";
@@ -29,12 +29,10 @@ export default function AtelierShowcase() {
     target: sectionRef,
     offset: ["start end", "end start"],
   });
-  const mediaY = useTransform(scrollYProgress, [0, 1], [95, -125]);
-  const mediaScale = useTransform(scrollYProgress, [0, 0.48, 1], [0.88, 1.09, 0.98]);
-  const mediaRotate = useTransform(scrollYProgress, [0, 0.5, 1], [-1.2, 0, 1.1]);
-  const copyX = useTransform(scrollYProgress, [0, 0.28, 0.72, 1], [90, 0, 0, -35]);
-  const copyY = useTransform(scrollYProgress, [0, 0.5, 1], [45, 0, -35]);
-  const copyOpacity = useTransform(scrollYProgress, [0, 0.26, 0.78, 1], [0.15, 1, 1, 0.45]);
+  const mediaY = useTransform(scrollYProgress, [0, 1], [60, -80]);
+  const mediaScale = useTransform(scrollYProgress, [0, 0.5, 1], [0.95, 1.035, 1]);
+  const copyY = useTransform(scrollYProgress, [0, 0.5, 1], [24, 0, -18]);
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.24, 0.8, 1], [0.35, 1, 1, 0.65]);
 
   const [products, setProducts] = useState([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
@@ -63,11 +61,13 @@ export default function AtelierShowcase() {
 
   const [active, setActive] = useState(0);
   useEffect(() => { if (active >= slides.length) setActive(0); }, [slides.length, active]);
-  useEffect(() => {
-    if (slides.length <= 1) return undefined;
-    const id = setInterval(() => setActive((i) => (i + 1) % slides.length), 6000);
-    return () => clearInterval(id);
-  }, [slides.length]);
+
+  useMotionValueEvent(scrollYProgress, "change", (latest) => {
+    if (prefersReducedMotion || slides.length <= 1) return;
+    const bounded = Math.max(0, Math.min(0.999, latest));
+    const next = Math.min(slides.length - 1, Math.floor(bounded * slides.length));
+    setActive((current) => (current === next ? current : next));
+  });
 
   if (slides.length === 0) return null;
 
@@ -94,7 +94,6 @@ export default function AtelierShowcase() {
           style={{
             y: prefersReducedMotion ? 0 : mediaY,
             scale: prefersReducedMotion ? 1 : mediaScale,
-            rotate: prefersReducedMotion ? 0 : mediaRotate,
             transformOrigin: "50% 50%",
           }}
         >
@@ -116,15 +115,15 @@ export default function AtelierShowcase() {
                   key={`${src}-${i}`}
                   src={api.resolveImage(src)}
                   alt={`Samrat Glass Emporium — ${s.caption || s.product?.name || ""}`}
-                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-1000 ${productHref && i === active ? "group-hover:scale-[1.03]" : ""}`}
-                  style={{ opacity: i === active ? 1 : 0 }}
+                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-1000 ${productHref && i === active ? "group-hover:scale-[1.025]" : ""}`}
+                  style={{ opacity: i === active ? 1 : 0, transform: i === active ? "scale(1)" : "scale(1.015)" }}
                   loading={i === 0 ? "eager" : "lazy"}
                 />
               );
             })}
 
             <div className="absolute inset-0 pointer-events-none mix-blend-screen"
-              style={{ background: "radial-gradient(circle at 50% 60%, rgba(212,175,55,0.22), transparent 55%)" }} />
+              style={{ background: "radial-gradient(circle at 50% 60%, rgba(212,175,55,0.18), transparent 58%)" }} />
             <div className="absolute inset-x-6 top-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
             <div className="absolute inset-x-6 bottom-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
 
@@ -178,7 +177,6 @@ export default function AtelierShowcase() {
         <motion.div
           className="md:col-span-5 md:sticky md:top-32 md:pt-14 will-change-transform"
           style={{
-            x: prefersReducedMotion ? 0 : copyX,
             y: prefersReducedMotion ? 0 : copyY,
             opacity: prefersReducedMotion ? 1 : copyOpacity,
           }}
