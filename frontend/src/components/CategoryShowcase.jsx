@@ -5,6 +5,7 @@ import { ArrowUpRight } from "lucide-react";
 import { api } from "../lib/api";
 import { NAV_CATEGORIES as CATEGORIES } from "../lib/categories";
 import { BRAND_PLACEHOLDER } from "../lib/placeholders";
+import { editorialGroup, editorialItem, imageReveal, LUXURY_EASE } from "../lib/motion";
 
 /**
  * "Shop by Category" — editorial category grid sitting directly under the
@@ -104,12 +105,12 @@ export default function CategoryShowcase() {
       <div className="relative max-w-7xl mx-auto px-6 py-20 md:py-24">
         <motion.div
           className="mb-12 md:mb-14"
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 28 }}
-          whileInView={{ opacity: 1, y: 0 }}
+          initial={prefersReducedMotion ? false : "hidden"}
+          whileInView="visible"
           viewport={{ once: true, margin: "-80px" }}
-          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+          variants={editorialGroup}
         >
-          <div>
+          <motion.div variants={prefersReducedMotion ? undefined : editorialItem}>
             <div className="eyebrow mb-3">The Collection</div>
             <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl leading-tight">
               Shop by <span className="italic brand-gradient-text">Category</span>
@@ -125,7 +126,7 @@ export default function CategoryShowcase() {
             >
               View full catalog <ArrowUpRight size={15} />
             </Link>
-          </div>
+          </motion.div>
         </motion.div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 md:gap-6">
@@ -148,13 +149,14 @@ function CategoryCard({ category, imageUrl, index, reducedMotion }) {
   const href = `/category/${category.slug}`;
   return (
     <motion.div
-      initial={reducedMotion ? false : { opacity: 0, y: 42, scale: 0.96 }}
-      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      initial={reducedMotion ? false : "hidden"}
+      whileInView="visible"
       viewport={{ once: true, margin: "-50px" }}
+      variants={reducedMotion ? undefined : imageReveal}
       transition={reducedMotion ? { duration: 0 } : {
-        duration: 0.75,
-        delay: Math.min(0.08 * index, 0.48),
-        ease: [0.22, 1, 0.36, 1],
+        duration: 0.9,
+        delay: Math.min(0.045 * index, 0.28),
+        ease: LUXURY_EASE,
       }}
     >
       <Link
@@ -172,7 +174,7 @@ function CategoryCard({ category, imageUrl, index, reducedMotion }) {
               loading="lazy"
               fetchPriority="low"
               decoding="async"
-              className="w-full h-full object-cover transition-transform duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.06]"
+              className="w-full h-full object-cover transition-transform duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04]"
             />
           )}
           <div
