@@ -1,5 +1,5 @@
-import React from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import React, { useRef } from "react";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { useSettings } from "../context/SettingsContext";
 import { LUXURY_EASE } from "../lib/motion";
 
@@ -18,71 +18,111 @@ export default function ReasonsSection({ compact = false }) {
   const { hp } = useSettings();
   const r = hp.reasons;
   const prefersReducedMotion = useReducedMotion();
+  const sectionRef = useRef(null);
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start end", "end start"] });
+  const headingY = useTransform(scrollYProgress, [0, 0.5, 1], prefersReducedMotion ? [0, 0, 0] : [34, 0, -20]);
+  const gridY = useTransform(scrollYProgress, [0.18, 0.55, 0.9], prefersReducedMotion ? [0, 0, 0] : [26, 0, -18]);
+  const glowX = useTransform(scrollYProgress, [0, 1], prefersReducedMotion ? ["0%", "0%"] : ["-12%", "12%"]);
 
   return (
-    <section data-testid="reasons-section" className="relative overflow-hidden">
+    <section ref={sectionRef} data-testid="reasons-section" className="relative overflow-hidden">
       <motion.div
         aria-hidden
-        className="absolute inset-0 pointer-events-none opacity-[0.06]"
-        style={{ background: "radial-gradient(ellipse at 50% 0%, #D4AF37 0%, transparent 55%)" }}
-        initial={prefersReducedMotion ? false : { opacity: 0.035, scale: 0.94 }}
-        whileInView={prefersReducedMotion ? undefined : { opacity: 0.075, scale: 1.04 }}
-        viewport={{ once: true, amount: 0.2 }}
-        transition={{ duration: 1.4, ease: LUXURY_EASE }}
+        className="absolute -inset-x-[12%] inset-y-0 pointer-events-none opacity-[0.07]"
+        style={{
+          x: glowX,
+          background: "radial-gradient(ellipse at 50% 0%, #D4AF37 0%, transparent 55%), radial-gradient(circle at 18% 70%, rgba(163,99,80,.22), transparent 35%)",
+        }}
       />
 
       <div className={`relative max-w-7xl mx-auto px-6 ${compact ? "py-16" : "py-24"}`}>
         <motion.div
           className="text-center mb-12 max-w-2xl mx-auto"
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 28 }}
-          whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.35 }}
-          transition={{ duration: 0.8, ease: LUXURY_EASE }}
+          style={{ y: headingY }}
+          initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.965 }}
+          whileInView={prefersReducedMotion ? undefined : { opacity: 1, scale: 1 }}
+          viewport={{ once: true, amount: 0.28 }}
+          transition={{ duration: 0.82, ease: LUXURY_EASE }}
         >
-          <div className="eyebrow mb-3">{r.eyebrow}</div>
+          <motion.div
+            className="eyebrow mb-3"
+            initial={prefersReducedMotion ? false : { opacity: 0, letterSpacing: "0.42em" }}
+            whileInView={prefersReducedMotion ? undefined : { opacity: 1, letterSpacing: "0.28em" }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.75, ease: LUXURY_EASE }}
+          >
+            {r.eyebrow}
+          </motion.div>
           <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl leading-tight brand-gradient-text">{r.heading}</h2>
           <motion.div
             className="mt-4 mx-auto h-px w-16 origin-center bg-[#D4AF37]/60"
             initial={prefersReducedMotion ? false : { scaleX: 0 }}
             whileInView={prefersReducedMotion ? undefined : { scaleX: 1 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.75, delay: 0.15, ease: LUXURY_EASE }}
+            transition={{ duration: 0.9, delay: 0.15, ease: LUXURY_EASE }}
           />
         </motion.div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" style={{ y: gridY }}>
           {(r.items || []).map((it, i) => (
             <motion.div
               key={i}
               data-testid={`reason-${i}`}
               className="warm-panel p-6 group relative overflow-hidden hover:border-[#D4AF37]/50 transition-colors"
-              initial={prefersReducedMotion ? false : { opacity: 0, y: 38, scale: 0.975 }}
-              whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, amount: 0.24 }}
-              transition={{ duration: 0.7, delay: prefersReducedMotion ? 0 : (i % 4) * 0.08, ease: LUXURY_EASE }}
-              whileHover={prefersReducedMotion ? undefined : { y: -6, scale: 1.012 }}
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 58, x: i % 2 === 0 ? -18 : 18, scale: 0.95 }}
+              whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0, x: 0, scale: 1 }}
+              viewport={{ once: true, amount: 0.18 }}
+              transition={{ duration: 0.82, delay: prefersReducedMotion ? 0 : (i % 4) * 0.1, ease: LUXURY_EASE }}
+              whileHover={prefersReducedMotion ? undefined : { y: -8, scale: 1.015 }}
             >
               <motion.div
                 aria-hidden
                 className="absolute -right-10 -top-10 h-28 w-28 rounded-full border border-[#D4AF37]/10"
                 initial={false}
-                whileHover={prefersReducedMotion ? undefined : { scale: 1.18, opacity: 0.75 }}
+                whileHover={prefersReducedMotion ? undefined : { scale: 1.28, opacity: 0.85 }}
                 transition={{ duration: 0.45, ease: LUXURY_EASE }}
+              />
+              <motion.div
+                aria-hidden
+                className="absolute left-0 top-0 h-px w-full origin-left bg-gradient-to-r from-[#D4AF37]/70 via-[#D4AF37]/20 to-transparent"
+                initial={prefersReducedMotion ? false : { scaleX: 0 }}
+                whileInView={prefersReducedMotion ? undefined : { scaleX: 1 }}
+                viewport={{ once: true, amount: 0.4 }}
+                transition={{ duration: 0.75, delay: 0.18 + (i % 4) * 0.08, ease: LUXURY_EASE }}
               />
 
               <motion.div
                 className="w-10 h-10 mb-4 flex items-center justify-center border border-[#D4AF37]/40 text-[#D4AF37] group-hover:bg-[#D4AF37]/10 transition-colors"
-                whileHover={prefersReducedMotion ? undefined : { rotate: 4, scale: 1.08 }}
-                transition={{ duration: 0.28 }}
+                initial={prefersReducedMotion ? false : { rotate: -8, scale: 0.82 }}
+                whileInView={prefersReducedMotion ? undefined : { rotate: 0, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.55, delay: 0.2 + (i % 4) * 0.1, ease: LUXURY_EASE }}
+                whileHover={prefersReducedMotion ? undefined : { rotate: 5, scale: 1.1 }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[i % ICONS.length]} /></svg>
               </motion.div>
 
-              <div className="font-serif text-base md:text-lg leading-snug text-white mb-2">{it.title}</div>
-              <p className="text-sm md:text-[15px] text-white/70 leading-relaxed">{it.body}</p>
+              <motion.div
+                className="font-serif text-base md:text-lg leading-snug text-white mb-2"
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
+                whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: 0.28 + (i % 4) * 0.1 }}
+              >
+                {it.title}
+              </motion.div>
+              <motion.p
+                className="text-sm md:text-[15px] text-white/70 leading-relaxed"
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
+                whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: 0.36 + (i % 4) * 0.1 }}
+              >
+                {it.body}
+              </motion.p>
             </motion.div>
           ))}
-        </div>
+        </motion.div>
       </div>
     </section>
   );
