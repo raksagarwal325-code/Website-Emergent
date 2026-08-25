@@ -1,10 +1,53 @@
 /**
  * Accessibility regression: Atelier carousel dots must have a 44×44 CSS
  * px tap target while keeping the visual pill clearly visible.
+ *
+ * Framer Motion is intentionally mocked here because this test verifies the
+ * rendered accessibility contract, not animation lifecycles. That keeps the
+ * regression deterministic under jsdom/React act semantics.
  */
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+
+jest.mock("framer-motion", () => {
+  const React = require("react");
+  const ignored = new Set([
+    "initial",
+    "animate",
+    "exit",
+    "transition",
+    "whileInView",
+    "viewport",
+    "whileHover",
+    "whileTap",
+    "variants",
+    "layout",
+    "layoutId",
+  ]);
+
+  const makeMotionComponent = (tag) =>
+    React.forwardRef(({ children, ...props }, ref) => {
+      const domProps = Object.fromEntries(
+        Object.entries(props).filter(([key]) => !ignored.has(key)),
+      );
+      return React.createElement(tag, { ...domProps, ref }, children);
+    });
+
+  const motion = new Proxy(
+    {},
+    {
+      get: (_target, tag) => makeMotionComponent(tag),
+    },
+  );
+
+  return {
+    __esModule: true,
+    motion,
+    AnimatePresence: ({ children }) => <>{children}</>,
+    useReducedMotion: () => false,
+  };
+});
 
 jest.mock("../lib/api", () => ({
   __esModule: true,
@@ -77,7 +120,8 @@ describe("AtelierShowcase — dot tap-target accessibility", () => {
       expect(btn.getAttribute("aria-label")).toMatch(/^View slide \d+$/);
     }
 
-    // The interaction-driven carousel must expose one and only one current dot.
-    expect(dots.filter((btn) => btn.getAttribute("aria-current") === "true")).toHaveLength(1);
+    expect(
+      dots.filter((btn) => btn.getAttribute("aria-current") === "true"),
+    ).toHaveLength(1);
   });
 });
