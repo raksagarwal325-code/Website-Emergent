@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
 import { NAV_CATEGORIES as CATEGORIES } from "../lib/categories";
 import { BRAND_PLACEHOLDER } from "../lib/placeholders";
@@ -13,6 +13,7 @@ export default function CategoryShowcase() {
   const [images, setImages] = useState({});
   const [shouldLoadMedia, setShouldLoadMedia] = useState(false);
   const sectionRef = useRef(null);
+  const railRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -69,6 +70,14 @@ export default function CategoryShowcase() {
     };
   }, [shouldLoadMedia]);
 
+  const scrollRail = (direction) => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const card = rail.querySelector("[data-category-card]");
+    const amount = card ? card.getBoundingClientRect().width + 20 : rail.clientWidth * 0.78;
+    rail.scrollBy({ left: direction * amount, behavior: prefersReducedMotion ? "auto" : "smooth" });
+  };
+
   return (
     <section
       ref={sectionRef}
@@ -83,40 +92,50 @@ export default function CategoryShowcase() {
             "radial-gradient(circle at 15% 20%, rgba(163,99,80,0.18), transparent 55%), radial-gradient(circle at 85% 90%, rgba(212,175,55,0.08), transparent 60%)",
         }}
       />
-      <div className="relative max-w-7xl mx-auto px-6 py-20 md:py-28">
+      <div className="relative max-w-[1500px] mx-auto px-6 py-16 md:py-20">
         <motion.div
-          className="mb-12 md:mb-16"
+          className="mb-8 md:mb-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between"
           initial={prefersReducedMotion ? false : "hidden"}
           whileInView="visible"
           viewport={{ once: true, margin: "-80px" }}
           variants={editorialGroup}
         >
-          <motion.div variants={prefersReducedMotion ? undefined : editorialItem}>
+          <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="max-w-2xl">
             <div className="eyebrow mb-3">The Collection</div>
             <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl leading-tight">
               Shop by <span className="italic brand-gradient-text">Category</span>
             </h2>
             <p className="mt-4 text-white/60 max-w-md text-sm md:text-base">
-              From soaring crystal chandeliers to intimate candle stands — a curated way to find the piece your space is asking for.
+              From soaring crystal chandeliers to intimate candle stands — move sideways through the collection without lengthening the page.
             </p>
+          </motion.div>
+
+          <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="flex items-center gap-3">
             <Link
               to="/catalog"
               data-testid="category-showcase-view-all"
-              className="hidden md:inline-flex mt-5 items-center gap-2 text-[#D4AF37] hover:text-[#E0C15D] text-sm font-medium uppercase tracking-[0.22em] link-underline"
+              className="mr-2 inline-flex items-center gap-2 text-[#D4AF37] hover:text-[#E0C15D] text-xs font-medium uppercase tracking-[0.22em] link-underline"
             >
-              View full catalog <ArrowUpRight size={15} />
+              View full catalog <ArrowUpRight size={14} />
             </Link>
+            <button type="button" aria-label="Previous categories" onClick={() => scrollRail(-1)} className="hidden md:flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/70 transition hover:border-[#D4AF37]/70 hover:text-[#D4AF37]"><ChevronLeft size={18} /></button>
+            <button type="button" aria-label="Next categories" onClick={() => scrollRail(1)} className="hidden md:flex h-11 w-11 items-center justify-center rounded-full border border-[#D4AF37]/45 bg-black/30 text-[#D4AF37] transition hover:bg-[#D4AF37] hover:text-black"><ChevronRight size={18} /></button>
           </motion.div>
         </motion.div>
 
         <motion.div
-          className="relative overflow-hidden"
-          initial={prefersReducedMotion ? false : { clipPath: "inset(0 0 22% 0)", opacity: 0.35, y: 42 }}
-          whileInView={{ clipPath: "inset(0 0 0% 0)", opacity: 1, y: 0 }}
+          className="relative"
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 26 }}
+          whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.16 }}
-          transition={prefersReducedMotion ? { duration: 0 } : { duration: 1.15, ease: LUXURY_EASE }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, ease: LUXURY_EASE }}
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 md:gap-6">
+          <div
+            ref={railRef}
+            data-testid="home-category-horizontal-rail"
+            className="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain pb-3 pr-[12vw] md:gap-5 md:pr-[8vw] lg:pr-[5vw]"
+            style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
+          >
             {CATEGORIES.map((c, i) => (
               <CategoryCard
                 key={c.db_name}
@@ -127,6 +146,7 @@ export default function CategoryShowcase() {
               />
             ))}
           </div>
+          <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-[#16070f] to-transparent md:w-24" />
         </motion.div>
       </div>
     </section>
@@ -137,12 +157,14 @@ function CategoryCard({ category, imageUrl, index, reducedMotion }) {
   const href = `/category/${category.slug}`;
   return (
     <motion.div
-      initial={reducedMotion ? false : { opacity: 0, y: 18 }}
+      data-category-card
+      className="w-[82vw] max-w-[330px] shrink-0 snap-start sm:w-[44vw] md:w-[31vw] lg:w-[22vw] xl:w-[19vw]"
+      initial={reducedMotion ? false : { opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-40px" }}
+      viewport={{ once: true, margin: "-30px" }}
       transition={reducedMotion ? { duration: 0 } : {
-        duration: 0.75,
-        delay: Math.min(0.055 * index, 0.32),
+        duration: 0.7,
+        delay: Math.min(0.045 * index, 0.24),
         ease: LUXURY_EASE,
       }}
     >
@@ -161,15 +183,14 @@ function CategoryCard({ category, imageUrl, index, reducedMotion }) {
               loading="lazy"
               fetchPriority="low"
               decoding="async"
-              className="w-full h-full object-cover scale-[1.035] transition-transform duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.075]"
+              className="w-full h-full object-cover scale-[1.025] transition-transform duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.07]"
             />
           )}
           <div aria-hidden className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,7,15,0.02) 35%, rgba(22,7,15,0.58) 72%, rgba(22,7,15,0.94) 100%)" }} />
-          <div aria-hidden className="absolute inset-x-6 bottom-[92px] h-px bg-[#D4AF37]/0 group-hover:bg-[#D4AF37]/60 transition-colors duration-500" />
         </div>
 
-        <div className="absolute inset-x-0 bottom-0 p-5 md:p-6 flex flex-col justify-end min-h-[8.5rem]">
-          <div className="font-serif text-xl md:text-2xl leading-tight text-white mb-3 min-h-[3.5rem] flex items-end">
+        <div className="absolute inset-x-0 bottom-0 p-5 md:p-6 flex flex-col justify-end min-h-[8rem]">
+          <div className="font-serif text-xl md:text-2xl leading-tight text-white mb-3 min-h-[3.25rem] flex items-end">
             {category.label}
           </div>
           <span className="inline-flex w-fit items-center gap-1.5 text-xs uppercase tracking-[0.24em] text-[#D4AF37] whitespace-nowrap pb-1 border-b border-[#D4AF37]/40 group-hover:border-[#D4AF37] transition-colors">
