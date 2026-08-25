@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
 import { NAV_CATEGORIES as CATEGORIES } from "../lib/categories";
@@ -11,9 +11,10 @@ const FALLBACK_IMG = BRAND_PLACEHOLDER;
 
 export default function CategoryShowcase() {
   const [images, setImages] = useState({});
+  const [active, setActive] = useState(0);
+  const [direction, setDirection] = useState(1);
   const [shouldLoadMedia, setShouldLoadMedia] = useState(false);
   const sectionRef = useRef(null);
-  const railRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export default function CategoryShowcase() {
         setShouldLoadMedia(true);
         observer.disconnect();
       }
-    }, { rootMargin: "200px 0px" });
+    }, { rootMargin: "240px 0px" });
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
@@ -53,59 +54,85 @@ export default function CategoryShowcase() {
     return () => { alive = false; };
   }, [shouldLoadMedia]);
 
-  const scrollRail = (direction) => {
-    const rail = railRef.current;
-    if (!rail) return;
-    const card = rail.querySelector("[data-category-card]");
-    const amount = card ? card.getBoundingClientRect().width + 18 : rail.clientWidth * 0.76;
-    rail.scrollBy({ left: direction * amount, behavior: prefersReducedMotion ? "auto" : "smooth" });
+  const total = CATEGORIES.length;
+  const go = (delta) => {
+    setDirection(delta > 0 ? 1 : -1);
+    setActive((current) => (current + delta + total) % total);
+  };
+  const choose = (index) => {
+    setDirection(index > active ? 1 : -1);
+    setActive(index);
   };
 
+  const visible = useMemo(() => [-1, 0, 1].map((offset) => ({
+    offset,
+    index: (active + offset + total) % total,
+    category: CATEGORIES[(active + offset + total) % total],
+  })), [active, total]);
+
+  const current = CATEGORIES[active];
+
   return (
-    <section ref={sectionRef} data-testid="home-category-showcase" className="relative z-10 border-t border-white/10 bg-[#16070f] md:-mt-6">
-      <div aria-hidden className="absolute inset-0 opacity-30 pointer-events-none" style={{ background: "radial-gradient(circle at 15% 20%, rgba(163,99,80,0.14), transparent 55%), radial-gradient(circle at 85% 90%, rgba(212,175,55,0.06), transparent 60%)" }} />
-      <div className="relative mx-auto max-w-[1500px] px-6 py-12 md:py-14">
-        <motion.div className="mb-7 flex flex-col gap-4 md:flex-row md:items-end md:justify-between" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={editorialGroup}>
+    <section ref={sectionRef} data-testid="home-category-showcase" className="relative z-10 overflow-hidden border-t border-white/10 bg-[#16070f] md:-mt-6">
+      <div aria-hidden className="absolute inset-0 opacity-45 pointer-events-none" style={{ background: "radial-gradient(circle at 18% 18%, rgba(163,99,80,.22), transparent 42%), radial-gradient(circle at 82% 82%, rgba(212,175,55,.08), transparent 38%)" }} />
+      <div className="relative mx-auto max-w-[1500px] px-6 py-12 md:py-16">
+        <motion.div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={editorialGroup}>
           <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="max-w-2xl">
             <div className="eyebrow mb-2">The Collection</div>
-            <h2 className="font-serif text-3xl leading-tight sm:text-4xl lg:text-5xl">Shop by <span className="italic brand-gradient-text">Category</span></h2>
-            <p className="mt-3 max-w-xl text-sm text-white/58 md:text-base">Browse the collection as a visual edit — each category stays one swipe away.</p>
+            <h2 className="font-serif text-4xl leading-tight sm:text-5xl lg:text-6xl">Shop by <span className="italic brand-gradient-text">Category</span></h2>
+            <p className="mt-3 max-w-xl text-sm text-white/58 md:text-base">One collection takes the stage; the next remains visible at the edge so browsing feels continuous.</p>
           </motion.div>
           <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="flex items-center gap-3">
             <Link to="/catalog" data-testid="category-showcase-view-all" className="mr-2 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.22em] text-[#D4AF37] link-underline hover:text-[#E0C15D]">View full catalog <ArrowUpRight size={14} /></Link>
-            <button type="button" aria-label="Previous categories" onClick={() => scrollRail(-1)} className="hidden h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/70 transition hover:border-[#D4AF37]/70 hover:text-[#D4AF37] md:flex"><ChevronLeft size={17} /></button>
-            <button type="button" aria-label="Next categories" onClick={() => scrollRail(1)} className="hidden h-10 w-10 items-center justify-center rounded-full border border-[#D4AF37]/45 bg-black/30 text-[#D4AF37] transition hover:bg-[#D4AF37] hover:text-black md:flex"><ChevronRight size={17} /></button>
+            <button type="button" aria-label="Previous categories" onClick={() => go(-1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/70 transition hover:border-[#D4AF37]/70 hover:text-[#D4AF37]"><ChevronLeft size={18} /></button>
+            <button type="button" aria-label="Next categories" onClick={() => go(1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-[#D4AF37]/45 bg-black/30 text-[#D4AF37] transition hover:bg-[#D4AF37] hover:text-black"><ChevronRight size={18} /></button>
           </motion.div>
         </motion.div>
 
-        <motion.div className="relative" initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.16 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.75, ease: LUXURY_EASE }}>
-          <div ref={railRef} data-testid="home-category-horizontal-rail" className="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain pb-2 pr-[15vw] md:gap-5 md:pr-[8vw]" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-            {CATEGORIES.map((c, i) => <CategoryCard key={c.db_name} category={c} imageUrl={images[c.db_name]} index={i} reducedMotion={prefersReducedMotion} />)}
-          </div>
-          <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-[#16070f] to-transparent md:w-24" />
+        <motion.div
+          className="relative h-[420px] overflow-hidden md:h-[500px] lg:h-[540px]"
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.18 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: .85, ease: LUXURY_EASE }}
+        >
+          <AnimatePresence initial={false} custom={direction}>
+            <motion.div key={active} className="absolute inset-0" initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 70 }} animate={{ opacity: 1, x: 0 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -70 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .72, ease: LUXURY_EASE }}>
+              <div className="absolute inset-y-0 left-1/2 flex w-[138%] -translate-x-1/2 items-center justify-center gap-4 md:w-[118%] md:gap-6">
+                {visible.map(({ offset, index, category }) => {
+                  const isActive = offset === 0;
+                  const img = images[category.db_name];
+                  return (
+                    <motion.button
+                      type="button"
+                      key={`${category.db_name}-${offset}`}
+                      onClick={() => choose(index)}
+                      className={`group relative overflow-hidden border text-left ${isActive ? "z-20 w-[66vw] max-w-[700px] border-[#D4AF37]/50" : "z-10 w-[27vw] max-w-[300px] border-white/10"}`}
+                      animate={prefersReducedMotion ? undefined : { scale: isActive ? 1 : .9, opacity: isActive ? 1 : .52, y: isActive ? 0 : 18 }}
+                      transition={{ duration: .65, ease: LUXURY_EASE }}
+                    >
+                      <div className={`relative overflow-hidden bg-black ${isActive ? "h-[350px] md:h-[430px] lg:h-[470px]" : "h-[290px] md:h-[360px] lg:h-[395px]"}`}>
+                        <img src={img || FALLBACK_IMG} alt={`${category.label} at Samrat Glass Emporium`} loading="lazy" className="h-full w-full object-contain transition-transform duration-[1300ms] ease-[cubic-bezier(.22,1,.36,1)] group-hover:scale-[1.045]" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#16070f]/88 via-transparent to-transparent" />
+                        <div className="absolute inset-x-0 bottom-0 p-5 md:p-7">
+                          <div className={`font-serif leading-none text-white ${isActive ? "text-3xl md:text-5xl" : "text-lg md:text-2xl"}`}>{category.label}</div>
+                          {isActive && <div className="mt-4 flex items-center justify-between gap-4"><span className="text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]">Explore collection</span><ArrowUpRight size={15} className="text-[#D4AF37]" /></div>}
+                        </div>
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </motion.div>
+
+        <div className="mt-5 flex items-center gap-5">
+          <div className="h-px flex-1 overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .45, ease: LUXURY_EASE }} /></div>
+          <div className="min-w-[78px] text-right text-[10px] uppercase tracking-[0.25em] text-white/42">{String(active + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div>
+          <Link to={`/category/${current.slug}`} className="hidden text-[10px] uppercase tracking-[0.22em] text-[#D4AF37] md:inline-flex">Open {current.label} <ArrowUpRight size={12} className="ml-1" /></Link>
+        </div>
       </div>
     </section>
-  );
-}
-
-function CategoryCard({ category, imageUrl, index, reducedMotion }) {
-  const href = `/category/${category.slug}`;
-  return (
-    <motion.div data-category-card className="w-[78vw] max-w-[360px] shrink-0 snap-start sm:w-[46vw] md:w-[32vw] lg:w-[24vw] xl:w-[22vw]" initial={reducedMotion ? false : { opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-30px" }} transition={reducedMotion ? { duration: 0 } : { duration: 0.65, delay: Math.min(0.04 * index, 0.2), ease: LUXURY_EASE }}>
-      <Link to={href} data-testid={`category-card-${category.db_name.toLowerCase().replace(/\s+/g, "-")}`} className="group block overflow-hidden border border-[#BF9972]/20 bg-[#1a0a12] transition-colors duration-500 hover:border-[#D4AF37]/60">
-        <div className="relative aspect-[4/3] overflow-hidden bg-black">
-          {imageUrl === undefined ? <div className="h-full w-full animate-pulse bg-white/[0.03]" /> : <img src={imageUrl || FALLBACK_IMG} alt={`${category.label} at Samrat Glass Emporium`} loading="lazy" fetchPriority="low" decoding="async" className="h-full w-full scale-[1.015] object-contain transition-transform duration-[1200ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.055]" />}
-          <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-[#16070f]/45 via-transparent to-transparent" />
-        </div>
-        <div className="flex items-end justify-between gap-4 border-t border-white/8 p-4 md:p-5">
-          <div className="min-w-0">
-            <div className="font-serif text-xl leading-tight text-white md:text-2xl">{category.label}</div>
-            <div className="mt-2 h-px w-10 bg-[#D4AF37]/45 transition-all duration-500 group-hover:w-16" />
-          </div>
-          <span className="inline-flex shrink-0 items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[#D4AF37]">Explore <ArrowUpRight size={12} /></span>
-        </div>
-      </Link>
-    </motion.div>
   );
 }
