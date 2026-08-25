@@ -5,7 +5,7 @@ import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
 
-const SESSION_KEY = "sge-welcome-intro-seen-v11";
+const SESSION_KEY = "sge-welcome-intro-seen-v12";
 const PRELOAD_TIMEOUT_MS = 4000;
 
 function shuffleInPlace(items) {
@@ -184,12 +184,12 @@ export default function WelcomeIntro() {
           <motion.div
             className="absolute left-[7vw] top-1/2 z-30 w-[78vw] max-w-[760px] -translate-y-1/2 md:left-[8vw] md:w-[44vw]"
             initial="hidden"
-            animate={ready ? "visible" : "hidden"}
-            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12, delayChildren: 0.18 } } }}
+            animate="visible"
+            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12, delayChildren: 0.08 } } }}
           >
             <motion.div
               className="mb-6 flex items-center gap-4"
-              variants={{ hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0, transition: { duration: 0.62 } } }}
+              variants={{ hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0, transition: { duration: 0.52 } } }}
             >
               <span className="h-px w-12 bg-[#D4AF37]/80 md:w-16" />
               <span className="text-[9px] uppercase tracking-[0.44em] text-[#D8B05B] sm:text-[10px] md:text-[11px]">
@@ -199,7 +199,7 @@ export default function WelcomeIntro() {
 
             <motion.h2
               className="font-serif text-[3.5rem] leading-[0.9] tracking-[-0.045em] text-white sm:text-6xl md:text-[5.2rem] lg:text-[6rem]"
-              variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0, transition: { duration: 0.82, ease: [0.16, 1, 0.3, 1] } } }}
+              variants={{ hidden: { opacity: 0, y: 18 }, visible: { opacity: 1, y: 0, transition: { duration: 0.72, ease: [0.16, 1, 0.3, 1] } } }}
             >
               A Legacy
               <span className="block italic font-normal text-[#d9b35d]">in Light</span>
@@ -207,14 +207,14 @@ export default function WelcomeIntro() {
 
             <motion.p
               className="mt-7 max-w-[30rem] text-[10px] uppercase leading-[1.9] tracking-[0.23em] text-white/72 md:text-[11px]"
-              variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.65 } } }}
+              variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.58 } } }}
             >
               Handcrafted glass lighting from Firozabad, since 1981
             </motion.p>
 
             <motion.div
               className="mt-8 text-[8px] uppercase tracking-[0.42em] text-[#D7B15D]/72 sm:text-[9px]"
-              variants={{ hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.65 } } }}
+              variants={{ hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.58 } } }}
             >
               Heritage · Craft · Illumination
             </motion.div>
