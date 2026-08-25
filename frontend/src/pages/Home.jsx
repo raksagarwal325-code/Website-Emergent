@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState, Suspense, lazy } from "react";
+import React, { useEffect, useState, Suspense, lazy } from "react";
 import { Link } from "react-router-dom";
-import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
 import SEO from "../components/SEO";
 import { api } from "../lib/api";
@@ -25,16 +25,7 @@ import { waGeneralLink } from "../lib/whatsapp";
 export default function Home() {
   const [featured, setFeatured] = useState([]);
   const { settings, hp } = useSettings();
-  const heroRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
-  const { scrollYProgress: heroScrollProgress } = useScroll({ target: heroRef, offset: ["start start", "end end"] });
-  const heroScale = useTransform(heroScrollProgress, [0, 0.55, 1], [1, 1.012, 0.9]);
-  const heroMediaY = useTransform(heroScrollProgress, [0, 0.58, 1], [0, 0, -36]);
-  const heroContentY = useTransform(heroScrollProgress, [0, 0.68, 1], [0, 0, -72]);
-  const heroContentOpacity = useTransform(heroScrollProgress, [0, 0.7, 0.9, 1], [1, 1, 0.9, 0]);
-  const heroShadeOpacity = useTransform(heroScrollProgress, [0.55, 1], [0, 0.62]);
-  const heroRuleScale = useTransform(heroScrollProgress, [0.04, 0.32], [0, 1]);
-  const heroFrameRadius = useTransform(heroScrollProgress, [0.72, 1], [0, 22]);
 
   useEffect(() => {
     api.listProducts({ featured: true, limit: 96 }).then((res) => setFeatured(res?.items || [])).catch(() => {});
@@ -51,42 +42,43 @@ export default function Home() {
       <SEO title="Samrat Glass Emporium · Handcrafted Chandeliers & Decorative Lighting · Firozabad" description="1000+ designs of hand-blown chandeliers, crystal hurricanes, pendants and glass lamps — crafted in Firozabad since 1981. 4.9★ · 236+ Google reviews." image={settings?.hero_image} path="/" />
       <WelcomeIntro />
 
-      <section ref={heroRef} className="relative h-auto md:h-[125vh]">
-        <motion.div className="relative md:sticky md:top-20 md:h-[calc(100vh-5rem)] overflow-hidden grain origin-center" style={{ borderRadius: prefersReducedMotion ? 0 : heroFrameRadius }}>
-          <motion.div className="absolute inset-0 opacity-45 will-change-transform" initial={prefersReducedMotion ? false : { opacity: 0 }} animate={{ opacity: 0.45 }} style={{ scale: prefersReducedMotion ? 1 : heroScale, y: prefersReducedMotion ? 0 : heroMediaY }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 1.4, ease: LUXURY_EASE }}>
-            <picture>
-              <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
-              <img src={settings?.hero_image || BRAND_PLACEHOLDER_HERO} alt="" className="w-full h-full object-cover" loading="eager" fetchPriority="high" decoding="async" />
-            </picture>
-            <HeroSlideshow />
-            <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(42,17,37,0.52) 0%, rgba(22,7,15,0.74) 58%, #16070f 100%)" }} />
-            <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 80% 20%, rgba(163,99,80,0.35), transparent 45%)" }} />
-          </motion.div>
+      <section className="relative overflow-hidden grain min-h-[calc(100vh-5rem)] border-b border-white/10">
+        <motion.div
+          className="absolute inset-0 opacity-45"
+          initial={prefersReducedMotion ? false : { opacity: 0.34, scale: 1.015 }}
+          animate={{ opacity: 0.45, scale: prefersReducedMotion ? 1 : 1.035 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 7, ease: LUXURY_EASE }}
+        >
+          <picture>
+            <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
+            <img src={settings?.hero_image || BRAND_PLACEHOLDER_HERO} alt="" className="w-full h-full object-cover" loading="eager" fetchPriority="high" decoding="async" />
+          </picture>
+          <HeroSlideshow />
+          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(42,17,37,0.54) 0%, rgba(22,7,15,0.7) 58%, #16070f 100%)" }} />
+          <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 80% 20%, rgba(163,99,80,0.30), transparent 45%)" }} />
+        </motion.div>
 
-          <motion.div aria-hidden className="absolute inset-0 pointer-events-none bg-[#16070f]" style={{ opacity: prefersReducedMotion ? 0 : heroShadeOpacity }} />
-
-          <motion.div className="relative max-w-7xl mx-auto px-6 min-h-[78vh] md:h-[calc(100vh-5rem)] flex items-center md:items-start py-12 md:pt-8 md:pb-6 will-change-transform" style={{ y: prefersReducedMotion ? 0 : heroContentY, opacity: prefersReducedMotion ? 1 : heroContentOpacity }}>
-            <motion.div className="max-w-2xl" initial={prefersReducedMotion ? false : "hidden"} animate="visible" variants={editorialGroup}>
-              <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft}>
-                <div className="mb-5 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2"><span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]" /><span className="text-xs uppercase tracking-[0.28em] text-[#BF9972]">{H.eyebrow}</span></div>
-                <h1 className="font-serif text-5xl sm:text-6xl lg:text-6xl xl:text-7xl leading-[1.02]">{H.headline_line1}<br /><span className="italic brand-gradient-text">{H.headline_line2}</span></h1>
-                <motion.div aria-hidden className="mt-6 h-px w-40 origin-left bg-gradient-to-r from-[#D4AF37]/90 to-transparent" style={{ scaleX: prefersReducedMotion ? 1 : heroRuleScale }} />
-              </motion.div>
-              <motion.div variants={prefersReducedMotion ? undefined : editorialItem}>
-                <p className="mt-5 text-white/70 max-w-lg leading-relaxed">{H.description}</p>
-                <div className="mt-7 flex flex-wrap gap-3">
-                  <Link to={H.primary_cta_link || "/catalog"} data-testid="hero-explore-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] transition-colors">{H.primary_cta_text} <ArrowUpRight size={14} /></Link>
-                  {H.secondary_cta_text && (heroSecondaryExternal ? <a href={heroSecondaryHref} target="_blank" rel="noreferrer" data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors"><MessageCircle size={14} /> {H.secondary_cta_text}</a> : <Link to={heroSecondaryHref} data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors"><MessageCircle size={14} /> {H.secondary_cta_text}</Link>)}
-                </div>
-              </motion.div>
-              <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft} className="mt-8 pt-5 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
-                {(H.trust || []).map((t, i) => <div key={i}><div className="font-serif text-xl md:text-2xl brand-gradient-text leading-none">{t.value}</div><div className="text-xs font-medium uppercase tracking-[0.18em] text-white/60 mt-2">{t.label}</div></div>)}
-              </motion.div>
+        <div className="relative max-w-7xl mx-auto px-6 min-h-[calc(100vh-5rem)] flex items-center py-10 md:py-12">
+          <motion.div className="max-w-2xl" initial={prefersReducedMotion ? false : "hidden"} animate="visible" variants={editorialGroup}>
+            <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft}>
+              <div className="mb-5 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2"><span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]" /><span className="text-xs uppercase tracking-[0.28em] text-[#BF9972]">{H.eyebrow}</span></div>
+              <h1 className="font-serif text-5xl sm:text-6xl lg:text-6xl xl:text-7xl leading-[1.02]">{H.headline_line1}<br /><span className="italic brand-gradient-text">{H.headline_line2}</span></h1>
+              <motion.div aria-hidden className="mt-6 h-px w-40 origin-left bg-gradient-to-r from-[#D4AF37]/90 to-transparent" initial={prefersReducedMotion ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, delay: 0.25, ease: LUXURY_EASE }} />
+            </motion.div>
+            <motion.div variants={prefersReducedMotion ? undefined : editorialItem}>
+              <p className="mt-5 text-white/70 max-w-lg leading-relaxed">{H.description}</p>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link to={H.primary_cta_link || "/catalog"} data-testid="hero-explore-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] transition-colors">{H.primary_cta_text} <ArrowUpRight size={14} /></Link>
+                {H.secondary_cta_text && (heroSecondaryExternal ? <a href={heroSecondaryHref} target="_blank" rel="noreferrer" data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors"><MessageCircle size={14} /> {H.secondary_cta_text}</a> : <Link to={heroSecondaryHref} data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors"><MessageCircle size={14} /> {H.secondary_cta_text}</Link>)}
+              </div>
+            </motion.div>
+            <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft} className="mt-8 pt-5 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
+              {(H.trust || []).map((t, i) => <div key={i}><div className="font-serif text-xl md:text-2xl brand-gradient-text leading-none">{t.value}</div><div className="text-xs font-medium uppercase tracking-[0.18em] text-white/60 mt-2">{t.label}</div></div>)}
             </motion.div>
           </motion.div>
+        </div>
 
-          <div aria-hidden className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#16070f] pointer-events-none" />
-        </motion.div>
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#16070f] pointer-events-none" />
       </section>
 
       <div className="relative z-10"><CategoryShowcase /></div>

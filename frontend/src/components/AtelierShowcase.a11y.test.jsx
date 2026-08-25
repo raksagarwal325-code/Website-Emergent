@@ -1,10 +1,53 @@
 /**
  * Accessibility regression: Atelier carousel dots must have a 44×44 CSS
  * px tap target while keeping the visual pill clearly visible.
+ *
+ * Framer Motion is intentionally mocked here because this test verifies the
+ * rendered accessibility contract, not animation lifecycles. That keeps the
+ * regression deterministic under jsdom/React act semantics.
  */
 import React from "react";
-import { render, screen, act, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+
+jest.mock("framer-motion", () => {
+  const React = require("react");
+  const ignored = new Set([
+    "initial",
+    "animate",
+    "exit",
+    "transition",
+    "whileInView",
+    "viewport",
+    "whileHover",
+    "whileTap",
+    "variants",
+    "layout",
+    "layoutId",
+  ]);
+
+  const makeMotionComponent = (tag) =>
+    React.forwardRef(({ children, ...props }, ref) => {
+      const domProps = Object.fromEntries(
+        Object.entries(props).filter(([key]) => !ignored.has(key)),
+      );
+      return React.createElement(tag, { ...domProps, ref }, children);
+    });
+
+  const motion = new Proxy(
+    {},
+    {
+      get: (_target, tag) => makeMotionComponent(tag),
+    },
+  );
+
+  return {
+    __esModule: true,
+    motion,
+    AnimatePresence: ({ children }) => <>{children}</>,
+    useReducedMotion: () => false,
+  };
+});
 
 jest.mock("../lib/api", () => ({
   __esModule: true,
@@ -54,16 +97,16 @@ const AtelierShowcase = require("./AtelierShowcase").default;
 
 describe("AtelierShowcase — dot tap-target accessibility", () => {
   test("each carousel dot exposes a 44×44 hit target and a visible pill", async () => {
-    await act(async () => {
-      render(
-        <MemoryRouter>
-          <AtelierShowcase />
-        </MemoryRouter>,
-      );
-    });
+    render(
+      <MemoryRouter>
+        <AtelierShowcase />
+      </MemoryRouter>,
+    );
+
     await waitFor(() =>
       expect(screen.getByTestId("atelier-dot-0")).toBeInTheDocument(),
     );
+
     const dots = [];
     for (let i = 0; i < 2; i++) {
       const btn = screen.getByTestId(`atelier-dot-${i}`);
@@ -72,15 +115,13 @@ describe("AtelierShowcase — dot tap-target accessibility", () => {
       expect(btn.className).toMatch(/min-h-\[44px\]/);
       const pill = btn.querySelector("span");
       expect(pill).toBeTruthy();
-      // Visual pill is intentionally thicker after the usability pass.
       expect(pill.className).toMatch(/h-2/);
-      // Pill hidden from AT — button aria-label announces "View slide N".
       expect(pill.getAttribute("aria-hidden")).toBe("true");
       expect(btn.getAttribute("aria-label")).toMatch(/^View slide \d+$/);
     }
-    // Scroll-linked Atelier motion may select either slide in jsdom depending
-    // on the synthetic layout measurement. Accessibility requires exactly one
-    // current dot, not that the first dot remain current after that callback.
-    expect(dots.filter((btn) => btn.getAttribute("aria-current") === "true")).toHaveLength(1);
+
+    expect(
+      dots.filter((btn) => btn.getAttribute("aria-current") === "true"),
+    ).toHaveLength(1);
   });
 });

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { MapPin, ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
@@ -21,14 +21,9 @@ export default function GalleryPreview() {
   const { hp } = useSettings();
   const g = hp?.gallery || {};
   const prefersReducedMotion = useReducedMotion();
-  const sectionRef = useRef(null);
-  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start start", "end end"] });
-  const progressScale = useTransform(scrollYProgress, [0.06, 0.94], [0, 1]);
-
   const rawItems = g.items || [];
   const slugsAll = useMemo(() => buildProjectSlugs(rawItems), [rawItems]);
   const enriched = useMemo(() => rawItems.map((p, idx) => ({ ...p, __idx: idx, __slug: slugsAll[idx] })).filter((p) => (p.title || "").trim() || (p.images || []).some(Boolean)), [rawItems, slugsAll]);
-  const perView = [3, 6, 9].includes(Number(g.home_per_view)) ? Number(g.home_per_view) : 3;
   const randomize = g.home_randomize !== false;
   const featured = Array.isArray(g.home_featured_indices) ? g.home_featured_indices : [];
 
@@ -50,9 +45,9 @@ export default function GalleryPreview() {
 
   const desktopSlides = useMemo(() => {
     const out = [];
-    for (let i = 0; i < ordered.length; i += perView) out.push(ordered.slice(i, i + perView));
+    for (let i = 0; i < ordered.length; i += 3) out.push(ordered.slice(i, i + 3));
     return out;
-  }, [ordered, perView]);
+  }, [ordered]);
   const mobileSlides = useMemo(() => ordered.map((p) => [p]), [ordered]);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -70,13 +65,6 @@ export default function GalleryPreview() {
   const [active, setActive] = useState(0);
   useEffect(() => { setActive(0); }, [isMobile, total]);
 
-  useMotionValueEvent(scrollYProgress, "change", (latest) => {
-    if (prefersReducedMotion || isMobile || total <= 1) return;
-    const normalized = Math.max(0, Math.min(0.999, (latest - 0.14) / 0.72));
-    const next = Math.min(total - 1, Math.floor(normalized * total));
-    setActive((current) => current === next ? current : next);
-  });
-
   const touchStartX = useRef(null);
   const go = useCallback((delta) => setActive((i) => total ? (i + delta + total) % total : 0), [total]);
   const jumpTo = useCallback((i) => setActive(i), []);
@@ -90,45 +78,46 @@ export default function GalleryPreview() {
   };
 
   if (pool.length === 0) return null;
-  const gridCols = "md:grid-cols-3";
+  const slide = slides[active] || [];
 
   return (
-    <section ref={sectionRef} data-testid="home-gallery-preview" className="relative isolate h-auto md:h-[145vh] border-t border-[#BF9972]/15 bg-[#16070f]">
-      <div className="relative md:sticky md:top-20 md:h-[calc(100vh-5rem)] overflow-hidden flex items-center py-20 md:py-5">
-        <div className="absolute inset-0 pointer-events-none opacity-30" style={{ background: "radial-gradient(ellipse at 12% 35%, rgba(163,99,80,0.34), transparent 50%), radial-gradient(ellipse at 88% 72%, rgba(212,175,55,0.08), transparent 48%)" }} />
-        <div className="relative max-w-7xl mx-auto px-6 w-full min-w-0">
-          <motion.div className="mb-6 max-w-4xl" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, amount: 0.35 }} variants={editorialGroup}>
-            <motion.div variants={prefersReducedMotion ? undefined : editorialItem}>
-              <div className="eyebrow mb-2">{g.eyebrow || "Installations"}</div>
-              <h2 className="font-serif text-4xl md:text-5xl lg:text-5xl leading-[1.04] text-balance">{g.title_pre || "Our Work"} <span className="brand-gradient-text italic">{g.title_highlight || "in the wild."}</span></h2>
-              <div className="mt-4 flex flex-wrap items-center gap-5"><Link to="/gallery" data-testid="home-gallery-view-all" className="inline-flex items-center gap-2 text-sm font-medium uppercase tracking-[0.22em] text-[#D4AF37] hover:text-[#E0C15D] transition-colors">View full gallery <ArrowUpRight size={15} /></Link><span className="hidden md:inline text-[10px] uppercase tracking-[0.28em] text-white/35">A short scroll previews more projects</span></div>
+    <section data-testid="home-gallery-preview" className="relative isolate overflow-hidden border-t border-[#BF9972]/15 bg-[#16070f] px-6 py-20 md:py-28">
+      <div className="absolute inset-0 pointer-events-none opacity-30" style={{ background: "radial-gradient(ellipse at 12% 35%, rgba(163,99,80,0.34), transparent 50%), radial-gradient(ellipse at 88% 72%, rgba(212,175,55,0.08), transparent 48%)" }} />
+      <div className="relative mx-auto max-w-7xl">
+        <motion.div className="mb-10 max-w-4xl" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, amount: 0.35 }} variants={editorialGroup}>
+          <motion.div variants={prefersReducedMotion ? undefined : editorialItem}>
+            <div className="eyebrow mb-3">{g.eyebrow || "Installations"}</div>
+            <h2 className="font-serif text-4xl leading-[1.04] text-balance md:text-5xl lg:text-6xl">{g.title_pre || "Our Work"} <span className="brand-gradient-text italic">{g.title_highlight || "in the wild."}</span></h2>
+            <div className="mt-5"><Link to="/gallery" data-testid="home-gallery-view-all" className="inline-flex items-center gap-2 text-sm font-medium uppercase tracking-[0.22em] text-[#D4AF37] transition-colors hover:text-[#E0C15D]">View full gallery <ArrowUpRight size={15} /></Link></div>
+          </motion.div>
+        </motion.div>
+
+        <div className="relative" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} data-testid="home-gallery-carousel">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={active}
+              className="grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-8"
+              initial={prefersReducedMotion ? false : { opacity: 0, x: 28 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={prefersReducedMotion ? undefined : { opacity: 0, x: -28 }}
+              transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.65, ease: LUXURY_EASE }}
+            >
+              {slide.map((p, i) => {
+                const cover = (p.images || []).filter(Boolean)[0];
+                return <div key={`${active}-${p.__idx}-${i}`} data-testid={`home-gallery-card-${active}-${i}`} className="group min-w-0 border border-white/8 bg-[#0e0510] transition-all duration-700 hover:border-[#D4AF37]/50">
+                  <Link to={`/gallery/${p.__slug}`} className="block">
+                    <div className="aspect-[4/5] overflow-hidden bg-black md:aspect-[5/4]">{cover ? <img src={api.resolveImage(cover)} alt={p.title || "Project"} loading="lazy" className="h-full w-full object-cover opacity-90 scale-[1.015] transition-all duration-[1000ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.045] group-hover:opacity-100" /> : <div className="flex h-full w-full items-center justify-center font-serif italic text-white/25">Image pending</div>}</div>
+                    <div className="min-h-[116px] p-5 md:p-6">{p.location && <div className="mb-2 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-[#BF9972]"><MapPin size={12} strokeWidth={1.5} /> {p.location}</div>}<h3 className="line-clamp-2 font-serif text-lg leading-snug text-white transition-colors group-hover:text-[#D4AF37] md:text-xl">{p.title}</h3></div>
+                  </Link>
+                </div>;
+              })}
             </motion.div>
-          </motion.div>
+          </AnimatePresence>
 
-          <motion.div className="relative px-5 lg:px-7" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} data-testid="home-gallery-carousel" initial={prefersReducedMotion ? false : { opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.18 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.75, ease: LUXURY_EASE }}>
-            <div className="overflow-hidden py-2 md:py-3">
-              <motion.div className="flex" animate={{ x: `-${active * (100 / Math.max(1, total))}%` }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.75, ease: LUXURY_EASE }} style={{ width: `${Math.max(1, total) * 100}%` }}>
-                {slides.map((slide, sIdx) => <div key={sIdx} className="shrink-0" style={{ width: `${100 / Math.max(1, total)}%` }} aria-hidden={sIdx !== active}>
-                  <div className={`grid grid-cols-1 ${gridCols} gap-5 md:gap-7 ${perView === 6 ? "md:grid-rows-2" : perView === 9 ? "md:grid-rows-3" : ""}`}>
-                    {slide.map((p, i) => {
-                      const cover = (p.images || []).filter(Boolean)[0];
-                      return <div key={`${sIdx}-${p.__idx}-${i}`} data-testid={`home-gallery-card-${sIdx}-${i}`} className="group border border-white/8 hover:border-[#D4AF37]/50 transition-all duration-700 bg-[#0e0510] min-w-0">
-                        <Link to={`/gallery/${p.__slug}`} className="block" tabIndex={sIdx === active ? 0 : -1} aria-hidden={sIdx === active ? undefined : true}>
-                          <div className="aspect-[4/5] md:h-[40vh] md:aspect-auto overflow-hidden bg-black">{cover ? <img src={api.resolveImage(cover)} alt={p.title || "Project"} loading="lazy" className="w-full h-full object-cover opacity-90 scale-[1.02] group-hover:opacity-100 group-hover:scale-[1.055] transition-all duration-[1000ms] ease-[cubic-bezier(0.22,1,0.36,1)]" /> : <div className="w-full h-full flex items-center justify-center text-white/25 font-serif italic">Image pending</div>}</div>
-                          <div className="p-4 md:p-5 min-h-[112px]">{p.location && <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-[#BF9972] mb-2"><MapPin size={12} strokeWidth={1.5} /> {p.location}</div>}<h3 className="font-serif text-lg md:text-xl leading-snug text-white group-hover:text-[#D4AF37] transition-colors line-clamp-2">{p.title}</h3></div>
-                        </Link>
-                      </div>;
-                    })}
-                  </div>
-                </div>)}
-              </motion.div>
-            </div>
-
-            {total > 1 && <><button type="button" aria-label="Previous projects" onClick={() => go(-1)} data-testid="home-gallery-prev" className="hidden md:flex absolute left-0 top-[44%] -translate-y-1/2 items-center justify-center w-12 h-12 rounded-full bg-black/75 backdrop-blur border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"><ChevronLeft size={20} /></button><button type="button" aria-label="Next projects" onClick={() => go(1)} data-testid="home-gallery-next" className="hidden md:flex absolute right-0 top-[44%] -translate-y-1/2 items-center justify-center w-12 h-12 rounded-full bg-black/75 backdrop-blur border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors z-10"><ChevronRight size={20} /></button></>}
-          </motion.div>
-
-          {total > 1 && <div className="mt-5"><div className="h-px bg-white/10 overflow-hidden"><motion.div className="h-px bg-[#D4AF37] origin-left" style={{ scaleX: prefersReducedMotion || isMobile ? (active + 1) / total : progressScale }} /></div><div className="flex items-center justify-between mt-3"><div className="flex items-center gap-2" data-testid="home-gallery-dots">{slides.map((_, i) => <button key={i} type="button" aria-label={`Go to slide ${i + 1}`} onClick={() => jumpTo(i)} data-testid={`home-gallery-dot-${i}`} className={`h-2 rounded-full transition-all ${i === active ? "w-10 bg-[#D4AF37]" : "w-4 bg-white/30 hover:bg-white/55"}`} />)}</div><div className="text-[10px] uppercase tracking-[0.28em] text-white/35">{String(active + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div></div></div>}
+          {total > 1 && <><button type="button" aria-label="Previous projects" onClick={() => go(-1)} data-testid="home-gallery-prev" className="absolute -left-4 top-[40%] z-10 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-[#D4AF37]/50 bg-black/75 text-[#D4AF37] backdrop-blur transition-colors hover:bg-[#D4AF37] hover:text-black md:flex"><ChevronLeft size={20} /></button><button type="button" aria-label="Next projects" onClick={() => go(1)} data-testid="home-gallery-next" className="absolute -right-4 top-[40%] z-10 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-[#D4AF37]/50 bg-black/75 text-[#D4AF37] backdrop-blur transition-colors hover:bg-[#D4AF37] hover:text-black md:flex"><ChevronRight size={20} /></button></>}
         </div>
+
+        {total > 1 && <div className="mt-7"><div className="h-px overflow-hidden bg-white/10"><div className="h-px bg-[#D4AF37] transition-[width] duration-500" style={{ width: `${((active + 1) / total) * 100}%` }} /></div><div className="mt-4 flex items-center justify-between"><div className="flex items-center gap-2" data-testid="home-gallery-dots">{slides.map((_, i) => <button key={i} type="button" aria-label={`Go to slide ${i + 1}`} onClick={() => jumpTo(i)} data-testid={`home-gallery-dot-${i}`} className={`h-2 rounded-full transition-all ${i === active ? "w-10 bg-[#D4AF37]" : "w-4 bg-white/30 hover:bg-white/55"}`} />)}</div><div className="text-[10px] uppercase tracking-[0.28em] text-white/35">{String(active + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div></div></div>}
       </div>
     </section>
   );

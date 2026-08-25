@@ -20,7 +20,6 @@ import React from "react";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-// ---- Mock api.listProducts BEFORE importing the component ---------------
 const mockListProducts = jest.fn();
 jest.mock("../lib/api", () => ({
   __esModule: true,
@@ -31,7 +30,6 @@ jest.mock("../lib/api", () => ({
   formatProductPrice: (p) => `₹${p?.price || 0}`,
 }));
 
-// Stub out ProductCard so we can count rendered products cheaply.
 jest.mock("./ProductCard", () => ({
   __esModule: true,
   default: ({ product }) => (
@@ -39,8 +37,6 @@ jest.mock("./ProductCard", () => ({
   ),
 }));
 
-// Stub out shadcn Slider + Select so their portal + Radix-UI internals
-// don't complicate the test tree.
 jest.mock("./ui/slider", () => ({
   __esModule: true,
   Slider: () => <div data-testid="price-slider-stub" />,
@@ -71,7 +67,6 @@ const makePage = (page, totalPages, total, count = 24) => ({
 
 beforeEach(() => {
   mockListProducts.mockReset();
-  // Default: 3 pages of 24 products (72 total)
   mockListProducts.mockImplementation((params = {}) => {
     const p = params.page || 1;
     return Promise.resolve(makePage(p, 3, 72, 24));
@@ -85,7 +80,6 @@ const renderBrowser = (initialEntries = ["/catalog"], extraProps = {}) =>
     </MemoryRouter>,
   );
 
-// Bypass the internal 250ms debounce.
 const advanceDebounce = async () => {
   jest.useFakeTimers();
   jest.advanceTimersByTime(300);
@@ -99,9 +93,7 @@ describe("CatalogueBrowser — URL-based pagination", () => {
       expect(screen.getByTestId("product-card-p1-0")).toBeInTheDocument(),
     );
     expect(screen.getByTestId("page-indicator").textContent).toMatch(/Page 1 of 3/i);
-    // Previous is disabled on page 1.
     expect(screen.getByTestId("pagination-prev")).toBeDisabled();
-    // Next is enabled.
     expect(screen.getByTestId("pagination-next")).not.toBeDisabled();
   });
 
@@ -115,12 +107,10 @@ describe("CatalogueBrowser — URL-based pagination", () => {
       fireEvent.click(screen.getByTestId("pagination-next"));
     });
 
-    // Page 1 products must be gone; page 2 products must be present.
     await waitFor(() =>
       expect(screen.getByTestId("product-card-p2-0")).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("product-card-p1-0")).toBeNull();
-    // The most recent call to the API should carry page=2.
     const lastCall = mockListProducts.mock.calls[mockListProducts.mock.calls.length - 1][0];
     expect(lastCall.page).toBe(2);
     expect(screen.getByTestId("page-indicator").textContent).toMatch(/Page 2 of 3/i);
@@ -171,7 +161,6 @@ describe("CatalogueBrowser — URL-based pagination", () => {
       expect(screen.getByTestId("product-card-p2-0")).toBeInTheDocument(),
     );
 
-    // Now type in the search box — it must reset to page 1.
     const searchInput = screen.getByTestId("catalog-search");
     await act(async () => {
       fireEvent.change(searchInput, { target: { value: "chandelier" } });
@@ -198,16 +187,11 @@ describe("CatalogueBrowser — URL-based pagination", () => {
 
   test("out-of-range ?page=999 clamps to the last valid page", async () => {
     renderBrowser(["/catalog?page=999"]);
-    // First request goes out with page=999; server returns total_pages=3.
-    // The component must re-render on page 3 (or clamp URL). We assert on
-    // the visible page indicator settling on 3, which is the terminal state.
     await waitFor(
       () =>
         expect(screen.getByTestId("page-indicator").textContent).toMatch(/Page 3 of 3/i),
       { timeout: 3000 },
     );
-    // A follow-up fetch for the clamped page must eventually happen (the
-    // debounce delay before the second fetch is 250 ms).
     await waitFor(
       () => {
         const callPages = mockListProducts.mock.calls.map((c) => c[0].page);
@@ -229,11 +213,8 @@ describe("CatalogueBrowser — URL-based pagination", () => {
   });
 });
 
-describe("CatalogueBrowser — sidebar category rendering", () => {
-  test("renders title-cased label (not raw uppercase db_name) for dynamic categories", async () => {
-    // Dynamic category object comes from mergeDynamicCategories → the
-    // fallback label is Title Cased even when the raw db_name is
-    // "CEILING LIGHT".
+describe("CatalogueBrowser — filter drawer category rendering", () => {
+  test("renders title-cased label (not raw uppercase db_name) for dynamic categories when filters are opened", async () => {
     const dynamicCategories = [
       { slug: "ceiling-lights", db_name: "CEILING LIGHT", label: "Ceiling Light", _dynamic: true },
       { slug: "chandeliers", db_name: "Chandelier", label: "Chandeliers" },
@@ -242,12 +223,12 @@ describe("CatalogueBrowser — sidebar category rendering", () => {
     await waitFor(() =>
       expect(screen.getByTestId("product-card-p1-0")).toBeInTheDocument(),
     );
-    // testid is derived from db_name (case-insensitive kebab).
+
+    expect(screen.queryByTestId("cat-ceiling-light")).toBeNull();
+    fireEvent.click(screen.getByTestId("filters-toggle"));
+
     const btn = screen.getByTestId("cat-ceiling-light");
-    // Human-visible text must be the Title Cased label, not the raw
-    // "CEILING LIGHT" from the DB.
     expect(btn.textContent).toBe("Ceiling Light");
-    // The curated entry also renders its label.
     expect(screen.getByTestId("cat-chandelier").textContent).toBe("Chandeliers");
   });
 
@@ -262,6 +243,8 @@ describe("CatalogueBrowser — sidebar category rendering", () => {
     await waitFor(() =>
       expect(screen.getByTestId("product-card-p1-0")).toBeInTheDocument(),
     );
+    fireEvent.click(screen.getByTestId("filters-toggle"));
+    expect(screen.getByTestId("cat-ceiling-light")).toBeInTheDocument();
     const keyWarnings = errorSpy.mock.calls.filter((args) =>
       String(args[0] || "").includes("unique \"key\" prop"),
     );
