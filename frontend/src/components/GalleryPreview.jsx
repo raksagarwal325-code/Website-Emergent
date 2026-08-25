@@ -152,7 +152,7 @@ export default function GalleryPreview() {
           </motion.button>
         </motion.div>
 
-        <div className="mt-5 flex items-center gap-5"><div className="h-px flex-1 overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} /></div><div className="text-[10px] uppercase tracking-[0.25em] text-white/42">{String(active + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div></div>
+        <div className="mt-5 h-px overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} /></div>
       </div>
     </section>
   );
