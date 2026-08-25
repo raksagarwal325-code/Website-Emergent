@@ -59,7 +59,7 @@ export default function GalleryPreview() {
   return (
     <section data-testid="home-gallery-preview" className="relative isolate overflow-hidden border-t border-[#BF9972]/15 bg-[#16070f] py-12 md:py-16">
       <div className="absolute inset-0 pointer-events-none opacity-30" style={{ background: "radial-gradient(ellipse at 12% 35%, rgba(163,99,80,.30), transparent 48%), radial-gradient(ellipse at 88% 72%, rgba(212,175,55,.08), transparent 45%)" }} />
-      <div className="relative mx-auto max-w-[1500px] px-6">
+      <div className="relative mx-auto max-w-7xl px-6">
         <motion.div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, amount: 0.35 }} variants={editorialGroup}>
           <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="max-w-4xl">
             <div className="eyebrow mb-2">{g.eyebrow || "Installations"}</div>
@@ -73,22 +73,21 @@ export default function GalleryPreview() {
           </motion.div>
         </motion.div>
 
-        <motion.div drag={prefersReducedMotion ? false : "x"} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.08} onDragEnd={(_, info) => { if (info.offset.x < -80) go(1); if (info.offset.x > 80) go(-1); }} className="relative grid min-h-[480px] gap-5 md:grid-cols-[.28fr_1fr_.28fr] md:items-center lg:min-h-[560px]">
-          <button type="button" onClick={() => go(-1)} className="group relative hidden h-[340px] overflow-hidden border border-white/10 opacity-45 transition hover:opacity-75 md:block">
+        <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 36, scale: .985 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: .14 }} transition={{ duration: .9, ease: LUXURY_EASE }} drag={prefersReducedMotion ? false : "x"} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.08} onDragEnd={(_, info) => { if (info.offset.x < -80) go(1); if (info.offset.x > 80) go(-1); }} className="relative grid gap-5 md:grid-cols-[.22fr_1fr_.22fr] md:items-center">
+          <motion.button type="button" onClick={() => go(-1)} className="group relative hidden h-[300px] overflow-hidden border border-white/10 bg-black opacity-42 transition hover:opacity-75 md:block" whileHover={prefersReducedMotion ? undefined : { x: -6, scale: .985 }} transition={{ duration: .35 }}>
             {prevCover && <img src={api.resolveImage(prevCover)} alt="" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" />}
-            <div className="absolute inset-0 bg-[#16070f]/35" />
-          </button>
+            <div className="absolute inset-0 bg-[#16070f]/38" />
+          </motion.button>
 
-          <div className="relative h-full min-h-[460px] overflow-hidden border border-[#BF9972]/20 bg-[#0e0510] lg:min-h-[540px]">
-            <AnimatePresence initial={false} custom={direction}>
-              <motion.article key={`${project.__idx}-${project.__slug}`} data-testid={`home-gallery-card-${active}`} className="absolute inset-0" initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 90, scale: .985 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -90, scale: .985 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .76, ease: LUXURY_EASE }}>
-                <Link to={`/gallery/${project.__slug}`} className="grid h-full md:grid-rows-[1fr_auto]">
-                  <div className="relative min-h-[350px] overflow-hidden bg-black">
-                    {cover ? <motion.img src={api.resolveImage(cover)} alt={project.title || "Project"} loading="lazy" className="h-full w-full object-cover" initial={prefersReducedMotion ? false : { scale: 1.04 }} animate={{ scale: 1 }} transition={{ duration: 1.05, ease: LUXURY_EASE }} /> : <div className="flex h-full items-center justify-center font-serif italic text-white/25">Image pending</div>}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#10060c]/65 via-transparent to-transparent" />
-                    <div aria-hidden className="absolute right-5 top-3 font-serif text-[7rem] leading-none text-white/[0.045] md:text-[9rem]">{String(active + 1).padStart(2, "0")}</div>
+          <div className="relative overflow-hidden border border-[#BF9972]/20 bg-[#0b0508]">
+            <AnimatePresence initial={false} custom={direction} mode="wait">
+              <motion.article key={`${project.__idx}-${project.__slug}`} data-testid={`home-gallery-card-${active}`} initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 150, scale: .96 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -150, scale: .96 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .8, ease: LUXURY_EASE }}>
+                <Link to={`/gallery/${project.__slug}`} className="block">
+                  <div className="relative flex h-[360px] items-center justify-center overflow-hidden bg-[#090507] md:h-[430px] lg:h-[500px]">
+                    {cover ? <motion.img src={api.resolveImage(cover)} alt={project.title || "Project"} loading="lazy" className="max-h-full max-w-full object-contain" initial={prefersReducedMotion ? false : { scale: .9, opacity: .55 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 1.05, ease: LUXURY_EASE }} /> : <div className="flex h-full items-center justify-center font-serif italic text-white/25">Image pending</div>}
+                    <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#10060c]/28 via-transparent to-transparent" />
                   </div>
-                  <motion.div className="grid gap-4 border-t border-white/8 p-5 md:grid-cols-[1fr_auto] md:items-end md:p-7" initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .18, duration: .6, ease: LUXURY_EASE }}>
+                  <motion.div className="grid gap-4 border-t border-white/8 p-5 md:grid-cols-[1fr_auto] md:items-end md:p-7" initial={prefersReducedMotion ? false : { opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .2, duration: .62, ease: LUXURY_EASE }}>
                     <div>{project.location && <div className="mb-2 inline-flex items-center gap-1.5 text-[9px] uppercase tracking-[0.22em] text-[#BF9972]"><MapPin size={11} strokeWidth={1.5} /> {project.location}</div>}<h3 className="max-w-3xl font-serif text-2xl leading-tight text-white md:text-3xl lg:text-4xl">{project.title}</h3></div>
                     <span className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]">View project <ArrowUpRight size={13} /></span>
                   </motion.div>
@@ -97,13 +96,13 @@ export default function GalleryPreview() {
             </AnimatePresence>
           </div>
 
-          <button type="button" onClick={() => go(1)} className="group relative hidden h-[340px] overflow-hidden border border-[#D4AF37]/20 opacity-52 transition hover:opacity-80 md:block">
+          <motion.button type="button" onClick={() => go(1)} className="group relative hidden h-[300px] overflow-hidden border border-[#D4AF37]/20 bg-black opacity-48 transition hover:opacity-82 md:block" whileHover={prefersReducedMotion ? undefined : { x: 6, scale: .985 }} transition={{ duration: .35 }}>
             {nextCover && <img src={api.resolveImage(nextCover)} alt="" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" />}
-            <div className="absolute inset-0 bg-[#16070f]/32" />
-          </button>
+            <div className="absolute inset-0 bg-[#16070f]/34" />
+          </motion.button>
         </motion.div>
 
-        <div className="mt-5 flex items-center gap-5"><div className="h-px flex-1 overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .45, ease: LUXURY_EASE }} /></div><div className="text-[10px] uppercase tracking-[0.25em] text-white/42">Drag / {String(active + 1).padStart(2, "0")} of {String(total).padStart(2, "0")}</div></div>
+        <div className="mt-5 flex items-center gap-5"><div className="h-px flex-1 overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} /></div><div className="text-[10px] uppercase tracking-[0.25em] text-white/42">{String(active + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div></div>
       </div>
     </section>
   );
