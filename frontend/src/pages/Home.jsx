@@ -4,7 +4,6 @@ import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion
 import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
 import SEO from "../components/SEO";
 import { api } from "../lib/api";
-import ProductCard from "../components/ProductCard";
 import GoogleReviews from "../components/GoogleReviews";
 import CollageSection from "../components/CollageSection";
 import ReasonsSection from "../components/ReasonsSection";
@@ -12,6 +11,7 @@ import AtelierShowcase from "../components/AtelierShowcase";
 import TrustedBySection from "../components/TrustedBySection";
 import GalleryPreview from "../components/GalleryPreview";
 import WelcomeIntro from "../components/WelcomeIntro";
+import SeasonalSpotlight from "../components/SeasonalSpotlight";
 const InfluencerPromotions = lazy(() => import(/* webpackChunkName: "influencer" */ "../components/InfluencerPromotions"));
 import FounderTeaser from "../components/FounderTeaser";
 import HeroSlideshow from "../components/HeroSlideshow";
@@ -52,7 +52,7 @@ export default function Home() {
       <WelcomeIntro />
 
       <section ref={heroRef} className="relative h-auto md:h-[165vh]">
-        <motion.div className="relative md:sticky md:top-0 md:h-screen overflow-hidden grain origin-center" style={{ borderRadius: prefersReducedMotion ? 0 : heroFrameRadius }}>
+        <motion.div className="relative md:sticky md:top-20 md:h-[calc(100vh-5rem)] overflow-hidden grain origin-center" style={{ borderRadius: prefersReducedMotion ? 0 : heroFrameRadius }}>
           <motion.div className="absolute inset-0 opacity-45 will-change-transform" initial={prefersReducedMotion ? false : { opacity: 0 }} animate={{ opacity: 0.45 }} style={{ scale: prefersReducedMotion ? 1 : heroScale, y: prefersReducedMotion ? 0 : heroMediaY }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 1.4, ease: LUXURY_EASE }}>
             <picture>
               <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
@@ -65,7 +65,7 @@ export default function Home() {
 
           <motion.div aria-hidden className="absolute inset-0 pointer-events-none bg-[#16070f]" style={{ opacity: prefersReducedMotion ? 0 : heroShadeOpacity }} />
 
-          <motion.div className="relative max-w-7xl mx-auto px-6 min-h-[78vh] md:h-screen flex items-center py-20 will-change-transform" style={{ y: prefersReducedMotion ? 0 : heroContentY, opacity: prefersReducedMotion ? 1 : heroContentOpacity }}>
+          <motion.div className="relative max-w-7xl mx-auto px-6 min-h-[78vh] md:h-[calc(100vh-5rem)] flex items-center py-12 md:py-8 will-change-transform" style={{ y: prefersReducedMotion ? 0 : heroContentY, opacity: prefersReducedMotion ? 1 : heroContentOpacity }}>
             <motion.div className="max-w-2xl" initial={prefersReducedMotion ? false : "hidden"} animate="visible" variants={editorialGroup}>
               <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft}>
                 <div className="mb-6 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2"><span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]" /><span className="text-xs uppercase tracking-[0.28em] text-[#BF9972]">{H.eyebrow}</span></div>
@@ -79,18 +79,18 @@ export default function Home() {
                   {H.secondary_cta_text && (heroSecondaryExternal ? <a href={heroSecondaryHref} target="_blank" rel="noreferrer" data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors"><MessageCircle size={14} /> {H.secondary_cta_text}</a> : <Link to={heroSecondaryHref} data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors"><MessageCircle size={14} /> {H.secondary_cta_text}</Link>)}
                 </div>
               </motion.div>
-              <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft} className="mt-14 pt-8 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
+              <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft} className="mt-12 pt-6 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
                 {(H.trust || []).map((t, i) => <div key={i}><div className="font-serif text-xl md:text-2xl brand-gradient-text leading-none">{t.value}</div><div className="text-xs font-medium uppercase tracking-[0.18em] text-white/60 mt-2">{t.label}</div></div>)}
               </motion.div>
             </motion.div>
           </motion.div>
 
-          <div aria-hidden className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-[#16070f] pointer-events-none" />
-          <div aria-hidden className="hidden md:flex absolute right-8 bottom-8 items-center gap-3 text-[10px] uppercase tracking-[0.3em] text-white/45"><span className="h-px w-12 bg-[#D4AF37]/50" /> Scroll to enter</div>
+          <div aria-hidden className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-b from-transparent to-[#16070f] pointer-events-none" />
+          <div aria-hidden className="hidden md:flex absolute right-8 bottom-6 items-center gap-3 text-[10px] uppercase tracking-[0.3em] text-white/45"><span className="h-px w-12 bg-[#D4AF37]/50" /> Scroll to enter</div>
         </motion.div>
       </section>
 
-      <div className="relative z-10 md:-mt-[10vh]"><CategoryShowcase /></div>
+      <div className="relative z-10 md:-mt-[4vh]"><CategoryShowcase /></div>
       <ShopBySpaceSection />
       <TrustedBySection />
       <CollageSection />
@@ -101,10 +101,7 @@ export default function Home() {
         { icon: MessageCircle, title: "WhatsApp Support", body: "Bulk enquiries, custom sizes & installation guidance — reply within hours." },
       ].map((f) => <div key={f.title} className="p-8 flex items-start gap-4"><f.icon size={20} strokeWidth={1.4} className="text-[#D4AF37] mt-1" /><div><div className="font-serif text-lg">{f.title}</div><div className="text-sm text-white/60 mt-1">{f.body}</div></div></div>)}</div></section>
 
-      <section className="max-w-7xl mx-auto px-6 py-16 md:py-20">
-        <div className="flex items-end justify-between mb-10"><div><div className="eyebrow mb-3">{F.eyebrow}</div><h2 className="font-serif text-3xl sm:text-4xl">{F.title}</h2></div><Link to={F.view_all_link || "/catalog"} className="hidden sm:inline-flex items-center gap-2 text-[#D4AF37] hover:text-[#E0C15D] text-sm font-medium uppercase tracking-[0.22em] link-underline">{F.view_all_text} <ArrowUpRight size={15} /></Link></div>
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">{featured.slice(0, F.limit || 8).map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}</div>
-      </section>
+      <SeasonalSpotlight products={featured} eyebrow={F.eyebrow} title={F.title} viewAllText={F.view_all_text} viewAllLink={F.view_all_link} />
 
       <section className="max-w-7xl mx-auto px-6 pb-6"><GoogleReviews /></section>
       <ReasonsSection />
