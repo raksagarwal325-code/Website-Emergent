@@ -3,7 +3,7 @@
  * px tap target while keeping the visual pill clearly visible.
  */
 import React from "react";
-import { render, screen, act, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 jest.mock("../lib/api", () => ({
@@ -54,16 +54,16 @@ const AtelierShowcase = require("./AtelierShowcase").default;
 
 describe("AtelierShowcase — dot tap-target accessibility", () => {
   test("each carousel dot exposes a 44×44 hit target and a visible pill", async () => {
-    await act(async () => {
-      render(
-        <MemoryRouter>
-          <AtelierShowcase />
-        </MemoryRouter>,
-      );
-    });
+    render(
+      <MemoryRouter>
+        <AtelierShowcase />
+      </MemoryRouter>,
+    );
+
     await waitFor(() =>
       expect(screen.getByTestId("atelier-dot-0")).toBeInTheDocument(),
     );
+
     const dots = [];
     for (let i = 0; i < 2; i++) {
       const btn = screen.getByTestId(`atelier-dot-${i}`);
@@ -72,15 +72,12 @@ describe("AtelierShowcase — dot tap-target accessibility", () => {
       expect(btn.className).toMatch(/min-h-\[44px\]/);
       const pill = btn.querySelector("span");
       expect(pill).toBeTruthy();
-      // Visual pill is intentionally thicker after the usability pass.
       expect(pill.className).toMatch(/h-2/);
-      // Pill hidden from AT — button aria-label announces "View slide N".
       expect(pill.getAttribute("aria-hidden")).toBe("true");
       expect(btn.getAttribute("aria-label")).toMatch(/^View slide \d+$/);
     }
-    // Scroll-linked Atelier motion may select either slide in jsdom depending
-    // on the synthetic layout measurement. Accessibility requires exactly one
-    // current dot, not that the first dot remain current after that callback.
+
+    // The interaction-driven carousel must expose one and only one current dot.
     expect(dots.filter((btn) => btn.getAttribute("aria-current") === "true")).toHaveLength(1);
   });
 });
