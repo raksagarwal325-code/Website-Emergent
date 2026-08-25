@@ -24,8 +24,8 @@ export default function AtelierShowcase() {
   const prefersReducedMotion = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start start", "end end"] });
   const progressScale = useTransform(scrollYProgress, [0.04, 0.96], [0, 1]);
-  const frameScale = useTransform(scrollYProgress, [0, 0.18, 0.84, 1], [0.93, 1, 1, 0.95]);
-  const frameOpacity = useTransform(scrollYProgress, [0, 0.08, 0.92, 1], [0.4, 1, 1, 0.45]);
+  const frameScale = useTransform(scrollYProgress, [0, 0.18, 0.84, 1], [0.96, 1, 1, 0.97]);
+  const frameOpacity = useTransform(scrollYProgress, [0, 0.08, 0.92, 1], [0.65, 1, 1, 0.7]);
 
   const [products, setProducts] = useState([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
@@ -50,7 +50,7 @@ export default function AtelierShowcase() {
 
   useMotionValueEvent(scrollYProgress, "change", (latest) => {
     if (prefersReducedMotion || slides.length <= 1) return;
-    const normalized = Math.max(0, Math.min(0.999, (latest - 0.08) / 0.84));
+    const normalized = Math.max(0, Math.min(0.999, (latest - 0.1) / 0.8));
     const next = Math.min(slides.length - 1, Math.floor(normalized * slides.length));
     setActive((current) => current === next ? current : next);
   });
@@ -66,19 +66,19 @@ export default function AtelierShowcase() {
   const heroWrapProps = productHref ? { to: productHref, "aria-label": `View ${activeProduct.name}` } : {};
 
   return (
-    <section ref={sectionRef} data-testid="atelier-section" className="relative isolate h-auto md:h-[300vh] border-y border-white/10 bg-[#16070f]">
-      <div className="max-w-7xl mx-auto px-6 py-20 md:py-8 md:sticky md:top-20 md:h-[calc(100vh-5rem)] flex items-center overflow-hidden">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-12 items-center w-full min-w-0">
+    <section ref={sectionRef} data-testid="atelier-section" className="relative isolate h-auto md:h-[180vh] border-y border-white/10 bg-[#16070f]">
+      <div className="max-w-7xl mx-auto px-6 py-20 md:py-6 md:sticky md:top-20 md:h-[calc(100vh-5rem)] flex items-center overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-10 items-center w-full min-w-0">
           <motion.div className="md:col-span-7 relative will-change-transform min-w-0" style={{ scale: prefersReducedMotion ? 1 : frameScale, opacity: prefersReducedMotion ? 1 : frameOpacity }}>
             <div className="hidden md:block absolute -left-7 top-0 bottom-0 w-px bg-white/10" aria-hidden><motion.div className="w-px h-full bg-gradient-to-b from-[#D4AF37] via-[#BF9972] to-transparent origin-top" style={{ scaleY: prefersReducedMotion ? 1 : progressScale }} /></div>
-            <HeroWrap {...heroWrapProps} data-testid="atelier-hero-frame" className={`relative block w-full bg-black border border-[#D4AF37]/25 overflow-hidden ${productHref ? "cursor-pointer group" : ""}`} style={{ aspectRatio: "1 / 1", maxHeight: "600px", boxShadow: "0 0 0 1px rgba(191,153,114,0.15), 0 36px 90px -18px rgba(0,0,0,0.82), 0 0 110px -24px rgba(212,175,55,0.3)" }}>
+            <HeroWrap {...heroWrapProps} data-testid="atelier-hero-frame" className={`relative block w-full bg-black border border-[#D4AF37]/25 overflow-hidden ${productHref ? "cursor-pointer group" : ""}`} style={{ aspectRatio: "1 / 1", maxHeight: "540px", boxShadow: "0 0 0 1px rgba(191,153,114,0.15), 0 32px 76px -18px rgba(0,0,0,0.8), 0 0 90px -24px rgba(212,175,55,0.24)" }}>
               {slides.map((s, i) => {
                 const src = s.src || s.product?.images?.[0];
                 if (!src) return null;
                 const distance = Math.abs(i - active);
-                return <img key={`${src}-${i}`} src={api.resolveImage(src)} alt={`Samrat Glass Emporium — ${s.caption || s.product?.name || ""}`} className={`absolute inset-0 w-full h-full object-contain transition-all duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${productHref && i === active ? "group-hover:scale-[1.03]" : ""}`} style={{ opacity: i === active ? 1 : 0, transform: i === active ? "scale(1) translateY(0)" : `scale(${1.04 + Math.min(distance, 2) * 0.01}) translateY(${i < active ? -24 : 24}px)`, filter: i === active ? "brightness(1)" : "brightness(0.45)" }} loading={i === 0 ? "eager" : "lazy"} />;
+                return <img key={`${src}-${i}`} src={api.resolveImage(src)} alt={`Samrat Glass Emporium — ${s.caption || s.product?.name || ""}`} className={`absolute inset-0 w-full h-full object-contain transition-all duration-[800ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${productHref && i === active ? "group-hover:scale-[1.025]" : ""}`} style={{ opacity: i === active ? 1 : 0, transform: i === active ? "scale(1) translateY(0)" : `scale(${1.03 + Math.min(distance, 2) * 0.01}) translateY(${i < active ? -18 : 18}px)`, filter: i === active ? "brightness(1)" : "brightness(0.5)" }} loading={i === 0 ? "eager" : "lazy"} />;
               })}
-              <div className="absolute inset-0 pointer-events-none mix-blend-screen" style={{ background: "radial-gradient(circle at 50% 60%, rgba(212,175,55,0.22), transparent 58%)" }} />
+              <div className="absolute inset-0 pointer-events-none mix-blend-screen" style={{ background: "radial-gradient(circle at 50% 60%, rgba(212,175,55,0.18), transparent 58%)" }} />
               <div className="absolute top-5 left-6 text-[10px] uppercase tracking-[0.3em] text-[#BF9972]/90 backdrop-blur bg-black/35 px-2 py-1 pointer-events-none">{String(active + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}</div>
               <div className="absolute bottom-4 left-6 right-6 flex items-end justify-between gap-4 pointer-events-none">
                 <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]/90 backdrop-blur bg-black/45 px-2 py-1 max-w-[70%] truncate">{activeCaption}</div>
@@ -89,13 +89,13 @@ export default function AtelierShowcase() {
 
           <div className="md:col-span-5 md:pl-3 min-w-0">
             <div className="eyebrow mb-3">{A.eyebrow}</div>
-            <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.04] text-balance">{A.headline}</h2>
-            <p className="mt-5 text-white/70 leading-relaxed whitespace-pre-wrap text-sm lg:text-base">{A.paragraph}</p>
-            <div className="mt-7 h-px bg-white/10 relative overflow-hidden"><motion.div className="absolute inset-y-0 left-0 bg-[#D4AF37] origin-left" style={{ width: "100%", scaleX: prefersReducedMotion ? 1 : progressScale }} /></div>
+            <h2 className="font-serif text-4xl sm:text-5xl lg:text-5xl leading-[1.04] text-balance">{A.headline}</h2>
+            <p className="mt-4 text-white/70 leading-relaxed whitespace-pre-wrap text-sm lg:text-base max-w-xl">{A.paragraph}</p>
+            <div className="mt-6 h-px bg-white/10 relative overflow-hidden"><motion.div className="absolute inset-y-0 left-0 bg-[#D4AF37] origin-left" style={{ width: "100%", scaleX: prefersReducedMotion ? 1 : progressScale }} /></div>
             {activeProduct ? <>
-              <div className="mt-7 pt-5 border-t border-white/10"><div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mb-2">Currently featured</div><Link to={productHref} data-testid="atelier-active-product-name" className="font-serif text-xl lg:text-2xl text-white hover:text-[#D4AF37] transition-colors leading-snug block line-clamp-3">{activeProduct.name}</Link><div className="mt-3 text-sm text-white/60">{(() => { const fp = formatProductPrice(activeProduct); return fp.onRequest ? <span className="text-[#D4AF37] font-serif text-base font-medium">Price on request</span> : <>{fp.label && <span className="text-[10px] uppercase tracking-[0.24em] text-[#BF9972] mr-1">{fp.label}</span>}<span className="text-[#D4AF37] font-serif text-base">{fp.primary}</span></>; })()}</div></div>
-              <div className="mt-5 flex flex-wrap gap-3"><Link to={productHref} data-testid="atelier-view-product" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black hover:bg-[#B5952F] px-5 py-3 uppercase text-[11px] tracking-[0.22em] transition-colors">View Product <ArrowUpRight size={14} /></Link>{waLink && <a href={waLink} target="_blank" rel="noreferrer" data-testid="atelier-inquire-wa" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] hover:bg-[#D4AF37]/10 px-5 py-3 uppercase text-[11px] tracking-[0.22em] transition-colors"><MessageCircle size={14} /> Inquire on WhatsApp</a>}</div>
-            </> : <Link to={A.cta_link || "/catalog"} className="mt-8 inline-flex items-center gap-2 text-[#D4AF37] hover:text-[#B5952F] text-xs uppercase tracking-[0.28em] link-underline">{A.cta_text || "Discover the Collection"} <ArrowUpRight size={14} /></Link>}
+              <div className="mt-6 pt-4 border-t border-white/10"><div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mb-2">Currently featured</div><Link to={productHref} data-testid="atelier-active-product-name" className="font-serif text-xl text-white hover:text-[#D4AF37] transition-colors leading-snug block line-clamp-2">{activeProduct.name}</Link><div className="mt-2 text-sm text-white/60">{(() => { const fp = formatProductPrice(activeProduct); return fp.onRequest ? <span className="text-[#D4AF37] font-serif text-base font-medium">Price on request</span> : <>{fp.label && <span className="text-[10px] uppercase tracking-[0.24em] text-[#BF9972] mr-1">{fp.label}</span>}<span className="text-[#D4AF37] font-serif text-base">{fp.primary}</span></>; })()}</div></div>
+              <div className="mt-4 flex flex-wrap gap-3"><Link to={productHref} data-testid="atelier-view-product" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black hover:bg-[#B5952F] px-5 py-3 uppercase text-[11px] tracking-[0.22em] transition-colors">View Product <ArrowUpRight size={14} /></Link>{waLink && <a href={waLink} target="_blank" rel="noreferrer" data-testid="atelier-inquire-wa" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] hover:bg-[#D4AF37]/10 px-5 py-3 uppercase text-[11px] tracking-[0.22em] transition-colors"><MessageCircle size={14} /> Inquire on WhatsApp</a>}</div>
+            </> : <Link to={A.cta_link || "/catalog"} className="mt-7 inline-flex items-center gap-2 text-[#D4AF37] hover:text-[#B5952F] text-xs uppercase tracking-[0.28em] link-underline">{A.cta_text || "Discover the Collection"} <ArrowUpRight size={14} /></Link>}
           </div>
         </div>
       </div>
