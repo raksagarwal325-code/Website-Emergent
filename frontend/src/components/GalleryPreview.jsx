@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { MapPin, ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
@@ -19,6 +19,8 @@ export default function GalleryPreview() {
   const { hp } = useSettings();
   const g = hp?.gallery || {};
   const prefersReducedMotion = useReducedMotion();
+  const sectionRef = useRef(null);
+  const [keyboardActive, setKeyboardActive] = useState(false);
   const rawItems = g.items || [];
   const slugsAll = useMemo(() => buildProjectSlugs(rawItems), [rawItems]);
   const enriched = useMemo(() => rawItems.map((p, idx) => ({ ...p, __idx: idx, __slug: slugsAll[idx] })).filter((p) => (p.title || "").trim() || (p.images || []).some(Boolean)), [rawItems, slugsAll]);
@@ -48,6 +50,35 @@ export default function GalleryPreview() {
     setActive((current) => (current + delta + total) % total);
   }, [total]);
 
+  useEffect(() => {
+    const node = sectionRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      setKeyboardActive(entry.isIntersecting && entry.intersectionRatio >= 0.42);
+    }, { threshold: [0, 0.42, 0.7] });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!keyboardActive) return undefined;
+    const onKeyDown = (event) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const target = event.target;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable) return;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        go(-1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        go(1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [go, keyboardActive]);
+
   if (!total) return null;
   const project = ordered[active];
   const prev = ordered[(active - 1 + total) % total];
@@ -57,7 +88,7 @@ export default function GalleryPreview() {
   const nextCover = (next.images || []).filter(Boolean)[0];
 
   return (
-    <section data-testid="home-gallery-preview" className="relative isolate overflow-hidden border-t border-[#BF9972]/15 bg-[#16070f] py-12 md:py-16">
+    <section ref={sectionRef} data-testid="home-gallery-preview" className="relative isolate overflow-hidden border-t border-[#BF9972]/15 bg-[#16070f] py-12 md:py-16">
       <div className="absolute inset-0 pointer-events-none opacity-30" style={{ background: "radial-gradient(ellipse at 12% 35%, rgba(163,99,80,.30), transparent 48%), radial-gradient(ellipse at 88% 72%, rgba(212,175,55,.08), transparent 45%)" }} />
       <div className="relative mx-auto max-w-7xl px-6">
         <motion.div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, amount: 0.35 }} variants={editorialGroup}>
