@@ -31,7 +31,7 @@ export default function CategorySwitchBar({ categories = [], activeSlug = null }
     <nav
       aria-label="Browse product categories"
       data-testid="catalog-category-switcher"
-      className="sticky top-20 z-40 -mx-6 mb-6 border-y border-white/10 bg-[#16070f]/28 px-6 py-2.5 backdrop-blur-[3px]"
+      className="sticky top-20 z-40 -mx-6 mb-6 border-y border-white/10 bg-[#16070f]/96 px-6 py-2.5 backdrop-blur-xl"
       onMouseLeave={() => setPreview(null)}
     >
       <div className="mx-auto max-w-7xl">
@@ -65,15 +65,12 @@ export default function CategorySwitchBar({ categories = [], activeSlug = null }
       </div>
 
       <div
-        className={`pointer-events-none absolute inset-x-0 top-full border-b border-[#D4AF37]/20 bg-[#12070d]/88 px-6 transition-all duration-200 ${preview ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`}
+        className={`pointer-events-none absolute inset-x-0 top-full z-50 border-y border-[#D4AF37]/25 bg-[#12070d] px-6 shadow-[0_18px_55px_rgba(0,0,0,0.72)] transition-all duration-200 ${preview ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`}
         aria-hidden={!preview}
       >
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 py-3">
-          <div>
-            <div className="text-[9px] uppercase tracking-[0.28em] text-[#D4AF37]">{preview?.label || "Collection overview"}</div>
-            <div className="mt-1 max-w-3xl text-xs leading-relaxed text-white/70">{overviewText}</div>
-          </div>
-          <div className="hidden text-[9px] uppercase tracking-[0.24em] text-white/35 md:block">Open category to browse all pieces</div>
+        <div className="mx-auto max-w-7xl py-4">
+          <div className="text-[9px] uppercase tracking-[0.28em] text-[#E5C453]">{preview?.label || "Collection overview"}</div>
+          <div className="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-white/90">{overviewText}</div>
         </div>
       </div>
     </nav>

@@ -75,20 +75,26 @@ export default function ReasonsSection({ compact = false }) {
               transition={{ duration: 0.82, delay: prefersReducedMotion ? 0 : (i % 4) * 0.1, ease: LUXURY_EASE }}
               whileHover={prefersReducedMotion ? undefined : { y: -8, scale: 1.015 }}
             >
+              {!prefersReducedMotion && (
+                <motion.div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0"
+                  animate={{ y: [0, -3, 0] }}
+                  transition={{ duration: 5.2 + (i % 3) * 0.7, repeat: Infinity, ease: "easeInOut", delay: i * 0.2 }}
+                >
+                  <motion.div
+                    className="absolute left-0 top-0 h-px w-24 bg-gradient-to-r from-[#D4AF37]/90 to-transparent"
+                    animate={{ x: [0, 115, 0], opacity: [0.28, 0.9, 0.28] }}
+                    transition={{ duration: 5.5 + i * 0.25, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                </motion.div>
+              )}
+
               <motion.div
                 aria-hidden
                 className="absolute -right-10 -top-10 h-28 w-28 rounded-full border border-[#D4AF37]/10"
-                initial={false}
-                whileHover={prefersReducedMotion ? undefined : { scale: 1.28, opacity: 0.85 }}
-                transition={{ duration: 0.45, ease: LUXURY_EASE }}
-              />
-              <motion.div
-                aria-hidden
-                className="absolute left-0 top-0 h-px w-full origin-left bg-gradient-to-r from-[#D4AF37]/70 via-[#D4AF37]/20 to-transparent"
-                initial={prefersReducedMotion ? false : { scaleX: 0 }}
-                whileInView={prefersReducedMotion ? undefined : { scaleX: 1 }}
-                viewport={{ once: true, amount: 0.4 }}
-                transition={{ duration: 0.75, delay: 0.18 + (i % 4) * 0.08, ease: LUXURY_EASE }}
+                animate={prefersReducedMotion ? undefined : { scale: [1, 1.15, 1], opacity: [0.24, 0.58, 0.24] }}
+                transition={{ duration: 6.2 + i * 0.3, repeat: prefersReducedMotion ? 0 : Infinity, ease: "easeInOut" }}
               />
 
               <motion.div
@@ -96,7 +102,8 @@ export default function ReasonsSection({ compact = false }) {
                 initial={prefersReducedMotion ? false : { rotate: -8, scale: 0.82 }}
                 whileInView={prefersReducedMotion ? undefined : { rotate: 0, scale: 1 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.55, delay: 0.2 + (i % 4) * 0.1, ease: LUXURY_EASE }}
+                animate={prefersReducedMotion ? undefined : { y: [0, -3, 0], rotate: [0, 2, 0] }}
+                transition={prefersReducedMotion ? { duration: 0 } : { duration: 4.8 + i * 0.35, repeat: Infinity, ease: "easeInOut", delay: i * 0.18 }}
                 whileHover={prefersReducedMotion ? undefined : { rotate: 5, scale: 1.1 }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[i % ICONS.length]} /></svg>
