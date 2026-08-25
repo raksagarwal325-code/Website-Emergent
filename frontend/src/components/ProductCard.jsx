@@ -131,7 +131,7 @@ export default function ProductCard({ product, index = 0 }) {
 
       <div className="flex flex-col flex-1 p-5">
         <div className="eyebrow truncate mb-2">{product.category}</div>
-        <Link to={productPath(product)} className="font-serif text-lg leading-snug text-white hover:text-[#D4AF37] transition-colors line-clamp-2 min-h-[3.5rem]">
+        <Link to={productPath(product)} className="font-serif text-lg leading-snug text-white hover:text-[#D4AF37] transition-colors min-h-[3.5rem] break-words">
           {product.name}
         </Link>
         <div className="flex items-baseline justify-between pt-3 min-h-[2.1rem]">
