@@ -10,13 +10,10 @@ import { productPath } from "../lib/productUrl";
 function buildAtelierWaLink(phone, product) {
   if (!product) return null;
   const priceInfo = formatProductPrice(product);
-  const priceLine = priceInfo.onRequest
-    ? "Price: Price on request"
-    : `Price: ${priceInfo.label ? priceInfo.label + " " : ""}${priceInfo.primary}`;
+  const priceLine = priceInfo.onRequest ? "Price: Price on request" : `Price: ${priceInfo.label ? priceInfo.label + " " : ""}${priceInfo.primary}`;
   const link = `${typeof window !== "undefined" ? window.location.origin : ""}${productPath(product)}`;
   const base = productMessage(product, link);
-  const msg = `${base}\n\n${priceLine}`;
-  return buildWaLink(phone, msg);
+  return buildWaLink(phone, `${base}\n\n${priceLine}`);
 }
 
 export default function AtelierShowcase() {
@@ -25,51 +22,37 @@ export default function AtelierShowcase() {
   const rawSlides = A.images || [];
   const sectionRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start end", "end start"],
-  });
-  const mediaY = useTransform(scrollYProgress, [0, 0.5, 1], [110, 0, -120]);
-  const mediaScale = useTransform(scrollYProgress, [0, 0.45, 1], [0.9, 1.055, 0.965]);
-  const copyY = useTransform(scrollYProgress, [0, 0.42, 1], [80, 0, -72]);
-  const copyOpacity = useTransform(scrollYProgress, [0, 0.2, 0.78, 1], [0.12, 1, 1, 0.28]);
-  const progressScale = useTransform(scrollYProgress, [0.08, 0.9], [0, 1]);
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start start", "end end"] });
+  const progressScale = useTransform(scrollYProgress, [0.04, 0.96], [0, 1]);
+  const frameScale = useTransform(scrollYProgress, [0, 0.18, 0.84, 1], [0.92, 1, 1, 0.94]);
+  const frameOpacity = useTransform(scrollYProgress, [0, 0.08, 0.92, 1], [0.35, 1, 1, 0.4]);
 
   const [products, setProducts] = useState([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
   useEffect(() => {
     let alive = true;
-    api.listAllProducts()
-      .then((rows) => { if (alive) { setProducts(rows); setProductsLoaded(true); } })
-      .catch(() => { if (alive) setProductsLoaded(true); });
+    api.listAllProducts().then((rows) => { if (alive) { setProducts(rows); setProductsLoaded(true); } }).catch(() => { if (alive) setProductsLoaded(true); });
     return () => { alive = false; };
   }, []);
 
   const byId = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p])), [products]);
-
-  const slides = useMemo(() => {
-    return rawSlides
-      .map((s) => {
-        const p = s?.product_id ? byId[s.product_id] : null;
-        if (!productsLoaded && s?.product_id) return { ...s, product: null };
-        return { ...s, product: p || null };
-      })
-      .filter((s) => {
-        if (s?.product_id && !s.product && productsLoaded) return false;
-        return !!(s.src || s.product);
-      });
-  }, [rawSlides, byId, productsLoaded]);
+  const slides = useMemo(() => rawSlides.map((s) => {
+    const p = s?.product_id ? byId[s.product_id] : null;
+    if (!productsLoaded && s?.product_id) return { ...s, product: null };
+    return { ...s, product: p || null };
+  }).filter((s) => {
+    if (s?.product_id && !s.product && productsLoaded) return false;
+    return !!(s.src || s.product);
+  }), [rawSlides, byId, productsLoaded]);
 
   const [active, setActive] = useState(0);
   useEffect(() => { if (active >= slides.length) setActive(0); }, [slides.length, active]);
 
   useMotionValueEvent(scrollYProgress, "change", (latest) => {
     if (prefersReducedMotion || slides.length <= 1) return;
-    const start = 0.12;
-    const end = 0.86;
-    const normalized = Math.max(0, Math.min(0.999, (latest - start) / (end - start)));
+    const normalized = Math.max(0, Math.min(0.999, (latest - 0.08) / 0.84));
     const next = Math.min(slides.length - 1, Math.floor(normalized * slides.length));
-    setActive((current) => (current === next ? current : next));
+    setActive((current) => current === next ? current : next);
   });
 
   if (slides.length === 0) return null;
@@ -79,182 +62,42 @@ export default function AtelierShowcase() {
   const activeCaption = current?.caption || activeProduct?.name || "";
   const productHref = activeProduct ? productPath(activeProduct) : null;
   const waLink = buildAtelierWaLink(settings?.whatsapp_number, activeProduct);
-
   const HeroWrap = productHref ? Link : "div";
-  const heroWrapProps = productHref
-    ? { to: productHref, "aria-label": `View ${activeProduct.name}` }
-    : {};
+  const heroWrapProps = productHref ? { to: productHref, "aria-label": `View ${activeProduct.name}` } : {};
 
   return (
-    <section
-      ref={sectionRef}
-      data-testid="atelier-section"
-      className="relative max-w-7xl mx-auto px-6 py-20 md:py-28 md:min-h-[220vh]"
-    >
-      <div className="hidden md:block absolute top-24 bottom-24 left-6 w-px bg-white/10" aria-hidden>
-        <motion.div
-          className="w-px h-full bg-gradient-to-b from-[#D4AF37] via-[#BF9972] to-transparent origin-top"
-          style={{ scaleY: prefersReducedMotion ? 1 : progressScale }}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-14 items-start">
-        <motion.div
-          className="md:col-span-7 md:sticky md:top-16 will-change-transform"
-          style={{
-            y: prefersReducedMotion ? 0 : mediaY,
-            scale: prefersReducedMotion ? 1 : mediaScale,
-            transformOrigin: "50% 50%",
-          }}
-        >
-          <HeroWrap
-            {...heroWrapProps}
-            data-testid="atelier-hero-frame"
-            className={`relative block w-full bg-black border border-[#D4AF37]/25 overflow-hidden ${productHref ? "cursor-pointer group" : ""}`}
-            style={{
-              aspectRatio: "1 / 1",
-              maxHeight: "620px",
-              boxShadow: "0 0 0 1px rgba(191,153,114,0.15), 0 32px 80px -16px rgba(0,0,0,0.8), 0 0 100px -22px rgba(212,175,55,0.28)",
-            }}
-          >
-            {slides.map((s, i) => {
-              const src = s.src || s.product?.images?.[0];
-              if (!src) return null;
-              return (
-                <img
-                  key={`${src}-${i}`}
-                  src={api.resolveImage(src)}
-                  alt={`Samrat Glass Emporium — ${s.caption || s.product?.name || ""}`}
-                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-[1200ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${productHref && i === active ? "group-hover:scale-[1.035]" : ""}`}
-                  style={{
-                    opacity: i === active ? 1 : 0,
-                    transform: i === active ? "scale(1) translateY(0)" : "scale(1.06) translateY(18px)",
-                    filter: i === active ? "brightness(1)" : "brightness(0.55)",
-                  }}
-                  loading={i === 0 ? "eager" : "lazy"}
-                />
-              );
-            })}
-
-            <div className="absolute inset-0 pointer-events-none mix-blend-screen"
-              style={{ background: "radial-gradient(circle at 50% 60%, rgba(212,175,55,0.22), transparent 58%)" }} />
-            <div className="absolute inset-x-6 top-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
-            <div className="absolute inset-x-6 bottom-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
-
-            <div className="absolute top-5 left-6 text-[10px] uppercase tracking-[0.3em] text-[#BF9972]/90 backdrop-blur bg-black/35 px-2 py-1 pointer-events-none">
-              {String(active + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}
-            </div>
-
-            <div className="absolute bottom-4 left-6 right-6 flex items-end justify-between gap-4 pointer-events-none">
-              <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]/90 backdrop-blur bg-black/40 px-2 py-1 max-w-[70%] truncate">
-                {activeCaption}
-              </div>
-              <div className="flex pointer-events-auto -mr-3">
-                {slides.map((_, i) => (
-                  <button
-                    key={i}
-                    data-testid={`atelier-dot-${i}`}
-                    aria-label={`View slide ${i + 1}`}
-                    aria-current={i === active ? "true" : undefined}
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActive(i); }}
-                    className="min-w-[44px] min-h-[44px] flex items-center justify-center group focus:outline-none focus-visible:ring-1 focus-visible:ring-[#D4AF37]"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`h-2 transition-all ${i === active ? "w-7 bg-[#D4AF37]" : "w-2 bg-white/30 group-hover:bg-white/55"}`}
-                    />
-                  </button>
-                ))}
-              </div>
-            </div>
-          </HeroWrap>
-
-          {slides.length > 1 && (
-            <div className="mt-4 grid gap-2" style={{ gridTemplateColumns: `repeat(${slides.length}, minmax(0, 1fr))` }}>
+    <section ref={sectionRef} data-testid="atelier-section" className="relative h-auto md:h-[300vh] border-y border-white/10">
+      <div className="max-w-7xl mx-auto px-6 py-20 md:py-0 md:sticky md:top-0 md:h-screen flex items-center">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-14 items-center w-full">
+          <motion.div className="md:col-span-7 relative will-change-transform" style={{ scale: prefersReducedMotion ? 1 : frameScale, opacity: prefersReducedMotion ? 1 : frameOpacity }}>
+            <div className="hidden md:block absolute -left-7 top-0 bottom-0 w-px bg-white/10" aria-hidden><motion.div className="w-px h-full bg-gradient-to-b from-[#D4AF37] via-[#BF9972] to-transparent origin-top" style={{ scaleY: prefersReducedMotion ? 1 : progressScale }} /></div>
+            <HeroWrap {...heroWrapProps} data-testid="atelier-hero-frame" className={`relative block w-full bg-black border border-[#D4AF37]/25 overflow-hidden ${productHref ? "cursor-pointer group" : ""}`} style={{ aspectRatio: "1 / 1", maxHeight: "640px", boxShadow: "0 0 0 1px rgba(191,153,114,0.15), 0 36px 90px -18px rgba(0,0,0,0.82), 0 0 110px -24px rgba(212,175,55,0.3)" }}>
               {slides.map((s, i) => {
-                const thumbSrc = s.src || s.product?.images?.[0];
-                return (
-                  <button
-                    key={`${thumbSrc}-${i}`}
-                    data-testid={`atelier-thumb-${i}`}
-                    onClick={() => setActive(i)}
-                    aria-label={`Show ${s.caption || s.product?.name || `slide ${i + 1}`}`}
-                    className={`relative aspect-square bg-black overflow-hidden border transition-all ${i === active ? "border-[#D4AF37] scale-[1.02]" : "border-white/10 hover:border-[#BF9972]/60 opacity-65 hover:opacity-100"}`}
-                  >
-                    {thumbSrc && (
-                      <img src={api.resolveImage(thumbSrc)} alt="" className="absolute inset-0 w-full h-full object-contain opacity-90" loading="lazy" />
-                    )}
-                    {i === active && <div className="absolute inset-0 pointer-events-none" style={{ boxShadow: "inset 0 0 24px rgba(212,175,55,0.35)" }} />}
-                  </button>
-                );
+                const src = s.src || s.product?.images?.[0];
+                if (!src) return null;
+                const distance = Math.abs(i - active);
+                return <img key={`${src}-${i}`} src={api.resolveImage(src)} alt={`Samrat Glass Emporium — ${s.caption || s.product?.name || ""}`} className={`absolute inset-0 w-full h-full object-contain transition-all duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${productHref && i === active ? "group-hover:scale-[1.03]" : ""}`} style={{ opacity: i === active ? 1 : 0, transform: i === active ? "scale(1) translateY(0)" : `scale(${1.04 + Math.min(distance, 2) * 0.01}) translateY(${i < active ? -24 : 24}px)`, filter: i === active ? "brightness(1)" : "brightness(0.45)" }} loading={i === 0 ? "eager" : "lazy"} />;
               })}
-            </div>
-          )}
-        </motion.div>
-
-        <motion.div
-          className="md:col-span-5 md:sticky md:top-28 md:pt-16 will-change-transform"
-          style={{
-            y: prefersReducedMotion ? 0 : copyY,
-            opacity: prefersReducedMotion ? 1 : copyOpacity,
-          }}
-        >
-          <div className="eyebrow mb-3">{A.eyebrow}</div>
-          <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl xl:text-6xl leading-tight">{A.headline}</h2>
-          <p className="mt-6 text-white/70 leading-relaxed whitespace-pre-wrap">{A.paragraph}</p>
-
-          {activeProduct ? (
-            <>
-              <div className="mt-8 pt-6 border-t border-white/10">
-                <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mb-2">Currently featured</div>
-                <Link
-                  to={productHref}
-                  data-testid="atelier-active-product-name"
-                  className="font-serif text-xl text-white hover:text-[#D4AF37] transition-colors leading-snug block"
-                >
-                  {activeProduct.name}
-                </Link>
-                <div className="mt-3 text-sm text-white/60">
-                  {(() => {
-                    const fp = formatProductPrice(activeProduct);
-                    if (fp.onRequest) return <span className="text-[#D4AF37] font-serif text-base font-medium">Price on request</span>;
-                    return (
-                      <>
-                        {fp.label && <span className="text-[10px] uppercase tracking-[0.24em] text-[#BF9972] mr-1">{fp.label}</span>}
-                        <span className="text-[#D4AF37] font-serif text-base">{fp.primary}</span>
-                      </>
-                    );
-                  })()}
-                </div>
+              <div className="absolute inset-0 pointer-events-none mix-blend-screen" style={{ background: "radial-gradient(circle at 50% 60%, rgba(212,175,55,0.22), transparent 58%)" }} />
+              <div className="absolute top-5 left-6 text-[10px] uppercase tracking-[0.3em] text-[#BF9972]/90 backdrop-blur bg-black/35 px-2 py-1 pointer-events-none">{String(active + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}</div>
+              <div className="absolute bottom-4 left-6 right-6 flex items-end justify-between gap-4 pointer-events-none">
+                <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]/90 backdrop-blur bg-black/45 px-2 py-1 max-w-[70%] truncate">{activeCaption}</div>
+                <div className="flex pointer-events-auto -mr-3">{slides.map((_, i) => <button key={i} data-testid={`atelier-dot-${i}`} aria-label={`View slide ${i + 1}`} aria-current={i === active ? "true" : undefined} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActive(i); }} className="min-w-[44px] min-h-[44px] flex items-center justify-center group focus:outline-none focus-visible:ring-1 focus-visible:ring-[#D4AF37]"><span aria-hidden="true" className={`h-2 transition-all ${i === active ? "w-7 bg-[#D4AF37]" : "w-2 bg-white/30 group-hover:bg-white/55"}`} /></button>)}</div>
               </div>
+            </HeroWrap>
+          </motion.div>
 
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Link
-                  to={productHref}
-                  data-testid="atelier-view-product"
-                  className="inline-flex items-center gap-2 bg-[#D4AF37] text-black hover:bg-[#B5952F] px-6 py-3 uppercase text-xs tracking-[0.24em] transition-colors"
-                >
-                  View Product <ArrowUpRight size={14} />
-                </Link>
-                {waLink && (
-                  <a
-                    href={waLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    data-testid="atelier-inquire-wa"
-                    className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] hover:bg-[#D4AF37]/10 px-6 py-3 uppercase text-xs tracking-[0.24em] transition-colors"
-                  >
-                    <MessageCircle size={14} /> Inquire on WhatsApp
-                  </a>
-                )}
-              </div>
-            </>
-          ) : (
-            <Link to={A.cta_link || "/catalog"} className="mt-8 inline-flex items-center gap-2 text-[#D4AF37] hover:text-[#B5952F] text-xs uppercase tracking-[0.28em] link-underline">
-              {A.cta_text || "Discover the Collection"} <ArrowUpRight size={14} />
-            </Link>
-          )}
-        </motion.div>
+          <div className="md:col-span-5 md:pl-4">
+            <div className="eyebrow mb-3">{A.eyebrow}</div>
+            <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl xl:text-7xl leading-[1.02]">{A.headline}</h2>
+            <p className="mt-6 text-white/70 leading-relaxed whitespace-pre-wrap">{A.paragraph}</p>
+            <div className="mt-8 h-px bg-white/10 relative overflow-hidden"><motion.div className="absolute inset-y-0 left-0 bg-[#D4AF37] origin-left" style={{ width: "100%", scaleX: prefersReducedMotion ? 1 : progressScale }} /></div>
+            {activeProduct ? <>
+              <div className="mt-8 pt-6 border-t border-white/10"><div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mb-2">Currently featured</div><Link to={productHref} data-testid="atelier-active-product-name" className="font-serif text-2xl text-white hover:text-[#D4AF37] transition-colors leading-snug block">{activeProduct.name}</Link><div className="mt-3 text-sm text-white/60">{(() => { const fp = formatProductPrice(activeProduct); return fp.onRequest ? <span className="text-[#D4AF37] font-serif text-base font-medium">Price on request</span> : <>{fp.label && <span className="text-[10px] uppercase tracking-[0.24em] text-[#BF9972] mr-1">{fp.label}</span>}<span className="text-[#D4AF37] font-serif text-base">{fp.primary}</span></>; })()}</div></div>
+              <div className="mt-6 flex flex-wrap gap-3"><Link to={productHref} data-testid="atelier-view-product" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black hover:bg-[#B5952F] px-6 py-3 uppercase text-xs tracking-[0.24em] transition-colors">View Product <ArrowUpRight size={14} /></Link>{waLink && <a href={waLink} target="_blank" rel="noreferrer" data-testid="atelier-inquire-wa" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] hover:bg-[#D4AF37]/10 px-6 py-3 uppercase text-xs tracking-[0.24em] transition-colors"><MessageCircle size={14} /> Inquire on WhatsApp</a>}</div>
+            </> : <Link to={A.cta_link || "/catalog"} className="mt-8 inline-flex items-center gap-2 text-[#D4AF37] hover:text-[#B5952F] text-xs uppercase tracking-[0.28em] link-underline">{A.cta_text || "Discover the Collection"} <ArrowUpRight size={14} /></Link>}
+          </div>
+        </div>
       </div>
     </section>
   );
