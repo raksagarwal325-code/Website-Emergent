@@ -12,6 +12,8 @@ import { api } from "../lib/api";
  *  - Desktop/tablet keeps the normal admin-managed slideshow behaviour.
  *  - Reduced-motion users keep the stable CMS hero and do not start the
  *    background slideshow.
+ *  - Slideshow metadata is deferred until the browser is idle so it does not
+ *    compete with the hero LCP image or first-visit welcome intro.
  */
 export default function HeroSlideshow() {
   const [slides, setSlides] = useState(null); // null = still loading
@@ -33,24 +35,38 @@ export default function HeroSlideshow() {
   }, []);
 
   useEffect(() => {
-    if (isMobile) {
+    if (isMobile || prefersReducedMotion) {
       setSlides([]);
       return undefined;
     }
 
     let alive = true;
-    api
-      .getHeroSlideshow()
-      .then((data) => {
-        if (!alive) return;
-        setSlides(Array.isArray(data?.slides) ? data.slides : []);
-        if (data?.settings) setSettings(data.settings);
-      })
-      .catch(() => alive && setErrored(true));
+    let idleId = null;
+    let timeoutId = null;
+
+    const load = () => {
+      api
+        .getHeroSlideshow()
+        .then((data) => {
+          if (!alive) return;
+          setSlides(Array.isArray(data?.slides) ? data.slides : []);
+          if (data?.settings) setSettings(data.settings);
+        })
+        .catch(() => alive && setErrored(true));
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(load, { timeout: 1600 });
+    } else {
+      timeoutId = window.setTimeout(load, 900);
+    }
+
     return () => {
       alive = false;
+      if (idleId !== null) window.cancelIdleCallback?.(idleId);
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
     };
-  }, [isMobile]);
+  }, [isMobile, prefersReducedMotion]);
 
   // Preserve a single high-priority LCP candidate on desktop initial load.
   useEffect(() => {

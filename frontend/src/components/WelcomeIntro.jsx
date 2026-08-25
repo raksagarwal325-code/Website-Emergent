@@ -5,8 +5,12 @@ import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
 
-const SESSION_KEY = "sge-welcome-intro-seen-v12";
-const PRELOAD_TIMEOUT_MS = 4000;
+const SESSION_KEY = "sge-welcome-intro-seen-v13";
+const PRELOAD_TIMEOUT_MS = 900;
+const INTRO_DURATION_DESKTOP_MS = 4800;
+const INTRO_DURATION_MOBILE_MS = 4200;
+const CRITICAL_IMAGE_COUNT = 2;
+const INTRO_IMAGE_COUNT = 6;
 
 function shuffleInPlace(items) {
   for (let i = items.length - 1; i > 0; i -= 1) {
@@ -41,8 +45,8 @@ export default function WelcomeIntro() {
     const shuffled = shuffleInPlace([...unique]);
     const fallback = shuffled.length ? shuffled : [heroImage];
     const merged = [...fallback];
-    while (merged.length < 8) merged.push(...fallback);
-    return merged.slice(0, 8);
+    while (merged.length < INTRO_IMAGE_COUNT) merged.push(...fallback);
+    return merged.slice(0, INTRO_IMAGE_COUNT);
   }, [heroImage, hp?.atelier?.images, hp?.gallery?.items]);
 
   useEffect(() => {
@@ -64,36 +68,43 @@ export default function WelcomeIntro() {
     if (!visible || typeof window === "undefined" || screenImages.length === 0) return undefined;
 
     let cancelled = false;
-    const preload = screenImages.map((src) => new Promise((resolve) => {
+    const critical = screenImages.slice(0, CRITICAL_IMAGE_COUNT);
+    const preload = critical.map((src) => new Promise((resolve) => {
       const image = new Image();
       image.onload = resolve;
       image.onerror = resolve;
+      image.decoding = "async";
+      image.fetchPriority = "high";
       image.src = src;
       if (image.complete) resolve();
     }));
 
-    const timeout = new Promise((resolve) => {
-      window.setTimeout(resolve, PRELOAD_TIMEOUT_MS);
-    });
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled) setReady(true);
+    }, PRELOAD_TIMEOUT_MS);
 
-    Promise.race([Promise.all(preload), timeout]).then(() => {
+    Promise.all(preload).then(() => {
+      window.clearTimeout(timeoutId);
       if (!cancelled) setReady(true);
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
   }, [visible, screenImages]);
 
   useEffect(() => {
-    if (!visible || !ready || typeof window === "undefined") return undefined;
+    if (!visible || typeof window === "undefined") return undefined;
 
     const isMobile = window.matchMedia?.("(max-width: 767px)")?.matches;
     const timer = window.setTimeout(() => {
       try { window.sessionStorage.setItem(SESSION_KEY, "1"); } catch (_) {}
       setVisible(false);
-    }, isMobile ? 6200 : 6800);
+    }, isMobile ? INTRO_DURATION_MOBILE_MS : INTRO_DURATION_DESKTOP_MS);
 
     return () => window.clearTimeout(timer);
-  }, [ready, visible]);
+  }, [visible]);
 
   useEffect(() => {
     if (!visible || typeof document === "undefined") return undefined;
@@ -109,7 +120,7 @@ export default function WelcomeIntro() {
 
   if (prefersReducedMotion) return null;
 
-  const rows = [screenImages.slice(0, 4), screenImages.slice(4, 8)];
+  const rows = [screenImages.slice(0, 3), screenImages.slice(3, 6)];
 
   return (
     <AnimatePresence>
@@ -123,7 +134,7 @@ export default function WelcomeIntro() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, scale: 1.01, filter: "blur(3px)" }}
-          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         >
           <div className="absolute inset-0 overflow-hidden">
             <div className="absolute inset-[-8vh_-8vw] rotate-[-3deg] scale-[1.08]">
@@ -135,28 +146,32 @@ export default function WelcomeIntro() {
                     className={`flex h-1/2 gap-4 py-2 ${rowIndex === 1 ? "-ml-[24vw]" : ""}`}
                     initial={{ x: rowIndex === 0 ? "0%" : "-18%" }}
                     animate={ready ? { x: rowIndex === 0 ? "-22%" : "4%" } : { x: rowIndex === 0 ? "0%" : "-18%" }}
-                    transition={{ duration: 9.5, ease: "linear" }}
+                    transition={{ duration: 7.2, ease: "linear" }}
                   >
-                    {doubled.map((src, index) => (
-                      <motion.div
-                        key={`${rowIndex}-${index}-${src}`}
-                        className="relative h-full min-w-[34vw] overflow-hidden rounded-[2px] border border-white/[0.05] bg-black/20 md:min-w-[27vw]"
-                        initial={{ opacity: 0, scale: 1.025 }}
-                        animate={ready ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.025 }}
-                        transition={{ duration: 0.75, delay: ready ? index * 0.02 : 0 }}
-                      >
-                        <img
-                          src={src}
-                          alt=""
-                          className="h-full w-full object-cover"
-                          draggable="false"
-                          loading="eager"
-                          decoding="async"
-                          fetchPriority={index < 4 ? "high" : "auto"}
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/10" />
-                      </motion.div>
-                    ))}
+                    {doubled.map((src, index) => {
+                      const globalIndex = rowIndex * 3 + (index % 3);
+                      const critical = globalIndex < CRITICAL_IMAGE_COUNT;
+                      return (
+                        <motion.div
+                          key={`${rowIndex}-${index}-${src}`}
+                          className="relative h-full min-w-[34vw] overflow-hidden rounded-[2px] border border-white/[0.05] bg-black/20 md:min-w-[27vw]"
+                          initial={{ opacity: 0, scale: 1.025 }}
+                          animate={ready ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.025 }}
+                          transition={{ duration: 0.6, delay: ready ? Math.min(index * 0.025, 0.12) : 0 }}
+                        >
+                          <img
+                            src={src}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            draggable="false"
+                            loading={critical ? "eager" : "lazy"}
+                            decoding="async"
+                            fetchPriority={critical ? "high" : "low"}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/10" />
+                        </motion.div>
+                      );
+                    })}
                   </motion.div>
                 );
               })}
@@ -185,11 +200,11 @@ export default function WelcomeIntro() {
             className="absolute left-[7vw] top-1/2 z-30 w-[78vw] max-w-[760px] -translate-y-1/2 md:left-[8vw] md:w-[44vw]"
             initial="hidden"
             animate="visible"
-            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12, delayChildren: 0.08 } } }}
+            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.1, delayChildren: 0.04 } } }}
           >
             <motion.div
               className="mb-6 flex items-center gap-4"
-              variants={{ hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0, transition: { duration: 0.52 } } }}
+              variants={{ hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0, transition: { duration: 0.45 } } }}
             >
               <span className="h-px w-12 bg-[#D4AF37]/80 md:w-16" />
               <span className="text-[9px] uppercase tracking-[0.44em] text-[#D8B05B] sm:text-[10px] md:text-[11px]">
@@ -199,7 +214,7 @@ export default function WelcomeIntro() {
 
             <motion.h2
               className="font-serif text-[3.5rem] leading-[0.9] tracking-[-0.045em] text-white sm:text-6xl md:text-[5.2rem] lg:text-[6rem]"
-              variants={{ hidden: { opacity: 0, y: 18 }, visible: { opacity: 1, y: 0, transition: { duration: 0.72, ease: [0.16, 1, 0.3, 1] } } }}
+              variants={{ hidden: { opacity: 0, y: 18 }, visible: { opacity: 1, y: 0, transition: { duration: 0.62, ease: [0.16, 1, 0.3, 1] } } }}
             >
               A Legacy
               <span className="block italic font-normal text-[#d9b35d]">in Light</span>
@@ -207,14 +222,14 @@ export default function WelcomeIntro() {
 
             <motion.p
               className="mt-7 max-w-[30rem] text-[10px] uppercase leading-[1.9] tracking-[0.23em] text-white/72 md:text-[11px]"
-              variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.58 } } }}
+              variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5 } } }}
             >
               Handcrafted glass lighting from Firozabad, since 1981
             </motion.p>
 
             <motion.div
               className="mt-8 text-[8px] uppercase tracking-[0.42em] text-[#D7B15D]/72 sm:text-[9px]"
-              variants={{ hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.58 } } }}
+              variants={{ hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.5 } } }}
             >
               Heritage · Craft · Illumination
             </motion.div>
@@ -225,7 +240,7 @@ export default function WelcomeIntro() {
             className="absolute inset-y-0 z-20 w-[12vw] min-w-[100px]"
             initial={{ x: "-15vw", opacity: 0 }}
             animate={ready ? { x: "116vw", opacity: [0, 0.24, 0] } : { x: "-15vw", opacity: 0 }}
-            transition={{ duration: 2.1, delay: ready ? 2.9 : 0, ease: "easeInOut" }}
+            transition={{ duration: 1.7, delay: ready ? 1.7 : 0, ease: "easeInOut" }}
             style={{
               background: "linear-gradient(90deg, transparent, rgba(255,240,205,0.08), transparent)",
               filter: "blur(22px)",
@@ -239,8 +254,8 @@ export default function WelcomeIntro() {
             data-testid="welcome-intro-skip"
             className="absolute right-4 top-4 z-40 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[#D4AF37]/30 bg-[#140a10]/45 px-4 py-2 text-[10px] uppercase tracking-[0.24em] text-white/76 backdrop-blur-md transition-all hover:border-[#D4AF37]/80 hover:bg-[#D4AF37]/10 hover:text-[#D4AF37] md:right-8 md:top-8 md:px-5"
             initial={{ opacity: 0, y: -8 }}
-            animate={ready ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
-            transition={{ delay: ready ? 0.28 : 0, duration: 0.55 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18, duration: 0.45 }}
           >
             Explore the Legacy <ArrowRight size={13} />
           </motion.button>
