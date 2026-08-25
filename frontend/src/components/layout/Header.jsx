@@ -241,23 +241,24 @@ export default function Header() {
       {navPreview !== null && NAV_ITEMS[navPreview] && (
         <div
           data-testid="nav-preview-overlay"
-          className="absolute left-0 right-0 top-full hidden border-y border-[#BF9972]/20 bg-[#12070d]/97 shadow-2xl backdrop-blur-2xl md:block"
+          className="absolute left-0 right-0 top-full z-[70] hidden border-y border-[#BF9972]/35 bg-[#12070d] shadow-[0_22px_60px_rgba(0,0,0,0.48)] md:block"
         >
-          <div className="mx-auto grid max-w-7xl grid-cols-[1.15fr_.85fr] gap-12 px-6 py-7">
-            <div>
-              <div className="text-[9px] uppercase tracking-[0.3em] text-[#BF9972]">{NAV_ITEMS[navPreview].eyebrow}</div>
-              <div className="mt-2 font-serif text-2xl text-white">{NAV_ITEMS[navPreview].title}</div>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/58">{NAV_ITEMS[navPreview].description}</p>
+          <div className="pointer-events-none absolute inset-0 opacity-60" style={{ background: "linear-gradient(110deg, rgba(88,27,55,.28), transparent 42%, rgba(212,175,55,.035))" }} />
+          <div className="relative mx-auto grid max-w-7xl grid-cols-[1.15fr_.85fr] gap-12 px-6 py-8">
+            <div className="min-w-0 pr-4">
+              <div className="text-[10px] font-medium uppercase tracking-[0.32em] text-[#D6B07B]">{NAV_ITEMS[navPreview].eyebrow}</div>
+              <div className="mt-2 max-w-3xl font-serif text-[30px] leading-tight text-[#FFF8ED]">{NAV_ITEMS[navPreview].title}</div>
+              <p className="mt-3 max-w-2xl text-[15px] leading-7 text-white/80">{NAV_ITEMS[navPreview].description}</p>
             </div>
-            <div className="grid grid-cols-3 gap-3 self-center">
+            <div className="grid grid-cols-3 gap-0 self-stretch border-l border-white/10">
               {NAV_ITEMS[navPreview].links.map(([to, label]) => (
                 <Link
                   key={`${NAV_ITEMS[navPreview].to}-${to}-${label}`}
                   to={to}
-                  className="group border-l border-white/10 pl-4 py-2 transition-colors hover:border-[#D4AF37]/60"
+                  className="group flex min-h-[96px] flex-col justify-center border-r border-white/10 px-5 py-3 transition-colors hover:bg-white/[0.035]"
                 >
-                  <span className="block text-[10px] uppercase tracking-[0.2em] text-white/64 transition group-hover:text-[#D4AF37]">{label}</span>
-                  <ArrowUpRight size={13} className="mt-2 text-[#D4AF37]/55 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#D4AF37]" />
+                  <span className="block text-[11px] font-medium uppercase tracking-[0.2em] text-white/85 transition-colors group-hover:text-[#E0C15D]">{label}</span>
+                  <ArrowUpRight size={14} className="mt-3 text-[#D4AF37] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                 </Link>
               ))}
             </div>
