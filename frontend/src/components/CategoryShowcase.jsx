@@ -60,6 +60,7 @@ export default function CategoryShowcase() {
     setActive((current) => (current + delta + total) % total);
   };
   const choose = (index) => {
+    if (index === active) return;
     setDirection(index > active ? 1 : -1);
     setActive(index);
   };
@@ -69,13 +70,12 @@ export default function CategoryShowcase() {
     index: (active + offset + total) % total,
     category: CATEGORIES[(active + offset + total) % total],
   })), [active, total]);
-
   const current = CATEGORIES[active];
 
   return (
     <section ref={sectionRef} data-testid="home-category-showcase" className="relative z-10 overflow-hidden border-t border-white/10 bg-[#16070f] md:-mt-6">
       <div aria-hidden className="absolute inset-0 opacity-45 pointer-events-none" style={{ background: "radial-gradient(circle at 18% 18%, rgba(163,99,80,.22), transparent 42%), radial-gradient(circle at 82% 82%, rgba(212,175,55,.08), transparent 38%)" }} />
-      <div className="relative mx-auto max-w-[1500px] px-6 py-12 md:py-16">
+      <div className="relative mx-auto max-w-7xl px-6 py-12 md:py-16">
         <motion.div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={editorialGroup}>
           <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="max-w-2xl">
             <div className="eyebrow mb-2">The Collection</div>
@@ -89,35 +89,22 @@ export default function CategoryShowcase() {
           </motion.div>
         </motion.div>
 
-        <motion.div
-          className="relative h-[420px] overflow-hidden md:h-[500px] lg:h-[540px]"
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.18 }}
-          transition={prefersReducedMotion ? { duration: 0 } : { duration: .85, ease: LUXURY_EASE }}
-        >
+        <motion.div className="relative h-[390px] overflow-hidden md:h-[470px] lg:h-[510px]" initial={prefersReducedMotion ? false : { opacity: 0, y: 34, scale: .985 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: 0.18 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .9, ease: LUXURY_EASE }}>
           <AnimatePresence initial={false} custom={direction}>
-            <motion.div key={active} className="absolute inset-0" initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 70 }} animate={{ opacity: 1, x: 0 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -70 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .72, ease: LUXURY_EASE }}>
-              <div className="absolute inset-y-0 left-1/2 flex w-[138%] -translate-x-1/2 items-center justify-center gap-4 md:w-[118%] md:gap-6">
+            <motion.div key={active} className="absolute inset-0" initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 150, scale: .96 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -150, scale: .96 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .78, ease: LUXURY_EASE }}>
+              <div className="absolute inset-0 flex items-center justify-center gap-5 md:gap-7">
                 {visible.map(({ offset, index, category }) => {
                   const isActive = offset === 0;
                   const img = images[category.db_name];
                   return (
-                    <motion.button
-                      type="button"
-                      key={`${category.db_name}-${offset}`}
-                      onClick={() => choose(index)}
-                      className={`group relative overflow-hidden border text-left ${isActive ? "z-20 w-[66vw] max-w-[700px] border-[#D4AF37]/50" : "z-10 w-[27vw] max-w-[300px] border-white/10"}`}
-                      animate={prefersReducedMotion ? undefined : { scale: isActive ? 1 : .9, opacity: isActive ? 1 : .52, y: isActive ? 0 : 18 }}
-                      transition={{ duration: .65, ease: LUXURY_EASE }}
-                    >
-                      <div className={`relative overflow-hidden bg-black ${isActive ? "h-[350px] md:h-[430px] lg:h-[470px]" : "h-[290px] md:h-[360px] lg:h-[395px]"}`}>
-                        <img src={img || FALLBACK_IMG} alt={`${category.label} at Samrat Glass Emporium`} loading="lazy" className="h-full w-full object-contain transition-transform duration-[1300ms] ease-[cubic-bezier(.22,1,.36,1)] group-hover:scale-[1.045]" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#16070f]/88 via-transparent to-transparent" />
-                        <div className="absolute inset-x-0 bottom-0 p-5 md:p-7">
-                          <div className={`font-serif leading-none text-white ${isActive ? "text-3xl md:text-5xl" : "text-lg md:text-2xl"}`}>{category.label}</div>
+                    <motion.button type="button" key={`${category.db_name}-${offset}`} onClick={() => choose(index)} className={`group relative overflow-hidden border text-left ${isActive ? "z-20 w-[64%] border-[#D4AF37]/50" : "z-10 hidden w-[18%] border-white/10 md:block"}`} initial={prefersReducedMotion ? false : { opacity: 0, x: offset * 55, y: 22 }} animate={{ opacity: isActive ? 1 : .5, x: 0, y: isActive ? 0 : 18, scale: isActive ? 1 : .9 }} transition={{ duration: .72, delay: isActive ? .05 : .12, ease: LUXURY_EASE }}>
+                      <div className={`relative overflow-hidden bg-black ${isActive ? "h-[330px] md:h-[405px] lg:h-[445px]" : "h-[300px] md:h-[340px] lg:h-[365px]"}`}>
+                        <motion.img src={img || FALLBACK_IMG} alt={`${category.label} at Samrat Glass Emporium`} loading="lazy" className="h-full w-full object-contain" initial={prefersReducedMotion ? false : { scale: isActive ? .92 : 1.02 }} animate={{ scale: isActive ? 1 : .96 }} transition={{ duration: 1, ease: LUXURY_EASE }} />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#16070f]/86 via-transparent to-transparent" />
+                        <motion.div className="absolute inset-x-0 bottom-0 p-5 md:p-7" initial={prefersReducedMotion ? false : { opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .18, duration: .6, ease: LUXURY_EASE }}>
+                          <div className={`font-serif leading-none text-white ${isActive ? "text-3xl md:text-5xl" : "text-lg md:text-xl"}`}>{category.label}</div>
                           {isActive && <div className="mt-4 flex items-center justify-between gap-4"><span className="text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]">Explore collection</span><ArrowUpRight size={15} className="text-[#D4AF37]" /></div>}
-                        </div>
+                        </motion.div>
                       </div>
                     </motion.button>
                   );
@@ -128,7 +115,7 @@ export default function CategoryShowcase() {
         </motion.div>
 
         <div className="mt-5 flex items-center gap-5">
-          <div className="h-px flex-1 overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .45, ease: LUXURY_EASE }} /></div>
+          <div className="h-px flex-1 overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} /></div>
           <div className="min-w-[78px] text-right text-[10px] uppercase tracking-[0.25em] text-white/42">{String(active + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div>
           <Link to={`/category/${current.slug}`} className="hidden text-[10px] uppercase tracking-[0.22em] text-[#D4AF37] md:inline-flex">Open {current.label} <ArrowUpRight size={12} className="ml-1" /></Link>
         </div>
