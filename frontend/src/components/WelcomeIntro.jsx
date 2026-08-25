@@ -5,7 +5,8 @@ import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
 
-const SESSION_KEY = "sge-welcome-intro-seen-v10";
+const SESSION_KEY = "sge-welcome-intro-seen-v11";
+const PRELOAD_TIMEOUT_MS = 4000;
 
 function shuffleInPlace(items) {
   for (let i = items.length - 1; i > 0; i -= 1) {
@@ -19,6 +20,7 @@ export default function WelcomeIntro() {
   const { settings, hp } = useSettings();
   const prefersReducedMotion = useReducedMotion();
   const [visible, setVisible] = useState(false);
+  const [ready, setReady] = useState(false);
 
   const heroImage = api.resolveImage(settings?.hero_image || BRAND_PLACEHOLDER_HERO);
 
@@ -55,14 +57,43 @@ export default function WelcomeIntro() {
     if (alreadySeen) return undefined;
 
     setVisible(true);
+    return undefined;
+  }, [prefersReducedMotion]);
+
+  useEffect(() => {
+    if (!visible || typeof window === "undefined" || screenImages.length === 0) return undefined;
+
+    let cancelled = false;
+    const preload = screenImages.map((src) => new Promise((resolve) => {
+      const image = new Image();
+      image.onload = resolve;
+      image.onerror = resolve;
+      image.src = src;
+      if (image.complete) resolve();
+    }));
+
+    const timeout = new Promise((resolve) => {
+      window.setTimeout(resolve, PRELOAD_TIMEOUT_MS);
+    });
+
+    Promise.race([Promise.all(preload), timeout]).then(() => {
+      if (!cancelled) setReady(true);
+    });
+
+    return () => { cancelled = true; };
+  }, [visible, screenImages]);
+
+  useEffect(() => {
+    if (!visible || !ready || typeof window === "undefined") return undefined;
+
     const isMobile = window.matchMedia?.("(max-width: 767px)")?.matches;
     const timer = window.setTimeout(() => {
       try { window.sessionStorage.setItem(SESSION_KEY, "1"); } catch (_) {}
       setVisible(false);
-    }, isMobile ? 5200 : 5900);
+    }, isMobile ? 6200 : 6800);
 
     return () => window.clearTimeout(timer);
-  }, [prefersReducedMotion]);
+  }, [ready, visible]);
 
   useEffect(() => {
     if (!visible || typeof document === "undefined") return undefined;
@@ -103,22 +134,25 @@ export default function WelcomeIntro() {
                     key={rowIndex}
                     className={`flex h-1/2 gap-4 py-2 ${rowIndex === 1 ? "-ml-[24vw]" : ""}`}
                     initial={{ x: rowIndex === 0 ? "0%" : "-18%" }}
-                    animate={{ x: rowIndex === 0 ? "-22%" : "4%" }}
+                    animate={ready ? { x: rowIndex === 0 ? "-22%" : "4%" } : { x: rowIndex === 0 ? "0%" : "-18%" }}
                     transition={{ duration: 9.5, ease: "linear" }}
                   >
                     {doubled.map((src, index) => (
                       <motion.div
                         key={`${rowIndex}-${index}-${src}`}
                         className="relative h-full min-w-[34vw] overflow-hidden rounded-[2px] border border-white/[0.05] bg-black/20 md:min-w-[27vw]"
-                        initial={{ opacity: 0.72, scale: 1.025 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.9, delay: index * 0.025 }}
+                        initial={{ opacity: 0, scale: 1.025 }}
+                        animate={ready ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.025 }}
+                        transition={{ duration: 0.75, delay: ready ? index * 0.02 : 0 }}
                       >
                         <img
                           src={src}
                           alt=""
                           className="h-full w-full object-cover"
                           draggable="false"
+                          loading="eager"
+                          decoding="async"
+                          fetchPriority={index < 4 ? "high" : "auto"}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/10" />
                       </motion.div>
@@ -150,8 +184,8 @@ export default function WelcomeIntro() {
           <motion.div
             className="absolute left-[7vw] top-1/2 z-30 w-[78vw] max-w-[760px] -translate-y-1/2 md:left-[8vw] md:w-[44vw]"
             initial="hidden"
-            animate="visible"
-            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12, delayChildren: 0.25 } } }}
+            animate={ready ? "visible" : "hidden"}
+            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12, delayChildren: 0.18 } } }}
           >
             <motion.div
               className="mb-6 flex items-center gap-4"
@@ -190,8 +224,8 @@ export default function WelcomeIntro() {
             aria-hidden
             className="absolute inset-y-0 z-20 w-[12vw] min-w-[100px]"
             initial={{ x: "-15vw", opacity: 0 }}
-            animate={{ x: "116vw", opacity: [0, 0.24, 0] }}
-            transition={{ duration: 2.1, delay: 3.15, ease: "easeInOut" }}
+            animate={ready ? { x: "116vw", opacity: [0, 0.24, 0] } : { x: "-15vw", opacity: 0 }}
+            transition={{ duration: 2.1, delay: ready ? 2.9 : 0, ease: "easeInOut" }}
             style={{
               background: "linear-gradient(90deg, transparent, rgba(255,240,205,0.08), transparent)",
               filter: "blur(22px)",
@@ -205,8 +239,8 @@ export default function WelcomeIntro() {
             data-testid="welcome-intro-skip"
             className="absolute right-4 top-4 z-40 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[#D4AF37]/30 bg-[#140a10]/45 px-4 py-2 text-[10px] uppercase tracking-[0.24em] text-white/76 backdrop-blur-md transition-all hover:border-[#D4AF37]/80 hover:bg-[#D4AF37]/10 hover:text-[#D4AF37] md:right-8 md:top-8 md:px-5"
             initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35, duration: 0.55 }}
+            animate={ready ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
+            transition={{ delay: ready ? 0.28 : 0, duration: 0.55 }}
           >
             Explore the Legacy <ArrowRight size={13} />
           </motion.button>
