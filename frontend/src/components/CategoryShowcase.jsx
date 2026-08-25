@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
@@ -14,6 +14,7 @@ export default function CategoryShowcase() {
   const [active, setActive] = useState(0);
   const [direction, setDirection] = useState(1);
   const [shouldLoadMedia, setShouldLoadMedia] = useState(false);
+  const [keyboardActive, setKeyboardActive] = useState(false);
   const sectionRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
 
@@ -30,6 +31,16 @@ export default function CategoryShowcase() {
         observer.disconnect();
       }
     }, { rootMargin: "240px 0px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const node = sectionRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      setKeyboardActive(entry.isIntersecting && entry.intersectionRatio >= 0.42);
+    }, { threshold: [0, 0.42, 0.7] });
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
@@ -55,10 +66,30 @@ export default function CategoryShowcase() {
   }, [shouldLoadMedia]);
 
   const total = CATEGORIES.length;
-  const go = (delta) => {
+  const go = useCallback((delta) => {
     setDirection(delta > 0 ? 1 : -1);
     setActive((current) => (current + delta + total) % total);
-  };
+  }, [total]);
+
+  useEffect(() => {
+    if (!keyboardActive) return undefined;
+    const onKeyDown = (event) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const target = event.target;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable) return;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        go(-1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        go(1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [go, keyboardActive]);
+
   const choose = (index) => {
     if (index === active) return;
     setDirection(index > active ? 1 : -1);
