@@ -5,22 +5,7 @@ import { ArrowUpRight } from "lucide-react";
 import { api } from "../lib/api";
 import { NAV_CATEGORIES as CATEGORIES } from "../lib/categories";
 import { BRAND_PLACEHOLDER } from "../lib/placeholders";
-import { editorialGroup, editorialItem, imageReveal, LUXURY_EASE } from "../lib/motion";
-
-/**
- * "Shop by Category" — editorial category grid sitting directly under the
- * hero. Each tile links to the clean category page at /category/<slug> so
- * search engines get a permanent, filterable landing page for each category.
- *
- *  - `db_name`   : exact value stored on products (singular, used as filter).
- *  - `label`     : plural marketing label shown to shoppers.
- *  - `slug`      : clean URL segment ("chandeliers", "hanging-lights", …).
- *  - Image source: admin override → newest published product for that
- *    category → neutral branded placeholder (below — no third-party stock).
- *  - Category media is not discovered until this section is close to the
- *    viewport, keeping multi-megabyte product imagery out of the initial
- *    mobile Lighthouse/LCP loading path.
- */
+import { editorialGroup, editorialItem, LUXURY_EASE } from "../lib/motion";
 
 const FALLBACK_IMG = BRAND_PLACEHOLDER;
 
@@ -33,12 +18,10 @@ export default function CategoryShowcase() {
   useEffect(() => {
     const node = sectionRef.current;
     if (!node) return undefined;
-
     if (typeof IntersectionObserver === "undefined") {
       setShouldLoadMedia(true);
       return undefined;
     }
-
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
@@ -48,14 +31,12 @@ export default function CategoryShowcase() {
       },
       { rootMargin: "200px 0px" },
     );
-
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
     if (!shouldLoadMedia) return undefined;
-
     let alive = true;
     Promise.all([
       api.getCategoryFeaturedImages().catch(() => ({})),
@@ -92,7 +73,7 @@ export default function CategoryShowcase() {
     <section
       ref={sectionRef}
       data-testid="home-category-showcase"
-      className="relative border-t border-white/10"
+      className="relative z-10 border-t border-white/10 bg-[#16070f] md:-mt-10"
     >
       <div
         aria-hidden
@@ -102,9 +83,9 @@ export default function CategoryShowcase() {
             "radial-gradient(circle at 15% 20%, rgba(163,99,80,0.18), transparent 55%), radial-gradient(circle at 85% 90%, rgba(212,175,55,0.08), transparent 60%)",
         }}
       />
-      <div className="relative max-w-7xl mx-auto px-6 py-20 md:py-24">
+      <div className="relative max-w-7xl mx-auto px-6 py-20 md:py-28">
         <motion.div
-          className="mb-12 md:mb-14"
+          className="mb-12 md:mb-16"
           initial={prefersReducedMotion ? false : "hidden"}
           whileInView="visible"
           viewport={{ once: true, margin: "-80px" }}
@@ -116,8 +97,7 @@ export default function CategoryShowcase() {
               Shop by <span className="italic brand-gradient-text">Category</span>
             </h2>
             <p className="mt-4 text-white/60 max-w-md text-sm md:text-base">
-              From soaring crystal chandeliers to intimate candle stands — a
-              curated way to find the piece your space is asking for.
+              From soaring crystal chandeliers to intimate candle stands — a curated way to find the piece your space is asking for.
             </p>
             <Link
               to="/catalog"
@@ -129,17 +109,25 @@ export default function CategoryShowcase() {
           </motion.div>
         </motion.div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 md:gap-6">
-          {CATEGORIES.map((c, i) => (
-            <CategoryCard
-              key={c.db_name}
-              category={c}
-              imageUrl={images[c.db_name]}
-              index={i}
-              reducedMotion={prefersReducedMotion}
-            />
-          ))}
-        </div>
+        <motion.div
+          className="relative overflow-hidden"
+          initial={prefersReducedMotion ? false : { clipPath: "inset(0 0 22% 0)", opacity: 0.35, y: 42 }}
+          whileInView={{ clipPath: "inset(0 0 0% 0)", opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.16 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 1.15, ease: LUXURY_EASE }}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 md:gap-6">
+            {CATEGORIES.map((c, i) => (
+              <CategoryCard
+                key={c.db_name}
+                category={c}
+                imageUrl={images[c.db_name]}
+                index={i}
+                reducedMotion={prefersReducedMotion}
+              />
+            ))}
+          </div>
+        </motion.div>
       </div>
     </section>
   );
@@ -149,13 +137,12 @@ function CategoryCard({ category, imageUrl, index, reducedMotion }) {
   const href = `/category/${category.slug}`;
   return (
     <motion.div
-      initial={reducedMotion ? false : "hidden"}
-      whileInView="visible"
-      viewport={{ once: true, margin: "-50px" }}
-      variants={reducedMotion ? undefined : imageReveal}
+      initial={reducedMotion ? false : { opacity: 0, y: 18 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-40px" }}
       transition={reducedMotion ? { duration: 0 } : {
-        duration: 0.9,
-        delay: Math.min(0.045 * index, 0.28),
+        duration: 0.75,
+        delay: Math.min(0.055 * index, 0.32),
         ease: LUXURY_EASE,
       }}
     >
@@ -174,21 +161,11 @@ function CategoryCard({ category, imageUrl, index, reducedMotion }) {
               loading="lazy"
               fetchPriority="low"
               decoding="async"
-              className="w-full h-full object-cover transition-transform duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04]"
+              className="w-full h-full object-cover scale-[1.035] transition-transform duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.075]"
             />
           )}
-          <div
-            aria-hidden
-            className="absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(22,7,15,0) 40%, rgba(22,7,15,0.55) 72%, rgba(22,7,15,0.92) 100%)",
-            }}
-          />
-          <div
-            aria-hidden
-            className="absolute inset-x-6 bottom-[92px] h-px bg-[#D4AF37]/0 group-hover:bg-[#D4AF37]/60 transition-colors duration-500"
-          />
+          <div aria-hidden className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,7,15,0.02) 35%, rgba(22,7,15,0.58) 72%, rgba(22,7,15,0.94) 100%)" }} />
+          <div aria-hidden className="absolute inset-x-6 bottom-[92px] h-px bg-[#D4AF37]/0 group-hover:bg-[#D4AF37]/60 transition-colors duration-500" />
         </div>
 
         <div className="absolute inset-x-0 bottom-0 p-5 md:p-6 flex flex-col justify-end min-h-[8.5rem]">
@@ -197,10 +174,7 @@ function CategoryCard({ category, imageUrl, index, reducedMotion }) {
           </div>
           <span className="inline-flex w-fit items-center gap-1.5 text-xs uppercase tracking-[0.24em] text-[#D4AF37] whitespace-nowrap pb-1 border-b border-[#D4AF37]/40 group-hover:border-[#D4AF37] transition-colors">
             Explore Collection
-            <ArrowUpRight
-              size={13}
-              className="transition-transform duration-500 group-hover:translate-x-1 group-hover:-translate-y-1"
-            />
+            <ArrowUpRight size={13} className="transition-transform duration-500 group-hover:translate-x-1 group-hover:-translate-y-1" />
           </span>
         </div>
       </Link>
