@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Heart, ShoppingBag, ArrowUpRight, Sparkles } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
@@ -36,6 +36,7 @@ export default function ProductCard({ product, index = 0 }) {
   const { hp } = useSettings();
   const fav = isFavorite(product.id);
   const img = api.resolveImage(product.images?.[0]);
+  const [mediaAspect, setMediaAspect] = useState(4 / 5);
 
   const projectCount = useMemo(() => {
     const items = hp?.gallery?.items || [];
@@ -44,6 +45,19 @@ export default function ProductCard({ product, index = 0 }) {
       0
     );
   }, [hp, product.id]);
+
+  const handleImageLoad = (event) => {
+    const naturalWidth = event.currentTarget?.naturalWidth || 0;
+    const naturalHeight = event.currentTarget?.naturalHeight || 0;
+    if (!naturalWidth || !naturalHeight) return;
+
+    // Let each card follow the source image instead of forcing every product
+    // into the same 4:5 box, while keeping extreme panoramas/portraits from
+    // making the catalogue grid impractically short or tall.
+    const sourceAspect = naturalWidth / naturalHeight;
+    const controlledAspect = Math.min(1.15, Math.max(0.68, sourceAspect));
+    setMediaAspect((current) => Math.abs(current - controlledAspect) > 0.01 ? controlledAspect : current);
+  };
 
   const handleAdd = (e) => {
     e.preventDefault();
@@ -85,16 +99,17 @@ export default function ProductCard({ product, index = 0 }) {
 
       <Link to={productPath(product)} className="block" data-testid={`product-link-${product.id}`}>
         <div
-          className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center relative p-4"
+          className="overflow-hidden bg-[#0e0510] flex items-center justify-center relative transition-[aspect-ratio] duration-500"
           {...containerGuardProps}
-          style={containerGuardStyle}
+          style={{ ...containerGuardStyle, aspectRatio: mediaAspect }}
         >
           {img ? (
             <img
               src={img}
               alt={product.name}
-              className="product-image max-w-full max-h-full w-auto h-auto object-contain object-center opacity-95 group-hover:opacity-100"
+              className="product-image block h-full w-full object-contain object-center p-2 opacity-95 group-hover:opacity-100 sm:p-3"
               loading="lazy"
+              onLoad={handleImageLoad}
               {...imgGuardProps}
               style={imgGuardStyle}
             />
