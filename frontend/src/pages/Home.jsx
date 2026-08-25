@@ -33,10 +33,12 @@ export default function Home() {
     target: heroRef,
     offset: ["start start", "end start"],
   });
-  const heroScale = useTransform(heroScrollProgress, [0, 1], [1, 1.1]);
-  const heroMediaY = useTransform(heroScrollProgress, [0, 1], [0, 78]);
-  const heroContentY = useTransform(heroScrollProgress, [0, 1], [0, -96]);
-  const heroContentOpacity = useTransform(heroScrollProgress, [0, 0.62, 1], [1, 0.9, 0]);
+  const heroScale = useTransform(heroScrollProgress, [0, 0.5, 1], [1, 1.035, 0.88]);
+  const heroMediaY = useTransform(heroScrollProgress, [0, 0.55, 1], [0, 20, -76]);
+  const heroContentY = useTransform(heroScrollProgress, [0, 0.5, 1], [0, -34, -180]);
+  const heroContentOpacity = useTransform(heroScrollProgress, [0, 0.48, 0.82, 1], [1, 1, 0.62, 0]);
+  const heroShadeOpacity = useTransform(heroScrollProgress, [0.35, 1], [0, 0.72]);
+  const heroRuleScale = useTransform(heroScrollProgress, [0.05, 0.45], [0, 1]);
 
   useEffect(() => {
     api.listProducts({ featured: true, limit: 48 })
@@ -60,7 +62,7 @@ export default function Home() {
         path="/"
       />
       <WelcomeIntro />
-      <section ref={heroRef} className="relative overflow-hidden grain">
+      <section ref={heroRef} className="relative overflow-hidden grain md:min-h-[112vh]">
         <motion.div
           className="absolute inset-0 opacity-45 will-change-transform"
           initial={prefersReducedMotion ? false : { opacity: 0 }}
@@ -88,7 +90,13 @@ export default function Home() {
         </motion.div>
 
         <motion.div
-          className="relative max-w-7xl mx-auto px-6 pt-20 pb-24 md:pt-24 md:pb-28 will-change-transform"
+          aria-hidden
+          className="absolute inset-0 pointer-events-none bg-[#16070f]"
+          style={{ opacity: prefersReducedMotion ? 0 : heroShadeOpacity }}
+        />
+
+        <motion.div
+          className="relative max-w-7xl mx-auto px-6 pt-20 pb-28 md:pt-24 md:pb-40 will-change-transform"
           style={{
             y: prefersReducedMotion ? 0 : heroContentY,
             opacity: prefersReducedMotion ? 1 : heroContentOpacity,
@@ -109,6 +117,11 @@ export default function Home() {
                 {H.headline_line1}<br />
                 <span className="italic brand-gradient-text">{H.headline_line2}</span>
               </h1>
+              <motion.div
+                aria-hidden
+                className="mt-7 h-px w-40 origin-left bg-gradient-to-r from-[#D4AF37]/90 to-transparent"
+                style={{ scaleX: prefersReducedMotion ? 1 : heroRuleScale }}
+              />
             </motion.div>
 
             <motion.div variants={prefersReducedMotion ? undefined : editorialItem}>
@@ -144,6 +157,8 @@ export default function Home() {
             </motion.div>
           </motion.div>
         </motion.div>
+
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-b from-transparent to-[#16070f] pointer-events-none" />
       </section>
 
       <CategoryShowcase />

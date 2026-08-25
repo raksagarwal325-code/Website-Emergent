@@ -29,10 +29,11 @@ export default function AtelierShowcase() {
     target: sectionRef,
     offset: ["start end", "end start"],
   });
-  const mediaY = useTransform(scrollYProgress, [0, 1], [60, -80]);
-  const mediaScale = useTransform(scrollYProgress, [0, 0.5, 1], [0.95, 1.035, 1]);
-  const copyY = useTransform(scrollYProgress, [0, 0.5, 1], [24, 0, -18]);
-  const copyOpacity = useTransform(scrollYProgress, [0, 0.24, 0.8, 1], [0.35, 1, 1, 0.65]);
+  const mediaY = useTransform(scrollYProgress, [0, 0.5, 1], [110, 0, -120]);
+  const mediaScale = useTransform(scrollYProgress, [0, 0.45, 1], [0.9, 1.055, 0.965]);
+  const copyY = useTransform(scrollYProgress, [0, 0.42, 1], [80, 0, -72]);
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.2, 0.78, 1], [0.12, 1, 1, 0.28]);
+  const progressScale = useTransform(scrollYProgress, [0.08, 0.9], [0, 1]);
 
   const [products, setProducts] = useState([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
@@ -64,8 +65,10 @@ export default function AtelierShowcase() {
 
   useMotionValueEvent(scrollYProgress, "change", (latest) => {
     if (prefersReducedMotion || slides.length <= 1) return;
-    const bounded = Math.max(0, Math.min(0.999, latest));
-    const next = Math.min(slides.length - 1, Math.floor(bounded * slides.length));
+    const start = 0.12;
+    const end = 0.86;
+    const normalized = Math.max(0, Math.min(0.999, (latest - start) / (end - start)));
+    const next = Math.min(slides.length - 1, Math.floor(normalized * slides.length));
     setActive((current) => (current === next ? current : next));
   });
 
@@ -86,11 +89,18 @@ export default function AtelierShowcase() {
     <section
       ref={sectionRef}
       data-testid="atelier-section"
-      className="max-w-7xl mx-auto px-6 py-20 md:py-28 md:min-h-[165vh]"
+      className="relative max-w-7xl mx-auto px-6 py-20 md:py-28 md:min-h-[220vh]"
     >
+      <div className="hidden md:block absolute top-24 bottom-24 left-6 w-px bg-white/10" aria-hidden>
+        <motion.div
+          className="w-px h-full bg-gradient-to-b from-[#D4AF37] via-[#BF9972] to-transparent origin-top"
+          style={{ scaleY: prefersReducedMotion ? 1 : progressScale }}
+        />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-14 items-start">
         <motion.div
-          className="md:col-span-7 md:sticky md:top-20 will-change-transform"
+          className="md:col-span-7 md:sticky md:top-16 will-change-transform"
           style={{
             y: prefersReducedMotion ? 0 : mediaY,
             scale: prefersReducedMotion ? 1 : mediaScale,
@@ -103,8 +113,8 @@ export default function AtelierShowcase() {
             className={`relative block w-full bg-black border border-[#D4AF37]/25 overflow-hidden ${productHref ? "cursor-pointer group" : ""}`}
             style={{
               aspectRatio: "1 / 1",
-              maxHeight: "560px",
-              boxShadow: "0 0 0 1px rgba(191,153,114,0.15), 0 24px 60px -12px rgba(0,0,0,0.7), 0 0 80px -20px rgba(212,175,55,0.25)",
+              maxHeight: "620px",
+              boxShadow: "0 0 0 1px rgba(191,153,114,0.15), 0 32px 80px -16px rgba(0,0,0,0.8), 0 0 100px -22px rgba(212,175,55,0.28)",
             }}
           >
             {slides.map((s, i) => {
@@ -115,17 +125,25 @@ export default function AtelierShowcase() {
                   key={`${src}-${i}`}
                   src={api.resolveImage(src)}
                   alt={`Samrat Glass Emporium — ${s.caption || s.product?.name || ""}`}
-                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-1000 ${productHref && i === active ? "group-hover:scale-[1.025]" : ""}`}
-                  style={{ opacity: i === active ? 1 : 0, transform: i === active ? "scale(1)" : "scale(1.015)" }}
+                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-[1200ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${productHref && i === active ? "group-hover:scale-[1.035]" : ""}`}
+                  style={{
+                    opacity: i === active ? 1 : 0,
+                    transform: i === active ? "scale(1) translateY(0)" : "scale(1.06) translateY(18px)",
+                    filter: i === active ? "brightness(1)" : "brightness(0.55)",
+                  }}
                   loading={i === 0 ? "eager" : "lazy"}
                 />
               );
             })}
 
             <div className="absolute inset-0 pointer-events-none mix-blend-screen"
-              style={{ background: "radial-gradient(circle at 50% 60%, rgba(212,175,55,0.18), transparent 58%)" }} />
+              style={{ background: "radial-gradient(circle at 50% 60%, rgba(212,175,55,0.22), transparent 58%)" }} />
             <div className="absolute inset-x-6 top-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
             <div className="absolute inset-x-6 bottom-4 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
+
+            <div className="absolute top-5 left-6 text-[10px] uppercase tracking-[0.3em] text-[#BF9972]/90 backdrop-blur bg-black/35 px-2 py-1 pointer-events-none">
+              {String(active + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}
+            </div>
 
             <div className="absolute bottom-4 left-6 right-6 flex items-end justify-between gap-4 pointer-events-none">
               <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]/90 backdrop-blur bg-black/40 px-2 py-1 max-w-[70%] truncate">
@@ -161,12 +179,12 @@ export default function AtelierShowcase() {
                     data-testid={`atelier-thumb-${i}`}
                     onClick={() => setActive(i)}
                     aria-label={`Show ${s.caption || s.product?.name || `slide ${i + 1}`}`}
-                    className={`relative aspect-square bg-black overflow-hidden border transition-all ${i === active ? "border-[#D4AF37]" : "border-white/10 hover:border-[#BF9972]/60"}`}
+                    className={`relative aspect-square bg-black overflow-hidden border transition-all ${i === active ? "border-[#D4AF37] scale-[1.02]" : "border-white/10 hover:border-[#BF9972]/60 opacity-65 hover:opacity-100"}`}
                   >
                     {thumbSrc && (
                       <img src={api.resolveImage(thumbSrc)} alt="" className="absolute inset-0 w-full h-full object-contain opacity-90" loading="lazy" />
                     )}
-                    {i === active && <div className="absolute inset-0 pointer-events-none" style={{ boxShadow: "inset 0 0 20px rgba(212,175,55,0.35)" }} />}
+                    {i === active && <div className="absolute inset-0 pointer-events-none" style={{ boxShadow: "inset 0 0 24px rgba(212,175,55,0.35)" }} />}
                   </button>
                 );
               })}
@@ -175,14 +193,14 @@ export default function AtelierShowcase() {
         </motion.div>
 
         <motion.div
-          className="md:col-span-5 md:sticky md:top-32 md:pt-14 will-change-transform"
+          className="md:col-span-5 md:sticky md:top-28 md:pt-16 will-change-transform"
           style={{
             y: prefersReducedMotion ? 0 : copyY,
             opacity: prefersReducedMotion ? 1 : copyOpacity,
           }}
         >
           <div className="eyebrow mb-3">{A.eyebrow}</div>
-          <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl leading-tight">{A.headline}</h2>
+          <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl xl:text-6xl leading-tight">{A.headline}</h2>
           <p className="mt-6 text-white/70 leading-relaxed whitespace-pre-wrap">{A.paragraph}</p>
 
           {activeProduct ? (
