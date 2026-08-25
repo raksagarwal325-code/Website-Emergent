@@ -80,7 +80,6 @@ export default function AtelierShowcase() {
                 <div aria-hidden className="absolute inset-0 mix-blend-screen" style={{ background: "radial-gradient(circle at 50% 62%, rgba(212,175,55,.16), transparent 58%)" }} />
               </motion.div>
             </AnimatePresence>
-            <div className="absolute left-5 top-5 z-10 bg-black/45 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-[#BF9972] backdrop-blur">{String(active + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}</div>
             <div className="absolute bottom-4 left-5 right-5 z-10 flex items-end justify-between gap-4">
               <div className="max-w-[70%] truncate bg-black/45 px-2 py-1 text-[10px] uppercase tracking-[0.26em] text-[#BF9972] backdrop-blur">{activeCaption}</div>
               {slides.length > 1 && <div className="flex gap-2"><button type="button" aria-label="Previous atelier piece" onClick={() => go(-1)} className="flex h-11 w-11 items-center justify-center border border-white/15 bg-black/55 text-white/75 transition hover:border-[#D4AF37] hover:text-[#D4AF37]"><ChevronLeft size={18} /></button><button type="button" aria-label="Next atelier piece" onClick={() => go(1)} className="flex h-11 w-11 items-center justify-center border border-[#D4AF37]/50 bg-black/55 text-[#D4AF37] transition hover:bg-[#D4AF37] hover:text-black"><ChevronRight size={18} /></button></div>}
