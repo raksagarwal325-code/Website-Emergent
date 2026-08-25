@@ -41,11 +41,18 @@ export default function CollageSection() {
             <motion.div aria-hidden className="absolute inset-x-0 top-0 h-px origin-left bg-gradient-to-r from-[#D4AF37] via-[#BF9972]/45 to-transparent" style={{ scaleX: prefersReducedMotion ? 1 : ruleScale }} />
             <div className="grid grid-cols-2 md:grid-cols-4">
               {stats.map((s, i) => {
-                const compactValue = String(s.value || "").length >= 7;
+                const valueLength = String(s.value || "").length;
+                const veryCompactValue = valueLength >= 8;
+                const compactValue = valueLength >= 7;
+                const valueSize = veryCompactValue
+                  ? "text-[1.7rem] sm:text-[1.8rem] lg:text-[1.72rem] xl:text-[1.9rem]"
+                  : compactValue
+                    ? "text-3xl sm:text-[2.05rem] lg:text-[1.95rem] xl:text-[2.15rem]"
+                    : "text-3xl sm:text-4xl lg:text-[2.35rem] xl:text-[2.6rem]";
                 return (
-                  <motion.div key={`${s.value}-${s.label}`} data-testid={`collage-stat-${i}`} className="relative min-w-0 overflow-visible px-3 py-8 md:px-4 md:py-10 lg:px-4" initial={prefersReducedMotion ? false : { opacity: 0, y: 44, scale: .94 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: .38 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .8, delay: i * .12, ease: LUXURY_EASE }}>
+                  <motion.div key={`${s.value}-${s.label}`} data-testid={`collage-stat-${i}`} className="relative z-10 min-w-0 overflow-visible px-2 py-8 md:px-3 md:py-10 lg:px-3" initial={prefersReducedMotion ? false : { opacity: 0, y: 44, scale: .94 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: .38 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .8, delay: i * .12, ease: LUXURY_EASE }}>
                     {i > 0 && <span aria-hidden className="absolute left-0 top-8 hidden h-[calc(100%-4rem)] w-px bg-white/10 md:block" />}
-                    <motion.div className={`whitespace-nowrap font-serif leading-[.95] brand-gradient-text ${compactValue ? "text-3xl sm:text-[2.15rem] lg:text-[2.05rem] xl:text-[2.3rem]" : "text-3xl sm:text-4xl lg:text-[2.45rem] xl:text-[2.75rem]"}`} initial={prefersReducedMotion ? false : { opacity: 0, x: -18 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: .7, delay: .15 + i * .12, ease: LUXURY_EASE }}>{s.value}</motion.div>
+                    <motion.div className={`max-w-full whitespace-nowrap font-serif leading-[.95] brand-gradient-text ${valueSize}`} initial={prefersReducedMotion ? false : { opacity: 0, x: -18 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: .7, delay: .15 + i * .12, ease: LUXURY_EASE }}>{s.value}</motion.div>
                     <div className="mt-3 max-w-[10rem] text-[9px] font-medium uppercase tracking-[0.18em] text-white/65 sm:text-[10px]">{s.label}</div>
                     <motion.div aria-hidden className="mt-6 h-px bg-[#D4AF37]/55" initial={prefersReducedMotion ? false : { width: 0 }} whileInView={{ width: 42 }} viewport={{ once: true }} transition={{ duration: .72, delay: .3 + i * .12, ease: LUXURY_EASE }} />
                   </motion.div>
