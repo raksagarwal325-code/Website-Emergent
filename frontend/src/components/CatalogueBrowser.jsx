@@ -9,58 +9,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 const PAGE_SIZE = 24;
 const VALID_SORTS = new Set(["newest", "price_asc", "price_desc", "rating", "name"]);
-
 const normalizeSort = (value) => (VALID_SORTS.has(value) ? value : "newest");
 
-/**
- * Shared product browser used by both `/catalog` and `/category/<slug>`.
- *
- * Pagination model (Batch B · Item 1):
- *   - The current page lives in the URL as `?page=N` (default 1).
- *   - Changing page **replaces** products (no append) and scrolls to the
- *     top of the grid.
- *   - Changing search / sort / category / price / lockedCategory always
- *     resets `?page=1` so the visitor never lands on an out-of-range page
- *     for a new filter set.
- *   - Invalid page values (`abc`, `-5`, `1e9`) are clamped to the valid
- *     range once the total_pages is known — the URL is normalised back
- *     via `setSearchParams(..., { replace: true })`.
- *   - Previous is disabled on page 1; Next is disabled on the last page.
- */
-export default function CatalogueBrowser({
-  lockedCategory = null,
-  initialProducts = [],
-  initialTotal = 0,
-  dynamicCategories = null,
-  onListingChange = null,
-}) {
+export default function CatalogueBrowser({ lockedCategory = null, initialProducts = [], initialTotal = 0, dynamicCategories = null, onListingChange = null }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState(initialProducts);
-  // Sidebar filter categories come from the parent (Catalog page fetches
-  // /api/products/categories and merges with the registry) OR fall back
-  // to the curated NAV_CATEGORIES so this component works standalone.
-  const navCats = Array.isArray(dynamicCategories) && dynamicCategories.length > 0
-    ? dynamicCategories
-    : NAV_CATEGORIES;
-  // Keep the full nav-cat objects ({ slug, db_name, label, ... }) so the
-  // sidebar can render the title-cased `label` (e.g. "Ceiling Light")
-  // while still filtering products against the raw `db_name`.
+  const navCats = Array.isArray(dynamicCategories) && dynamicCategories.length > 0 ? dynamicCategories : NAV_CATEGORIES;
   const categories = navCats;
   const [loading, setLoading] = useState(initialProducts.length === 0);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(initialTotal);
   const [q, setQ] = useState(() => searchParams.get("q") || "");
-  const [category, setCategory] = useState(() => {
-    if (lockedCategory) return lockedCategory;
-    return searchParams.get("category") || "all";
-  });
+  const [category, setCategory] = useState(() => lockedCategory || searchParams.get("category") || "all");
   const [sort, setSort] = useState(() => normalizeSort(searchParams.get("sort")));
   const [priceRange, setPriceRange] = useState([0, 60000]);
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const requestKeyRef = useRef(0);
   const gridTopRef = useRef(null);
 
-  // Parse `?page=` safely. NaN / <1 / non-integer → 1.
   const parsePage = (raw) => {
     const n = parseInt(raw, 10);
     if (!Number.isFinite(n) || n < 1) return 1;
@@ -68,40 +34,27 @@ export default function CatalogueBrowser({
   };
   const currentPage = parsePage(searchParams.get("page"));
 
-  // Search and sort are URL-backed so refresh and browser Back/Forward
-  // restore the visible catalogue state. Default/invalid sort params are
-  // normalized away with replace so they do not add a history entry.
   useEffect(() => {
     const nextQ = searchParams.get("q") || "";
     const rawSort = searchParams.get("sort");
     const nextSort = normalizeSort(rawSort);
-
     setQ((current) => (current === nextQ ? current : nextQ));
     setSort((current) => (current === nextSort ? current : nextSort));
-
     if (rawSort && nextSort === "newest") {
       const next = new URLSearchParams(searchParams);
       next.delete("sort");
-      if (next.toString() !== searchParams.toString()) {
-        setSearchParams(next, { replace: true });
-      }
+      if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
     }
   }, [searchParams, setSearchParams]);
 
-  // Whenever the caller changes `lockedCategory` (e.g. navigating between
-  // /category/chandeliers and /category/floor-lamps), reset internal state
-  // so the new category renders from scratch.
   useEffect(() => {
     if (!lockedCategory) return;
     setCategory(lockedCategory);
     setProducts([]);
     setTotal(0);
-    // Reset URL page as well when a new locked category comes in.
     const next = new URLSearchParams(searchParams);
     next.delete("page");
-    if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true });
-    }
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
     setLoading(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lockedCategory]);
@@ -115,75 +68,47 @@ export default function CatalogueBrowser({
     return params;
   };
 
-  // Category / price / lockedCategory retain their existing page-reset and
-  // URL behaviour. Search and sort update the URL in their own handlers so
-  // URL-driven Back/Forward changes do not accidentally reset `?page=`.
-  const filterKey = useMemo(
-    () => JSON.stringify([category, priceRange, lockedCategory || ""]),
-    [category, priceRange, lockedCategory],
-  );
+  const filterKey = useMemo(() => JSON.stringify([category, priceRange, lockedCategory || ""]), [category, priceRange, lockedCategory]);
   const prevFilterKeyRef = useRef(filterKey);
   useEffect(() => {
-    if (prevFilterKeyRef.current === filterKey) {
-      // First render (or strict-mode double-fire) — nothing to reset.
-      return;
-    }
+    if (prevFilterKeyRef.current === filterKey) return;
     prevFilterKeyRef.current = filterKey;
     const next = new URLSearchParams(searchParams);
-    // Sync ?category= only on the catalogue page.
     if (!lockedCategory) {
       if (category && category !== "all") next.set("category", category);
       else next.delete("category");
     }
     next.delete("page");
-    if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true });
-    }
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterKey]);
 
-  // Fetch whenever page OR filters change. Products are REPLACED, never
-  // appended — pagination is deliberately non-infinite so page state is
-  // deterministic and shareable.
   useEffect(() => {
     setLoading(true);
     const myKey = ++requestKeyRef.current;
     const t = setTimeout(() => {
-      api
-        .listProducts(buildParams(currentPage))
-        .then((res) => {
-          if (myKey !== requestKeyRef.current) return;
-          const items = res?.items || [];
-          const nextTotal = res?.total || 0;
-          const tp = Math.max(1, res?.total_pages || 1);
-          setProducts(items);
-          setTotal(nextTotal);
-          setTotalPages(tp);
+      api.listProducts(buildParams(currentPage)).then((res) => {
+        if (myKey !== requestKeyRef.current) return;
+        const items = res?.items || [];
+        const nextTotal = res?.total || 0;
+        const tp = Math.max(1, res?.total_pages || 1);
+        setProducts(items);
+        setTotal(nextTotal);
+        setTotalPages(tp);
+        setLoading(false);
+        if (typeof onListingChange === "function") onListingChange({ products: items, total: nextTotal, totalPages: tp, page: currentPage });
+        if (currentPage > tp) {
+          const next = new URLSearchParams(searchParams);
+          if (tp === 1) next.delete("page");
+          else next.set("page", String(tp));
+          setSearchParams(next, { replace: true });
+        }
+      }).catch(() => {
+        if (myKey === requestKeyRef.current) {
+          setProducts([]);
           setLoading(false);
-          if (typeof onListingChange === "function") {
-            onListingChange({
-              products: items,
-              total: nextTotal,
-              totalPages: tp,
-              page: currentPage,
-            });
-          }
-          // Clamp URL page if it's now out of range (e.g. filters shrank
-          // the result set below the requested page). We replace so
-          // back-button behaviour still lands on the pre-filter state.
-          if (currentPage > tp) {
-            const next = new URLSearchParams(searchParams);
-            if (tp === 1) next.delete("page");
-            else next.set("page", String(tp));
-            setSearchParams(next, { replace: true });
-          }
-        })
-        .catch(() => {
-          if (myKey === requestKeyRef.current) {
-            setProducts([]);
-            setLoading(false);
-          }
-        });
+        }
+      });
     }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -195,9 +120,7 @@ export default function CatalogueBrowser({
     if (nextQ) next.set("q", nextQ);
     else next.delete("q");
     next.delete("page");
-    if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next);
-    }
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
   };
 
   const updateSort = (nextValue) => {
@@ -207,9 +130,7 @@ export default function CatalogueBrowser({
     if (nextSort === "newest") next.delete("sort");
     else next.set("sort", nextSort);
     next.delete("page");
-    if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next);
-    }
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
   };
 
   const goToPage = (n) => {
@@ -219,11 +140,8 @@ export default function CatalogueBrowser({
     if (target === 1) next.delete("page");
     else next.set("page", String(target));
     setSearchParams(next);
-    // Scroll to the top of the grid so the user notices the change.
     if (gridTopRef.current && typeof gridTopRef.current.scrollIntoView === "function") {
-      try {
-        gridTopRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      } catch { /* jsdom / older browsers */ }
+      try { gridTopRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* older browsers */ }
     }
   };
 
@@ -232,23 +150,17 @@ export default function CatalogueBrowser({
     if (!lockedCategory) setCategory("all");
     setSort("newest");
     setPriceRange([0, 60000]);
-
     const next = new URLSearchParams(searchParams);
     next.delete("q");
     next.delete("sort");
     next.delete("page");
     if (!lockedCategory) next.delete("category");
-    if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next);
-    }
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
   };
 
-  // Compact page numbers: 1 … currentPage-1, currentPage, currentPage+1 … totalPages
   const pageWindow = useMemo(() => {
     const pages = new Set([1, totalPages, currentPage, currentPage - 1, currentPage + 1]);
-    return [...pages]
-      .filter((n) => n >= 1 && n <= totalPages)
-      .sort((a, b) => a - b);
+    return [...pages].filter((n) => n >= 1 && n <= totalPages).sort((a, b) => a - b);
   }, [currentPage, totalPages]);
 
   const startIdx = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
@@ -256,180 +168,36 @@ export default function CatalogueBrowser({
 
   return (
     <>
-      {/* Toolbar */}
-      <div className="flex flex-col md:flex-row md:items-center gap-4 mb-10 no-print">
+      <div className="mb-7 flex flex-col gap-4 no-print md:flex-row md:items-center">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
-          <input
-            data-testid="catalog-search"
-            value={q}
-            onChange={(e) => updateSearch(e.target.value)}
-            placeholder="Search products, SKUs, tags…"
-            className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none pl-11 pr-4 py-3 text-sm text-white placeholder:text-white/40"
-          />
+          <input data-testid="catalog-search" value={q} onChange={(e) => updateSearch(e.target.value)} placeholder="Search products, SKUs, tags…" className="w-full border border-white/15 bg-[#0a0a0a] py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#D4AF37]" />
         </div>
-        <button
-          data-testid="filters-toggle"
-          onClick={() => setShowFilters(!showFilters)}
-          className="inline-flex items-center gap-2 border border-white/15 hover:border-white/40 px-4 py-3 text-xs uppercase tracking-[0.2em] text-white/80"
-        >
-          <SlidersHorizontal size={14} /> Filters
-        </button>
-        <div className="w-full md:w-48">
+        <button data-testid="filters-toggle" onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters} className={`inline-flex items-center gap-2 border px-4 py-3 text-xs uppercase tracking-[0.2em] transition-colors ${showFilters ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/15 text-white/80 hover:border-white/40"}`}><SlidersHorizontal size={14} /> Filters</button>
+        <div className="w-full md:w-52">
           <Select value={sort} onValueChange={updateSort}>
-            <SelectTrigger data-testid="sort-select" className="rounded-none bg-[#0a0a0a] border-white/15 h-12 text-white">
-              <SelectValue placeholder="Sort" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#0a0a0a] border-white/15 text-white">
-              <SelectItem value="newest">Newest</SelectItem>
-              <SelectItem value="price_asc">Price: Low to High</SelectItem>
-              <SelectItem value="price_desc">Price: High to Low</SelectItem>
-              <SelectItem value="rating">Top Rated</SelectItem>
-              <SelectItem value="name">Name A→Z</SelectItem>
-            </SelectContent>
+            <SelectTrigger data-testid="sort-select" className="h-12 rounded-none border-white/15 bg-[#0a0a0a] text-white"><SelectValue placeholder="Sort" /></SelectTrigger>
+            <SelectContent className="border-white/15 bg-[#0a0a0a] text-white"><SelectItem value="newest">Newest</SelectItem><SelectItem value="price_asc">Price: Low to High</SelectItem><SelectItem value="price_desc">Price: High to Low</SelectItem><SelectItem value="rating">Top Rated</SelectItem><SelectItem value="name">Name A→Z</SelectItem></SelectContent>
           </Select>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        {showFilters && (
-          <aside data-testid="filters-panel" className="lg:col-span-3 space-y-10 no-print">
-            {!lockedCategory && (
-              <div>
-                <div className="eyebrow mb-4">Category</div>
-                <div className="space-y-2">
-                  <button
-                    data-testid="cat-all"
-                    onClick={() => setCategory("all")}
-                    className={`block text-sm w-full text-left ${category === "all" ? "text-[#D4AF37]" : "text-white/70 hover:text-white"}`}
-                  >
-                    All
-                  </button>
-                  {categories.map((c) => (
-                    <button
-                      key={c.slug || c.db_name}
-                      data-testid={`cat-${String(c.db_name).replace(/\s+/g, "-").toLowerCase()}`}
-                      onClick={() => setCategory(c.db_name)}
-                      className={`block text-sm w-full text-left ${category === c.db_name ? "text-[#D4AF37]" : "text-white/70 hover:text-white"}`}
-                    >
-                      {c.label || c.db_name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div>
-              <div className="eyebrow mb-4">Price</div>
-              <Slider
-                data-testid="price-slider"
-                min={0}
-                max={60000}
-                step={500}
-                value={priceRange}
-                onValueChange={setPriceRange}
-                className="mb-4"
-              />
-              <div className="flex items-center justify-between text-xs text-white/60">
-                <span>₹{priceRange[0].toLocaleString("en-IN")}</span>
-                <span>₹{priceRange[1].toLocaleString("en-IN")}</span>
-              </div>
-            </div>
-
-            <button
-              data-testid="clear-filters-btn"
-              onClick={clearFilters}
-              className="text-xs uppercase tracking-[0.2em] text-white/60 hover:text-white link-underline"
-            >
-              Clear all
-            </button>
-          </aside>
-        )}
-
-        <div className={showFilters ? "lg:col-span-9" : "lg:col-span-12"} ref={gridTopRef}>
-          <div className="flex items-center justify-between mb-6 text-xs text-white/50 uppercase tracking-widest">
-            <span data-testid="results-count">
-              {loading
-                ? "Loading…"
-                : total === 0
-                  ? "0 pieces"
-                  : `Showing ${startIdx}–${endIdx} of ${total} piece${total === 1 ? "" : "s"}`}
-            </span>
-            {totalPages > 1 && !loading && (
-              <span data-testid="page-indicator" className="text-white/40">
-                Page {currentPage} of {totalPages}
-              </span>
-            )}
+      {showFilters && (
+        <aside data-testid="filters-panel" className="mb-8 border border-white/10 bg-[#11070e]/80 p-5 no-print md:p-6">
+          <div className="grid gap-8 lg:grid-cols-[1fr_0.7fr_auto] lg:items-end">
+            {!lockedCategory ? <div><div className="eyebrow mb-4">Category</div><div className="flex flex-wrap gap-x-5 gap-y-3"><button data-testid="cat-all" onClick={() => setCategory("all")} className={`text-sm ${category === "all" ? "text-[#D4AF37]" : "text-white/65 hover:text-white"}`}>All</button>{categories.map((c) => <button key={c.slug || c.db_name} data-testid={`cat-${String(c.db_name).replace(/\s+/g, "-").toLowerCase()}`} onClick={() => setCategory(c.db_name)} className={`text-sm ${category === c.db_name ? "text-[#D4AF37]" : "text-white/65 hover:text-white"}`}>{c.label || c.db_name}</button>)}</div></div> : <div><div className="eyebrow mb-3">Collection</div><div className="font-serif text-xl text-white">{categories.find((c) => c.db_name === lockedCategory)?.label || lockedCategory}</div></div>}
+            <div><div className="eyebrow mb-4">Price</div><Slider data-testid="price-slider" min={0} max={60000} step={500} value={priceRange} onValueChange={setPriceRange} className="mb-4" /><div className="flex items-center justify-between text-xs text-white/60"><span>₹{priceRange[0].toLocaleString("en-IN")}</span><span>₹{priceRange[1].toLocaleString("en-IN")}</span></div></div>
+            <button data-testid="clear-filters-btn" onClick={clearFilters} className="justify-self-start text-xs uppercase tracking-[0.2em] text-white/60 link-underline hover:text-white lg:justify-self-end">Clear all</button>
           </div>
-          {total === 0 && !loading ? (
-            <div className="py-24 text-center text-white/40 border border-white/10">
-              <div className="font-serif text-2xl mb-2">Nothing matches.</div>
-              <div className="text-sm">Try adjusting your filters.</div>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-8">
-                {products.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
-              </div>
-              {totalPages > 1 && (
-                <nav
-                  aria-label="Catalog pagination"
-                  data-testid="catalog-pagination"
-                  className="mt-14 flex items-center justify-center gap-2 no-print flex-wrap"
-                >
-                  <button
-                    type="button"
-                    data-testid="pagination-prev"
-                    onClick={() => goToPage(currentPage - 1)}
-                    disabled={currentPage <= 1 || loading}
-                    className="inline-flex items-center gap-1 border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/80 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-white/15 disabled:hover:text-white/80"
-                  >
-                    <ChevronLeft size={14} /> Previous
-                  </button>
-                  {pageWindow.map((n, idx) => {
-                    const prev = pageWindow[idx - 1];
-                    const showGap = prev !== undefined && n - prev > 1;
-                    return (
-                      <React.Fragment key={n}>
-                        {showGap && (
-                          <span
-                            data-testid={`pagination-gap-${prev}-${n}`}
-                            className="px-2 text-white/40 select-none"
-                          >
-                            …
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          data-testid={`pagination-page-${n}`}
-                          onClick={() => goToPage(n)}
-                          disabled={loading}
-                          aria-current={n === currentPage ? "page" : undefined}
-                          className={`min-w-[40px] px-3 py-2 text-xs uppercase tracking-[0.24em] border transition-colors ${
-                            n === currentPage
-                              ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10"
-                              : "border-white/15 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]"
-                          }`}
-                        >
-                          {n}
-                        </button>
-                      </React.Fragment>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    data-testid="pagination-next"
-                    onClick={() => goToPage(currentPage + 1)}
-                    disabled={currentPage >= totalPages || loading}
-                    className="inline-flex items-center gap-1 border border-white/15 hover:border-[#D4AF37] hover:text-[#D4AF37] px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/80 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-white/15 disabled:hover:text-white/80"
-                  >
-                    Next <ChevronRight size={14} />
-                  </button>
-                </nav>
-              )}
-            </>
-          )}
-        </div>
+        </aside>
+      )}
+
+      <div ref={gridTopRef} className="scroll-mt-56">
+        <div className="mb-6 flex items-center justify-between text-xs uppercase tracking-widest text-white/50"><span data-testid="results-count">{loading ? "Loading…" : total === 0 ? "0 pieces" : `Showing ${startIdx}–${endIdx} of ${total} piece${total === 1 ? "" : "s"}`}</span>{totalPages > 1 && !loading && <span data-testid="page-indicator" className="text-white/40">Page {currentPage} of {totalPages}</span>}</div>
+        {total === 0 && !loading ? <div className="border border-white/10 py-24 text-center text-white/40"><div className="mb-2 font-serif text-2xl">Nothing matches.</div><div className="text-sm">Try adjusting your filters.</div></div> : <>
+          <div className="grid grid-cols-1 gap-7 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{products.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}</div>
+          {totalPages > 1 && <nav aria-label="Catalog pagination" data-testid="catalog-pagination" className="mt-14 flex flex-wrap items-center justify-center gap-2 no-print"><button type="button" data-testid="pagination-prev" onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1 || loading} className="inline-flex items-center gap-1 border border-white/15 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/80 hover:border-[#D4AF37] hover:text-[#D4AF37] disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft size={14} /> Previous</button>{pageWindow.map((n, idx) => { const prev = pageWindow[idx - 1]; const showGap = prev !== undefined && n - prev > 1; return <React.Fragment key={n}>{showGap && <span data-testid={`pagination-gap-${prev}-${n}`} className="select-none px-2 text-white/40">…</span>}<button type="button" data-testid={`pagination-page-${n}`} onClick={() => goToPage(n)} disabled={loading} aria-current={n === currentPage ? "page" : undefined} className={`min-w-[40px] border px-3 py-2 text-xs uppercase tracking-[0.24em] transition-colors ${n === currentPage ? "border-[#D4AF37] bg-[#D4AF37]/10 text-[#D4AF37]" : "border-white/15 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]"}`}>{n}</button></React.Fragment>; })}<button type="button" data-testid="pagination-next" onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages || loading} className="inline-flex items-center gap-1 border border-white/15 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/80 hover:border-[#D4AF37] hover:text-[#D4AF37] disabled:cursor-not-allowed disabled:opacity-40">Next <ChevronRight size={14} /></button></nav>}
+        </>}
       </div>
     </>
   );
