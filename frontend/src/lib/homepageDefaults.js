@@ -3,7 +3,7 @@
 export const HOMEPAGE_DEFAULTS = {
   hero: {
     eyebrow: "Since 1981 · Handcrafted in Firozabad",
-    headline_line1: "Fancy lights that",
+    headline_line1: "Decorative lights that",
     headline_line2: "turns houses into homes.",
     description:
       "A curated catalog of crystal chandeliers, pendant lights, wall sconces, table lamps & decorative lighting — hand-blown and hand-assembled by our artisans in Firozabad.",
@@ -110,20 +110,16 @@ export const HOMEPAGE_DEFAULTS = {
   },
   craft_video: {
     enabled: true,
-    // "Watch Our Craft in Motion" section
     section_eyebrow: "Process Reel",
     section_title_pre: "Watch Our Craft",
     section_title_highlight: "in Motion.",
     caption: "Behind the scenes at Samrat Glass Emporium — handcrafted decorative lighting from Firozabad.",
-    // Video sources
-    video_url: "",                 // uploaded MP4/webm — preferred when set
+    video_url: "",
     instagram_url: "https://www.instagram.com/reel/CqS8MlDoVuH/",
-    thumbnail_url: "",             // poster image / placeholder still
-    // Behaviour
-    bg_autoplay: true,             // muted autoplay loop for Craft hero background (uses uploaded video only)
+    thumbnail_url: "",
+    bg_autoplay: true,
     cta_text: "Watch on Instagram",
     cta_link: "https://www.instagram.com/reel/CqS8MlDoVuH/",
-    // About page mini video block
     about_enabled: true,
     about_caption: "A moment from our Firozabad workshop.",
   },
@@ -133,11 +129,10 @@ export const HOMEPAGE_DEFAULTS = {
     title_highlight: "in the wild.",
     tagline: "Homes, hotels, weddings, showrooms — spaces we've helped illuminate. Each piece here is custom-made in Firozabad.",
     items: [],
-    // Homepage carousel controls
     home_randomize: true,
     home_autoplay: true,
     home_per_view: 3,
-    home_featured_indices: [], // reorder-able list of project indices; empty = use all/latest
+    home_featured_indices: [],
   },
   faq: {
     eyebrow: "Support · FAQ",
@@ -186,7 +181,7 @@ export const HOMEPAGE_DEFAULTS = {
   },
   footer: {
     description:
-      "Fancy lights, crystal chandeliers, glass lamps & decorative lighting — handcrafted in the city of glass, Firozabad.",
+      "Decorative lights, crystal chandeliers, glass lamps & decorative lighting — handcrafted in the city of glass, Firozabad.",
     quick_links: [
       { label: "Catalog", href: "/catalog" },
       { label: "The Craft", href: "/craft" },
@@ -212,11 +207,7 @@ export const HOMEPAGE_DEFAULTS = {
       "Real homes. Real spaces. Real stories from creators who styled Samrat Glass Emporium lights.",
     view_more_text: "View More on Instagram",
     view_more_link: "",
-    // Each item accepts EITHER a full Instagram embed <blockquote>… snippet OR a
-    // plain Reel / Post URL (e.g. https://www.instagram.com/reel/XYZ/) — the
-    // renderer auto-detects and normalizes both.
     items: [],
-    // item shape: { input: string, handle: string, caption: string, product_id: string, thumbnail: string }
   },
 };
 
@@ -236,5 +227,15 @@ export function mergeHomepage(saved = {}) {
       out[k] = { ...d, ...s };
     }
   }
+
+  // Normalize the older "Fancy lights" wording that may still be saved in
+  // homepage content so the live homepage consistently uses "Decorative lights".
+  if (typeof out.hero?.headline_line1 === "string" && /^Fancy lights\b/i.test(out.hero.headline_line1)) {
+    out.hero.headline_line1 = out.hero.headline_line1.replace(/^Fancy lights\b/i, "Decorative lights");
+  }
+  if (typeof out.footer?.description === "string" && /^Fancy lights\b/i.test(out.footer.description)) {
+    out.footer.description = out.footer.description.replace(/^Fancy lights\b/i, "Decorative lights");
+  }
+
   return out;
 }
