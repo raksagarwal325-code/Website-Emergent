@@ -12,7 +12,7 @@ export default function FounderTeaser() {
   const sectionRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start end", "end start"] });
-  const yearY = useTransform(scrollYProgress, [0, 1], [18, -18]);
+  const yearY = useTransform(scrollYProgress, [0, 1], [12, -12]);
 
   if (t.enabled === false || !f.image) return null;
 
@@ -27,7 +27,7 @@ export default function FounderTeaser() {
       <div className="relative mx-auto max-w-7xl overflow-hidden border border-[#BF9972]/15 bg-[linear-gradient(135deg,rgba(72,29,45,.78),rgba(28,9,18,.94))]">
         <motion.div
           aria-hidden
-          className="pointer-events-none absolute -right-[2vw] -bottom-[6vw] select-none font-serif text-[24vw] leading-none text-white/[0.035]"
+          className="pointer-events-none absolute bottom-[-0.08em] right-[2.5%] select-none whitespace-nowrap font-serif text-[clamp(8rem,18vw,17rem)] leading-none tracking-[-0.07em] text-[#D4AF37]/[0.085]"
           style={{ y: prefersReducedMotion ? 0 : yearY }}
         >
           1981
@@ -35,54 +35,19 @@ export default function FounderTeaser() {
         <div aria-hidden className="absolute -right-24 -top-28 h-[34rem] w-[34rem] rounded-full opacity-20" style={{ background: "radial-gradient(circle, rgba(212,175,55,0.48), transparent 66%)" }} />
 
         <div className="relative z-10 grid grid-cols-1 items-center gap-12 p-8 md:grid-cols-[0.88fr_1.12fr] md:p-12 lg:gap-16 lg:p-16">
-          <motion.div
-            className="relative flex justify-center md:justify-start"
-            initial={prefersReducedMotion ? false : { opacity: 0, y: 22 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.35 }}
-            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, ease: LUXURY_EASE }}
-          >
+          <motion.div className="relative flex justify-center md:justify-start" initial={prefersReducedMotion ? false : { opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.35 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, ease: LUXURY_EASE }}>
             <div className="relative">
-              <div
-                data-testid="founder-teaser-photo"
-                className="relative h-[390px] w-[280px] overflow-hidden rounded-t-[140px] border border-[#D4AF37]/35 bg-[#5a4035] shadow-[0_30px_80px_-28px_rgba(0,0,0,.95)] md:h-[440px] md:w-[320px] md:rounded-t-[160px]"
-              >
+              <div data-testid="founder-teaser-photo" className="relative h-[390px] w-[280px] overflow-hidden rounded-t-[140px] border border-[#D4AF37]/35 bg-[#5a4035] shadow-[0_30px_80px_-28px_rgba(0,0,0,.95)] md:h-[440px] md:w-[320px] md:rounded-t-[160px]">
                 <div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(236,206,166,.36),transparent_48%),linear-gradient(180deg,#6a493b,#2a111d)]" />
-                <img
-                  src={f.image}
-                  alt={f.name || "Founder"}
-                  loading="lazy"
-                  className="relative h-full w-full scale-[1.28] object-cover object-center mix-blend-normal"
-                  style={{ transformOrigin: "50% 46%" }}
-                />
+                <img src={f.image} alt={f.name || "Founder"} loading="lazy" className="relative h-full w-full scale-[1.28] object-cover object-center mix-blend-normal" style={{ transformOrigin: "50% 46%" }} />
                 <div aria-hidden className="absolute inset-0 ring-1 ring-inset ring-white/5" />
               </div>
-              <motion.div
-                aria-hidden
-                className="absolute -left-6 -top-6 h-20 w-20 border-l border-t border-[#D4AF37]/65"
-                initial={prefersReducedMotion ? false : { scale: 0.65, opacity: 0 }}
-                whileInView={{ scale: 1, opacity: 1 }}
-                viewport={{ once: true }}
-                transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.8, delay: 0.15, ease: LUXURY_EASE }}
-              />
-              <motion.div
-                aria-hidden
-                className="absolute -bottom-6 -right-6 h-20 w-20 border-b border-r border-[#D4AF37]/65"
-                initial={prefersReducedMotion ? false : { scale: 0.65, opacity: 0 }}
-                whileInView={{ scale: 1, opacity: 1 }}
-                viewport={{ once: true }}
-                transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.8, delay: 0.25, ease: LUXURY_EASE }}
-              />
+              <motion.div aria-hidden className="absolute -left-6 -top-6 h-20 w-20 border-l border-t border-[#D4AF37]/65" initial={prefersReducedMotion ? false : { scale: 0.65, opacity: 0 }} whileInView={{ scale: 1, opacity: 1 }} viewport={{ once: true }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.8, delay: 0.15, ease: LUXURY_EASE }} />
+              <motion.div aria-hidden className="absolute -bottom-6 -right-6 h-20 w-20 border-b border-r border-[#D4AF37]/65" initial={prefersReducedMotion ? false : { scale: 0.65, opacity: 0 }} whileInView={{ scale: 1, opacity: 1 }} viewport={{ once: true }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.8, delay: 0.25, ease: LUXURY_EASE }} />
             </div>
           </motion.div>
 
-          <motion.div
-            className="min-w-0 text-center md:text-left"
-            initial={prefersReducedMotion ? false : "hidden"}
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.3 }}
-            variants={editorialGroup}
-          >
+          <motion.div className="min-w-0 text-center md:text-left" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, amount: 0.3 }} variants={editorialGroup}>
             <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft} className="eyebrow mb-4 text-[#D4AF37]">{eyebrow}</motion.div>
             <motion.h2 variants={prefersReducedMotion ? undefined : editorialItem} className="mb-5 max-w-3xl font-serif text-4xl leading-[1.04] text-balance md:text-5xl lg:text-6xl">{title}</motion.h2>
             <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft} aria-hidden className="mx-auto mb-6 h-px w-44 bg-gradient-to-r from-[#D4AF37] to-transparent md:mx-0" />
