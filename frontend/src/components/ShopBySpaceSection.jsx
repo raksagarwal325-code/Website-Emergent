@@ -55,7 +55,7 @@ export default function ShopBySpaceSection() {
   return (
     <section ref={sectionRef} className="relative overflow-hidden border-t border-white/10 bg-[#12070d]" data-testid="shop-by-space-section">
       <div aria-hidden className="absolute inset-0 opacity-45" style={{ background: "radial-gradient(circle at 12% 12%, rgba(163,99,80,.22), transparent 40%), radial-gradient(circle at 88% 82%, rgba(212,175,55,.08), transparent 38%)" }} />
-      <div className="relative mx-auto max-w-[1500px] px-6 py-12 md:py-16">
+      <div className="relative mx-auto max-w-7xl px-6 py-12 md:py-16">
         <motion.div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={editorialGroup}>
           <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="max-w-2xl">
             <div className="eyebrow mb-2">Find lighting for your setting</div>
@@ -69,24 +69,17 @@ export default function ShopBySpaceSection() {
           </motion.div>
         </motion.div>
 
-        <div className="grid gap-5 lg:grid-cols-[1.55fr_.75fr]">
-          <motion.div
-            drag={prefersReducedMotion ? false : "x"}
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.08}
-            onDragEnd={(_, info) => { if (info.offset.x < -70) go(1); if (info.offset.x > 70) go(-1); }}
-            className="relative min-h-[420px] overflow-hidden border border-white/10 bg-[#190a12] md:min-h-[480px]"
-          >
-            <AnimatePresence initial={false} custom={direction}>
-              <motion.div key={space.slug} className="absolute inset-0" initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 70, scale: .985 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -70, scale: .985 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .72, ease: LUXURY_EASE }}>
-                {cover ? <img src={cover} alt={`${space.label} lighting`} loading="lazy" className="h-full w-full object-cover" /> : <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 70% 30%,rgba(212,175,55,.08),transparent 30%),linear-gradient(135deg,#35131f,#12070d 68%)" }} />}
+        <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 38, scale: .985 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: .16 }} transition={{ duration: .9, ease: LUXURY_EASE }} className="grid gap-5 lg:grid-cols-[1.55fr_.75fr]">
+          <motion.div drag={prefersReducedMotion ? false : "x"} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.08} onDragEnd={(_, info) => { if (info.offset.x < -70) go(1); if (info.offset.x > 70) go(-1); }} className="relative min-h-[420px] overflow-hidden border border-white/10 bg-[#190a12] md:min-h-[480px]">
+            <AnimatePresence initial={false} custom={direction} mode="wait">
+              <motion.div key={space.slug} className="absolute inset-0" initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 150, scale: .95 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -150, scale: .95 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .8, ease: LUXURY_EASE }}>
+                {cover ? <motion.img src={cover} alt={`${space.label} lighting`} loading="lazy" className="h-full w-full object-cover" initial={prefersReducedMotion ? false : { scale: 1.08 }} animate={{ scale: 1 }} transition={{ duration: 1.15, ease: LUXURY_EASE }} /> : <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 70% 30%,rgba(212,175,55,.08),transparent 30%),linear-gradient(135deg,#35131f,#12070d 68%)" }} />}
                 <div className="absolute inset-0 bg-gradient-to-r from-[#12070d]/95 via-[#12070d]/55 to-[#12070d]/10" />
-                <div aria-hidden className="absolute right-8 top-6 font-serif text-[22vw] leading-none text-white/[0.025] md:text-[13vw]">{String(active + 1).padStart(2, "0")}</div>
                 <div className="absolute inset-x-0 bottom-0 max-w-2xl p-7 md:p-10">
-                  <div className="mb-3 text-[10px] uppercase tracking-[0.26em] text-[#D4AF37]">By space · {String(active + 1).padStart(2, "0")}</div>
-                  <motion.h3 className="font-serif text-4xl leading-[.98] text-white md:text-6xl" initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .12, duration: .58, ease: LUXURY_EASE }}>{space.label}</motion.h3>
-                  <motion.p className="mt-4 max-w-xl text-sm leading-relaxed text-white/66 md:text-base" initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .2, duration: .58, ease: LUXURY_EASE }}>{space.description}</motion.p>
-                  <Link to={spaceCatalogHref(space)} className="mt-6 inline-flex items-center gap-2 border-b border-[#D4AF37]/50 pb-1 text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]">Explore lighting <ArrowUpRight size={13} /></Link>
+                  <motion.div className="mb-3 text-[10px] uppercase tracking-[0.26em] text-[#D4AF37]" initial={prefersReducedMotion ? false : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .12, duration: .55, ease: LUXURY_EASE }}>By space · {String(active + 1).padStart(2, "0")}</motion.div>
+                  <motion.h3 className="font-serif text-4xl leading-[.98] text-white md:text-6xl" initial={prefersReducedMotion ? false : { opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .18, duration: .62, ease: LUXURY_EASE }}>{space.label}</motion.h3>
+                  <motion.p className="mt-4 max-w-xl text-sm leading-relaxed text-white/66 md:text-base" initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .26, duration: .62, ease: LUXURY_EASE }}>{space.description}</motion.p>
+                  <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .34, duration: .55, ease: LUXURY_EASE }}><Link to={spaceCatalogHref(space)} className="mt-6 inline-flex items-center gap-2 border-b border-[#D4AF37]/50 pb-1 text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]">Explore lighting <ArrowUpRight size={13} /></Link></motion.div>
                 </div>
               </motion.div>
             </AnimatePresence>
@@ -97,18 +90,17 @@ export default function ShopBySpaceSection() {
               const itemIndex = (active + index + 1) % total;
               const next = visibleSpaces[itemIndex];
               return (
-                <button key={`${next.slug}-${index}`} type="button" onClick={() => { setDirection(1); setActive(itemIndex); }} className="group relative min-h-[128px] overflow-hidden border border-white/10 bg-[#190a12] p-5 text-left transition hover:border-[#D4AF37]/45 lg:min-h-0">
-                  <div aria-hidden className="absolute right-4 top-1 font-serif text-7xl text-white/[0.025]">{String(itemIndex + 1).padStart(2, "0")}</div>
+                <motion.button key={`${next.slug}-${index}`} type="button" onClick={() => { setDirection(1); setActive(itemIndex); }} className="group relative min-h-[128px] overflow-hidden border border-white/10 bg-[#190a12] p-5 text-left transition hover:border-[#D4AF37]/45 lg:min-h-0" initial={prefersReducedMotion ? false : { opacity: 0, x: 28 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: .6, delay: .12 + index * .1, ease: LUXURY_EASE }} whileHover={prefersReducedMotion ? undefined : { x: 5 }}>
                   <div className="relative z-10 text-[9px] uppercase tracking-[0.23em] text-[#BF9972]">Next scene</div>
                   <div className="relative z-10 mt-3 font-serif text-xl leading-tight text-white transition group-hover:text-[#D4AF37] md:text-2xl">{next.label}</div>
                   <div className="relative z-10 mt-3 h-px w-8 bg-[#D4AF37]/35 transition-all group-hover:w-14" />
-                </button>
+                </motion.button>
               );
             })}
           </div>
-        </div>
+        </motion.div>
 
-        <div className="mt-5 flex items-center gap-5"><div className="h-px flex-1 overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .4, ease: LUXURY_EASE }} /></div><div className="text-[10px] uppercase tracking-[0.25em] text-white/42">Drag / {String(active + 1).padStart(2, "0")} of {String(total).padStart(2, "0")}</div></div>
+        <div className="mt-5 flex items-center gap-5"><div className="h-px flex-1 overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} /></div><div className="text-[10px] uppercase tracking-[0.25em] text-white/42">{String(active + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div></div>
       </div>
     </section>
   );
