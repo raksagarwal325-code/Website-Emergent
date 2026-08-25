@@ -126,7 +126,6 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
                       transition={prefersReducedMotion ? { duration: 0 } : { duration: 8, repeat: Infinity, ease: "easeInOut" }}
                     />
                   </>}
-                  <div className="absolute bottom-4 left-4 z-20 text-[10px] uppercase tracking-[0.3em] text-[#BF9972]">{String(currentIndex + 1).padStart(2, "0")} / {String(items.length).padStart(2, "0")}</div>
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -147,8 +146,7 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
                 </div>}
               </div>
               {items.length > 1 && <div className="mt-8 max-w-md">
-                <div className="h-1 bg-white/12 overflow-hidden"><div className="h-full bg-[#D4AF37] transition-[width] duration-500" style={{ width: `${progress * 100}%` }} /></div>
-                <div className="mt-3 flex items-center justify-end text-[9px] uppercase tracking-[0.26em] text-white/35"><span>{currentIndex + 1} of {items.length}</span></div>
+                <div className="h-1 overflow-hidden bg-white/12"><div className="h-full bg-[#D4AF37] transition-[width] duration-500" style={{ width: `${progress * 100}%` }} /></div>
               </div>}
             </motion.div>
           </AnimatePresence>
