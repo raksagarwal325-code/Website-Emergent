@@ -23,15 +23,12 @@ export default function CategoryShowcase() {
       setShouldLoadMedia(true);
       return undefined;
     }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setShouldLoadMedia(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "200px 0px" },
-    );
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setShouldLoadMedia(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "200px 0px" });
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
@@ -41,26 +38,16 @@ export default function CategoryShowcase() {
     let alive = true;
     Promise.all([
       api.getCategoryFeaturedImages().catch(() => ({})),
-      Promise.all(
-        CATEGORIES.map((c) =>
-          api
-            .listProducts({ category: c.db_name, sort: "newest", limit: 1 })
-            .then((res) => {
-              const first = (res?.items || [])[0];
-              const raw = first?.images?.[0];
-              return [c.db_name, raw ? api.resolveImage(raw) : null];
-            })
-            .catch(() => [c.db_name, null]),
-        ),
-      ),
+      Promise.all(CATEGORIES.map((c) => api.listProducts({ category: c.db_name, sort: "newest", limit: 1 }).then((res) => {
+        const first = (res?.items || [])[0];
+        const raw = first?.images?.[0];
+        return [c.db_name, raw ? api.resolveImage(raw) : null];
+      }).catch(() => [c.db_name, null]))),
     ]).then(([overrides, fallbackPairs]) => {
       if (!alive) return;
       const fallbackMap = Object.fromEntries(fallbackPairs);
       const resolved = {};
-      for (const c of CATEGORIES) {
-        const override = overrides?.[c.db_name];
-        resolved[c.db_name] = override ? api.resolveImage(override) : fallbackMap[c.db_name] ?? null;
-      }
+      CATEGORIES.forEach((c) => { resolved[c.db_name] = overrides?.[c.db_name] ? api.resolveImage(overrides[c.db_name]) : fallbackMap[c.db_name] ?? null; });
       setImages(resolved);
     });
     return () => { alive = false; };
@@ -70,19 +57,19 @@ export default function CategoryShowcase() {
     const rail = railRef.current;
     if (!rail) return;
     const card = rail.querySelector("[data-category-card]");
-    const amount = card ? card.getBoundingClientRect().width + 16 : rail.clientWidth * 0.72;
+    const amount = card ? card.getBoundingClientRect().width + 18 : rail.clientWidth * 0.76;
     rail.scrollBy({ left: direction * amount, behavior: prefersReducedMotion ? "auto" : "smooth" });
   };
 
   return (
     <section ref={sectionRef} data-testid="home-category-showcase" className="relative z-10 border-t border-white/10 bg-[#16070f] md:-mt-6">
       <div aria-hidden className="absolute inset-0 opacity-30 pointer-events-none" style={{ background: "radial-gradient(circle at 15% 20%, rgba(163,99,80,0.14), transparent 55%), radial-gradient(circle at 85% 90%, rgba(212,175,55,0.06), transparent 60%)" }} />
-      <div className="relative mx-auto max-w-[1500px] px-6 py-10 md:py-12">
-        <motion.div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={editorialGroup}>
+      <div className="relative mx-auto max-w-[1500px] px-6 py-12 md:py-14">
+        <motion.div className="mb-7 flex flex-col gap-4 md:flex-row md:items-end md:justify-between" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={editorialGroup}>
           <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="max-w-2xl">
             <div className="eyebrow mb-2">The Collection</div>
             <h2 className="font-serif text-3xl leading-tight sm:text-4xl lg:text-5xl">Shop by <span className="italic brand-gradient-text">Category</span></h2>
-            <p className="mt-3 max-w-xl text-sm text-white/58 md:text-base">Browse the complete collection sideways — more choice, less page length.</p>
+            <p className="mt-3 max-w-xl text-sm text-white/58 md:text-base">Browse the collection as a visual edit — each category stays one swipe away.</p>
           </motion.div>
           <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="flex items-center gap-3">
             <Link to="/catalog" data-testid="category-showcase-view-all" className="mr-2 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.22em] text-[#D4AF37] link-underline hover:text-[#E0C15D]">View full catalog <ArrowUpRight size={14} /></Link>
@@ -91,11 +78,11 @@ export default function CategoryShowcase() {
           </motion.div>
         </motion.div>
 
-        <motion.div className="relative" initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.16 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.75, ease: LUXURY_EASE }}>
-          <div ref={railRef} data-testid="home-category-horizontal-rail" className="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain pb-2 pr-[14vw] md:pr-[7vw]" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+        <motion.div className="relative" initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.16 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.75, ease: LUXURY_EASE }}>
+          <div ref={railRef} data-testid="home-category-horizontal-rail" className="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain pb-2 pr-[15vw] md:gap-5 md:pr-[8vw]" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
             {CATEGORIES.map((c, i) => <CategoryCard key={c.db_name} category={c} imageUrl={images[c.db_name]} index={i} reducedMotion={prefersReducedMotion} />)}
           </div>
-          <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-14 bg-gradient-to-l from-[#16070f] to-transparent md:w-20" />
+          <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-[#16070f] to-transparent md:w-24" />
         </motion.div>
       </div>
     </section>
@@ -105,15 +92,18 @@ export default function CategoryShowcase() {
 function CategoryCard({ category, imageUrl, index, reducedMotion }) {
   const href = `/category/${category.slug}`;
   return (
-    <motion.div data-category-card className="w-[68vw] max-w-[270px] shrink-0 snap-start sm:w-[38vw] md:w-[26vw] lg:w-[18vw] xl:w-[16vw]" initial={reducedMotion ? false : { opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-30px" }} transition={reducedMotion ? { duration: 0 } : { duration: 0.6, delay: Math.min(0.04 * index, 0.2), ease: LUXURY_EASE }}>
-      <Link to={href} data-testid={`category-card-${category.db_name.toLowerCase().replace(/\s+/g, "-")}`} className="group relative block overflow-hidden border border-[#BF9972]/20 bg-[#1a0a12] transition-colors duration-500 hover:border-[#D4AF37]/60">
-        <div className="relative aspect-[4/3] overflow-hidden">
-          {imageUrl === undefined ? <div className="h-full w-full animate-pulse bg-white/[0.03]" /> : <img src={imageUrl || FALLBACK_IMG} alt={`${category.label} at Samrat Glass Emporium`} loading="lazy" fetchPriority="low" decoding="async" className="h-full w-full scale-[1.02] object-cover transition-transform duration-[1200ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.065]" />}
-          <div aria-hidden className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,7,15,0.02) 28%, rgba(22,7,15,0.4) 64%, rgba(22,7,15,0.92) 100%)" }} />
+    <motion.div data-category-card className="w-[78vw] max-w-[360px] shrink-0 snap-start sm:w-[46vw] md:w-[32vw] lg:w-[24vw] xl:w-[22vw]" initial={reducedMotion ? false : { opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-30px" }} transition={reducedMotion ? { duration: 0 } : { duration: 0.65, delay: Math.min(0.04 * index, 0.2), ease: LUXURY_EASE }}>
+      <Link to={href} data-testid={`category-card-${category.db_name.toLowerCase().replace(/\s+/g, "-")}`} className="group block overflow-hidden border border-[#BF9972]/20 bg-[#1a0a12] transition-colors duration-500 hover:border-[#D4AF37]/60">
+        <div className="relative aspect-[4/3] overflow-hidden bg-black">
+          {imageUrl === undefined ? <div className="h-full w-full animate-pulse bg-white/[0.03]" /> : <img src={imageUrl || FALLBACK_IMG} alt={`${category.label} at Samrat Glass Emporium`} loading="lazy" fetchPriority="low" decoding="async" className="h-full w-full scale-[1.015] object-contain transition-transform duration-[1200ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.055]" />}
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-[#16070f]/45 via-transparent to-transparent" />
         </div>
-        <div className="absolute inset-x-0 bottom-0 p-4">
-          <div className="font-serif text-lg leading-tight text-white md:text-xl">{category.label}</div>
-          <span className="mt-2 inline-flex w-fit items-center gap-1.5 border-b border-[#D4AF37]/40 pb-1 text-[10px] uppercase tracking-[0.2em] text-[#D4AF37] transition-colors group-hover:border-[#D4AF37]">Explore <ArrowUpRight size={12} className="transition-transform duration-500 group-hover:translate-x-1 group-hover:-translate-y-1" /></span>
+        <div className="flex items-end justify-between gap-4 border-t border-white/8 p-4 md:p-5">
+          <div className="min-w-0">
+            <div className="font-serif text-xl leading-tight text-white md:text-2xl">{category.label}</div>
+            <div className="mt-2 h-px w-10 bg-[#D4AF37]/45 transition-all duration-500 group-hover:w-16" />
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[#D4AF37]">Explore <ArrowUpRight size={12} /></span>
         </div>
       </Link>
     </motion.div>
