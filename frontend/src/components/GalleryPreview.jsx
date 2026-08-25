@@ -20,7 +20,6 @@ export default function GalleryPreview() {
   const g = hp?.gallery || {};
   const prefersReducedMotion = useReducedMotion();
   const sectionRef = useRef(null);
-  const [keyboardActive, setKeyboardActive] = useState(false);
   const rawItems = g.items || [];
   const slugsAll = useMemo(() => buildProjectSlugs(rawItems), [rawItems]);
   const enriched = useMemo(() => rawItems.map((p, idx) => ({ ...p, __idx: idx, __slug: slugsAll[idx] })).filter((p) => (p.title || "").trim() || (p.images || []).some(Boolean)), [rawItems, slugsAll]);
@@ -51,33 +50,28 @@ export default function GalleryPreview() {
   }, [total]);
 
   useEffect(() => {
-    const node = sectionRef.current;
-    if (!node || typeof IntersectionObserver === "undefined") return undefined;
-    const observer = new IntersectionObserver(([entry]) => {
-      setKeyboardActive(entry.isIntersecting && entry.intersectionRatio >= 0.42);
-    }, { threshold: [0, 0.42, 0.7] });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!keyboardActive) return undefined;
     const onKeyDown = (event) => {
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+
       const target = event.target;
       const tag = target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable) return;
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        go(-1);
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        go(1);
-      }
+
+      const node = sectionRef.current;
+      if (!node) return;
+      const rect = node.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const isActiveZone = rect.top <= viewportHeight * 0.65 && rect.bottom >= viewportHeight * 0.35;
+      if (!isActiveZone) return;
+
+      event.preventDefault();
+      go(event.key === "ArrowLeft" ? -1 : 1);
     };
+
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [go, keyboardActive]);
+  }, [go]);
 
   if (!total) return null;
   const project = ordered[active];

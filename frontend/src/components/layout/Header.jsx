@@ -1,9 +1,76 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Heart, ShoppingBag, Search, Menu, X, Images } from "lucide-react";
+import { Heart, ShoppingBag, Search, Menu, X, Images, ArrowUpRight } from "lucide-react";
 import { useCatalog } from "../../context/CatalogContext";
 import { api } from "../../lib/api";
+
+const NAV_ITEMS = [
+  {
+    to: "/",
+    label: "Home",
+    testid: "nav-home",
+    end: true,
+    eyebrow: "Start here",
+    title: "A quick view of Samrat Glass",
+    description: "Featured lighting, spaces, heritage, atelier pieces and real installations in one editorial overview.",
+    links: [["/collections", "Collections"], ["/spaces", "Shop by Space"], ["/gallery", "Installations"]],
+  },
+  {
+    to: "/catalog",
+    label: "Catalog",
+    testid: "nav-catalog",
+    eyebrow: "Browse lighting",
+    title: "Explore the complete lighting range",
+    description: "Browse chandeliers, hanging lights, wall lights, lamps and the wider catalogue by category, price or search.",
+    links: [["/catalog", "Full Catalog"], ["/spaces", "By Space"], ["/custom-lighting-bulk-orders", "Custom Lighting"]],
+  },
+  {
+    to: "/collections",
+    label: "Collections",
+    testid: "nav-collections",
+    eyebrow: "Curated families",
+    title: "Lighting grouped by design language",
+    description: "Discover related pieces and coordinated families without searching through the full catalogue.",
+    links: [["/collections", "All Collections"], ["/catalog", "All Products"], ["/styled-by", "Styled By"]],
+  },
+  {
+    to: "/craft",
+    label: "The Craft",
+    testid: "nav-craft",
+    eyebrow: "Made in Firozabad",
+    title: "Glassmaking, finishing and custom work",
+    description: "See the craftsmanship behind the fixtures, the manufacturing story and how custom lighting is developed.",
+    links: [["/craft", "The Craft"], ["/chandelier-manufacturer-india", "Manufacturing"], ["/custom-lighting-bulk-orders", "Custom Orders"]],
+  },
+  {
+    to: "/gallery",
+    label: "Gallery",
+    testid: "nav-gallery",
+    eyebrow: "Real installations",
+    title: "See Samrat Glass in finished spaces",
+    description: "Browse completed residential, hospitality and project installations across India.",
+    links: [["/gallery", "Project Gallery"], ["/styled-by", "Styled By"], ["/architects-interior-designers", "For Designers"]],
+  },
+  {
+    to: "/about",
+    label: "About",
+    testid: "nav-about",
+    eyebrow: "Since 1981",
+    title: "The people and legacy behind the brand",
+    description: "Learn about Samrat Glass Emporium, its Firozabad roots, founder story and four decades of decorative lighting.",
+    links: [["/about", "Our Story"], ["/craft", "Our Craft"], ["/faq", "FAQ"]],
+  },
+  {
+    to: "/contact",
+    label: "Contact",
+    testid: "nav-contact",
+    eyebrow: "Talk to us",
+    title: "Product, project and custom enquiries",
+    description: "Reach the team for product questions, custom lighting, bulk requirements and architect or designer projects.",
+    links: [["/contact", "Contact"], ["/custom-lighting-bulk-orders", "Custom Lighting"], ["/architects-interior-designers", "Architects & Designers"]],
+  },
+];
 
 export default function Header() {
   const { cart, favorites } = useCatalog();
@@ -11,6 +78,7 @@ export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [brand, setBrand] = useState("Samrat Glass Emporium");
+  const [navPreview, setNavPreview] = useState(null);
   const [projectTabHost, setProjectTabHost] = useState(null);
   const [projectTabActive, setProjectTabActive] = useState(() => window.location.hash === "#project-gallery");
 
@@ -20,6 +88,10 @@ export default function Header() {
     api.getSettings().then((s) => setBrand(s.brand_name || "Lumière")).catch(() => {});
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    setNavPreview(null);
+  }, [location.pathname]);
 
   useEffect(() => {
     const onHashChange = () => setProjectTabActive(window.location.hash === "#project-gallery");
@@ -97,7 +169,8 @@ export default function Header() {
   return (
     <header
       data-testid="site-header"
-      className={`sticky top-0 z-50 w-full backdrop-blur-2xl transition-all duration-300 ${scrolled ? "bg-[#16070f]/90 border-b border-[#BF9972]/20" : "bg-[#16070f]/50"}`}
+      onMouseLeave={() => setNavPreview(null)}
+      className={`relative sticky top-0 z-50 w-full backdrop-blur-2xl transition-all duration-300 ${scrolled ? "bg-[#16070f]/90 border-b border-[#BF9972]/20" : "bg-[#16070f]/50"}`}
     >
       {projectTabHost && createPortal(
         <button
@@ -123,13 +196,19 @@ export default function Header() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-7">
-          <NavLink to="/" end className={linkClass} data-testid="nav-home">Home</NavLink>
-          <NavLink to="/catalog" className={linkClass} data-testid="nav-catalog">Catalog</NavLink>
-          <NavLink to="/collections" className={linkClass} data-testid="nav-collections">Collections</NavLink>
-          <NavLink to="/craft" className={linkClass} data-testid="nav-craft">The Craft</NavLink>
-          <NavLink to="/gallery" className={linkClass} data-testid="nav-gallery">Gallery</NavLink>
-          <NavLink to="/about" className={linkClass} data-testid="nav-about">About</NavLink>
-          <NavLink to="/contact" className={linkClass} data-testid="nav-contact">Contact</NavLink>
+          {NAV_ITEMS.map((item, index) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={linkClass}
+              data-testid={item.testid}
+              onMouseEnter={() => setNavPreview(index)}
+              onFocus={() => setNavPreview(index)}
+            >
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
 
         <div className="flex items-center gap-4">
@@ -158,10 +237,38 @@ export default function Header() {
           </button>
         </div>
       </div>
+
+      {navPreview !== null && NAV_ITEMS[navPreview] && (
+        <div
+          data-testid="nav-preview-overlay"
+          className="absolute left-0 right-0 top-full hidden border-y border-[#BF9972]/20 bg-[#12070d]/97 shadow-2xl backdrop-blur-2xl md:block"
+        >
+          <div className="mx-auto grid max-w-7xl grid-cols-[1.15fr_.85fr] gap-12 px-6 py-7">
+            <div>
+              <div className="text-[9px] uppercase tracking-[0.3em] text-[#BF9972]">{NAV_ITEMS[navPreview].eyebrow}</div>
+              <div className="mt-2 font-serif text-2xl text-white">{NAV_ITEMS[navPreview].title}</div>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/58">{NAV_ITEMS[navPreview].description}</p>
+            </div>
+            <div className="grid grid-cols-3 gap-3 self-center">
+              {NAV_ITEMS[navPreview].links.map(([to, label]) => (
+                <Link
+                  key={`${NAV_ITEMS[navPreview].to}-${to}-${label}`}
+                  to={to}
+                  className="group border-l border-white/10 pl-4 py-2 transition-colors hover:border-[#D4AF37]/60"
+                >
+                  <span className="block text-[10px] uppercase tracking-[0.2em] text-white/64 transition group-hover:text-[#D4AF37]">{label}</span>
+                  <ArrowUpRight size={13} className="mt-2 text-[#D4AF37]/55 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#D4AF37]" />
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {open && (
         <div className="md:hidden border-t border-[#BF9972]/20 px-6 py-6 flex flex-col gap-4 bg-[#16070f]">
-          {[["/", "Home"],["/catalog", "Catalog"],["/collections", "Collections"],["/craft", "The Craft"],["/gallery", "Gallery"],["/about", "About"],["/contact", "Contact"]].map(([to, label]) => (
-            <NavLink key={to} to={to} end={to === "/"} onClick={() => setOpen(false)} className={linkClass}>{label}</NavLink>
+          {NAV_ITEMS.map((item) => (
+            <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setOpen(false)} className={linkClass}>{item.label}</NavLink>
           ))}
         </div>
       )}
