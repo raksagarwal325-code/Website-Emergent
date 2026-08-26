@@ -11,6 +11,7 @@ import { productPath } from "../lib/productUrl";
 import { productImageAlt, galleryImageAlt } from "../lib/imageSeo";
 import { projectProductPresentation, projectQuickAnswer } from "../lib/projectProducts";
 import SEO from "../components/SEO";
+import ProjectStorytelling from "../components/ProjectStorytelling";
 import { toast } from "sonner";
 
 function Lightbox({ open, index, images, project, onClose, onNav }) {
@@ -37,13 +38,6 @@ function Lightbox({ open, index, images, project, onClose, onNav }) {
     </div>
   );
 }
-
-const SnapshotItem = ({ label, value }) => value ? (
-  <div className="border-t border-white/8 pt-3">
-    <div className="text-[9px] uppercase tracking-[0.24em] text-[#BF9972] mb-1">{label}</div>
-    <div className="text-sm text-white/80 leading-relaxed">{value}</div>
-  </div>
-) : null;
 
 const TocLink = ({ href, children }) => (
   <a href={href} className="text-white/65 hover:text-[#D4AF37] underline underline-offset-4 decoration-white/20 hover:decoration-[#D4AF37]/60 transition-colors">
@@ -132,7 +126,6 @@ export default function GalleryProject() {
     ["Completion", project.completion_year],
     ["Architect / designer", project.architect_designer],
   ];
-  const hasExtendedSnapshot = optionalSnapshot.some(([, value]) => Boolean(value));
 
   const quickAnswer = projectQuickAnswer({
     location: project.location,
@@ -209,31 +202,16 @@ export default function GalleryProject() {
         </div>
       </section>
 
-      <section id="project-story" className="max-w-7xl mx-auto px-6 pb-14 md:pb-18 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 scroll-mt-28">
-        <div className="lg:col-span-8">
-          <div className="eyebrow mb-4">Project story</div>
-          {project.note ? <p className="text-white/80 leading-relaxed text-lg md:text-xl whitespace-pre-line">{project.note}</p> : <p className="text-white/50 leading-relaxed">Project details will be added soon.</p>}
-
-          {(project.fixture_details || project.customisation) && <div id="project-details" className="scroll-mt-28">
-            {project.fixture_details && <div className="mt-10"><div className="eyebrow mb-3">Fixture details</div><p className="text-white/70 leading-relaxed">{project.fixture_details}</p></div>}
-            {project.customisation && <div className="mt-10"><div className="eyebrow mb-3">Customisation</div><p className="text-white/70 leading-relaxed">{project.customisation}</p></div>}
-          </div>}
-        </div>
-        <aside id="project-at-a-glance" className="lg:col-span-4 scroll-mt-28">
-          <div className="border border-[#BF9972]/20 bg-black/20 p-6 md:p-7 lg:sticky lg:top-28">
-            <div className="eyebrow mb-5">Project at a glance</div>
-            <div className="space-y-4">
-              <SnapshotItem label="Location" value={project.location} />
-              {linkedProducts.length > 0 && <SnapshotItem label={productPresentation.snapshotLabel} value={productPresentation.snapshotValue} />}
-              {hasExtendedSnapshot && optionalSnapshot.map(([label, value]) => <SnapshotItem key={label} label={label} value={value} />)}
-            </div>
-          </div>
-        </aside>
-      </section>
+      <ProjectStorytelling
+        project={project}
+        images={images}
+        productPresentation={productPresentation}
+        linkedProducts={linkedProducts}
+        optionalSnapshot={optionalSnapshot}
+        onImageOpen={setLbIdx}
+      />
 
       <ProductStories products={linkedProducts} />
-
-      {images.length > 0 && <section id="installed-views" className="border-t border-[#BF9972]/15 scroll-mt-28"><div className="max-w-7xl mx-auto px-6 py-14 md:py-18"><div className="eyebrow mb-3">Real photos from the site</div><h2 className="font-serif text-3xl md:text-5xl">Installed in the client space.</h2><p className="mt-3 text-white/60 max-w-2xl">These are project photographs from the actual installation, not stock-room renders.</p><div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">{images.map((img, i) => <button key={i} onClick={() => setLbIdx(i)} data-testid={`project-thumb-${i}`} className={`${i === 0 && images.length > 2 ? "md:col-span-2" : ""} min-h-[260px] md:min-h-[360px] overflow-hidden bg-black group flex items-center justify-center`}><img src={api.resolveImage(img)} alt={galleryImageAlt({ title: project.title, location: project.location, view: i + 1 })} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full max-h-[75vh] object-contain transition-opacity duration-300" /></button>)}</div></div></section>}
 
       <section id="manufacturer" className="border-t border-[#BF9972]/15 scroll-mt-28">
         <div className="max-w-5xl mx-auto px-6 py-14 md:py-18">
