@@ -87,6 +87,7 @@ function BreakableEmail({ address }) {
 const EXPLORE_LINKS = [
   { label: "Catalog", href: "/catalog" },
   { label: "The Craft", href: "/craft" },
+  { label: "Lighting Guides", href: "/guides" },
   { label: "Project Gallery", href: "/gallery" },
   { label: "About Us", href: "/about" },
   { label: "Custom Lighting / Bulk Orders", href: "/custom-lighting-bulk-orders" },
