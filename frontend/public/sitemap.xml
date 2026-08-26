@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  This is a minimal static sitemap. The authoritative dynamic sitemap
-  (including every currently published product) is served by the backend
-  at https://samratglass.com/api/sitemap.xml and is what search engines
-  discover through robots.txt.
+  This static sitemap supplements the authoritative dynamic product sitemap
+  at https://samratglass.com/api/sitemap.xml with editorial / answer-engine
+  pages that are implemented in the frontend.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://samratglass.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
@@ -12,6 +11,17 @@
   <url><loc>https://samratglass.com/about</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://samratglass.com/gallery</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://samratglass.com/faq</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://samratglass.com/guides</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/guides/choose-chandelier-size-room</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/guides/chandelier-double-height-living-room</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/guides/how-high-should-chandelier-hang</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/guides/glass-vs-crystal-chandelier</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/guides/choose-lighting-living-room</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/guides/wall-light-installation-height</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/guides/can-chandelier-be-custom-made</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/guides/how-chandeliers-made-firozabad</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/guides/lighting-for-architects-interior-projects</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/guides/pack-transport-glass-chandeliers</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://samratglass.com/contact</loc><changefreq>yearly</changefreq><priority>0.6</priority></url>
   <url><loc>https://samratglass.com/legal/privacy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
   <url><loc>https://samratglass.com/legal/terms</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
