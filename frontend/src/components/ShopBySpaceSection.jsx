@@ -28,6 +28,10 @@ export default function ShopBySpaceSection() {
           if (product?.images?.[0]) map[space.slug] = api.resolveImage(product.images[0]);
         });
         setCovers(map);
+        Object.values(map).forEach((src) => {
+          const image = new Image();
+          image.src = src;
+        });
       }).catch(() => {});
     };
     if (typeof IntersectionObserver === "undefined") {
@@ -39,7 +43,7 @@ export default function ShopBySpaceSection() {
         load();
         observer.disconnect();
       }
-    }, { rootMargin: "240px 0px" });
+    }, { rootMargin: "1200px 0px" });
     observer.observe(node);
     return () => { cancelled = true; observer.disconnect(); };
   }, [visibleSpaces]);
@@ -71,9 +75,9 @@ export default function ShopBySpaceSection() {
 
         <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 38, scale: .985 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: .16 }} transition={{ duration: .9, ease: LUXURY_EASE }} className="grid gap-5 lg:grid-cols-[1.55fr_.75fr]">
           <motion.div drag={prefersReducedMotion ? false : "x"} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.08} onDragEnd={(_, info) => { if (info.offset.x < -70) go(1); if (info.offset.x > 70) go(-1); }} className="relative min-h-[420px] overflow-hidden border border-white/10 bg-[#190a12] md:min-h-[480px]">
-            <AnimatePresence initial={false} custom={direction} mode="wait">
+            <AnimatePresence initial={false} custom={direction} mode="sync">
               <motion.div key={space.slug} className="absolute inset-0" initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 150, scale: .95 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -150, scale: .95 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .8, ease: LUXURY_EASE }}>
-                {cover ? <motion.img src={cover} alt={`${space.label} lighting`} loading="lazy" className="h-full w-full object-cover" initial={prefersReducedMotion ? false : { scale: 1.08 }} animate={{ scale: 1 }} transition={{ duration: 1.15, ease: LUXURY_EASE }} /> : <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 70% 30%,rgba(212,175,55,.08),transparent 30%),linear-gradient(135deg,#35131f,#12070d 68%)" }} />}
+                {cover ? <motion.img src={cover} alt={`${space.label} lighting`} loading="eager" className="h-full w-full object-cover" initial={prefersReducedMotion ? false : { scale: 1.08 }} animate={{ scale: 1 }} transition={{ duration: 1.15, ease: LUXURY_EASE }} /> : <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 70% 30%,rgba(212,175,55,.08),transparent 30%),linear-gradient(135deg,#35131f,#12070d 68%)" }} />}
                 <div className="absolute inset-0 bg-gradient-to-r from-[#12070d]/95 via-[#12070d]/55 to-[#12070d]/10" />
                 <div className="absolute inset-x-0 bottom-0 max-w-2xl p-7 md:p-10">
                   <motion.div className="mb-3 text-[10px] uppercase tracking-[0.26em] text-[#D4AF37]" initial={prefersReducedMotion ? false : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .12, duration: .55, ease: LUXURY_EASE }}>By space</motion.div>
