@@ -101,7 +101,7 @@
           },
           "sameAs": [
             "https://www.instagram.com/samratglassemporium/",
-            "https://www.youtube.com/@samratglassemporium4394"
+            "https://www.youtube.com/@samratglass"
           ]
         }
         </script>
@@ -118,12 +118,19 @@
               'youtube.com',
               'pinterest.com'
             ];
+            var legacyYouTubeUrl = 'https://www.youtube.com/@samratglassemporium4394';
+            var officialYouTubeUrl = 'https://www.youtube.com/@samratglass';
 
             function syncBusinessSocialProfiles() {
               try {
                 var urls = Array.prototype.map.call(
                   document.querySelectorAll('footer a[href]'),
-                  function (a) { return a.href; }
+                  function (a) {
+                    if ((a.href || '').replace(/\/$/, '') === legacyYouTubeUrl) {
+                      a.href = officialYouTubeUrl;
+                    }
+                    return a.href;
+                  }
                 ).filter(function (href) {
                   try {
                     var host = new URL(href).hostname.toLowerCase().replace(/^www\./, '');
