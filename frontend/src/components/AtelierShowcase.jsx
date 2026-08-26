@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, MessageCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api, formatProductPrice } from "../lib/api";
+import { applyImageFrameColor } from "../lib/imageFrame";
 import { buildWaLink, productMessage } from "../lib/whatsapp";
 import { productPath } from "../lib/productUrl";
 import { LUXURY_EASE } from "../lib/motion";
@@ -93,8 +94,8 @@ export default function AtelierShowcase() {
                 exit={prefersReducedMotion ? undefined : { opacity: 0, x: -24, scale: 1.01 }}
                 transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.65, ease: LUXURY_EASE }}
               >
-                {src && <img src={api.resolveImage(src)} alt={`Samrat Glass Emporium — ${activeCaption}`} className="h-full w-full object-contain p-4 md:p-7" loading={active === 0 ? "eager" : "lazy"} />}
-                <div aria-hidden className="absolute inset-0 mix-blend-screen" style={{ background: "radial-gradient(circle at 50% 62%, rgba(212,175,55,.16), transparent 58%)" }} />
+                {src && <img src={api.resolveImage(src)} alt={`Samrat Glass Emporium — ${activeCaption}`} className="h-full w-full object-contain p-4 md:p-7" loading={active === 0 ? "eager" : "lazy"} onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />}
+                <div data-image-atmosphere aria-hidden className="absolute inset-0 mix-blend-screen" style={{ background: "radial-gradient(circle at 50% 62%, rgba(212,175,55,.16), transparent 58%)" }} />
               </motion.div>
             </AnimatePresence>
             <div className="absolute bottom-4 left-5 right-5 z-10 flex items-end justify-between gap-4">
