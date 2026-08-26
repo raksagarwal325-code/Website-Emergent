@@ -12,6 +12,7 @@ export default function ShopBySpaceSection() {
   const [direction, setDirection] = useState(1);
   const sectionRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
+  const skipEntranceMotion = prefersReducedMotion || (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches);
   const visibleSpaces = useMemo(() => SHOP_BY_SPACE.slice(0, 8), []);
 
   useEffect(() => {
@@ -59,21 +60,21 @@ export default function ShopBySpaceSection() {
   return (
     <section ref={sectionRef} className="relative overflow-hidden border-t border-white/10 bg-[#12070d]" data-testid="shop-by-space-section">
       <div aria-hidden className="absolute inset-0 opacity-45" style={{ background: "radial-gradient(circle at 12% 12%, rgba(163,99,80,.22), transparent 40%), radial-gradient(circle at 88% 82%, rgba(212,175,55,.08), transparent 38%)" }} />
-      <div className="relative mx-auto max-w-7xl px-6 py-12 md:py-16">
-        <motion.div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between" initial={prefersReducedMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={editorialGroup}>
-          <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="max-w-2xl">
+      <div className="relative mx-auto max-w-7xl px-6 py-8 md:py-16">
+        <motion.div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between" initial={skipEntranceMotion ? false : "hidden"} whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={skipEntranceMotion ? undefined : editorialGroup}>
+          <motion.div variants={skipEntranceMotion ? undefined : editorialItem} className="max-w-2xl">
             <div className="eyebrow mb-2">Find lighting for your setting</div>
             <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl">Shop by <span className="italic brand-gradient-text">Space</span></h2>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/58 md:text-base">Each setting becomes a single changing scene instead of another grid of boxes.</p>
           </motion.div>
-          <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="flex items-center gap-3">
+          <motion.div variants={skipEntranceMotion ? undefined : editorialItem} className="flex items-center gap-3">
             <Link to="/spaces" className="mr-2 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.22em] text-[#D4AF37] link-underline hover:text-[#E0C15D]">View all spaces <ArrowUpRight size={14} /></Link>
             <button type="button" aria-label="Previous spaces" onClick={() => go(-1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/70 transition hover:border-[#D4AF37]/70 hover:text-[#D4AF37]"><ChevronLeft size={18} /></button>
             <button type="button" aria-label="Next spaces" onClick={() => go(1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-[#D4AF37]/45 bg-black/30 text-[#D4AF37] transition hover:bg-[#D4AF37] hover:text-black"><ChevronRight size={18} /></button>
           </motion.div>
         </motion.div>
 
-        <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 38, scale: .985 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: .16 }} transition={{ duration: .9, ease: LUXURY_EASE }} className="grid gap-5 lg:grid-cols-[1.55fr_.75fr]">
+        <motion.div initial={skipEntranceMotion ? false : { opacity: 0, y: 38, scale: .985 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: .16 }} transition={skipEntranceMotion ? { duration: 0 } : { duration: .9, ease: LUXURY_EASE }} className="grid gap-5 lg:grid-cols-[1.55fr_.75fr]">
           <motion.div drag={prefersReducedMotion ? false : "x"} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.08} onDragEnd={(_, info) => { if (info.offset.x < -70) go(1); if (info.offset.x > 70) go(-1); }} className="relative min-h-[420px] overflow-hidden border border-white/10 bg-[#190a12] md:min-h-[480px]">
             <AnimatePresence initial={false} custom={direction} mode="sync">
               <motion.div key={space.slug} className="absolute inset-0" initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 150, scale: .95 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -150, scale: .95 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .8, ease: LUXURY_EASE }}>
@@ -94,7 +95,7 @@ export default function ShopBySpaceSection() {
               const itemIndex = (active + index + 1) % total;
               const next = visibleSpaces[itemIndex];
               return (
-                <motion.button key={`${next.slug}-${index}`} type="button" onClick={() => { setDirection(1); setActive(itemIndex); }} className="group relative min-h-[128px] overflow-hidden border border-white/10 bg-[#190a12] p-5 text-left transition hover:border-[#D4AF37]/45 lg:min-h-0" initial={prefersReducedMotion ? false : { opacity: 0, x: 28 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: .6, delay: .12 + index * .1, ease: LUXURY_EASE }} whileHover={prefersReducedMotion ? undefined : { x: 5 }}>
+                <motion.button key={`${next.slug}-${index}`} type="button" onClick={() => { setDirection(1); setActive(itemIndex); }} className="group relative min-h-[128px] overflow-hidden border border-white/10 bg-[#190a12] p-5 text-left transition hover:border-[#D4AF37]/45 lg:min-h-0" initial={skipEntranceMotion ? false : { opacity: 0, x: 28 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={skipEntranceMotion ? { duration: 0 } : { duration: .6, delay: .12 + index * .1, ease: LUXURY_EASE }} whileHover={prefersReducedMotion ? undefined : { x: 5 }}>
                   <div className="relative z-10 text-[9px] uppercase tracking-[0.23em] text-[#BF9972]">Next scene</div>
                   <div className="relative z-10 mt-3 font-serif text-xl leading-tight text-white transition group-hover:text-[#D4AF37] md:text-2xl">{next.label}</div>
                   <div className="relative z-10 mt-3 h-px w-8 bg-[#D4AF37]/35 transition-all group-hover:w-14" />
