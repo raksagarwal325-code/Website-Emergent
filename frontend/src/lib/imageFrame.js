@@ -31,6 +31,11 @@ export function detectImageFrameColor(img) {
 
 export function applyImageFrameColor(img, frame) {
   const color = detectImageFrameColor(img);
-  if (color && frame) frame.style.backgroundColor = color;
+  if (!color || !frame) return color;
+
+  frame.style.backgroundColor = color;
+  frame.querySelectorAll?.("[data-image-atmosphere]").forEach((node) => {
+    node.style.display = "none";
+  });
   return color;
 }
