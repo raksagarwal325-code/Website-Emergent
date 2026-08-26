@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ArrowUpRight } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { api, formatProductPrice } from "../lib/api";
+import { applyImageFrameColor } from "../lib/imageFrame";
 import { productPath } from "../lib/productUrl";
 import { LUXURY_EASE } from "../lib/motion";
 
@@ -95,16 +96,16 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
               <>
                 <button type="button" onClick={() => setActive(prevIndex)} aria-label={`Show ${items[prevIndex].name}`} className="absolute left-0 top-1/2 z-0 hidden h-[70%] w-[27%] -translate-y-1/2 overflow-hidden border border-white/8 bg-[#0b0508] opacity-[.38] transition hover:opacity-[.72] md:block" style={{ transform: "translateY(-50%) rotateY(12deg) scale(.88)", transformOrigin: "right center" }}>
                   {prevImage && <>
-                    <img src={prevImage} alt="" aria-hidden className="absolute -inset-[12%] h-[124%] w-[124%] object-cover blur-2xl opacity-45 scale-110" loading="lazy" />
-                    <div className="absolute inset-0 bg-[#13080f]/45" />
-                    <img src={prevImage} alt="" className="relative z-10 h-full w-full object-contain p-6" loading="lazy" />
+                    <img data-image-atmosphere src={prevImage} alt="" aria-hidden className="absolute -inset-[12%] h-[124%] w-[124%] object-cover blur-2xl opacity-45 scale-110" loading="lazy" />
+                    <div data-image-atmosphere className="absolute inset-0 bg-[#13080f]/45" />
+                    <img src={prevImage} alt="" className="relative z-10 h-full w-full object-contain p-6" loading="lazy" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
                   </>}
                 </button>
                 <button type="button" onClick={() => setActive(nextIndex)} aria-label={`Show ${items[nextIndex].name}`} className="absolute right-0 top-1/2 z-0 hidden h-[70%] w-[27%] -translate-y-1/2 overflow-hidden border border-white/8 bg-[#0b0508] opacity-[.38] transition hover:opacity-[.72] md:block" style={{ transform: "translateY(-50%) rotateY(-12deg) scale(.88)", transformOrigin: "left center" }}>
                   {nextImage && <>
-                    <img src={nextImage} alt="" aria-hidden className="absolute -inset-[12%] h-[124%] w-[124%] object-cover blur-2xl opacity-45 scale-110" loading="lazy" />
-                    <div className="absolute inset-0 bg-[#13080f]/45" />
-                    <img src={nextImage} alt="" className="relative z-10 h-full w-full object-contain p-6" loading="lazy" />
+                    <img data-image-atmosphere src={nextImage} alt="" aria-hidden className="absolute -inset-[12%] h-[124%] w-[124%] object-cover blur-2xl opacity-45 scale-110" loading="lazy" />
+                    <div data-image-atmosphere className="absolute inset-0 bg-[#13080f]/45" />
+                    <img src={nextImage} alt="" className="relative z-10 h-full w-full object-contain p-6" loading="lazy" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
                   </>}
                 </button>
               </>
@@ -123,6 +124,7 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
                 >
                   {currentImage && <>
                     <motion.img
+                      data-image-atmosphere
                       src={currentImage}
                       alt=""
                       aria-hidden
@@ -131,13 +133,14 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
                       animate={prefersReducedMotion ? { scale: 1.08, opacity: 0.42 } : { scale: [1.08, 1.14, 1.08], opacity: 0.42 }}
                       transition={prefersReducedMotion ? { duration: 0 } : { duration: 9, repeat: Infinity, ease: "easeInOut" }}
                     />
-                    <div className="absolute inset-0 bg-[#12070d]/38" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#12070d]/35 via-transparent to-[#12070d]/16" />
+                    <div data-image-atmosphere className="absolute inset-0 bg-[#12070d]/38" />
+                    <div data-image-atmosphere className="absolute inset-0 bg-gradient-to-t from-[#12070d]/35 via-transparent to-[#12070d]/16" />
                     <motion.img
                       src={currentImage}
                       alt={current.name}
                       className="relative z-10 max-h-[92%] max-w-[92%] object-contain p-4 md:p-8 drop-shadow-[0_18px_32px_rgba(0,0,0,.45)]"
                       loading="lazy"
+                      onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)}
                       initial={prefersReducedMotion ? false : { scale: 0.965, opacity: 0.72 }}
                       animate={prefersReducedMotion ? { scale: 1, opacity: 1 } : { scale: [0.985, 1.018, 0.985], opacity: 1 }}
                       transition={prefersReducedMotion ? { duration: 0 } : { duration: 8, repeat: Infinity, ease: "easeInOut" }}
