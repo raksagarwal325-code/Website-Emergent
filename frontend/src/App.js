@@ -34,6 +34,8 @@ import NotFound from "@/pages/NotFound";
 import CustomLighting from "@/pages/CustomLighting";
 import ArchitectsDesigners from "@/pages/ArchitectsDesigners";
 import ChandelierManufacturerIndia from "@/pages/ChandelierManufacturerIndia";
+import GuidesIndex from "@/pages/GuidesIndex";
+import GuidePage from "@/pages/GuidePage";
 import FloatingActions from "@/components/FloatingActions";
 import MobileReachStrip from "@/components/MobileReachStrip";
 import AnalyticsRouteTracker from "@/components/AnalyticsRouteTracker";
@@ -170,6 +172,8 @@ function App() {
               <Route path="/about" element={<About />} />
               <Route path="/craft" element={<Craft />} />
               <Route path="/faq" element={<FAQ />} />
+              <Route path="/guides" element={<GuidesIndex />} />
+              <Route path="/guides/:slug" element={<GuidePage />} />
               <Route path="/gallery" element={<Gallery />} />
               <Route path="/gallery/:slug" element={<GalleryProject />} />
               <Route path="/styled-by" element={<StyledBy />} />
