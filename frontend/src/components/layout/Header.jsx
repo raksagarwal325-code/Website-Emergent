@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Heart, ShoppingBag, Search, Menu, X, Images, ArrowUpRight } from "lucide-react";
+import { Heart, ShoppingBag, Search, Menu, X, Images, ArrowUpRight, Grid2X2, Layers3, ArrowUp } from "lucide-react";
 import { useCatalog } from "../../context/CatalogContext";
 import { api } from "../../lib/api";
 
@@ -72,10 +72,17 @@ const NAV_ITEMS = [
   },
 ];
 
+const MOBILE_QUICK_LINKS = [
+  { to: "/catalog", label: "Catalog", Icon: Grid2X2 },
+  { to: "/collections", label: "Collections", Icon: Layers3 },
+  { to: "/gallery", label: "Gallery", Icon: Images },
+];
+
 export default function Header() {
   const { cart, favorites } = useCatalog();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
+  const [quickNavVisible, setQuickNavVisible] = useState(false);
   const [open, setOpen] = useState(false);
   const [brand, setBrand] = useState("Samrat Glass Emporium");
   const [navPreview, setNavPreview] = useState(null);
@@ -83,8 +90,12 @@ export default function Header() {
   const [projectTabActive, setProjectTabActive] = useState(() => window.location.hash === "#project-gallery");
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", onScroll);
+    const onScroll = () => {
+      setScrolled(window.scrollY > 20);
+      setQuickNavVisible(window.scrollY > 320);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
     api.getSettings().then((s) => setBrand(s.brand_name || "Lumière")).catch(() => {});
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -157,6 +168,10 @@ export default function Header() {
     }, 0);
   };
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
   const linkClass = ({ isActive }) =>
@@ -182,6 +197,36 @@ export default function Header() {
           <Images size={14} /> Project Gallery
         </button>,
         projectTabHost
+      )}
+
+      {quickNavVisible && !open && location.pathname !== "/admin" && createPortal(
+        <nav
+          aria-label="Mobile quick links"
+          data-testid="mobile-quick-nav"
+          className="fixed right-2 top-1/2 z-[65] -translate-y-1/2 overflow-hidden border border-[#BF9972]/30 bg-[#12070d]/95 shadow-[0_14px_34px_rgba(0,0,0,0.38)] backdrop-blur-xl md:hidden"
+        >
+          {MOBILE_QUICK_LINKS.map(({ to, label, Icon }) => (
+            <Link
+              key={to}
+              to={to}
+              aria-label={label}
+              className="flex h-[54px] w-[54px] flex-col items-center justify-center gap-1 border-b border-white/10 text-white/68 transition-colors active:bg-white/[0.06] active:text-[#D4AF37]"
+            >
+              <Icon size={17} strokeWidth={1.5} />
+              <span className="max-w-[48px] truncate text-[7px] font-medium uppercase tracking-[0.08em]">{label}</span>
+            </Link>
+          ))}
+          <button
+            type="button"
+            onClick={scrollToTop}
+            aria-label="Back to top"
+            className="flex h-[54px] w-[54px] flex-col items-center justify-center gap-1 text-[#D4AF37] transition-colors active:bg-white/[0.06]"
+          >
+            <ArrowUp size={17} strokeWidth={1.5} />
+            <span className="text-[7px] font-medium uppercase tracking-[0.08em]">Top</span>
+          </button>
+        </nav>,
+        document.body
       )}
 
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
