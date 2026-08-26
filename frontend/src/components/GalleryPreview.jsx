@@ -117,7 +117,7 @@ export default function GalleryPreview() {
           </motion.button>
 
           <div className="relative overflow-hidden border border-[#BF9972]/20 bg-[#0b0508]">
-            <AnimatePresence initial={false} custom={direction} mode="sync">
+            <AnimatePresence initial={false} custom={direction} mode="popLayout">
               <motion.article key={`${project.__idx}-${project.__slug}`} data-testid={`home-gallery-card-${active}`} initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 150, scale: .96 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -150, scale: .96 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .8, ease: LUXURY_EASE }}>
                 <Link to={`/gallery/${project.__slug}`} className="block">
                   <div className="relative flex h-[360px] items-center justify-center overflow-hidden bg-[#090507] md:h-[430px] lg:h-[500px]">
