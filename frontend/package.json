@@ -66,7 +66,7 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
-    "postbuild": "node scripts/prerender-categories.js && node scripts/prerender-authority-pages.js",
+    "postbuild": "node scripts/prerender-categories.js && node scripts/prerender-authority-pages.js && node scripts/prerender-guides.js",
     "test": "craco test"
   },
   "browserslist": {
@@ -103,7 +103,7 @@
   "resolutions": {
     "react-router": "7.15.0",
     "node-forge": "1.4.0",
-    "fast-uri": "3.1.2",
+    "fast-uri": "3.0.0",
     "flatted": "3.4.2",
     "qs": "6.15.2",
     "diff": "4.0.4",
@@ -126,7 +126,7 @@
     "**/jsdom/form-data": "3.0.4",
     "**/postcss-svgo/svgo": "2.8.1",
     "**/webpack-dev-server/ws": "8.20.1",
-    "**/postcss-load-config/yaml": "2.8.3",
+    "**/postcss-load-config/yaml": "8.5.10",
     "**/cosmiconfig/yaml": "1.10.3",
     "**/cssnano/yaml": "1.10.3",
     "**/eslint/js-yaml": "4.1.1",
