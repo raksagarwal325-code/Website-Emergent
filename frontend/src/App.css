@@ -6,3 +6,67 @@
 
 /* Hide Emergent badge on public site (per client polish request) */
 #emergent-badge { display: none !important; }
+
+/* Mobile footer: use the available width instead of stacking every column.
+   Explore stays full-width, Support + Legal share a row, Collections becomes
+   a discoverable 2-column grid before Contact, and the old horizontal strip
+   no longer requires side-scrolling. Desktop/tablet layout is untouched. */
+@media (max-width: 639px) {
+  [data-testid="site-footer"] > .relative.max-w-7xl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.25rem;
+    row-gap: 2rem;
+  }
+
+  [data-testid="site-footer"] > .relative.max-w-7xl > .grid:first-of-type {
+    display: contents;
+  }
+
+  [data-testid="site-footer"] > .relative.max-w-7xl > .grid:first-of-type > :nth-child(1),
+  [data-testid="site-footer"] > .relative.max-w-7xl > .grid:first-of-type > :nth-child(2),
+  [data-testid="site-footer"] [data-testid="footer-contact-col"],
+  [data-testid="site-footer"] [data-testid="footer-collections"],
+  [data-testid="site-footer"] [data-testid="footer-copyright"] {
+    grid-column: 1 / -1;
+  }
+
+  [data-testid="site-footer"] > .relative.max-w-7xl > .grid:first-of-type > :nth-child(1) { order: 1; }
+  [data-testid="site-footer"] > .relative.max-w-7xl > .grid:first-of-type > :nth-child(2) { order: 2; }
+  [data-testid="site-footer"] > .relative.max-w-7xl > .grid:first-of-type > :nth-child(3) { order: 3; }
+  [data-testid="site-footer"] > .relative.max-w-7xl > .grid:first-of-type > :nth-child(4) { order: 3; }
+  [data-testid="site-footer"] [data-testid="footer-collections"] { order: 4; }
+  [data-testid="site-footer"] [data-testid="footer-contact-col"] { order: 5; }
+  [data-testid="site-footer"] [data-testid="footer-copyright"] { order: 6; }
+
+  [data-testid="site-footer"] [data-testid="footer-collections"] {
+    margin-top: 0;
+    padding-top: 1.5rem;
+    overflow-x: visible;
+  }
+
+  [data-testid="site-footer"] [data-testid="footer-collections"] > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 1rem;
+    white-space: normal;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  [data-testid="site-footer"] [data-testid="footer-collections"] > div > span:first-child {
+    grid-column: 1 / -1;
+    color: #BF9972;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+  }
+
+  [data-testid="site-footer"] [data-testid="footer-collections"] a {
+    min-width: 0;
+    line-height: 1.45;
+  }
+
+  [data-testid="site-footer"] [data-testid="footer-copyright"] {
+    margin-top: 0;
+  }
+}
