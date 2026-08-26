@@ -25,40 +25,24 @@ function Lightbox({ open, onClose, src, alt }) {
 
 function ProjectCard({ project, index, slug, linkedProducts }) {
   const [open, setOpen] = useState(false);
-  const [mediaAspect, setMediaAspect] = useState(4 / 3);
   const images = (project.images || []).filter(Boolean);
   const cover = images[0];
   const primaryProduct = linkedProducts?.[0];
 
-  const handleImageLoad = (event) => {
-    const naturalWidth = event.currentTarget?.naturalWidth || 0;
-    const naturalHeight = event.currentTarget?.naturalHeight || 0;
-    if (!naturalWidth || !naturalHeight) return;
-
-    // Let installation cards follow the source photograph so the complete
-    // project view remains visible, while keeping extreme aspect ratios from
-    // making the archive grid impractically tall or short.
-    const sourceAspect = naturalWidth / naturalHeight;
-    const controlledAspect = Math.min(1.5, Math.max(0.72, sourceAspect));
-    setMediaAspect((current) => Math.abs(current - controlledAspect) > 0.01 ? controlledAspect : current);
-  };
-
   return (
-    <article data-testid={`gallery-project-${index}`} className="group border border-white/8 hover:border-[#D4AF37]/40 transition-colors bg-[#0e0510] overflow-hidden flex flex-col">
+    <article data-testid={`gallery-project-${index}`} className="group border border-white/8 hover:border-[#D4AF37]/40 transition-colors bg-[#0e0510] overflow-hidden flex flex-col h-full">
       <button
         type="button"
         onClick={() => cover && setOpen(true)}
-        className="overflow-hidden bg-[#12060d] text-left flex items-center justify-center transition-[aspect-ratio] duration-500"
-        style={{ aspectRatio: mediaAspect }}
+        className="aspect-[4/3] overflow-hidden bg-[#12060d] text-left flex items-center justify-center cursor-zoom-in"
         aria-label={`Open ${project.title || "project"} image`}
       >
         {cover ? (
           <img
             src={api.resolveImage(cover)}
             alt={project.title || "Samrat Glass installation project"}
-            className="block w-full h-full object-contain object-center opacity-95 group-hover:opacity-100 transition-opacity duration-300"
+            className="block w-full h-full object-contain object-center opacity-95 group-hover:opacity-100 group-hover:scale-[1.025] transition-[transform,opacity] duration-700"
             loading="lazy"
-            onLoad={handleImageLoad}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-white/25 font-serif italic">Image pending</div>
@@ -145,7 +129,7 @@ export default function Gallery() {
         </div>
 
         {items.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
             {items.map((p, i) => (
               <ProjectCard key={i} project={p} index={i} slug={slugs[i]} linkedProducts={productsByProject[i]} />
             ))}
