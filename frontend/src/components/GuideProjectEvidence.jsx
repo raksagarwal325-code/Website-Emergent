@@ -4,26 +4,15 @@ import { ArrowUpRight, MapPin } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
 import { buildProjectSlugs } from "../lib/slug";
-
-const GUIDE_CATEGORY_MAP = {
-  "choose-chandelier-size-room": ["chandelier"],
-  "chandelier-double-height-living-room": ["chandelier", "floor chandelier"],
-  "how-high-should-chandelier-hang": ["chandelier", "hanging light"],
-  "glass-vs-crystal-chandelier": ["chandelier"],
-  "choose-lighting-living-room": ["chandelier", "wall light", "table lamp", "floor lamp", "hanging light"],
-  "wall-light-installation-height": ["wall light"],
-  "can-chandelier-be-custom-made": ["chandelier"],
-  "how-chandeliers-made-firozabad": [],
-  "lighting-for-architects-interior-projects": [],
-  "pack-transport-glass-chandeliers": ["chandelier", "hanging light"],
-};
+import { GUIDE_CATEGORY_MAP, guideEvidencePriority } from "../lib/guideEvidence";
 
 const norm = (value) => String(value || "").trim().toLowerCase();
 
 export default function GuideProjectEvidence({ guideSlug }) {
   const { hp } = useSettings();
   const [products, setProducts] = useState([]);
-  const projects = hp.gallery?.items || [];
+  const galleryItems = hp.gallery?.items;
+  const projects = useMemo(() => galleryItems || [], [galleryItems]);
 
   useEffect(() => {
     let active = true;
@@ -43,22 +32,36 @@ export default function GuideProjectEvidence({ guideSlug }) {
 
     return projects
       .map((project, index) => {
+        if (project.guide_evidence_enabled === false) return null;
+
         const linkedProducts = (project.products || [])
           .map((id) => productById.get(id))
           .filter(Boolean);
         if (!linkedProducts.length) return null;
 
-        const categoryMatch = wanted.length === 0 || linkedProducts.some((product) => {
-          const category = norm(product.category);
-          return wanted.some((wantedCategory) => category.includes(wantedCategory));
-        });
-        if (!categoryMatch) return null;
+        const manualTopics = Array.isArray(project.guide_evidence_topics)
+          ? project.guide_evidence_topics.filter(Boolean)
+          : [];
+        const manuallyTargeted = manualTopics.length > 0;
+
+        if (manuallyTargeted && !manualTopics.includes(guideSlug)) return null;
+
+        if (!manuallyTargeted) {
+          const categoryMatch = wanted.length === 0 || linkedProducts.some((product) => {
+            const category = norm(product.category);
+            return wanted.some((wantedCategory) => category.includes(wantedCategory));
+          });
+          if (!categoryMatch) return null;
+        }
+
+        const manualPriority = guideEvidencePriority(project.guide_evidence_priority);
+        const customisationBoost = customisationFirst && project.customisation ? 1 : 0;
 
         return {
           project,
           slug: projectSlugs[index],
           linkedProducts,
-          priority: customisationFirst && project.customisation ? 1 : 0,
+          priority: manualPriority * 10 + (manuallyTargeted ? 5 : 0) + customisationBoost,
         };
       })
       .filter(Boolean)
