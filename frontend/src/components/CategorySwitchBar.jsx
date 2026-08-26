@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { ChevronDown } from "lucide-react";
 
 const CATEGORY_OVERVIEWS = {
   "chandeliers": "Statement chandeliers, multi-light glass forms and grand decorative centrepieces.",
@@ -16,6 +17,7 @@ const CATEGORY_OVERVIEWS = {
 
 export default function CategorySwitchBar({ categories = [], activeSlug = null }) {
   const [preview, setPreview] = useState(null);
+  const navigate = useNavigate();
   const links = [{ slug: null, label: "All", href: "/catalog" }, ...categories.map((category) => ({
     slug: category.slug,
     label: category.label,
@@ -27,6 +29,8 @@ export default function CategorySwitchBar({ categories = [], activeSlug = null }
     ? CATEGORY_OVERVIEWS[preview.slug] || `Explore the ${preview.label} collection.`
     : "Browse the complete Samrat Glass collection across every lighting category.";
 
+  const mobileValue = activeSlug || "all";
+
   return (
     <nav
       aria-label="Browse product categories"
@@ -35,12 +39,38 @@ export default function CategorySwitchBar({ categories = [], activeSlug = null }
       onMouseLeave={() => setPreview(null)}
     >
       <div className="mx-auto max-w-7xl">
+        <div className="md:hidden">
+          <label htmlFor="mobile-category-select" className="mb-1.5 block text-[9px] uppercase tracking-[0.28em] text-[#BF9972]">
+            Browse collection
+          </label>
+          <div className="relative">
+            <select
+              id="mobile-category-select"
+              data-testid="mobile-category-select"
+              value={mobileValue}
+              onChange={(event) => {
+                const nextSlug = event.target.value;
+                navigate(nextSlug === "all" ? "/catalog" : `/category/${nextSlug}`);
+              }}
+              className="h-12 w-full appearance-none rounded-none border border-white/15 bg-[#0a0a0a] px-4 pr-11 text-sm text-white outline-none focus:border-[#D4AF37]"
+            >
+              <option value="all">All categories</option>
+              {categories.map((category) => (
+                <option key={category.slug || category.db_name} value={category.slug}>
+                  {category.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={17} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
+          </div>
+        </div>
+
         <div className="mb-1.5 hidden items-center gap-3 md:flex">
           <span className="text-[9px] uppercase tracking-[0.3em] text-[#BF9972]">Browse collection</span>
           <span className="h-px flex-1 bg-gradient-to-r from-[#D4AF37]/24 to-transparent" aria-hidden="true" />
         </div>
 
-        <div className="flex gap-x-5 gap-y-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible md:whitespace-normal">
+        <div className="hidden gap-x-5 gap-y-1 md:flex md:flex-wrap md:overflow-visible md:whitespace-normal">
           {links.map((item) => {
             const active = item.slug === activeSlug;
             return (
@@ -65,7 +95,7 @@ export default function CategorySwitchBar({ categories = [], activeSlug = null }
       </div>
 
       <div
-        className={`pointer-events-none absolute inset-x-0 top-full z-50 border-y border-[#D4AF37]/25 bg-[#12070d] px-6 shadow-[0_18px_55px_rgba(0,0,0,0.72)] transition-all duration-200 ${preview ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`}
+        className={`pointer-events-none absolute inset-x-0 top-full z-50 hidden border-y border-[#D4AF37]/25 bg-[#12070d] px-6 shadow-[0_18px_55px_rgba(0,0,0,0.72)] transition-all duration-200 md:block ${preview ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`}
         aria-hidden={!preview}
       >
         <div className="mx-auto max-w-7xl py-4">
