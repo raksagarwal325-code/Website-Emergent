@@ -5,6 +5,7 @@ import { useCatalog } from "../context/CatalogContext";
 import { useSettings } from "../context/SettingsContext";
 import { api, formatProductPrice } from "../lib/api";
 import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
+import { applyImageFrameColor } from "../lib/imageFrame";
 import { productPath } from "../lib/productUrl";
 import { toast } from "sonner";
 
@@ -51,12 +52,10 @@ export default function ProductCard({ product, index = 0 }) {
     const naturalHeight = event.currentTarget?.naturalHeight || 0;
     if (!naturalWidth || !naturalHeight) return;
 
-    // Let each card follow the source image instead of forcing every product
-    // into the same 4:5 box, while keeping extreme panoramas/portraits from
-    // making the catalogue grid impractically short or tall.
     const sourceAspect = naturalWidth / naturalHeight;
     const controlledAspect = Math.min(1.15, Math.max(0.68, sourceAspect));
     setMediaAspect((current) => Math.abs(current - controlledAspect) > 0.01 ? controlledAspect : current);
+    applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement);
   };
 
   const handleAdd = (e) => {
