@@ -12,6 +12,7 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
   const [active, setActive] = useState(0);
   const sectionRef = useRef(null);
   const keyboardActiveRef = useRef(false);
+  const swipeStartRef = useRef(null);
 
   const go = (delta) => {
     if (!items.length) return;
@@ -48,6 +49,22 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
 
   if (!items.length) return null;
 
+  const handleSwipeStart = (event) => {
+    const touch = event.touches?.[0];
+    if (touch) swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleSwipeEnd = (event) => {
+    const start = swipeStartRef.current;
+    const touch = event.changedTouches?.[0];
+    swipeStartRef.current = null;
+    if (!start || !touch || items.length <= 1) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 44 || Math.abs(dx) <= Math.abs(dy) * 1.15) return;
+    go(dx < 0 ? 1 : -1);
+  };
+
   const currentIndex = Math.min(active, items.length - 1);
   const current = items[currentIndex];
   const prevIndex = (currentIndex - 1 + items.length) % items.length;
@@ -73,7 +90,7 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
         </div>
 
         <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:gap-16">
-          <div className="relative min-h-[450px] sm:min-h-[540px]" style={{ perspective: "1500px" }}>
+          <div className="relative min-h-[450px] sm:min-h-[540px]" style={{ perspective: "1500px", touchAction: "pan-y", overscrollBehaviorX: "contain" }} onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
             {items.length > 1 && (
               <>
                 <button type="button" onClick={() => setActive(prevIndex)} aria-label={`Show ${items[prevIndex].name}`} className="absolute left-0 top-1/2 z-0 hidden h-[70%] w-[27%] -translate-y-1/2 overflow-hidden border border-white/8 bg-[#0b0508] opacity-[.38] transition hover:opacity-[.72] md:block" style={{ transform: "translateY(-50%) rotateY(12deg) scale(.88)", transformOrigin: "right center" }}>

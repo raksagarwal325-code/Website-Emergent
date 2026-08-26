@@ -16,6 +16,7 @@ export default function CategoryShowcase() {
   const [shouldLoadMedia, setShouldLoadMedia] = useState(false);
   const [keyboardActive, setKeyboardActive] = useState(false);
   const sectionRef = useRef(null);
+  const swipeStartRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -90,6 +91,22 @@ export default function CategoryShowcase() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [go, keyboardActive]);
 
+  const handleSwipeStart = (event) => {
+    const touch = event.touches?.[0];
+    if (touch) swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleSwipeEnd = (event) => {
+    const start = swipeStartRef.current;
+    const touch = event.changedTouches?.[0];
+    swipeStartRef.current = null;
+    if (!start || !touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 44 || Math.abs(dx) <= Math.abs(dy) * 1.15) return;
+    go(dx < 0 ? 1 : -1);
+  };
+
   const choose = (index) => {
     if (index === active) return;
     setDirection(index > active ? 1 : -1);
@@ -120,7 +137,7 @@ export default function CategoryShowcase() {
           </motion.div>
         </motion.div>
 
-        <motion.div className="relative h-[390px] overflow-hidden md:h-[470px] lg:h-[510px]" initial={prefersReducedMotion ? false : { opacity: 0, y: 34, scale: .985 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: 0.18 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .9, ease: LUXURY_EASE }}>
+        <motion.div className="relative h-[390px] overflow-hidden md:h-[470px] lg:h-[510px]" style={{ touchAction: "pan-y", overscrollBehaviorX: "contain" }} onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} initial={prefersReducedMotion ? false : { opacity: 0, y: 34, scale: .985 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: 0.18 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .9, ease: LUXURY_EASE }}>
           <AnimatePresence initial={false} custom={direction}>
             <motion.div key={active} className="absolute inset-0" initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 150, scale: .96 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -150, scale: .96 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .78, ease: LUXURY_EASE }}>
               <div className="absolute inset-0 flex items-center justify-center gap-5 md:gap-7">

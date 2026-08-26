@@ -22,6 +22,7 @@ export default function AtelierShowcase() {
   const A = hp.atelier || {};
   const rawSlides = A.images || [];
   const sectionRef = useRef(null);
+  const swipeStartRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
   const [products, setProducts] = useState([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
@@ -55,6 +56,22 @@ export default function AtelierShowcase() {
   const src = current?.src || activeProduct?.images?.[0];
   const go = (delta) => setActive((index) => (index + delta + slides.length) % slides.length);
 
+  const handleSwipeStart = (event) => {
+    const touch = event.touches?.[0];
+    if (touch) swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleSwipeEnd = (event) => {
+    const start = swipeStartRef.current;
+    const touch = event.changedTouches?.[0];
+    swipeStartRef.current = null;
+    if (!start || !touch || slides.length <= 1) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 44 || Math.abs(dx) <= Math.abs(dy) * 1.15) return;
+    go(dx < 0 ? 1 : -1);
+  };
+
   return (
     <section ref={sectionRef} data-testid="atelier-section" className="relative isolate overflow-hidden border-y border-white/10 bg-[#16070f] px-6 py-20 md:py-28">
       <div aria-hidden className="absolute inset-0 opacity-25" style={{ background: "radial-gradient(circle at 16% 30%, rgba(163,99,80,.35), transparent 40%), radial-gradient(circle at 84% 70%, rgba(212,175,55,.08), transparent 40%)" }} />
@@ -66,7 +83,7 @@ export default function AtelierShowcase() {
           viewport={{ once: true, amount: 0.25 }}
           transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.85, ease: LUXURY_EASE }}
         >
-          <div className="relative aspect-square max-h-[610px] overflow-hidden border border-[#D4AF37]/25 bg-black shadow-[0_34px_90px_-28px_rgba(0,0,0,.9)]">
+          <div className="relative aspect-square max-h-[610px] overflow-hidden border border-[#D4AF37]/25 bg-black shadow-[0_34px_90px_-28px_rgba(0,0,0,.9)]" style={{ touchAction: "pan-y", overscrollBehaviorX: "contain" }} onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={`${src}-${active}`}
