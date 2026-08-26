@@ -124,7 +124,7 @@ function App() {
 
         const isLight = (total / count) >= 165;
         const frame = img.closest('button[data-testid^="thumb-"]') || img.parentElement;
-        if (frame) frame.style.backgroundColor = isLight ? "#ffffff" : "#0a0a0a";
+        if (frame) frame.style.backgroundColor = isLight ? "#ffffff" : "#000000";
       } catch (_) {
         // Cross-origin images keep the existing dark fallback if pixels cannot be sampled.
       }
