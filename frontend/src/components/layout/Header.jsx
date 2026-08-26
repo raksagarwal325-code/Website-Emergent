@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Heart, ShoppingBag, Search, Menu, X, Images, ArrowUpRight, Grid2X2, Layers3, ArrowUp } from "lucide-react";
+import { Heart, ShoppingBag, Search, Menu, X, Images, ArrowUpRight, Grid2X2, Layers3, ArrowUp, House } from "lucide-react";
 import { useCatalog } from "../../context/CatalogContext";
 import { api } from "../../lib/api";
 
@@ -73,10 +73,19 @@ const NAV_ITEMS = [
 ];
 
 const MOBILE_QUICK_LINKS = [
-  { to: "/catalog", label: "Catalog", Icon: Grid2X2 },
-  { to: "/collections", label: "Collections", Icon: Layers3 },
-  { to: "/gallery", label: "Gallery", Icon: Images },
+  { to: "/catalog", label: "Catalog", Icon: Grid2X2, section: "catalog" },
+  { to: "/collections", label: "Collections", Icon: Layers3, section: "collections" },
+  { to: "/gallery", label: "Gallery", Icon: Images, section: "gallery" },
 ];
+
+const MOBILE_HOME_LINK = { to: "/", label: "Home", Icon: House, section: "home" };
+
+const quickNavSection = (pathname) => {
+  if (pathname === "/catalog" || pathname.startsWith("/category/") || pathname.startsWith("/product/")) return "catalog";
+  if (pathname === "/collections" || pathname.startsWith("/collection/")) return "collections";
+  if (pathname === "/gallery" || pathname.startsWith("/gallery/")) return "gallery";
+  return null;
+};
 
 export default function Header() {
   const { cart, favorites } = useCatalog();
@@ -173,6 +182,10 @@ export default function Header() {
   };
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
+  const activeQuickSection = quickNavSection(location.pathname);
+  const mobileQuickLinks = activeQuickSection
+    ? [MOBILE_HOME_LINK, ...MOBILE_QUICK_LINKS.filter((item) => item.section !== activeQuickSection)]
+    : MOBILE_QUICK_LINKS;
 
   const linkClass = ({ isActive }) =>
     `relative text-[13px] font-medium uppercase tracking-[0.22em] transition-colors pb-1 ${
@@ -205,7 +218,7 @@ export default function Header() {
           data-testid="mobile-quick-nav"
           className="fixed right-2 top-1/2 z-[65] -translate-y-1/2 overflow-hidden border border-[#BF9972]/30 bg-[#12070d]/95 shadow-[0_14px_34px_rgba(0,0,0,0.38)] backdrop-blur-xl md:hidden"
         >
-          {MOBILE_QUICK_LINKS.map(({ to, label, Icon }) => (
+          {mobileQuickLinks.map(({ to, label, Icon }) => (
             <Link
               key={to}
               to={to}
