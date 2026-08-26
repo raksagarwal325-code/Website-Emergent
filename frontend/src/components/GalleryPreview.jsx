@@ -73,6 +73,17 @@ export default function GalleryPreview() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [go]);
 
+  useEffect(() => {
+    if (!total) return;
+    const indexes = [active, (active - 1 + total) % total, (active + 1) % total];
+    indexes.forEach((index) => {
+      const cover = (ordered[index]?.images || []).filter(Boolean)[0];
+      if (!cover) return;
+      const image = new Image();
+      image.src = api.resolveImage(cover);
+    });
+  }, [active, ordered, total]);
+
   if (!total) return null;
   const project = ordered[active];
   const prev = ordered[(active - 1 + total) % total];
@@ -106,7 +117,7 @@ export default function GalleryPreview() {
           </motion.button>
 
           <div className="relative overflow-hidden border border-[#BF9972]/20 bg-[#0b0508]">
-            <AnimatePresence initial={false} custom={direction} mode="wait">
+            <AnimatePresence initial={false} custom={direction} mode="sync">
               <motion.article key={`${project.__idx}-${project.__slug}`} data-testid={`home-gallery-card-${active}`} initial={prefersReducedMotion ? false : { opacity: 0, x: direction * 150, scale: .96 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={prefersReducedMotion ? undefined : { opacity: 0, x: direction * -150, scale: .96 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: .8, ease: LUXURY_EASE }}>
                 <Link to={`/gallery/${project.__slug}`} className="block">
                   <div className="relative flex h-[360px] items-center justify-center overflow-hidden bg-[#090507] md:h-[430px] lg:h-[500px]">
@@ -116,7 +127,7 @@ export default function GalleryPreview() {
                           aria-hidden
                           src={resolvedCover}
                           alt=""
-                          loading="lazy"
+                          loading="eager"
                           className="absolute inset-[-8%] h-[116%] w-[116%] object-cover opacity-40 blur-[34px] saturate-[.8]"
                           initial={prefersReducedMotion ? false : { scale: 1.08, opacity: .24 }}
                           animate={prefersReducedMotion ? { opacity: .4 } : { scale: 1.16, opacity: .4 }}
@@ -126,7 +137,7 @@ export default function GalleryPreview() {
                         <motion.img
                           src={resolvedCover}
                           alt={project.title || "Project"}
-                          loading="lazy"
+                          loading="eager"
                           className="relative z-10 max-h-full max-w-full object-contain drop-shadow-[0_20px_45px_rgba(0,0,0,.28)]"
                           initial={prefersReducedMotion ? false : { scale: .94, opacity: .58, y: 10 }}
                           animate={prefersReducedMotion ? { opacity: 1 } : { scale: 1.025, opacity: 1, y: 0 }}
