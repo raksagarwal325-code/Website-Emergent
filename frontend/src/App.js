@@ -92,6 +92,64 @@ function App() {
     };
   }, []);
 
+  React.useEffect(() => {
+    const selector = '[data-testid="product-main-image"], button[data-testid^="thumb-"] img';
+    const attached = new WeakSet();
+
+    const sampleBackground = (img) => {
+      if (!img?.complete || !img.naturalWidth || !img.naturalHeight) return;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 12;
+        canvas.height = 12;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const points = [
+          [0, 0], [1, 0], [0, 1],
+          [11, 0], [10, 0], [11, 1],
+          [0, 11], [1, 11], [0, 10],
+          [11, 11], [10, 11], [11, 10],
+        ];
+        let total = 0;
+        let count = 0;
+        points.forEach(([x, y]) => {
+          const [r, g, b, a] = ctx.getImageData(x, y, 1, 1).data;
+          if (a < 32) return;
+          total += (r * 0.2126) + (g * 0.7152) + (b * 0.0722);
+          count += 1;
+        });
+        if (!count) return;
+
+        const isLight = (total / count) >= 165;
+        const frame = img.closest('button[data-testid^="thumb-"]') || img.parentElement;
+        if (frame) frame.style.backgroundColor = isLight ? "#ffffff" : "#0a0a0a";
+      } catch (_) {
+        // Cross-origin images keep the existing dark fallback if pixels cannot be sampled.
+      }
+    };
+
+    const attach = (img) => {
+      if (!img || attached.has(img)) return;
+      attached.add(img);
+      img.addEventListener("load", () => sampleBackground(img));
+      if (img.complete) sampleBackground(img);
+    };
+
+    const scan = () => document.querySelectorAll(selector).forEach(attach);
+    scan();
+
+    const observer = new MutationObserver(scan);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["src"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="App min-h-screen flex flex-col">
       <CatalogProvider>
