@@ -66,8 +66,9 @@ export default function ShopBySpaceSection() {
             <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl">Shop by <span className="italic brand-gradient-text">Space</span></h2>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/58 md:text-base">Each setting becomes a single changing scene instead of another grid of boxes.</p>
           </motion.div>
-          <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="flex items-center gap-3">
+          <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="flex flex-wrap items-center gap-3">
             <Link to="/spaces" className="mr-2 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.22em] text-[#D4AF37] link-underline hover:text-[#E0C15D]">View all spaces <ArrowUpRight size={14} /></Link>
+            <Link to="/guides" data-testid="shop-by-space-guides-link" className="mr-2 inline-flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.2em] text-white/60 link-underline hover:text-[#D4AF37]">Need help choosing? Lighting Guides <ArrowUpRight size={12} /></Link>
             <button type="button" aria-label="Previous spaces" onClick={() => go(-1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/70 transition hover:border-[#D4AF37]/70 hover:text-[#D4AF37]"><ChevronLeft size={18} /></button>
             <button type="button" aria-label="Next spaces" onClick={() => go(1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-[#D4AF37]/45 bg-black/30 text-[#D4AF37] transition hover:bg-[#D4AF37] hover:text-black"><ChevronRight size={18} /></button>
           </motion.div>
