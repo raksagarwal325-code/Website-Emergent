@@ -50,6 +50,48 @@ function App() {
     setTimeout(() => clearInterval(t), 5000);
     return () => clearInterval(t);
   }, []);
+
+  React.useEffect(() => {
+    let start = null;
+    const selector = '[data-testid="influencer-carousel-viewport"]';
+
+    const onTouchStart = (event) => {
+      const viewport = event.target?.closest?.(selector);
+      const touch = event.touches?.[0];
+      if (!viewport || !touch) {
+        start = null;
+        return;
+      }
+      start = { x: touch.clientX, y: touch.clientY, viewport };
+    };
+
+    const onTouchEnd = (event) => {
+      if (!start) return;
+      const touch = event.changedTouches?.[0];
+      const { x, y, viewport } = start;
+      start = null;
+      if (!touch || !viewport.isConnected) return;
+
+      const dx = touch.clientX - x;
+      const dy = touch.clientY - y;
+      if (Math.abs(dx) < 44 || Math.abs(dx) <= Math.abs(dy) * 1.15) return;
+
+      const section = viewport.closest('[data-testid="influencer-promotions-section"]');
+      const direction = dx < 0 ? "next" : "prev";
+      section?.querySelector(`[data-testid="influencer-carousel-${direction}-mobile"]`)?.click();
+    };
+
+    const onTouchCancel = () => { start = null; };
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchend", onTouchEnd, { passive: true });
+    document.addEventListener("touchcancel", onTouchCancel, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", onTouchCancel);
+    };
+  }, []);
+
   return (
     <div className="App min-h-screen flex flex-col">
       <CatalogProvider>
