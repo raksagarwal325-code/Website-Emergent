@@ -106,6 +106,71 @@
         }
         </script>
 
+        <!-- Keep LocalBusiness.sameAs synchronized with the real social links
+             rendered from Admin settings in the footer. This intentionally
+             reads only official platform URLs already exposed by the site, so
+             Facebook/Pinterest changes in Admin cannot leave stale schema. -->
+        <script>
+          (function () {
+            var socialHosts = [
+              'instagram.com',
+              'facebook.com',
+              'youtube.com',
+              'pinterest.com'
+            ];
+
+            function syncBusinessSocialProfiles() {
+              try {
+                var urls = Array.prototype.map.call(
+                  document.querySelectorAll('footer a[href]'),
+                  function (a) { return a.href; }
+                ).filter(function (href) {
+                  try {
+                    var host = new URL(href).hostname.toLowerCase().replace(/^www\./, '');
+                    return socialHosts.some(function (socialHost) {
+                      return host === socialHost || host.endsWith('.' + socialHost);
+                    });
+                  } catch (_) {
+                    return false;
+                  }
+                });
+
+                urls = Array.from(new Set(urls));
+                if (!urls.length) return false;
+
+                var el = document.head.querySelector('script[data-schema="business-social-profiles"]');
+                if (!el) {
+                  el = document.createElement('script');
+                  el.type = 'application/ld+json';
+                  el.setAttribute('data-schema', 'business-social-profiles');
+                  document.head.appendChild(el);
+                }
+                el.textContent = JSON.stringify({
+                  '@context': 'https://schema.org',
+                  '@type': 'LocalBusiness',
+                  '@id': 'https://samratglass.com/#business',
+                  sameAs: urls
+                });
+                return true;
+              } catch (_) {
+                return false;
+              }
+            }
+
+            if (document.readyState === 'loading') {
+              document.addEventListener('DOMContentLoaded', syncBusinessSocialProfiles, { once: true });
+            } else {
+              syncBusinessSocialProfiles();
+            }
+
+            var attempts = 0;
+            var timer = setInterval(function () {
+              attempts += 1;
+              if (syncBusinessSocialProfiles() || attempts >= 20) clearInterval(timer);
+            }, 250);
+          })();
+        </script>
+
         <!-- Schema.org · WebSite: connects the domain to the canonical business entity. -->
         <script type="application/ld+json">
         {
