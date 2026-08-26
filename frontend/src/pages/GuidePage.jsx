@@ -2,6 +2,7 @@ import React from "react";
 import { Link, useParams } from "react-router-dom";
 import SEO from "../components/SEO";
 import SchemaLD from "../components/SchemaLD";
+import GuideProjectEvidence from "../components/GuideProjectEvidence";
 import guides from "../data/guides.json";
 
 export default function GuidePage() {
@@ -67,6 +68,8 @@ export default function GuidePage() {
           </section>
         ))}
       </div>
+
+      <GuideProjectEvidence guideSlug={guide.slug} />
 
       <section className="mt-16 border-t border-white/10 pt-10">
         <h2 className="font-serif text-3xl mb-6">Continue from the guide</h2>
