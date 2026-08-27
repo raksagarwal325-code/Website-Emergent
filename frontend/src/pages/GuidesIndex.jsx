@@ -3,8 +3,10 @@ import { Link } from "react-router-dom";
 import SEO from "../components/SEO";
 import SchemaLD from "../components/SchemaLD";
 import guides from "../data/guides.json";
+import geoGuides from "../data/geoGuides.json";
 
 export default function GuidesIndex() {
+  const allGuides = [...guides, ...geoGuides];
   const site = "https://samratglass.com";
   const schema = {
     "@context": "https://schema.org",
@@ -38,7 +40,7 @@ export default function GuidesIndex() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {guides.map((guide) => (
+        {allGuides.map((guide) => (
           <Link
             key={guide.slug}
             to={`/guides/${guide.slug}`}
