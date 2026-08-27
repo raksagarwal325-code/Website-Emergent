@@ -68,7 +68,8 @@ export default function WelcomeIntro() {
     if (!visible || typeof window === "undefined" || screenImages.length === 0) return undefined;
 
     let cancelled = false;
-    const critical = screenImages.slice(0, CRITICAL_IMAGE_COUNT);
+    const isMobile = window.matchMedia?.("(max-width: 767px)")?.matches;
+    const critical = isMobile ? [BRAND_PLACEHOLDER_HERO] : screenImages.slice(0, CRITICAL_IMAGE_COUNT);
     const preload = critical.map((src) => new Promise((resolve) => {
       const image = new Image();
       image.onload = resolve;
@@ -159,15 +160,18 @@ export default function WelcomeIntro() {
                           animate={ready ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.025 }}
                           transition={{ duration: 0.6, delay: ready ? Math.min(index * 0.025, 0.12) : 0 }}
                         >
-                          <img
-                            src={src}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            draggable="false"
-                            loading={critical ? "eager" : "lazy"}
-                            decoding="async"
-                            fetchPriority={critical ? "high" : "low"}
-                          />
+                          <picture>
+                            <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
+                            <img
+                              src={src}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              draggable="false"
+                              loading={critical ? "eager" : "lazy"}
+                              decoding="async"
+                              fetchPriority={critical ? "high" : "low"}
+                            />
+                          </picture>
                           <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/10" />
                         </motion.div>
                       );
