@@ -8,38 +8,39 @@ import { SettingsProvider } from "@/context/SettingsContext";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import Home from "@/pages/Home";
-import Catalog from "@/pages/Catalog";
-import CategoryPage from "@/pages/CategoryPage";
-import CollectionsIndex from "@/pages/CollectionsIndex";
-import CollectionPage from "@/pages/CollectionPage";
-import SpacesIndex from "@/pages/SpacesIndex";
-import SpacePage from "@/pages/SpacePage";
-import ProductDetail from "@/pages/ProductDetail";
-import Favorites from "@/pages/Favorites";
-import Cart from "@/pages/Cart";
-import Contact from "@/pages/Contact";
-import Admin from "@/pages/Admin";
-import CollectionsAdmin from "@/pages/CollectionsAdmin";
-import SpacesAdmin from "@/pages/SpacesAdmin";
 import AdminAuthGate from "@/components/AdminAuthGate";
-import Catalogue from "@/pages/Catalogue";
-import About from "@/pages/About";
-import Craft from "@/pages/Craft";
-import FAQ from "@/pages/FAQ";
-import Gallery from "@/pages/Gallery";
-import GalleryProject from "@/pages/GalleryProject";
-import StyledBy from "@/pages/StyledBy";
-import LegalPage from "@/pages/LegalPage";
-import NotFound from "@/pages/NotFound";
-import CustomLighting from "@/pages/CustomLighting";
-import ArchitectsDesigners from "@/pages/ArchitectsDesigners";
-import ChandelierManufacturerIndia from "@/pages/ChandelierManufacturerIndia";
-import GuidesIndex from "@/pages/GuidesIndex";
-import GuidePage from "@/pages/GuidePage";
 import FloatingActions from "@/components/FloatingActions";
 import MobileReachStrip from "@/components/MobileReachStrip";
 import AnalyticsRouteTracker from "@/components/AnalyticsRouteTracker";
 import ScrollToTop from "@/components/ScrollToTop";
+
+const Catalog = React.lazy(() => import("@/pages/Catalog"));
+const CategoryPage = React.lazy(() => import("@/pages/CategoryPage"));
+const CollectionsIndex = React.lazy(() => import("@/pages/CollectionsIndex"));
+const CollectionPage = React.lazy(() => import("@/pages/CollectionPage"));
+const SpacesIndex = React.lazy(() => import("@/pages/SpacesIndex"));
+const SpacePage = React.lazy(() => import("@/pages/SpacePage"));
+const ProductDetail = React.lazy(() => import("@/pages/ProductDetail"));
+const Favorites = React.lazy(() => import("@/pages/Favorites"));
+const Cart = React.lazy(() => import("@/pages/Cart"));
+const Contact = React.lazy(() => import("@/pages/Contact"));
+const Admin = React.lazy(() => import("@/pages/Admin"));
+const CollectionsAdmin = React.lazy(() => import("@/pages/CollectionsAdmin"));
+const SpacesAdmin = React.lazy(() => import("@/pages/SpacesAdmin"));
+const Catalogue = React.lazy(() => import("@/pages/Catalogue"));
+const About = React.lazy(() => import("@/pages/About"));
+const Craft = React.lazy(() => import("@/pages/Craft"));
+const FAQ = React.lazy(() => import("@/pages/FAQ"));
+const Gallery = React.lazy(() => import("@/pages/Gallery"));
+const GalleryProject = React.lazy(() => import("@/pages/GalleryProject"));
+const StyledBy = React.lazy(() => import("@/pages/StyledBy"));
+const LegalPage = React.lazy(() => import("@/pages/LegalPage"));
+const NotFound = React.lazy(() => import("@/pages/NotFound"));
+const CustomLighting = React.lazy(() => import("@/pages/CustomLighting"));
+const ArchitectsDesigners = React.lazy(() => import("@/pages/ArchitectsDesigners"));
+const ChandelierManufacturerIndia = React.lazy(() => import("@/pages/ChandelierManufacturerIndia"));
+const GuidesIndex = React.lazy(() => import("@/pages/GuidesIndex"));
+const GuidePage = React.lazy(() => import("@/pages/GuidePage"));
 
 function App() {
   React.useEffect(() => {
@@ -161,36 +162,38 @@ function App() {
           <AnalyticsRouteTracker />
           <Header />
           <main className="flex-1">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/catalog" element={<Catalog />} />
-              <Route path="/category/:slug" element={<CategoryPage />} />
-              <Route path="/collections" element={<CollectionsIndex />} />
-              <Route path="/collection/:slug" element={<CollectionPage />} />
-              <Route path="/spaces" element={<SpacesIndex />} />
-              <Route path="/space/:slug" element={<SpacePage />} />
-              <Route path="/about" element={<About />} />
-              <Route path="/craft" element={<Craft />} />
-              <Route path="/faq" element={<FAQ />} />
-              <Route path="/guides" element={<GuidesIndex />} />
-              <Route path="/guides/:slug" element={<GuidePage />} />
-              <Route path="/gallery" element={<Gallery />} />
-              <Route path="/gallery/:slug" element={<GalleryProject />} />
-              <Route path="/styled-by" element={<StyledBy />} />
-              <Route path="/product/:id" element={<ProductDetail />} />
-              <Route path="/favorites" element={<Favorites />} />
-              <Route path="/cart" element={<Cart />} />
-              <Route path="/contact" element={<Contact />} />
-              <Route path="/custom-lighting-bulk-orders" element={<CustomLighting />} />
-              <Route path="/architects-interior-designers" element={<ArchitectsDesigners />} />
-              <Route path="/chandelier-manufacturer-india" element={<ChandelierManufacturerIndia />} />
-              <Route path="/admin" element={<AdminAuthGate><Admin /></AdminAuthGate>} />
-              <Route path="/admin/collections" element={<AdminAuthGate><CollectionsAdmin /></AdminAuthGate>} />
-              <Route path="/admin/spaces" element={<AdminAuthGate><SpacesAdmin /></AdminAuthGate>} />
-              <Route path="/catalogue" element={<AdminAuthGate><Catalogue /></AdminAuthGate>} />
-              <Route path="/legal/:slug" element={<LegalPage />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <React.Suspense fallback={<div aria-hidden="true" className="min-h-[40vh]" />}>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/catalog" element={<Catalog />} />
+                <Route path="/category/:slug" element={<CategoryPage />} />
+                <Route path="/collections" element={<CollectionsIndex />} />
+                <Route path="/collection/:slug" element={<CollectionPage />} />
+                <Route path="/spaces" element={<SpacesIndex />} />
+                <Route path="/space/:slug" element={<SpacePage />} />
+                <Route path="/about" element={<About />} />
+                <Route path="/craft" element={<Craft />} />
+                <Route path="/faq" element={<FAQ />} />
+                <Route path="/guides" element={<GuidesIndex />} />
+                <Route path="/guides/:slug" element={<GuidePage />} />
+                <Route path="/gallery" element={<Gallery />} />
+                <Route path="/gallery/:slug" element={<GalleryProject />} />
+                <Route path="/styled-by" element={<StyledBy />} />
+                <Route path="/product/:id" element={<ProductDetail />} />
+                <Route path="/favorites" element={<Favorites />} />
+                <Route path="/cart" element={<Cart />} />
+                <Route path="/contact" element={<Contact />} />
+                <Route path="/custom-lighting-bulk-orders" element={<CustomLighting />} />
+                <Route path="/architects-interior-designers" element={<ArchitectsDesigners />} />
+                <Route path="/chandelier-manufacturer-india" element={<ChandelierManufacturerIndia />} />
+                <Route path="/admin" element={<AdminAuthGate><Admin /></AdminAuthGate>} />
+                <Route path="/admin/collections" element={<AdminAuthGate><CollectionsAdmin /></AdminAuthGate>} />
+                <Route path="/admin/spaces" element={<AdminAuthGate><SpacesAdmin /></AdminAuthGate>} />
+                <Route path="/catalogue" element={<AdminAuthGate><Catalogue /></AdminAuthGate>} />
+                <Route path="/legal/:slug" element={<LegalPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </React.Suspense>
           </main>
           <Footer />
           <FloatingActions />
