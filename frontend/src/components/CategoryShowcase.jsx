@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import { NAV_CATEGORIES as CATEGORIES } from "../lib/categories";
 import { BRAND_PLACEHOLDER } from "../lib/placeholders";
 import { editorialGroup, editorialItem, LUXURY_EASE } from "../lib/motion";
+import { imageVariantSrcSet, imageVariantUrl } from "../lib/imageVariants";
 
 const FALLBACK_IMG = BRAND_PLACEHOLDER;
 
@@ -146,7 +147,18 @@ export default function CategoryShowcase() {
                   const cardClass = `group relative overflow-hidden border text-left ${isActive ? "z-20 w-[64%] border-[#D4AF37]/50" : "z-10 hidden w-[18%] border-white/10 md:block"}`;
                   const cardContent = (
                     <div className={`relative overflow-hidden bg-black ${isActive ? "h-[330px] md:h-[405px] lg:h-[445px]" : "h-[300px] md:h-[340px] lg:h-[365px]"}`}>
-                      <motion.img src={img || FALLBACK_IMG} alt={`${category.label} at Samrat Glass Emporium`} loading="lazy" className="h-full w-full object-contain" initial={prefersReducedMotion ? false : { scale: isActive ? .92 : 1.02 }} animate={{ scale: isActive ? 1 : .96 }} transition={{ duration: 1, ease: LUXURY_EASE }} />
+                      <motion.img
+                        src={img ? imageVariantUrl(img, 640) : FALLBACK_IMG}
+                        srcSet={img ? imageVariantSrcSet(img, [320, 640, 960, 1280]) : undefined}
+                        sizes={isActive ? "(max-width: 767px) 64vw, 46vw" : "18vw"}
+                        alt={`${category.label} at Samrat Glass Emporium`}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-contain"
+                        initial={prefersReducedMotion ? false : { scale: isActive ? .92 : 1.02 }}
+                        animate={{ scale: isActive ? 1 : .96 }}
+                        transition={{ duration: 1, ease: LUXURY_EASE }}
+                      />
                       <div className="absolute inset-0 bg-gradient-to-t from-[#16070f]/86 via-transparent to-transparent" />
                       <motion.div className="absolute inset-x-0 bottom-0 p-5 md:p-7" initial={prefersReducedMotion ? false : { opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .18, duration: .6, ease: LUXURY_EASE }}>
                         <div className={`font-serif leading-none text-white ${isActive ? "text-3xl md:text-5xl" : "text-lg md:text-xl"}`}>{category.label}</div>
