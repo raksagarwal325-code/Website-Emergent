@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, MapPin } from "lucide-react";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { schemaAvailabilityFor, isMadeToOrder } from "../lib/productAvailability";
@@ -16,6 +16,7 @@ import { productImageAlt } from "../lib/imageSeo";
 
 export default function ProductDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [reviews, setReviews] = useState([]);
@@ -99,6 +100,15 @@ export default function ProductDetail() {
       ? `${window.location.origin}${productPath(product)}`
       : "";
   const waLink = waProductLink(settings?.whatsapp_number, product, productUrl) || "#";
+
+  const handleBack = () => {
+    const historyIndex = window.history?.state?.idx;
+    if (typeof historyIndex === "number" && historyIndex > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate("/catalog");
+  };
 
   const handleAdd = () => {
     addToCart(product);
@@ -239,9 +249,14 @@ export default function ProductDetail() {
           <SchemaLD id={`product-${product.id}`} data={productSchema} />
         </>
       )}
-      <Link to="/catalog" className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.28em] text-white/60 hover:text-white mb-10 link-underline">
-        <ArrowLeft size={14} /> Back to catalog
-      </Link>
+      <button
+        type="button"
+        onClick={handleBack}
+        data-testid="product-back-btn"
+        className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.28em] text-white/60 hover:text-white mb-10 link-underline"
+      >
+        <ArrowLeft size={14} /> Back
+      </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
         {/* Gallery */}
