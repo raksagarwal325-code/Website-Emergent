@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { api } from "../lib/api";
@@ -66,11 +66,9 @@ export default function ShopBySpaceSection() {
             <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl">Shop by <span className="italic brand-gradient-text">Space</span></h2>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/58 md:text-base">Each setting becomes a single changing scene instead of another grid of boxes.</p>
           </motion.div>
-          <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="flex flex-wrap items-center gap-3">
-            <Link to="/spaces" className="mr-2 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.22em] text-[#D4AF37] link-underline hover:text-[#E0C15D]">View all spaces <ArrowUpRight size={14} /></Link>
-            <Link to="/guides" data-testid="shop-by-space-guides-link" className="mr-2 inline-flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.2em] text-white/60 link-underline hover:text-[#D4AF37]">Need help choosing? Lighting Guides <ArrowUpRight size={12} /></Link>
-            <button type="button" aria-label="Previous spaces" onClick={() => go(-1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/70 transition hover:border-[#D4AF37]/70 hover:text-[#D4AF37]"><ChevronLeft size={18} /></button>
-            <button type="button" aria-label="Next spaces" onClick={() => go(1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-[#D4AF37]/45 bg-black/30 text-[#D4AF37] transition hover:bg-[#D4AF37] hover:text-black"><ChevronRight size={18} /></button>
+          <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="flex flex-wrap items-center gap-x-5 gap-y-3 md:justify-end">
+            <Link to="/spaces" className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.22em] text-[#D4AF37] link-underline hover:text-[#E0C15D]">View all spaces <ArrowUpRight size={14} /></Link>
+            <Link to="/guides" data-testid="shop-by-space-guides-link" className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-white/65 link-underline hover:text-[#D4AF37]">Lighting Guides <ArrowUpRight size={13} /></Link>
           </motion.div>
         </motion.div>
 
@@ -81,31 +79,35 @@ export default function ShopBySpaceSection() {
                 {cover ? <motion.img src={cover} alt={`${space.label} lighting`} loading="eager" className="h-full w-full object-cover" initial={prefersReducedMotion ? false : { scale: 1.08 }} animate={{ scale: 1 }} transition={{ duration: 1.15, ease: LUXURY_EASE }} /> : <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 70% 30%,rgba(212,175,55,.08),transparent 30%),linear-gradient(135deg,#35131f,#12070d 68%)" }} />}
                 <div className="absolute inset-0 bg-gradient-to-r from-[#12070d]/95 via-[#12070d]/55 to-[#12070d]/10" />
                 <div className="absolute inset-x-0 bottom-0 max-w-2xl p-7 md:p-10">
-                  <motion.div className="mb-3 text-[10px] uppercase tracking-[0.26em] text-[#D4AF37]" initial={prefersReducedMotion ? false : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .12, duration: .55, ease: LUXURY_EASE }}>By space</motion.div>
+                  <motion.div className="mb-3 text-xs uppercase tracking-[0.24em] text-[#D4AF37]" initial={prefersReducedMotion ? false : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .12, duration: .55, ease: LUXURY_EASE }}>By space</motion.div>
                   <motion.h3 className="font-serif text-4xl leading-[.98] text-white md:text-6xl" initial={prefersReducedMotion ? false : { opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .18, duration: .62, ease: LUXURY_EASE }}>{space.label}</motion.h3>
                   <motion.p className="mt-4 max-w-xl text-sm leading-relaxed text-white/66 md:text-base" initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .26, duration: .62, ease: LUXURY_EASE }}>{space.description}</motion.p>
-                  <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .34, duration: .55, ease: LUXURY_EASE }}><Link to={spaceCatalogHref(space)} className="mt-6 inline-flex items-center gap-2 border-b border-[#D4AF37]/50 pb-1 text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]">Explore lighting <ArrowUpRight size={13} /></Link></motion.div>
+                  <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .34, duration: .55, ease: LUXURY_EASE }}><Link to={spaceCatalogHref(space)} className="mt-6 inline-flex items-center gap-2 border-b border-[#D4AF37]/50 pb-1 text-xs uppercase tracking-[0.2em] text-[#D4AF37]">Explore lighting <ArrowUpRight size={13} /></Link></motion.div>
                 </div>
               </motion.div>
             </AnimatePresence>
           </motion.div>
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-            {visibleSpaces.slice(1, 4).map((item, index) => {
-              const itemIndex = (active + index + 1) % total;
-              const next = visibleSpaces[itemIndex];
-              return (
-                <motion.button key={`${next.slug}-${index}`} type="button" onClick={() => { setDirection(1); setActive(itemIndex); }} className="group relative min-h-[128px] overflow-hidden border border-white/10 bg-[#190a12] p-5 text-left transition hover:border-[#D4AF37]/45 lg:min-h-0" initial={prefersReducedMotion ? false : { opacity: 0, x: 28 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: .6, delay: .12 + index * .1, ease: LUXURY_EASE }} whileHover={prefersReducedMotion ? undefined : { x: 5 }}>
-                  <div className="relative z-10 text-[9px] uppercase tracking-[0.23em] text-[#BF9972]">Next scene</div>
-                  <div className="relative z-10 mt-3 font-serif text-xl leading-tight text-white transition group-hover:text-[#D4AF37] md:text-2xl">{next.label}</div>
-                  <div className="relative z-10 mt-3 h-px w-8 bg-[#D4AF37]/35 transition-all group-hover:w-14" />
-                </motion.button>
-              );
-            })}
+          <div className="flex flex-col">
+            <div className="mb-3 text-xs font-medium uppercase tracking-[0.22em] text-white/55">Other spaces</div>
+            <div className="grid flex-1 grid-cols-2 gap-3 lg:grid-cols-1">
+              {visibleSpaces.slice(1, 4).map((item, index) => {
+                const itemIndex = (active + index + 1) % total;
+                const next = visibleSpaces[itemIndex];
+                return (
+                  <motion.button key={`${next.slug}-${index}`} type="button" onClick={() => { setDirection(1); setActive(itemIndex); }} className="group relative min-h-[128px] overflow-hidden border border-white/8 bg-white/[0.025] p-5 text-left transition hover:border-[#D4AF37]/35 hover:bg-white/[0.04] lg:min-h-0" initial={prefersReducedMotion ? false : { opacity: 0, x: 28 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: .6, delay: .12 + index * .1, ease: LUXURY_EASE }} whileHover={prefersReducedMotion ? undefined : { x: 3 }}>
+                    <div className="relative z-10 font-serif text-lg leading-tight text-white/82 transition group-hover:text-[#D4AF37] md:text-xl">{next.label}</div>
+                    <div className="relative z-10 mt-3 h-px w-8 bg-[#D4AF37]/25 transition-all group-hover:w-12 group-hover:bg-[#D4AF37]/50" />
+                  </motion.button>
+                );
+              })}
+            </div>
           </div>
         </motion.div>
 
-        <div className="mt-5 h-px overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} /></div>
+        <div className="mt-5 h-1.5 overflow-hidden bg-white/15" aria-label={`Space ${active + 1} of ${total}`}>
+          <motion.div className="h-full bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} />
+        </div>
       </div>
     </section>
   );

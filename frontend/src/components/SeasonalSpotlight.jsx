@@ -94,24 +94,24 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
           <div className="relative min-h-[450px] sm:min-h-[540px]" style={{ perspective: "1500px", touchAction: "pan-y", overscrollBehaviorX: "contain" }} onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
             {items.length > 1 && (
               <>
-                <button type="button" onClick={() => setActive(prevIndex)} aria-label={`Show ${items[prevIndex].name}`} className="absolute left-0 top-1/2 z-0 hidden h-[70%] w-[27%] -translate-y-1/2 overflow-hidden border border-white/8 bg-[#0b0508] opacity-[.38] transition hover:opacity-[.72] md:block" style={{ transform: "translateY(-50%) rotateY(12deg) scale(.88)", transformOrigin: "right center" }}>
+                <button type="button" onClick={() => setActive(prevIndex)} aria-label={`Show ${items[prevIndex].name}`} className="absolute left-0 top-1/2 z-0 hidden h-[76%] w-[32%] -translate-y-1/2 overflow-hidden border border-white/12 bg-[#0b0508] opacity-[.62] transition hover:border-[#D4AF37]/35 hover:opacity-[.9] md:block" style={{ transform: "translateY(-50%) rotateY(10deg) scale(.92)", transformOrigin: "right center" }}>
                   {prevImage && <>
-                    <img data-image-atmosphere src={prevImage} alt="" aria-hidden className="absolute -inset-[12%] h-[124%] w-[124%] object-cover blur-2xl opacity-45 scale-110" loading="lazy" />
-                    <div data-image-atmosphere className="absolute inset-0 bg-[#13080f]/45" />
-                    <img src={prevImage} alt="" className="relative z-10 h-full w-full object-contain p-6" loading="lazy" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
+                    <img data-image-atmosphere src={prevImage} alt="" aria-hidden className="absolute -inset-[10%] h-[120%] w-[120%] object-cover blur-2xl opacity-35 scale-110" loading="lazy" />
+                    <div data-image-atmosphere className="absolute inset-0 bg-[#13080f]/24" />
+                    <img src={prevImage} alt="" className="relative z-10 h-full w-full object-contain p-4" loading="lazy" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
                   </>}
                 </button>
-                <button type="button" onClick={() => setActive(nextIndex)} aria-label={`Show ${items[nextIndex].name}`} className="absolute right-0 top-1/2 z-0 hidden h-[70%] w-[27%] -translate-y-1/2 overflow-hidden border border-white/8 bg-[#0b0508] opacity-[.38] transition hover:opacity-[.72] md:block" style={{ transform: "translateY(-50%) rotateY(-12deg) scale(.88)", transformOrigin: "left center" }}>
+                <button type="button" onClick={() => setActive(nextIndex)} aria-label={`Show ${items[nextIndex].name}`} className="absolute right-0 top-1/2 z-0 hidden h-[76%] w-[32%] -translate-y-1/2 overflow-hidden border border-white/12 bg-[#0b0508] opacity-[.62] transition hover:border-[#D4AF37]/35 hover:opacity-[.9] md:block" style={{ transform: "translateY(-50%) rotateY(-10deg) scale(.92)", transformOrigin: "left center" }}>
                   {nextImage && <>
-                    <img data-image-atmosphere src={nextImage} alt="" aria-hidden className="absolute -inset-[12%] h-[124%] w-[124%] object-cover blur-2xl opacity-45 scale-110" loading="lazy" />
-                    <div data-image-atmosphere className="absolute inset-0 bg-[#13080f]/45" />
-                    <img src={nextImage} alt="" className="relative z-10 h-full w-full object-contain p-6" loading="lazy" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
+                    <img data-image-atmosphere src={nextImage} alt="" aria-hidden className="absolute -inset-[10%] h-[120%] w-[120%] object-cover blur-2xl opacity-35 scale-110" loading="lazy" />
+                    <div data-image-atmosphere className="absolute inset-0 bg-[#13080f]/24" />
+                    <img src={nextImage} alt="" className="relative z-10 h-full w-full object-contain p-4" loading="lazy" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
                   </>}
                 </button>
               </>
             )}
 
-            <div className="absolute inset-x-[8%] inset-y-0 z-10 md:inset-x-[18%]">
+            <div className="absolute inset-x-[8%] inset-y-0 z-10 md:inset-x-[20%]">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={current.id}
@@ -153,20 +153,20 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
 
           <AnimatePresence mode="wait">
             <motion.div key={`copy-${current.id}`} initial={prefersReducedMotion ? false : { opacity: 0, y: 26 }} animate={{ opacity: 1, y: 0 }} exit={prefersReducedMotion ? undefined : { opacity: 0, y: -18 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.55, ease: LUXURY_EASE }} className="min-w-0">
-              <div className="text-[10px] uppercase tracking-[0.3em] text-[#BF9972]">{current.category}</div>
+              <div className="text-xs uppercase tracking-[0.26em] text-[#BF9972]">{current.category}</div>
               <h3 className="mt-4 max-w-xl font-serif text-3xl leading-[1.08] text-white sm:text-4xl lg:text-5xl">{current.name}</h3>
               <div className="mt-6 text-[#D4AF37]">
-                {price.onRequest ? <span className="font-serif text-xl">Price on request</span> : <><span className="mr-2 text-[10px] uppercase tracking-[0.24em] text-[#BF9972]">{price.label}</span><span className="font-serif text-2xl">{price.primary}</span></>}
+                {price.onRequest ? <span className="font-serif text-xl">Price on request</span> : <><span className="mr-2 text-xs uppercase tracking-[0.22em] text-[#BF9972]">{price.label}</span><span className="font-serif text-2xl">{price.primary}</span></>}
               </div>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link to={productPath(current)} className="inline-flex items-center gap-2 bg-[#D4AF37] px-7 py-3.5 text-xs uppercase tracking-[0.22em] text-black hover:bg-[#B5952F]">View product <ArrowUpRight size={14} /></Link>
                 {items.length > 1 && <div className="flex gap-2">
-                  <button type="button" onClick={() => go(-1)} aria-label="Previous seasonal product" className="flex h-12 w-12 items-center justify-center border border-white/15 text-white/75 hover:border-[#D4AF37] hover:text-[#D4AF37]"><ArrowLeft size={18} /></button>
-                  <button type="button" onClick={() => go(1)} aria-label="Next seasonal product" className="flex h-12 w-12 items-center justify-center border border-white/15 text-white/75 hover:border-[#D4AF37] hover:text-[#D4AF37]"><ArrowRight size={18} /></button>
+                  <button type="button" onClick={() => go(-1)} aria-label="Previous seasonal product" className="flex h-12 w-12 items-center justify-center border border-white/20 bg-black/20 text-white/80 hover:border-[#D4AF37] hover:text-[#D4AF37]"><ArrowLeft size={18} /></button>
+                  <button type="button" onClick={() => go(1)} aria-label="Next seasonal product" className="flex h-12 w-12 items-center justify-center border border-white/20 bg-black/20 text-white/80 hover:border-[#D4AF37] hover:text-[#D4AF37]"><ArrowRight size={18} /></button>
                 </div>}
               </div>
-              {items.length > 1 && <div className="mt-8 max-w-md">
-                <div className="h-1 overflow-hidden bg-white/12"><div className="h-full bg-[#D4AF37] transition-[width] duration-500" style={{ width: `${progress * 100}%` }} /></div>
+              {items.length > 1 && <div className="mt-8 max-w-md" aria-label={`Product ${currentIndex + 1} of ${items.length}`}>
+                <div className="h-1.5 overflow-hidden bg-white/20"><div className="h-full bg-[#D4AF37] transition-[width] duration-500" style={{ width: `${progress * 100}%` }} /></div>
               </div>}
             </motion.div>
           </AnimatePresence>
