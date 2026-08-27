@@ -118,7 +118,6 @@ export default function CategoryShowcase() {
     index: (active + offset + total) % total,
     category: CATEGORIES[(active + offset + total) % total],
   })), [active, total]);
-  const current = CATEGORIES[active];
 
   return (
     <section ref={sectionRef} data-testid="home-category-showcase" className="relative z-10 overflow-hidden border-t border-white/10 bg-[#16070f] md:-mt-6">
@@ -144,16 +143,24 @@ export default function CategoryShowcase() {
                 {visible.map(({ offset, index, category }) => {
                   const isActive = offset === 0;
                   const img = images[category.db_name];
-                  return (
-                    <motion.button type="button" key={`${category.db_name}-${offset}`} onClick={() => choose(index)} className={`group relative overflow-hidden border text-left ${isActive ? "z-20 w-[64%] border-[#D4AF37]/50" : "z-10 hidden w-[18%] border-white/10 md:block"}`} initial={prefersReducedMotion ? false : { opacity: 0, x: offset * 55, y: 22 }} animate={{ opacity: isActive ? 1 : .5, x: 0, y: isActive ? 0 : 18, scale: isActive ? 1 : .9 }} transition={{ duration: .72, delay: isActive ? .05 : .12, ease: LUXURY_EASE }}>
-                      <div className={`relative overflow-hidden bg-black ${isActive ? "h-[330px] md:h-[405px] lg:h-[445px]" : "h-[300px] md:h-[340px] lg:h-[365px]"}`}>
-                        <motion.img src={img || FALLBACK_IMG} alt={`${category.label} at Samrat Glass Emporium`} loading="lazy" className="h-full w-full object-contain" initial={prefersReducedMotion ? false : { scale: isActive ? .92 : 1.02 }} animate={{ scale: isActive ? 1 : .96 }} transition={{ duration: 1, ease: LUXURY_EASE }} />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#16070f]/86 via-transparent to-transparent" />
-                        <motion.div className="absolute inset-x-0 bottom-0 p-5 md:p-7" initial={prefersReducedMotion ? false : { opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .18, duration: .6, ease: LUXURY_EASE }}>
-                          <div className={`font-serif leading-none text-white ${isActive ? "text-3xl md:text-5xl" : "text-lg md:text-xl"}`}>{category.label}</div>
-                          {isActive && <div className="mt-4 flex items-center justify-between gap-4"><span className="text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]">Explore collection</span><ArrowUpRight size={15} className="text-[#D4AF37]" /></div>}
-                        </motion.div>
-                      </div>
+                  const cardClass = `group relative overflow-hidden border text-left ${isActive ? "z-20 w-[64%] border-[#D4AF37]/50" : "z-10 hidden w-[18%] border-white/10 md:block"}`;
+                  const cardContent = (
+                    <div className={`relative overflow-hidden bg-black ${isActive ? "h-[330px] md:h-[405px] lg:h-[445px]" : "h-[300px] md:h-[340px] lg:h-[365px]"}`}>
+                      <motion.img src={img || FALLBACK_IMG} alt={`${category.label} at Samrat Glass Emporium`} loading="lazy" className="h-full w-full object-contain" initial={prefersReducedMotion ? false : { scale: isActive ? .92 : 1.02 }} animate={{ scale: isActive ? 1 : .96 }} transition={{ duration: 1, ease: LUXURY_EASE }} />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#16070f]/86 via-transparent to-transparent" />
+                      <motion.div className="absolute inset-x-0 bottom-0 p-5 md:p-7" initial={prefersReducedMotion ? false : { opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .18, duration: .6, ease: LUXURY_EASE }}>
+                        <div className={`font-serif leading-none text-white ${isActive ? "text-3xl md:text-5xl" : "text-lg md:text-xl"}`}>{category.label}</div>
+                        {isActive && <div className="mt-4 flex items-center justify-between gap-4"><span className="text-xs font-medium uppercase tracking-[0.2em] text-[#D4AF37] drop-shadow-[0_1px_8px_rgba(0,0,0,.9)]">Explore collection</span><ArrowUpRight size={15} className="text-[#D4AF37]" /></div>}
+                      </motion.div>
+                    </div>
+                  );
+                  return isActive ? (
+                    <motion.div key={`${category.db_name}-${offset}`} className={cardClass} initial={prefersReducedMotion ? false : { opacity: 0, x: offset * 55, y: 22 }} animate={{ opacity: 1, x: 0, y: 0, scale: 1 }} transition={{ duration: .72, delay: .05, ease: LUXURY_EASE }}>
+                      <Link to={`/category/${category.slug}`} className="block" aria-label={`Open ${category.label}`}>{cardContent}</Link>
+                    </motion.div>
+                  ) : (
+                    <motion.button type="button" key={`${category.db_name}-${offset}`} onClick={() => choose(index)} className={cardClass} initial={prefersReducedMotion ? false : { opacity: 0, x: offset * 55, y: 22 }} animate={{ opacity: .5, x: 0, y: 18, scale: .9 }} transition={{ duration: .72, delay: .12, ease: LUXURY_EASE }}>
+                      {cardContent}
                     </motion.button>
                   );
                 })}
@@ -162,9 +169,8 @@ export default function CategoryShowcase() {
           </AnimatePresence>
         </motion.div>
 
-        <div className="mt-5 flex items-center gap-5">
-          <div className="h-px flex-1 overflow-hidden bg-white/10"><motion.div className="h-px bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} /></div>
-          <Link to={`/category/${current.slug}`} className="hidden text-[10px] uppercase tracking-[0.22em] text-[#D4AF37] md:inline-flex">Open {current.label} <ArrowUpRight size={12} className="ml-1" /></Link>
+        <div className="mt-5 h-1.5 overflow-hidden bg-white/15" aria-label={`Category ${active + 1} of ${total}`}>
+          <motion.div className="h-full bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} />
         </div>
       </div>
     </section>
