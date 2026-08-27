@@ -4,10 +4,11 @@ import SEO from "../components/SEO";
 import SchemaLD from "../components/SchemaLD";
 import GuideProjectEvidence from "../components/GuideProjectEvidence";
 import guides from "../data/guides.json";
+import geoGuides from "../data/geoGuides.json";
 
 export default function GuidePage() {
   const { slug } = useParams();
-  const guide = guides.find((g) => g.slug === slug);
+  const guide = [...guides, ...geoGuides].find((g) => g.slug === slug);
 
   if (!guide) {
     return (

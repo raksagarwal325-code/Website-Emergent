@@ -6,6 +6,7 @@ const ROOT = path.resolve(__dirname, '..');
 const BUILD_DIR = path.join(ROOT, 'build');
 const TEMPLATE_PATH = path.join(BUILD_DIR, 'index.html');
 const GUIDES_PATH = path.join(ROOT, 'src', 'data', 'guides.json');
+const GEO_GUIDES_PATH = path.join(ROOT, 'src', 'data', 'geoGuides.json');
 const SITE_ORIGIN = 'https://samratglass.com';
 
 function escapeHtml(value) {
@@ -129,9 +130,13 @@ function writePage(template, relativePath, options, body) {
 function run() {
   if (!fs.existsSync(TEMPLATE_PATH)) throw new Error(`missing build template: ${TEMPLATE_PATH}`);
   if (!fs.existsSync(GUIDES_PATH)) throw new Error(`missing guide data: ${GUIDES_PATH}`);
+  if (!fs.existsSync(GEO_GUIDES_PATH)) throw new Error(`missing GEO guide data: ${GEO_GUIDES_PATH}`);
 
   const template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
-  const guides = JSON.parse(fs.readFileSync(GUIDES_PATH, 'utf8'));
+  const guides = [
+    ...JSON.parse(fs.readFileSync(GUIDES_PATH, 'utf8')),
+    ...JSON.parse(fs.readFileSync(GEO_GUIDES_PATH, 'utf8')),
+  ];
 
   writePage(template, 'guides', {
     title: 'Lighting Guides | Chandeliers, Wall Lights & Project Advice | Samrat Glass',
