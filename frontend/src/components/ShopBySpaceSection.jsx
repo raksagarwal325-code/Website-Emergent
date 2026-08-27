@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { api } from "../lib/api";
@@ -82,7 +82,7 @@ export default function ShopBySpaceSection() {
                   <motion.div className="mb-3 text-xs uppercase tracking-[0.24em] text-[#D4AF37]" initial={prefersReducedMotion ? false : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .12, duration: .55, ease: LUXURY_EASE }}>By space</motion.div>
                   <motion.h3 className="font-serif text-4xl leading-[.98] text-white md:text-6xl" initial={prefersReducedMotion ? false : { opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .18, duration: .62, ease: LUXURY_EASE }}>{space.label}</motion.h3>
                   <motion.p className="mt-4 max-w-xl text-sm leading-relaxed text-white/66 md:text-base" initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .26, duration: .62, ease: LUXURY_EASE }}>{space.description}</motion.p>
-                  <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .34, duration: .55, ease: LUXURY_EASE }}><Link to={spaceCatalogHref(space)} className="mt-6 inline-flex items-center gap-2 border-b border-[#D4AF37]/50 pb-1 text-xs uppercase tracking-[0.2em] text-[#D4AF37]">Explore lighting <ArrowUpRight size={13} /></Link></motion.div>
+                  <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .34, duration: .55, ease: LUXURY_EASE }}><Link to={spaceCatalogHref(space)} className="mt-4 inline-flex items-center gap-2 border border-[#D4AF37]/45 px-4 py-2.5 text-xs uppercase tracking-[0.2em] text-[#D4AF37] transition hover:border-[#D4AF37] hover:bg-[#D4AF37]/10">Explore lighting <ArrowUpRight size={13} /></Link></motion.div>
                 </div>
               </motion.div>
             </AnimatePresence>
@@ -95,9 +95,10 @@ export default function ShopBySpaceSection() {
                 const itemIndex = (active + index + 1) % total;
                 const next = visibleSpaces[itemIndex];
                 return (
-                  <motion.button key={`${next.slug}-${index}`} type="button" onClick={() => { setDirection(1); setActive(itemIndex); }} className="group relative min-h-[128px] overflow-hidden border border-white/8 bg-white/[0.025] p-5 text-left transition hover:border-[#D4AF37]/35 hover:bg-white/[0.04] lg:min-h-0" initial={prefersReducedMotion ? false : { opacity: 0, x: 28 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: .6, delay: .12 + index * .1, ease: LUXURY_EASE }} whileHover={prefersReducedMotion ? undefined : { x: 3 }}>
+                  <motion.button key={`${next.slug}-${index}`} type="button" onClick={() => { setDirection(1); setActive(itemIndex); }} className="group relative min-h-[128px] overflow-hidden border border-white/12 bg-white/[0.025] p-5 pr-12 text-left transition hover:border-[#D4AF37]/55 hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#D4AF37]/70 lg:min-h-0" initial={prefersReducedMotion ? false : { opacity: 0, x: 28 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: .6, delay: .12 + index * .1, ease: LUXURY_EASE }} whileHover={prefersReducedMotion ? undefined : { x: 3 }}>
                     <div className="relative z-10 font-serif text-lg leading-tight text-white/82 transition group-hover:text-[#D4AF37] md:text-xl">{next.label}</div>
                     <div className="relative z-10 mt-3 h-px w-8 bg-[#D4AF37]/25 transition-all group-hover:w-12 group-hover:bg-[#D4AF37]/50" />
+                    <ChevronRight aria-hidden="true" size={18} strokeWidth={1.6} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/35 transition group-hover:translate-x-0.5 group-hover:text-[#D4AF37]" />
                   </motion.button>
                 );
               })}
