@@ -1,18 +1,14 @@
-import React, { useEffect, useState, Suspense, lazy } from "react";
+import React, { useEffect, useRef, useState, Suspense, lazy } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
 import SEO from "../components/SEO";
 import { api } from "../lib/api";
-import GoogleReviews from "../components/GoogleReviews";
 import CollageSection from "../components/CollageSection";
 import ReasonsSection from "../components/ReasonsSection";
-import AtelierShowcase from "../components/AtelierShowcase";
 import TrustedBySection from "../components/TrustedBySection";
-import GalleryPreview from "../components/GalleryPreview";
 import WelcomeIntro from "../components/WelcomeIntro";
 import SeasonalSpotlight from "../components/SeasonalSpotlight";
-const InfluencerPromotions = lazy(() => import(/* webpackChunkName: "influencer" */ "../components/InfluencerPromotions"));
 import FounderTeaser from "../components/FounderTeaser";
 import HeroSlideshow from "../components/HeroSlideshow";
 import CategoryShowcase from "../components/CategoryShowcase";
@@ -21,6 +17,46 @@ import { useSettings } from "../context/SettingsContext";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
 import { editorialGroup, editorialItem, editorialItemSoft, LUXURY_EASE } from "../lib/motion";
 import { waGeneralLink } from "../lib/whatsapp";
+
+const GoogleReviews = lazy(() => import("../components/GoogleReviews"));
+const AtelierShowcase = lazy(() => import("../components/AtelierShowcase"));
+const GalleryPreview = lazy(() => import("../components/GalleryPreview"));
+const InfluencerPromotions = lazy(() => import(/* webpackChunkName: "influencer" */ "../components/InfluencerPromotions"));
+
+function DeferredSection({ children, minHeight = 480, rootMargin = "800px 0px" }) {
+  const [ready, setReady] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (ready) return undefined;
+    const node = ref.current;
+    if (!node) return undefined;
+
+    if (!("IntersectionObserver" in window)) {
+      setReady(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setReady(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [ready, rootMargin]);
+
+  return (
+    <div ref={ref} style={!ready ? { minHeight } : undefined}>
+      {ready ? children : null}
+    </div>
+  );
+}
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
@@ -94,12 +130,22 @@ export default function Home() {
 
       <SeasonalSpotlight products={featured} eyebrow={F.eyebrow} title={F.title} viewAllText={F.view_all_text} viewAllLink={F.view_all_link} />
 
-      <section className="max-w-7xl mx-auto px-6 pb-6"><GoogleReviews /></section>
+      <section className="max-w-7xl mx-auto px-6 pb-6">
+        <DeferredSection minHeight={420}>
+          <Suspense fallback={<div aria-hidden="true" className="min-h-[420px]" />}><GoogleReviews /></Suspense>
+        </DeferredSection>
+      </section>
       <ReasonsSection />
       <FounderTeaser />
-      <AtelierShowcase />
-      <GalleryPreview />
-      <Suspense fallback={<div aria-hidden="true" className="min-h-[600px]" />}><InfluencerPromotions /></Suspense>
+      <DeferredSection minHeight={900}>
+        <Suspense fallback={<div aria-hidden="true" className="min-h-[900px]" />}><AtelierShowcase /></Suspense>
+      </DeferredSection>
+      <DeferredSection minHeight={720}>
+        <Suspense fallback={<div aria-hidden="true" className="min-h-[720px]" />}><GalleryPreview /></Suspense>
+      </DeferredSection>
+      <DeferredSection minHeight={600}>
+        <Suspense fallback={<div aria-hidden="true" className="min-h-[600px]" />}><InfluencerPromotions /></Suspense>
+      </DeferredSection>
     </div>
   );
 }
