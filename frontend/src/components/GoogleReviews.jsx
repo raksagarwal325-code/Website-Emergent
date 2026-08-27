@@ -14,10 +14,6 @@ const GoogleMark = ({ size = 16 }) => (
 );
 
 const Stars = ({ value = 0 }) => (
-  // `role="img"` + `aria-label` is the valid semantic for a graphical
-  // rating summary. Each child <Star> icon is hidden from AT so the
-  // rating is announced exactly once as "X out of 5 stars" instead of
-  // being read five times.
   <span
     role="img"
     aria-label={`${Math.round(value * 10) / 10} out of 5 stars`}
@@ -42,7 +38,6 @@ export default function GoogleReviews({ variant = "full" }) {
     api.googleReviews().then(setData).catch(() => setData({ enabled: false }));
   }, []);
 
-  // Merge Google + manual reviews (both live in the same slider) — only 4★+ shown
   const allReviews = useMemo(() => {
     const google = (data?.reviews || []).map((r) => ({
       source: "google",
@@ -62,12 +57,9 @@ export default function GoogleReviews({ variant = "full" }) {
         relative_time_description: (r.relative_time_description || "").trim(),
         text: (r.text || "").trim(),
       }));
-    // Interleave — manual reviews first (curated), then Google (fresh & verified)
-    // Only surface 4★ and above to keep the luxury tone tight.
     return [...manual, ...google].filter((r) => (r.rating || 0) >= 4);
   }, [data, hp]);
 
-  // Autoplay 5s (loops continuously; pauses on hover)
   useEffect(() => {
     if (paused || allReviews.length < 2) return;
     timerRef.current = setInterval(() => {
@@ -76,7 +68,6 @@ export default function GoogleReviews({ variant = "full" }) {
     return () => clearInterval(timerRef.current);
   }, [paused, allReviews.length]);
 
-  // Keep idx in-bounds when list length changes
   useEffect(() => {
     if (idx >= allReviews.length) setIdx(0);
   }, [allReviews.length, idx]);
@@ -91,7 +82,6 @@ export default function GoogleReviews({ variant = "full" }) {
   return (
     <section data-testid="google-reviews-section" className="relative border border-white/10 bg-[#0a0a0a] p-8 md:p-12">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-        {/* Left: rating summary */}
         <div className="lg:col-span-5">
           <div className="flex items-center gap-3 mb-4">
             <GoogleMark size={22} />
@@ -142,13 +132,12 @@ export default function GoogleReviews({ variant = "full" }) {
           )}
 
           {!enabled && variant === "full" && (place_id_set === false || api_key_set === false) && (
-            <p className="mt-6 text-[11px] text-white/30 leading-relaxed max-w-sm">
-              Live Google reviews will appear here automatically once <span className="text-white/50">GOOGLE_PLACE_ID</span> and <span className="text-white/50">GOOGLE_MAPS_API_KEY</span> are added in Admin → Settings.
+            <p className="mt-6 text-xs text-white/40 leading-relaxed max-w-sm">
+              Live Google reviews will appear here automatically once <span className="text-white/55">GOOGLE_PLACE_ID</span> and <span className="text-white/55">GOOGLE_MAPS_API_KEY</span> are added in Admin → Settings.
             </p>
           )}
         </div>
 
-        {/* Right: slider (Google + manual reviews) */}
         {hasReviews && (
           <div
             className="lg:col-span-7 relative"
@@ -156,7 +145,6 @@ export default function GoogleReviews({ variant = "full" }) {
             onMouseLeave={() => setPaused(false)}
             data-testid="gr-slideshow"
           >
-            {/* Slide stack (cross-fade) with arrows floating on edges */}
             <div className="relative min-h-[260px] md:min-h-[280px]">
               {allReviews.map((r, i) => (
                 <div
@@ -177,11 +165,11 @@ export default function GoogleReviews({ variant = "full" }) {
                         {r.source === "google" ? (
                           <span title="Verified Google review" className="inline-flex flex-shrink-0"><GoogleMark size={12} /></span>
                         ) : (
-                          <span title="Verified customer testimonial" className="text-[9px] uppercase tracking-[0.24em] text-[#BF9972] border border-[#BF9972]/40 px-1.5 py-0.5 flex-shrink-0">Client</span>
+                          <span title="Verified customer testimonial" className="text-[10px] uppercase tracking-[0.22em] text-[#BF9972] border border-[#BF9972]/45 px-1.5 py-0.5 flex-shrink-0">Client</span>
                         )}
                       </div>
                       {r.relative_time_description && (
-                        <div className="text-[10px] text-white/65 uppercase tracking-widest mt-0.5">{r.relative_time_description}</div>
+                        <div className="text-xs text-white/70 uppercase tracking-[0.14em] mt-0.5">{r.relative_time_description}</div>
                       )}
                     </div>
                     <Stars value={r.rating} />
@@ -193,7 +181,6 @@ export default function GoogleReviews({ variant = "full" }) {
                 </div>
               ))}
 
-              {/* Prev / next — floating on card edges */}
               {allReviews.length > 1 && (
                 <>
                   <button
@@ -201,26 +188,23 @@ export default function GoogleReviews({ variant = "full" }) {
                     onClick={prev}
                     data-testid="gr-prev"
                     aria-label="Previous review"
-                    className="absolute left-1 md:left-2 top-1/2 -translate-y-1/2 w-8 h-8 md:w-9 md:h-9 border border-white/15 bg-black/60 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/70 flex items-center justify-center transition-colors z-10"
+                    className="absolute left-1 md:left-2 top-1/2 -translate-y-1/2 w-9 h-9 md:w-10 md:h-10 border border-white/25 bg-black/75 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/85 flex items-center justify-center transition-colors z-10"
                   >
-                    <ChevronLeft size={16} />
+                    <ChevronLeft size={17} />
                   </button>
                   <button
                     type="button"
                     onClick={next}
                     data-testid="gr-next"
                     aria-label="Next review"
-                    className="absolute right-1 md:right-2 top-1/2 -translate-y-1/2 w-8 h-8 md:w-9 md:h-9 border border-white/15 bg-black/60 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/70 flex items-center justify-center transition-colors z-10"
+                    className="absolute right-1 md:right-2 top-1/2 -translate-y-1/2 w-9 h-9 md:w-10 md:h-10 border border-white/25 bg-black/75 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/85 flex items-center justify-center transition-colors z-10"
                   >
-                    <ChevronRight size={16} />
+                    <ChevronRight size={17} />
                   </button>
                 </>
               )}
             </div>
 
-            {/* Dots below the card — visible pill is small, the actual
-                interactive target is expanded to 44×44 CSS px for touch
-                accessibility (WCAG 2.5.5 / Lighthouse "Tap targets"). */}
             {allReviews.length > 1 && (
               <div className="mt-3 flex items-center justify-center" data-testid="gr-dots">
                 {allReviews.map((_, i) => (
@@ -235,7 +219,7 @@ export default function GoogleReviews({ variant = "full" }) {
                   >
                     <span
                       aria-hidden="true"
-                      className={`h-1.5 rounded-none transition-all ${i === idx ? "w-8 bg-[#D4AF37]" : "w-3 bg-white/25 group-hover:bg-white/50"}`}
+                      className={`h-2 rounded-none transition-all ${i === idx ? "w-9 bg-[#D4AF37]" : "w-4 bg-white/45 group-hover:bg-white/70"}`}
                     />
                   </button>
                 ))}
