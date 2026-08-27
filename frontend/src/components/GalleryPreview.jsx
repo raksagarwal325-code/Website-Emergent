@@ -110,10 +110,10 @@ export default function GalleryPreview() {
           </motion.div>
         </motion.div>
 
-        <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 36, scale: .985 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: .14 }} transition={{ duration: .9, ease: LUXURY_EASE }} drag={prefersReducedMotion ? false : "x"} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.08} onDragEnd={(_, info) => { if (info.offset.x < -80) go(1); if (info.offset.x > 80) go(-1); }} className="relative grid gap-5 md:grid-cols-[.22fr_1fr_.22fr] md:items-center">
-          <motion.button type="button" onClick={() => go(-1)} className="group relative hidden h-[300px] overflow-hidden border border-white/10 bg-black opacity-[.42] transition hover:opacity-75 md:block" whileHover={prefersReducedMotion ? undefined : { x: -6, scale: .985 }} transition={{ duration: .35 }}>
+        <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 36, scale: .985 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: .14 }} transition={{ duration: .9, ease: LUXURY_EASE }} drag={prefersReducedMotion ? false : "x"} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.08} onDragEnd={(_, info) => { if (info.offset.x < -80) go(1); if (info.offset.x > 80) go(-1); }} className="relative grid gap-5 md:grid-cols-[.32fr_1fr_.32fr] md:items-center">
+          <motion.button type="button" onClick={() => go(-1)} className="group relative hidden h-[300px] overflow-hidden border border-white/10 bg-black opacity-[.48] transition hover:opacity-80 md:block" whileHover={prefersReducedMotion ? undefined : { x: -6, scale: .985 }} transition={{ duration: .35 }}>
             {prevCover && <img src={api.resolveImage(prevCover)} alt="" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" />}
-            <div className="absolute inset-0 bg-[#16070f]/38" />
+            <div className="absolute inset-0 bg-[#16070f]/30" />
           </motion.button>
 
           <div className="relative overflow-hidden border border-[#BF9972]/20 bg-[#0b0508]">
@@ -157,9 +157,9 @@ export default function GalleryPreview() {
             </AnimatePresence>
           </div>
 
-          <motion.button type="button" onClick={() => go(1)} className="group relative hidden h-[300px] overflow-hidden border border-[#D4AF37]/20 bg-black opacity-[.48] transition hover:opacity-[.82] md:block" whileHover={prefersReducedMotion ? undefined : { x: 6, scale: .985 }} transition={{ duration: .35 }}>
+          <motion.button type="button" onClick={() => go(1)} className="group relative hidden h-[300px] overflow-hidden border border-[#D4AF37]/20 bg-black opacity-[.54] transition hover:opacity-[.86] md:block" whileHover={prefersReducedMotion ? undefined : { x: 6, scale: .985 }} transition={{ duration: .35 }}>
             {nextCover && <img src={api.resolveImage(nextCover)} alt="" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" />}
-            <div className="absolute inset-0 bg-[#16070f]/34" />
+            <div className="absolute inset-0 bg-[#16070f]/28" />
           </motion.button>
         </motion.div>
 
