@@ -96,16 +96,16 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
               <>
                 <button type="button" onClick={() => setActive(prevIndex)} aria-label={`Show ${items[prevIndex].name}`} className="absolute left-0 top-1/2 z-0 hidden h-[76%] w-[32%] -translate-y-1/2 overflow-hidden border border-white/12 bg-[#0b0508] opacity-[.62] transition hover:border-[#D4AF37]/35 hover:opacity-[.9] md:block" style={{ transform: "translateY(-50%) rotateY(10deg) scale(.92)", transformOrigin: "right center" }}>
                   {prevImage && <>
-                    <img data-image-atmosphere src={prevImage} alt="" aria-hidden className="absolute -inset-[10%] h-[120%] w-[120%] object-cover blur-2xl opacity-35 scale-110" loading="lazy" />
+                    <img data-image-atmosphere src={prevImage} alt="" aria-hidden className="absolute -inset-[10%] h-[120%] w-[120%] object-cover blur-2xl opacity-35 scale-110" loading="lazy" decoding="async" fetchPriority="low" />
                     <div data-image-atmosphere className="absolute inset-0 bg-[#13080f]/24" />
-                    <img src={prevImage} alt="" className="relative z-10 h-full w-full object-contain p-4" loading="lazy" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
+                    <img src={prevImage} alt="" className="relative z-10 h-full w-full object-contain p-4" loading="lazy" decoding="async" fetchPriority="low" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
                   </>}
                 </button>
                 <button type="button" onClick={() => setActive(nextIndex)} aria-label={`Show ${items[nextIndex].name}`} className="absolute right-0 top-1/2 z-0 hidden h-[76%] w-[32%] -translate-y-1/2 overflow-hidden border border-white/12 bg-[#0b0508] opacity-[.62] transition hover:border-[#D4AF37]/35 hover:opacity-[.9] md:block" style={{ transform: "translateY(-50%) rotateY(-10deg) scale(.92)", transformOrigin: "left center" }}>
                   {nextImage && <>
-                    <img data-image-atmosphere src={nextImage} alt="" aria-hidden className="absolute -inset-[10%] h-[120%] w-[120%] object-cover blur-2xl opacity-35 scale-110" loading="lazy" />
+                    <img data-image-atmosphere src={nextImage} alt="" aria-hidden className="absolute -inset-[10%] h-[120%] w-[120%] object-cover blur-2xl opacity-35 scale-110" loading="lazy" decoding="async" fetchPriority="low" />
                     <div data-image-atmosphere className="absolute inset-0 bg-[#13080f]/24" />
-                    <img src={nextImage} alt="" className="relative z-10 h-full w-full object-contain p-4" loading="lazy" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
+                    <img src={nextImage} alt="" className="relative z-10 h-full w-full object-contain p-4" loading="lazy" decoding="async" fetchPriority="low" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
                   </>}
                 </button>
               </>
@@ -128,6 +128,9 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
                       src={currentImage}
                       alt=""
                       aria-hidden
+                      loading="lazy"
+                      decoding="async"
+                      fetchPriority="low"
                       className="absolute -inset-[12%] h-[124%] w-[124%] object-cover blur-3xl opacity-45"
                       initial={prefersReducedMotion ? false : { scale: 1.08, opacity: 0.2 }}
                       animate={prefersReducedMotion ? { scale: 1.08, opacity: 0.42 } : { scale: [1.08, 1.14, 1.08], opacity: 0.42 }}
@@ -140,6 +143,8 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
                       alt={current.name}
                       className="relative z-10 max-h-[92%] max-w-[92%] object-contain p-4 md:p-8 drop-shadow-[0_18px_32px_rgba(0,0,0,.45)]"
                       loading="lazy"
+                      decoding="async"
+                      fetchPriority="low"
                       onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)}
                       initial={prefersReducedMotion ? false : { scale: 0.965, opacity: 0.72 }}
                       animate={prefersReducedMotion ? { scale: 1, opacity: 1 } : { scale: [0.985, 1.018, 0.985], opacity: 1 }}
