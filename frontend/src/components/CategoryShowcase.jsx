@@ -120,6 +120,19 @@ export default function CategoryShowcase() {
     category: CATEGORIES[(active + offset + total) % total],
   })), [active, total]);
 
+  const handleImageError = (event, original) => {
+    const node = event.currentTarget;
+    if (original && node.dataset.fallbackStage !== "master") {
+      node.dataset.fallbackStage = "master";
+      node.removeAttribute("srcset");
+      node.src = original;
+      return;
+    }
+    node.onerror = null;
+    node.removeAttribute("srcset");
+    node.src = FALLBACK_IMG;
+  };
+
   return (
     <section ref={sectionRef} data-testid="home-category-showcase" className="relative z-10 overflow-hidden border-t border-white/10 bg-[#16070f] md:-mt-6">
       <div aria-hidden className="absolute inset-0 opacity-45 pointer-events-none" style={{ background: "radial-gradient(circle at 18% 18%, rgba(163,99,80,.22), transparent 42%), radial-gradient(circle at 82% 82%, rgba(212,175,55,.08), transparent 38%)" }} />
@@ -154,6 +167,7 @@ export default function CategoryShowcase() {
                         alt={`${category.label} at Samrat Glass Emporium`}
                         loading="lazy"
                         decoding="async"
+                        onError={(event) => handleImageError(event, img)}
                         className="h-full w-full object-contain"
                         initial={prefersReducedMotion ? false : { scale: isActive ? .92 : 1.02 }}
                         animate={{ scale: isActive ? 1 : .96 }}
