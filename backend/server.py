@@ -25,6 +25,7 @@ load_dotenv(ROOT_DIR / ".env")
 from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E402
 from watermark import apply_watermark  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
+from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -886,6 +887,72 @@ async def admin_products_export(admin: _AdminUser = Depends(require_admin)):
         {"status": "published"}, {"_id": 0}
     ).sort("created_at", -1).to_list(length=10000)
     return {"items": docs, "total": len(docs)}
+
+
+@api.get("/commerce/products.csv")
+async def commerce_products_feed():
+    """Public OpenAI/Google-compatible feed of safely eligible products.
+
+    Drafts, non-INR rows, zero prices, and products whose visible pricing
+    mode is ``on_request`` are excluded. This prevents private or placeholder
+    values from becoming public commerce data.
+    """
+    docs = await db.products.find(
+        {"status": "published"}, {"_id": 0}
+    ).sort("sku", 1).to_list(length=10000)
+    rows, _, _ = build_feed(
+        docs,
+        site_origin=_SITE_ORIGIN,
+        slug_builder=product_slug,
+        image_url_builder=_absolute_image_url,
+    )
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(
+        output,
+        fieldnames=[*COMMERCE_FEED_FIELDS, "condition"],
+        extrasaction="ignore",
+    )
+    writer.writeheader()
+    writer.writerows(rows)
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Cache-Control": "public, max-age=900",
+            "Content-Disposition": 'inline; filename="samrat-glass-openai-products.csv"',
+            "X-Commerce-Eligible-Products": str(len(rows)),
+        },
+    )
+
+
+@api.get("/admin/commerce/readiness")
+async def admin_commerce_readiness(admin: _AdminUser = Depends(require_admin)):
+    """Admin-only feed readiness report with per-product exclusion reasons."""
+    docs = await db.products.find({}, {"_id": 0}).sort("sku", 1).to_list(length=10000)
+    rows, excluded, reason_counts = build_feed(
+        docs,
+        site_origin=_SITE_ORIGIN,
+        slug_builder=product_slug,
+        image_url_builder=_absolute_image_url,
+    )
+    warning_items = [
+        {"id": row["id"], "warnings": row.get("_warnings", [])}
+        for row in rows if row.get("_warnings")
+    ]
+    warning_counts: dict[str, int] = {}
+    for item in warning_items:
+        for warning in item["warnings"]:
+            warning_counts[warning] = warning_counts.get(warning, 0) + 1
+    return {
+        "total": len(docs),
+        "eligible": len(rows),
+        "excluded": len(excluded),
+        "reason_counts": reason_counts,
+        "excluded_items": excluded,
+        "warning_counts": warning_counts,
+        "warning_items": warning_items,
+        "feed_url": f"{_SITE_ORIGIN}/api/commerce/products.csv",
+    }
 
 
 # --- Reviews ---
