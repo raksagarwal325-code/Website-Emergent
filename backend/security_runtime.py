@@ -11,8 +11,11 @@ admin allowlist, session, CSRF, rate-limit, or SSRF-safe proxy controls.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
+import io
 import ipaddress
+import re
 import socket
 import sys
 from urllib.parse import urlparse
@@ -37,6 +40,9 @@ _AI_FETCH_CALLERS = {
     "ai_name_suggestions",
     "_resolve_product_image",
 }
+_IMAGE_VARIANT_WIDTHS = {320, 640, 960, 1280}
+_PRODUCT_PATH_RE = re.compile(r"^[^/]+/products/(?!.*(?:^|/)originals/)[A-Za-z0-9._/-]+$")
+_IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
 
 
 def _find_server_module():
@@ -174,6 +180,75 @@ def _guarded_requests_get(url, *args, **kwargs):
         raise
 
 
+def _valid_product_path(path: str) -> bool:
+    return bool(path) and ".." not in path and bool(_PRODUCT_PATH_RE.fullmatch(path))
+
+
+def _variant_storage_path(path: str, width: int) -> str:
+    app_prefix, _, product_tail = path.partition("/products/")
+    return f"{app_prefix}/product-variants/webp/{width}/{product_tail}.webp"
+
+
+def _render_webp_variant(data: bytes, width: int) -> bytes:
+    """Resize a public product image without touching the stored master."""
+    from PIL import Image, ImageOps
+
+    with Image.open(io.BytesIO(data)) as opened:
+        if getattr(opened, "is_animated", False):
+            raise ValueError("animated images are not supported")
+        image = ImageOps.exif_transpose(opened)
+        if image.width > width:
+            ratio = width / float(image.width)
+            height = max(1, round(image.height * ratio))
+            image = image.resize((width, height), Image.Resampling.LANCZOS)
+        if image.mode not in {"RGB", "RGBA"}:
+            image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+        output = io.BytesIO()
+        image.save(output, format="WEBP", quality=90, method=6)
+        return output.getvalue()
+
+
+def _install_image_delivery(server_module) -> None:
+    app = server_module.app
+    if getattr(app.state, "sge_image_delivery_installed", False):
+        return
+
+    from fastapi import HTTPException
+    from starlette.responses import Response
+    from storage import get_object, put_object
+
+    @app.get("/api/image-variant/{width}/{path:path}")
+    async def _image_variant(width: int, path: str):
+        if width not in _IMAGE_VARIANT_WIDTHS or not _valid_product_path(path):
+            raise HTTPException(status_code=404, detail="Image variant not found")
+
+        variant_path = _variant_storage_path(path, width)
+        try:
+            cached, _cached_type = await asyncio.to_thread(get_object, variant_path)
+            return Response(content=cached, media_type="image/webp", headers={"Cache-Control": _IMMUTABLE_CACHE})
+        except Exception:
+            pass
+
+        try:
+            source, source_type = await asyncio.to_thread(get_object, path)
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail="Source image not found") from exc
+        if not str(source_type or "").lower().startswith("image/"):
+            raise HTTPException(status_code=415, detail="Unsupported source type")
+
+        try:
+            rendered = await asyncio.to_thread(_render_webp_variant, source, width)
+            await asyncio.to_thread(put_object, variant_path, rendered, "image/webp")
+        except ValueError as exc:
+            raise HTTPException(status_code=415, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail="Image variant generation failed") from exc
+
+        return Response(content=rendered, media_type="image/webp", headers={"Cache-Control": _IMMUTABLE_CACHE})
+
+    app.state.sge_image_delivery_installed = True
+
+
 def _install_cors_hardening(server_module) -> None:
     original = getattr(server_module, "CORSMiddleware", None)
     if original is None or getattr(original, "_sge_tightened", False):
@@ -215,6 +290,15 @@ def _install_security_headers(server_module) -> None:
         forwarded_proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").lower()
         if forwarded_proto == "https":
             headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+
+        # Public product assets are content-addressed by UUID-style upload
+        # paths. They are immutable in normal catalogue operation, so browsers
+        # can safely keep them for a year. Other /api/files routes retain their
+        # existing cache behaviour.
+        if response.status_code == 200 and request.url.path.startswith("/api/files/"):
+            storage_path = request.url.path.removeprefix("/api/files/")
+            if _valid_product_path(storage_path):
+                headers["Cache-Control"] = _IMMUTABLE_CACHE
         return response
 
     app.state.sge_security_headers_installed = True
@@ -232,6 +316,7 @@ def install_runtime_hardening() -> None:
 
     _install_cors_hardening(server_module)
     _install_security_headers(server_module)
+    _install_image_delivery(server_module)
 
     if requests.get is not _guarded_requests_get:
         requests.get = _guarded_requests_get

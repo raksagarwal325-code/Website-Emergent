@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, ArrowUpRight } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { api, formatProductPrice } from "../lib/api";
 import { applyImageFrameColor } from "../lib/imageFrame";
+import { imageVariantSrcSet, imageVariantUrl } from "../lib/imageVariants";
 import { productPath } from "../lib/productUrl";
 import { LUXURY_EASE } from "../lib/motion";
 
@@ -96,16 +97,16 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
               <>
                 <button type="button" onClick={() => setActive(prevIndex)} aria-label={`Show ${items[prevIndex].name}`} className="absolute left-0 top-1/2 z-0 hidden h-[76%] w-[32%] -translate-y-1/2 overflow-hidden border border-white/12 bg-[#0b0508] opacity-[.62] transition hover:border-[#D4AF37]/35 hover:opacity-[.9] md:block" style={{ transform: "translateY(-50%) rotateY(10deg) scale(.92)", transformOrigin: "right center" }}>
                   {prevImage && <>
-                    <img data-image-atmosphere src={prevImage} alt="" aria-hidden className="absolute -inset-[10%] h-[120%] w-[120%] object-cover blur-2xl opacity-35 scale-110" loading="lazy" decoding="async" fetchPriority="low" />
+                    <img data-image-atmosphere src={imageVariantUrl(prevImage, 320)} alt="" aria-hidden className="absolute -inset-[10%] h-[120%] w-[120%] object-cover blur-2xl opacity-35 scale-110" loading="lazy" decoding="async" fetchPriority="low" />
                     <div data-image-atmosphere className="absolute inset-0 bg-[#13080f]/24" />
-                    <img src={prevImage} alt="" className="relative z-10 h-full w-full object-contain p-4" loading="lazy" decoding="async" fetchPriority="low" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
+                    <img src={imageVariantUrl(prevImage, 640)} srcSet={imageVariantSrcSet(prevImage, [320, 640])} sizes="32vw" alt="" className="relative z-10 h-full w-full object-contain p-4" loading="lazy" decoding="async" fetchPriority="low" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
                   </>}
                 </button>
                 <button type="button" onClick={() => setActive(nextIndex)} aria-label={`Show ${items[nextIndex].name}`} className="absolute right-0 top-1/2 z-0 hidden h-[76%] w-[32%] -translate-y-1/2 overflow-hidden border border-white/12 bg-[#0b0508] opacity-[.62] transition hover:border-[#D4AF37]/35 hover:opacity-[.9] md:block" style={{ transform: "translateY(-50%) rotateY(-10deg) scale(.92)", transformOrigin: "left center" }}>
                   {nextImage && <>
-                    <img data-image-atmosphere src={nextImage} alt="" aria-hidden className="absolute -inset-[10%] h-[120%] w-[120%] object-cover blur-2xl opacity-35 scale-110" loading="lazy" decoding="async" fetchPriority="low" />
+                    <img data-image-atmosphere src={imageVariantUrl(nextImage, 320)} alt="" aria-hidden className="absolute -inset-[10%] h-[120%] w-[120%] object-cover blur-2xl opacity-35 scale-110" loading="lazy" decoding="async" fetchPriority="low" />
                     <div data-image-atmosphere className="absolute inset-0 bg-[#13080f]/24" />
-                    <img src={nextImage} alt="" className="relative z-10 h-full w-full object-contain p-4" loading="lazy" decoding="async" fetchPriority="low" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
+                    <img src={imageVariantUrl(nextImage, 640)} srcSet={imageVariantSrcSet(nextImage, [320, 640])} sizes="32vw" alt="" className="relative z-10 h-full w-full object-contain p-4" loading="lazy" decoding="async" fetchPriority="low" onLoad={(event) => applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement)} />
                   </>}
                 </button>
               </>
@@ -125,7 +126,7 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
                   {currentImage && <>
                     <motion.img
                       data-image-atmosphere
-                      src={currentImage}
+                      src={imageVariantUrl(currentImage, 320)}
                       alt=""
                       aria-hidden
                       loading="lazy"
@@ -139,7 +140,9 @@ export default function SeasonalSpotlight({ products = [], eyebrow, title, viewA
                     <div data-image-atmosphere className="absolute inset-0 bg-[#12070d]/38" />
                     <div data-image-atmosphere className="absolute inset-0 bg-gradient-to-t from-[#12070d]/35 via-transparent to-[#12070d]/16" />
                     <motion.img
-                      src={currentImage}
+                      src={imageVariantUrl(currentImage, 640)}
+                      srcSet={imageVariantSrcSet(currentImage, [320, 640, 960, 1280])}
+                      sizes="(max-width: 767px) 84vw, 52vw"
                       alt={current.name}
                       className="relative z-10 max-h-[92%] max-w-[92%] object-contain p-4 md:p-8 drop-shadow-[0_18px_32px_rgba(0,0,0,.45)]"
                       loading="lazy"
