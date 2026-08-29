@@ -12,6 +12,7 @@
  */
 
 const BRAND_PREFIX = "Hi Samrat Glass Emporium,";
+const PUBLIC_SITE_ORIGIN = "https://samratglass.com";
 
 /**
  * Named prefilled messages for each public entry point. Kept in an
@@ -59,11 +60,18 @@ export const galleryProductMessage = (product, project) => {
 
 /**
  * Compose the inquiry-basket cart WhatsApp message.
+ *
+ * Each line includes the stable public product URL when an id is available.
+ * We intentionally use the production domain even from Preview so a staff
+ * member or customer never receives a temporary preview-domain link.
  */
-export const cartMessage = (items = []) => {
-  const lines = items.map(
-    (i) => `- ${i.name}${i.sku ? ` (SKU: ${i.sku})` : ""} (x${i.quantity})`,
-  );
+export const cartMessage = (items = [], siteOrigin = PUBLIC_SITE_ORIGIN) => {
+  const origin = String(siteOrigin || PUBLIC_SITE_ORIGIN).replace(/\/$/, "");
+  const lines = items.map((i) => {
+    const summary = `- ${i.name}${i.sku ? ` (SKU: ${i.sku})` : ""} (x${i.quantity})`;
+    if (!i.product_id) return summary;
+    return `${summary}\n  ${origin}/product/${encodeURIComponent(i.product_id)}`;
+  });
   return `${BRAND_PREFIX} I would like to enquire about the following items:\n${lines.join("\n")}`;
 };
 
@@ -90,5 +98,5 @@ export const waProductLink = (number, product, url) =>
   buildWaLink(number, productMessage(product, url));
 export const waGalleryProductLink = (number, product, project) =>
   buildWaLink(number, galleryProductMessage(product, project));
-export const waCartLink = (number, items) =>
-  buildWaLink(number, cartMessage(items));
+export const waCartLink = (number, items, siteOrigin) =>
+  buildWaLink(number, cartMessage(items, siteOrigin));
