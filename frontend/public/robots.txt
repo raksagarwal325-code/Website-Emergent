@@ -3,6 +3,17 @@ Allow: /
 Disallow: /admin
 Disallow: /catalogue
 
+# OpenAI product discovery and user-requested browsing.
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /admin
+Disallow: /catalogue
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /admin
+Disallow: /catalogue
+
 Sitemap: https://samratglass.com/api/sitemap.xml
 Sitemap: https://samratglass.com/sitemap.xml
 Sitemap: https://samratglass.com/authority-sitemap.xml
