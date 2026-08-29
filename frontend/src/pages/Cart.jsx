@@ -39,7 +39,7 @@ export default function Cart() {
     }
     setSubmitting(true);
     try {
-    const items = cart.map((i) => ({ product_id: i.product_id, sku: i.sku || "", name: i.name, quantity: i.quantity, price: i.price }));
+      const items = cart.map((i) => ({ product_id: i.product_id, sku: i.sku || "", name: i.name, quantity: i.quantity, price: i.price }));
       await api.createInquiry({ ...form, customer_phone: p.value, items });
       trackGenerateLead({ source: "inquiry_basket", cart_size: cart.length });
       toast.success("Inquiry sent. We'll be in touch shortly.");
@@ -52,8 +52,15 @@ export default function Cart() {
     }
   };
 
+  const hasStartingFromItems = cart.some((i) => !isItemOnRequest(i) && i.price_display === "starting_from");
+  const totalLabel = hasStartingFromItems
+    ? "Indicative starting total"
+    : hasOnRequestItems && hasPricedItems
+      ? "Priced items total"
+      : "Total";
+
   const waLink = cart.length > 0
-    ? (waCartLink(settings?.whatsapp_number, cart) || "#")
+    ? (waCartLink(settings?.whatsapp_number, cart, "https://samratglass.com") || "#")
     : "#";
 
   return (
@@ -68,7 +75,7 @@ export default function Cart() {
       <div className="mb-12">
         <div className="eyebrow mb-3">Basket</div>
         <h1 className="font-serif text-4xl sm:text-5xl">Inquiry Basket</h1>
-        <p className="text-white/60 mt-4 max-w-lg">Submit an inquiry — we&apos;ll respond with availability, private viewing options, or WhatsApp directly.</p>
+        <p className="text-white/60 mt-4 max-w-xl">Submit your selection and we&apos;ll confirm price, availability and delivery. No payment is taken online.</p>
       </div>
 
       {cart.length === 0 ? (
@@ -83,15 +90,17 @@ export default function Cart() {
           <div className="lg:col-span-7 space-y-4">
             {cart.map((i) => {
               const onRequest = isItemOnRequest(i);
+              const startingFrom = !onRequest && i.price_display === "starting_from";
               return (
               <div key={i.product_id} data-testid={`cart-item-${i.product_id}`} className="flex gap-5 border border-white/10 p-5">
                 <div className="w-24 h-24 overflow-hidden bg-[#0a0a0a] flex items-center justify-center p-2 flex-shrink-0">
                   {i.image && <img src={api.resolveImage(i.image)} alt={i.name} className="max-w-full max-h-full w-auto h-auto object-contain object-center" />}
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="font-serif text-lg">{i.name}</div>
+                  {i.sku && <div className="text-white/40 text-xs mt-1">Reference Code: {i.sku}</div>}
                   <div data-testid={`cart-item-unit-price-${i.product_id}`} className="text-white/60 text-sm mt-1">
-                    {onRequest ? "Price on request" : formatPrice(i.price)}
+                    {onRequest ? "Price on request" : `${startingFrom ? "From " : ""}${formatPrice(i.price)}`}
                   </div>
                   <div className="flex items-center gap-3 mt-3">
                     <button data-testid={`qty-minus-${i.product_id}`} onClick={() => updateQty(i.product_id, i.quantity - 1)} className="w-8 h-8 border border-white/15 hover:border-[#D4AF37]"><Minus size={12} className="mx-auto" /></button>
@@ -100,37 +109,41 @@ export default function Cart() {
                     <button data-testid={`remove-${i.product_id}`} onClick={() => removeFromCart(i.product_id)} className="ml-4 text-white/50 hover:text-red-400"><Trash2 size={14} /></button>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex-shrink-0">
                   <div data-testid={`cart-item-line-total-${i.product_id}`} className="text-[#D4AF37] font-serif">
-                    {onRequest ? "Price on request" : formatPrice(i.price * i.quantity)}
+                    {onRequest ? "Price on request" : `${startingFrom ? "From " : ""}${formatPrice(i.price * i.quantity)}`}
                   </div>
                 </div>
               </div>
               );
             })}
 
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 text-white/80">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 pt-4 text-white/80">
               <button onClick={clearCart} data-testid="clear-basket-btn" className="text-xs uppercase tracking-[0.28em] text-white/50 hover:text-red-400 self-start">Clear basket</button>
-              <div className="text-right sm:text-right">
+              <div className="text-right sm:text-right max-w-sm">
+                <div className="text-sm text-white/60 mb-1">{totalLabel}</div>
                 <div className="text-lg">
-                  Total:{" "}
                   {hasPricedItems ? (
                     <span data-testid="cart-total" className="text-[#D4AF37] font-serif text-2xl">{formatPrice(cartTotal)}</span>
                   ) : (
                     <span data-testid="cart-total-on-request" className="text-[#D4AF37] font-serif text-2xl">Price on request</span>
                   )}
                 </div>
+                {hasStartingFromItems && (
+                  <div data-testid="cart-starting-total-note" className="text-white/60 text-xs mt-2">Final quotation will be confirmed on inquiry.</div>
+                )}
                 {hasPricedItems && hasOnRequestItems && (
-                  <div data-testid="cart-mixed-note" className="text-white/60 text-xs mt-2">
-                    Some products are priced on request.
-                  </div>
+                  <div data-testid="cart-mixed-note" className="text-white/60 text-xs mt-2">Some products are priced on request and are not included in the amount above.</div>
                 )}
               </div>
             </div>
           </div>
 
           <form onSubmit={submit} className="lg:col-span-5 border border-white/10 p-8 space-y-5">
-            <div className="eyebrow mb-2">Send Inquiry</div>
+            <div>
+              <div className="eyebrow mb-2">Send Inquiry</div>
+              <p className="text-xs leading-relaxed text-white/55">No payment is taken online. Send your selection and we&apos;ll confirm price, availability and delivery with you directly.</p>
+            </div>
             <input required data-testid="inq-name" placeholder="Full name" value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
             <input required type="email" data-testid="inq-email" placeholder="Email" value={form.customer_email} onChange={(e) => setForm({ ...form, customer_email: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
             <input data-testid="inq-phone" required type="tel" inputMode="tel" autoComplete="tel" placeholder="Mobile / WhatsApp Number" value={form.customer_phone} onChange={(e) => { setForm({ ...form, customer_phone: e.target.value }); if (phoneError) setPhoneError(""); }} className={`w-full bg-[#0a0a0a] border ${phoneError ? "border-red-500/70" : "border-white/15"} focus:border-[#D4AF37] outline-none px-4 py-3 text-sm`} />
