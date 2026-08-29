@@ -2,9 +2,22 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const FILE_MARKER = "/api/files/";
 const WIDTHS = new Set([320, 640, 960, 1280]);
 
+function isEmergentPreviewHost() {
+  if (typeof window === "undefined") return false;
+  const host = String(window.location?.hostname || "").toLowerCase();
+  return host.endsWith(".preview.emergentagent.com");
+}
+
 export function imageVariantUrl(src, width) {
   if (!src || !WIDTHS.has(Number(width))) return src || "";
   const value = String(src);
+
+  // Emergent Preview can serve the original uploaded product image even when
+  // the production-only responsive variant route is temporarily unavailable.
+  // Prefer the master there so Preview remains visually trustworthy; the
+  // production site continues using optimized WebP variants normally.
+  if (isEmergentPreviewHost()) return value;
+
   const markerIndex = value.indexOf(FILE_MARKER);
   if (markerIndex < 0) return value;
 
@@ -23,7 +36,7 @@ export function imageVariantUrl(src, width) {
 }
 
 export function imageVariantSrcSet(src, widths = [320, 640, 960, 1280]) {
-  if (!src) return undefined;
+  if (!src || isEmergentPreviewHost()) return undefined;
   const variants = widths
     .filter((width) => WIDTHS.has(Number(width)))
     .map((width) => `${imageVariantUrl(src, Number(width))} ${Number(width)}w`);

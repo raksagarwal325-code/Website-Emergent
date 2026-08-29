@@ -197,6 +197,14 @@ button, input, select, textarea {
   .trusted-marquee-track { animation: none; }
 }
 
+/* On phones, the Styled By carousel already has dedicated previous/next
+   controls. Hiding its long dot row keeps the section calm and avoids a
+   cluttered line of 20+ gold markers when many styled looks are published. */
+@media (max-width: 639px) {
+  [data-testid="influencer-carousel-dots"] {
+    display: none !important;
+  }
+}
 
 /* Print styles for PDF export */
 @media print {
