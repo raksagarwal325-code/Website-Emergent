@@ -32,7 +32,10 @@ html, body, #root {
   min-height: 100vh;
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  /* `hidden` creates a scrolling ancestor and can break position: sticky.
+     `clip` keeps horizontal overflow contained without changing the sticky
+     containing block used by the site header and catalog category switcher. */
+  overflow-x: clip;
   overscroll-behavior-x: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
