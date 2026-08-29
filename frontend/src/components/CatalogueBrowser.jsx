@@ -8,7 +8,7 @@ import { Slider } from "./ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 const PAGE_SIZE = 24;
-const PRICE_CAP = 60000;
+const FALLBACK_PRICE_CEILING = 60000;
 const VALID_SORTS = new Set(["newest", "price_asc", "price_desc", "rating", "name"]);
 const normalizeSort = (value) => (VALID_SORTS.has(value) ? value : "newest");
 
@@ -23,9 +23,11 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
   const [q, setQ] = useState(() => searchParams.get("q") || "");
   const [category, setCategory] = useState(() => lockedCategory || searchParams.get("category") || "all");
   const [sort, setSort] = useState(() => normalizeSort(searchParams.get("sort")));
-  const [priceRange, setPriceRange] = useState([0, PRICE_CAP]);
+  const [priceCeiling, setPriceCeiling] = useState(FALLBACK_PRICE_CEILING);
+  const [priceRange, setPriceRange] = useState([0, FALLBACK_PRICE_CEILING]);
   const [showFilters, setShowFilters] = useState(false);
   const requestKeyRef = useRef(0);
+  const priceCeilingLoadedRef = useRef(false);
   const gridTopRef = useRef(null);
 
   const parsePage = (raw) => {
@@ -34,6 +36,23 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
     return n;
   };
   const currentPage = parsePage(searchParams.get("page"));
+
+  useEffect(() => {
+    if (!showFilters || priceCeilingLoadedRef.current) return undefined;
+    priceCeilingLoadedRef.current = true;
+    let alive = true;
+    api.listProducts({ sort: "price_desc", page: 1, limit: 1 }).then((res) => {
+      if (!alive) return;
+      const highest = Number(res?.items?.[0]?.price);
+      if (!Number.isFinite(highest) || highest <= 0) return;
+      setPriceCeiling(highest);
+      setPriceRange((current) => {
+        const upperWasUnbounded = current[1] >= FALLBACK_PRICE_CEILING;
+        return upperWasUnbounded ? [current[0], highest] : [current[0], Math.min(current[1], highest)];
+      });
+    }).catch(() => { priceCeilingLoadedRef.current = false; });
+    return () => { alive = false; };
+  }, [showFilters]);
 
   useEffect(() => {
     const nextQ = searchParams.get("q") || "";
@@ -65,7 +84,7 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
     if (q) params.q = q;
     if (category !== "all") params.category = category;
     if (priceRange[0] > 0) params.min_price = priceRange[0];
-    if (priceRange[1] < PRICE_CAP) params.max_price = priceRange[1];
+    if (priceRange[1] < priceCeiling) params.max_price = priceRange[1];
     return params;
   };
 
@@ -113,7 +132,7 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
     }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, category, sort, priceRange, lockedCategory, currentPage]);
+  }, [q, category, sort, priceRange, priceCeiling, lockedCategory, currentPage]);
 
   const updateSearch = (nextQ) => {
     setQ(nextQ);
@@ -150,7 +169,7 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
     setQ("");
     if (!lockedCategory) setCategory("all");
     setSort("newest");
-    setPriceRange([0, PRICE_CAP]);
+    setPriceRange([0, priceCeiling]);
     const next = new URLSearchParams(searchParams);
     next.delete("q");
     next.delete("sort");
@@ -187,7 +206,7 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
         <aside data-testid="filters-panel" className="mb-8 border border-white/10 bg-[#11070e]/80 p-5 no-print md:p-6">
           <div className="grid gap-8 lg:grid-cols-[1fr_0.7fr_auto] lg:items-end">
             {!lockedCategory ? <div><div className="eyebrow mb-4">Category</div><div className="flex flex-wrap gap-x-5 gap-y-3"><button data-testid="cat-all" onClick={() => setCategory("all")} className={`text-sm ${category === "all" ? "text-[#D4AF37]" : "text-white/65 hover:text-white"}`}>All</button>{categories.map((c) => <button key={c.slug || c.db_name} data-testid={`cat-${String(c.db_name).replace(/\s+/g, "-").toLowerCase()}`} onClick={() => setCategory(c.db_name)} className={`text-sm ${category === c.db_name ? "text-[#D4AF37]" : "text-white/65 hover:text-white"}`}>{c.label || c.db_name}</button>)}</div></div> : <div><div className="eyebrow mb-3">Collection</div><div className="font-serif text-xl text-white">{categories.find((c) => c.db_name === lockedCategory)?.label || lockedCategory}</div></div>}
-            <div><div className="eyebrow mb-4">Price</div><Slider data-testid="price-slider" min={0} max={PRICE_CAP} step={500} value={priceRange} onValueChange={setPriceRange} className="mb-4" /><div className="flex items-center justify-between text-xs text-white/60"><span>₹{priceRange[0].toLocaleString("en-IN")}</span><span data-testid="price-upper-label">{priceRange[1] >= PRICE_CAP ? `₹${PRICE_CAP.toLocaleString("en-IN")}+` : `₹${priceRange[1].toLocaleString("en-IN")}`}</span></div><p className="mt-2 text-[10px] leading-relaxed text-white/40">₹60,000+ includes all higher-priced pieces.</p></div>
+            <div><div className="eyebrow mb-4">Price</div><Slider data-testid="price-slider" min={0} max={priceCeiling} step={500} value={priceRange} onValueChange={setPriceRange} className="mb-4" /><div className="flex items-center justify-between text-xs text-white/60"><span>₹{priceRange[0].toLocaleString("en-IN")}</span><span data-testid="price-upper-label">₹{priceRange[1].toLocaleString("en-IN")}</span></div><p className="mt-2 text-[10px] leading-relaxed text-white/40">Price range automatically follows the highest-priced piece currently in the catalogue.</p></div>
             <button data-testid="clear-filters-btn" onClick={clearFilters} className="justify-self-start text-xs uppercase tracking-[0.2em] text-white/60 link-underline hover:text-white lg:justify-self-end">Clear all</button>
           </div>
         </aside>
