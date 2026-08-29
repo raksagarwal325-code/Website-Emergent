@@ -27,6 +27,7 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
   const [priceRange, setPriceRange] = useState([0, FALLBACK_PRICE_CEILING]);
   const [showFilters, setShowFilters] = useState(false);
   const requestKeyRef = useRef(0);
+  const priceCeilingLoadedRef = useRef(false);
   const gridTopRef = useRef(null);
 
   const parsePage = (raw) => {
@@ -37,6 +38,8 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
   const currentPage = parsePage(searchParams.get("page"));
 
   useEffect(() => {
+    if (!showFilters || priceCeilingLoadedRef.current) return undefined;
+    priceCeilingLoadedRef.current = true;
     let alive = true;
     api.listProducts({ sort: "price_desc", page: 1, limit: 1 }).then((res) => {
       if (!alive) return;
@@ -47,9 +50,9 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
         const upperWasUnbounded = current[1] >= FALLBACK_PRICE_CEILING;
         return upperWasUnbounded ? [current[0], highest] : [current[0], Math.min(current[1], highest)];
       });
-    }).catch(() => {});
+    }).catch(() => { priceCeilingLoadedRef.current = false; });
     return () => { alive = false; };
-  }, []);
+  }, [showFilters]);
 
   useEffect(() => {
     const nextQ = searchParams.get("q") || "";
