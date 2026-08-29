@@ -1,0 +1,5 @@
+@media (max-width: 1023px) {
+  [data-testid="shop-by-space-section"] .grid.grid-cols-2 > button:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
