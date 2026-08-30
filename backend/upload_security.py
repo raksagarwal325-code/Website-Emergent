@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import inspect
 import io
-import os
 import struct
 from typing import Iterable
 
@@ -40,30 +39,14 @@ _DEFAULT_CORS_ORIGINS = (
 )
 
 
-def configured_cors_origins(env: dict[str, str] | None = None) -> list[str]:
-    """Return exact credentialed CORS origins.
+def configured_cors_origins() -> list[str]:
+    """Return the exact credentialed CORS allowlist.
 
-    Production origins are always present. Emergent Preview, if it needs a
-    cross-origin backend request, must be supplied explicitly through
-    CORS_ALLOWED_ORIGINS as a comma-separated list of complete origins. This
-    intentionally does not accept wildcard host patterns.
+    Emergent Preview uses its same-origin API path, so it does not require a
+    cross-origin exception here. Keeping the allowlist static avoids turning a
+    deployment environment value into a credentialed CORS trust decision.
     """
-    source = os.environ if env is None else env
-    origins = list(_DEFAULT_CORS_ORIGINS)
-    for raw in str(source.get("CORS_ALLOWED_ORIGINS", "") or "").split(","):
-        origin = raw.strip().rstrip("/")
-        if not origin or origin in origins:
-            continue
-        if not origin.startswith("https://"):
-            continue
-        # Exact origins only: no regex/glob tokens and no path/query/fragment.
-        if any(token in origin for token in ("*", "[", "]", "(", ")", "\\")):
-            continue
-        host_part = origin.removeprefix("https://")
-        if not host_part or any(ch in host_part for ch in ("/", "?", "#")):
-            continue
-        origins.append(origin)
-    return origins
+    return list(_DEFAULT_CORS_ORIGINS)
 
 
 def _strict_image_container(data: bytes, fmt: str) -> None:
