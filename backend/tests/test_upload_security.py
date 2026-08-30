@@ -36,27 +36,14 @@ def test_fake_video_bytes_are_rejected():
         validate_upload_bytes(b"not-an-mp4-at-all", "video/mp4")
 
 
-def test_cors_origins_are_exact_and_wildcards_are_ignored():
-    origins = configured_cors_origins(
-        {
-            "CORS_ALLOWED_ORIGINS": (
-                "https://exact.preview.emergentagent.com,"
-                "https://*.preview.emergentagent.com,"
-                "https://bad.example/path,"
-                "http://insecure.example"
-            )
-        }
-    )
-    assert "https://samratglass.com" in origins
-    assert "https://www.samratglass.com" in origins
-    assert "https://exact.preview.emergentagent.com" in origins
-    assert "https://*.preview.emergentagent.com" not in origins
-    assert "https://bad.example/path" not in origins
-    assert "http://insecure.example" not in origins
+def test_cors_origins_are_static_exact_production_origins():
+    assert configured_cors_origins() == [
+        "https://samratglass.com",
+        "https://www.samratglass.com",
+    ]
 
 
-def test_untrusted_origin_fails_credentialed_cors_preflight(monkeypatch):
-    monkeypatch.delenv("CORS_ALLOWED_ORIGINS", raising=False)
+def test_untrusted_origin_fails_credentialed_cors_preflight():
     inner = Starlette()
 
     @inner.route("/")
