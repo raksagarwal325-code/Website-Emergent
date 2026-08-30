@@ -22,6 +22,8 @@ from urllib.parse import urlparse
 
 import requests
 
+from upload_security import configured_cors_origins, install_upload_validation
+
 _INSTALLED = False
 _ORIGINAL_REQUESTS_GET = requests.get
 
@@ -258,9 +260,12 @@ def _install_cors_hardening(server_module) -> None:
         _sge_tightened = True
 
         def __init__(self, app, *args, **kwargs):
-            # server.py still supplies the origin regex / credentials policy;
-            # replace only the two wildcard settings that were broader than
-            # the browser client needs.
+            # Ignore server.py's historic broad fallback regex entirely.
+            # Credentialed cross-origin requests are accepted only from the
+            # two exact production origins. Emergent Preview uses the
+            # same-origin API path and needs no wildcard CORS exception.
+            kwargs["allow_origins"] = configured_cors_origins()
+            kwargs["allow_origin_regex"] = None
             kwargs["allow_methods"] = list(_ALLOWED_CORS_METHODS)
             kwargs["allow_headers"] = list(_ALLOWED_CORS_HEADERS)
             super().__init__(app, *args, **kwargs)
@@ -317,6 +322,7 @@ def install_runtime_hardening() -> None:
     _install_cors_hardening(server_module)
     _install_security_headers(server_module)
     _install_image_delivery(server_module)
+    install_upload_validation()
 
     if requests.get is not _guarded_requests_get:
         requests.get = _guarded_requests_get
