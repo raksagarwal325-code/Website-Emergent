@@ -889,13 +889,14 @@ async def admin_products_export(admin: _AdminUser = Depends(require_admin)):
     return {"items": docs, "total": len(docs)}
 
 
-@api.get("/commerce/products.csv")
-async def commerce_products_feed():
-    """Public OpenAI/Google-compatible feed of safely eligible products.
+@api.get("/admin/commerce/products.csv")
+async def admin_commerce_products_feed(admin: _AdminUser = Depends(require_admin)):
+    """Admin-only OpenAI/Google-compatible feed of safely eligible products.
 
     Drafts, non-INR rows, zero prices, and products whose visible pricing
-    mode is ``on_request`` are excluded. This prevents private or placeholder
-    values from becoming public commerce data.
+    mode is ``on_request`` are excluded. Authentication prevents the catalogue
+    from being bulk-downloaded through a public URL while individual published
+    product pages remain available to search and shopping crawlers.
     """
     docs = await db.products.find(
         {"status": "published"}, {"_id": 0}
@@ -918,8 +919,8 @@ async def commerce_products_feed():
         content=output.getvalue(),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Cache-Control": "public, max-age=900",
-            "Content-Disposition": 'inline; filename="samrat-glass-openai-products.csv"',
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": 'attachment; filename="samrat-glass-openai-products.csv"',
             "X-Commerce-Eligible-Products": str(len(rows)),
         },
     )
@@ -951,7 +952,7 @@ async def admin_commerce_readiness(admin: _AdminUser = Depends(require_admin)):
         "excluded_items": excluded,
         "warning_counts": warning_counts,
         "warning_items": warning_items,
-        "feed_url": f"{_SITE_ORIGIN}/api/commerce/products.csv",
+        "feed_url": f"{_SITE_ORIGIN}/api/admin/commerce/products.csv",
     }
 
 
