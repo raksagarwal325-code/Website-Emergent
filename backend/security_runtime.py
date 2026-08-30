@@ -261,8 +261,9 @@ def _install_cors_hardening(server_module) -> None:
 
         def __init__(self, app, *args, **kwargs):
             # Ignore server.py's historic broad fallback regex entirely.
-            # Credentialed requests are accepted only from exact production
-            # origins plus exact preview origins supplied in CORS_ALLOWED_ORIGINS.
+            # Credentialed cross-origin requests are accepted only from the
+            # two exact production origins. Emergent Preview uses the
+            # same-origin API path and needs no wildcard CORS exception.
             kwargs["allow_origins"] = configured_cors_origins()
             kwargs["allow_origin_regex"] = None
             kwargs["allow_methods"] = list(_ALLOWED_CORS_METHODS)
