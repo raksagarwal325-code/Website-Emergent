@@ -49,8 +49,6 @@ on:
   pull_request:
     branches: [main]
 
-# Cancel superseded runs on the same branch so a rapid push chain doesn't
-# hog runners. Does not affect main-branch pushes.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -59,24 +57,16 @@ permissions:
   contents: read
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # 1) Backend — pytest against an ephemeral MongoDB service.
-  # ---------------------------------------------------------------------------
   backend:
     name: Backend tests (pytest)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     services:
-      # Ephemeral, empty MongoDB spun up JUST for this job. GitHub Actions
-      # tears it down when the job ends — production Mongo is never touched.
       mongodb:
         image: mongo:6
         ports:
           - 27017:27017
-        # Health-check gates the job on Mongo actually being READY, not just
-        # the port being bound. Prevents "connection refused" flakes on the
-        # first test that runs before mongod is done initialising.
         options: >-
           --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' | grep 1"
           --health-interval 5s
@@ -85,20 +75,17 @@ jobs:
           --health-start-period 10s
 
     env:
-      # Point the backend at the ephemeral CI Mongo, NOT production.
       MONGO_URL: "mongodb://localhost:27017"
       DB_NAME: "test_ci_${{ github.run_id }}"
-      # A dev-only session token the pytest suite already recognises for the
-      # admin-facing tests (see backend/tests/conftest.py). No secrets.
       ADMIN_EMAILS: "raks.agarwal325@gmail.com"
       REACT_APP_BACKEND_URL: "http://localhost:8001"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: "pip"
@@ -107,22 +94,11 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          # `emergentintegrations` is an Emergent-internal package hosted on
-          # a private CloudFront index and is NOT available from public PyPI.
-          # It is intentionally kept in backend/requirements.txt so the
-          # production/preview deploy containers (which do have that index
-          # configured) install it correctly. In GitHub Actions we skip it
-          # here so pytest can still exercise the rest of the suite; any
-          # tests that require the LLM integration are already gated on
-          # the runtime module import.
           grep -v -E '^\s*emergentintegrations([<>=!~ ].*)?$' backend/requirements.txt > /tmp/ci-requirements.txt
           pip install -r /tmp/ci-requirements.txt
 
       - name: Wait for MongoDB to accept connections
         run: |
-          # Belt-and-braces on top of the service health-check: ping until
-          # ready or fail after ~60s. mongosh isn't installed on the runner,
-          # so use a tiny python one-liner.
           python - <<'PY'
           import socket, time, sys
           deadline = time.time() + 60
@@ -138,22 +114,16 @@ jobs:
 
       - name: Seed admin test session (matches conftest expectations)
         run: |
-          # The pytest suite uses a fixed session_token=test_admin_session
-          # cookie to hit admin endpoints. conftest.py handles the seeding
-          # inside the backend process when it starts; here we just make
-          # sure the DB exists.
           echo "MONGO_URL=$MONGO_URL DB_NAME=$DB_NAME"
+
       - name: Prepare backend CI runtime
         run: |
-          # Existing pytest fixtures expect Emergent-style absolute env paths.
           sudo mkdir -p /app/backend /app/frontend
           printf 'MONGO_URL=%s\nDB_NAME=%s\n' "$MONGO_URL" "$DB_NAME" \
             | sudo tee /app/backend/.env >/dev/null
           printf 'REACT_APP_BACKEND_URL=%s\n' "$REACT_APP_BACKEND_URL" \
             | sudo tee /app/frontend/.env >/dev/null
 
-          # conftest.py invokes `mongosh` directly. The Mongo service container
-          # already contains mongosh, so expose a tiny host-side wrapper.
           sudo tee /usr/local/bin/mongosh >/dev/null <<'SH'
           #!/usr/bin/env bash
           set -e
@@ -206,12 +176,10 @@ jobs:
           )
           sys.exit(1)
           PY
+
       - name: Run backend pytest (serial mode — matches audited-green run)
         working-directory: backend
         env:
-          # Serial mode: the parallel xdist run has known pre-existing
-          # flakes (documented in the fork handoff) that are unrelated to
-          # this CI gate. -n 0 matches the 184/184-green baseline we ship.
           PYTEST_ADDOPTS: "-n 0"
         run: |
           python -m pytest tests/ -q --tb=short
@@ -222,9 +190,6 @@ jobs:
           echo "--- /tmp/backend.log ---"
           tail -n 200 /tmp/backend.log || true
 
-  # ---------------------------------------------------------------------------
-  # 2) Frontend Jest / RTL suite.
-  # ---------------------------------------------------------------------------
   frontend-tests:
     name: Frontend tests (Jest)
     runs-on: ubuntu-latest
@@ -236,10 +201,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node 20.20.2
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20.20.2"
           cache: "yarn"
@@ -253,14 +218,6 @@ jobs:
           CI: "true"
         run: yarn test --watchAll=false
 
-  # ---------------------------------------------------------------------------
-  # 3) Frontend production build + category-prerender assertion.
-  #
-  # Uses the EXACT command the developer audit proved successful:
-  #     PRERENDER_API_URL=https://samratglass.com
-  #     REACT_APP_BACKEND_URL=https://samratglass.com
-  #     CI=false GENERATE_SOURCEMAP=false yarn build
-  # ---------------------------------------------------------------------------
   frontend-build:
     name: Frontend production build + prerender
     runs-on: ubuntu-latest
@@ -272,10 +229,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node 20.20.2
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20.20.2"
           cache: "yarn"
@@ -286,13 +243,8 @@ jobs:
 
       - name: Production build + postbuild prerender
         env:
-          # See note at top of file: this is deliberately the live prod API.
-          # Replace with a deterministic CI fixture once the follow-up lands.
           PRERENDER_API_URL: "https://samratglass.com"
           REACT_APP_BACKEND_URL: "https://samratglass.com"
-          # CRA's CI=true converts warnings into errors; we keep warnings
-          # non-fatal because the current tree has known cosmetic Tailwind
-          # ambiguous-class warnings that aren't blocking the ship.
           CI: "false"
           GENERATE_SOURCEMAP: "false"
         run: yarn build
@@ -303,10 +255,6 @@ jobs:
             || { echo "::error::build/index.html missing or empty"; exit 1; }
 
       - name: Assert every expected category prerender HTML file exists
-        # Slug-driven, not count-driven: we validate the exact expected list
-        # from frontend/src/lib/categories.data.json. A future accidental
-        # rename or deletion inside categories.data.json will fail here
-        # loudly instead of silently shipping a broken sitemap.
         run: |
           set -euo pipefail
           expected_slugs=(
@@ -333,7 +281,6 @@ jobs:
             printf '::error:: - %s\n' "${missing[@]}"
             exit 1
           fi
-          # Belt-and-braces: nothing UNEXPECTED slipped in either.
           found=$(ls build/category | sort)
           expected=$(printf '%s\n' "${expected_slugs[@]}" | sort)
           if [ "$found" != "$expected" ]; then
