@@ -80,7 +80,11 @@ def test_api_security_headers_present():
 
 
 def test_cors_allows_only_expected_request_headers():
-    origin = "https://security-test.emergentagent.com"
+    # Runtime hardening now permits credentialed cross-origin requests only
+    # from the exact production origins. Use a trusted production origin here
+    # so this test continues to exercise the allowed-header policy rather than
+    # the separate untrusted-origin rejection policy.
+    origin = "https://samratglass.com"
     with httpx.Client(base_url=API, timeout=15) as client:
         good = client.options(
             "/settings",
