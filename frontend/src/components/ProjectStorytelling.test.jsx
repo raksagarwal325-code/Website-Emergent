@@ -54,4 +54,25 @@ describe("ProjectStorytelling", () => {
     fireEvent.click(screen.getByTestId("project-story-image-1"));
     expect(onImageOpen).toHaveBeenCalledWith(1);
   });
+
+  it("labels a standard catalogue setup as Configuration rather than Customisation", () => {
+    const standardProject = {
+      ...project,
+      customisation: "Standard catalogue configuration",
+    };
+
+    render(
+      <ProjectStorytelling
+        project={standardProject}
+        images={[]}
+        productPresentation={productPresentation}
+        linkedProducts={[{ id: "p1" }]}
+        optionalSnapshot={[["Customisation", "Standard catalogue configuration"]]}
+      />
+    );
+
+    expect(screen.getAllByText("Configuration")).toHaveLength(2);
+    expect(screen.queryByText("Customisation")).toBeNull();
+    expect(screen.getAllByText("Standard catalogue configuration")).toHaveLength(2);
+  });
 });

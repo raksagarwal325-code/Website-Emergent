@@ -1,3 +1,13 @@
+const trimTerminalPunctuation = (value = "") => String(value).trim().replace(/[.!?]+$/g, "");
+
+export function isStandardCatalogueConfiguration(value) {
+  return trimTerminalPunctuation(value).toLowerCase() === "standard catalogue configuration";
+}
+
+export function projectConfigurationLabel(value) {
+  return isStandardCatalogueConfiguration(value) ? "Configuration" : "Customisation";
+}
+
 export function projectProductPresentation(products = []) {
   const linked = Array.isArray(products) ? products.filter(Boolean) : [];
   const count = linked.length;
@@ -31,8 +41,15 @@ export function projectQuickAnswer({ location, customisation, products = [] }) {
   const productText = linked
     .map((product) => `${product.name}${product.sku ? ` (${product.sku})` : ""}`)
     .join(linked.length > 1 ? "; and " : "");
-  const verb = linked.length > 1 ? "uses" : "uses";
   const pieceText = linked.length > 1 ? "catalogue pieces" : "catalogue piece";
+  const cleanCustomisation = trimTerminalPunctuation(customisation);
 
-  return `${location ? `This ${location} installation ${verb}` : `This installation ${verb}`} ${productText}, linked directly to the exact Samrat Glass Emporium ${pieceText}. The photographs on this page are from the real client space${customisation ? `, with ${customisation}` : ""}.`;
+  let configurationSentence = "";
+  if (cleanCustomisation) {
+    configurationSentence = isStandardCatalogueConfiguration(cleanCustomisation)
+      ? " The installation uses the standard catalogue configuration."
+      : ` Customisation: ${cleanCustomisation}.`;
+  }
+
+  return `${location ? `This ${location} installation uses` : "This installation uses"} ${productText}, linked directly to the exact Samrat Glass Emporium ${pieceText}. The photographs on this page are from the real client space.${configurationSentence}`;
 }
