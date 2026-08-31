@@ -37,8 +37,8 @@ describe("normalizeHomepageClaims", () => {
 
     expect(result.hero.description).toContain("handcrafted and hand-assembled");
     expect(result.hero.description).toContain("processes varying by design");
-    expect(result.collage.title).toBe("500+ Pieces");
-    expect(result.collage.highlight).toBe("Online");
+    expect(result.collage.title).toBe("1000+ Light Options");
+    expect(result.collage.highlight).toBe("Inside");
     expect(result.collage.stats[0]).toEqual({ value: "1000+", label: "Designs" });
     expect(result.reasons.items[0].body).toContain("techniques appropriate to each design");
     expect(result.faq.items[0].a).toContain("dispatch in 7–10 business days");

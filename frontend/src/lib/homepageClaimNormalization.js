@@ -40,13 +40,10 @@ export function normalizeHomepageClaims(homepage) {
   }
 
   if (homepage.collage && typeof homepage.collage === "object") {
+    // Keep the owner's established 1000+ light-options/design-library claim.
+    // Do not tie this marketing/library statement to the momentary count of
+    // currently published online SKUs.
     out.collage = { ...homepage.collage };
-    // Preserve the separate 1000+ design-library claim, but do not imply that
-    // 1000+ products are currently browsable in the online catalogue.
-    if (out.collage.title === "1000+ Light Options" && out.collage.highlight === "Inside") {
-      out.collage.title = "500+ Pieces";
-      out.collage.highlight = "Online";
-    }
   }
 
   if (homepage.reasons && typeof homepage.reasons === "object") {
