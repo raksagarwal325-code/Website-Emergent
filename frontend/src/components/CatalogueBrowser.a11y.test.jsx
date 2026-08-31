@@ -2,9 +2,11 @@ import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
+const mockListProducts = jest.fn();
+
 jest.mock("../lib/api", () => ({
   api: {
-    listProducts: jest.fn(() => Promise.resolve({ items: [], total: 0, total_pages: 1 })),
+    listProducts: (...args) => mockListProducts(...args),
   },
 }));
 
@@ -24,6 +26,11 @@ function renderBrowser() {
 }
 
 describe("CatalogueBrowser accessibility", () => {
+  beforeEach(() => {
+    mockListProducts.mockReset();
+    mockListProducts.mockResolvedValue({ items: [], total: 0, total_pages: 1 });
+  });
+
   test("search input has a persistent programmatic label", () => {
     renderBrowser();
     const input = screen.getByRole("searchbox", { name: "Search catalogue" });
