@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { pageView, installWhatsAppClickListener } from "../lib/analytics";
+import { installProductNotFoundSeoGuard } from "../lib/productNotFoundSeo";
 
 /**
  * Fires a single `page_view` to GA4 on initial mount and whenever the
@@ -16,6 +17,7 @@ export default function AnalyticsRouteTracker() {
   const location = useLocation();
   useEffect(() => {
     installWhatsAppClickListener();
+    return installProductNotFoundSeoGuard();
   }, []);
   useEffect(() => {
     pageView({ path: location.pathname, search: location.search });
