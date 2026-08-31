@@ -94,10 +94,10 @@ export default function Cart() {
                     {i.sku && <div className="text-white/40 text-xs mt-1">Reference Code: {i.sku}</div>}
                     <div data-testid={`cart-item-unit-price-${i.product_id}`} className="text-white/60 text-sm mt-1">{onRequest ? "Price on request" : `${startingFrom ? "From " : ""}${formatPrice(i.price)}`}</div>
                     <div className="flex items-center gap-3 mt-3">
-                      <button data-testid={`qty-minus-${i.product_id}`} onClick={() => updateQty(i.product_id, i.quantity - 1)} className="w-8 h-8 border border-white/15 hover:border-[#D4AF37]"><Minus size={12} className="mx-auto" /></button>
-                      <span data-testid={`qty-${i.product_id}`} className="text-sm w-6 text-center">{i.quantity}</span>
-                      <button data-testid={`qty-plus-${i.product_id}`} onClick={() => updateQty(i.product_id, i.quantity + 1)} className="w-8 h-8 border border-white/15 hover:border-[#D4AF37]"><Plus size={12} className="mx-auto" /></button>
-                      <button data-testid={`remove-${i.product_id}`} onClick={() => removeFromCart(i.product_id)} className="ml-4 text-white/50 hover:text-red-400"><Trash2 size={14} /></button>
+                      <button type="button" aria-label={`Decrease quantity of ${i.name}`} data-testid={`qty-minus-${i.product_id}`} onClick={() => updateQty(i.product_id, i.quantity - 1)} className="w-8 h-8 border border-white/15 hover:border-[#D4AF37]"><Minus size={12} className="mx-auto" aria-hidden="true" /></button>
+                      <span data-testid={`qty-${i.product_id}`} className="text-sm w-6 text-center" aria-live="polite" aria-label={`Quantity ${i.quantity}`}>{i.quantity}</span>
+                      <button type="button" aria-label={`Increase quantity of ${i.name}`} data-testid={`qty-plus-${i.product_id}`} onClick={() => updateQty(i.product_id, i.quantity + 1)} className="w-8 h-8 border border-white/15 hover:border-[#D4AF37]"><Plus size={12} className="mx-auto" aria-hidden="true" /></button>
+                      <button type="button" aria-label={`Remove ${i.name} from inquiry basket`} data-testid={`remove-${i.product_id}`} onClick={() => removeFromCart(i.product_id)} className="ml-4 text-white/50 hover:text-red-400"><Trash2 size={14} aria-hidden="true" /></button>
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0"><div data-testid={`cart-item-line-total-${i.product_id}`} className="text-[#D4AF37] font-serif">{onRequest ? "Price on request" : `${startingFrom ? "From " : ""}${formatPrice(i.price * i.quantity)}`}</div></div>
@@ -106,7 +106,7 @@ export default function Cart() {
             })}
 
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 pt-4 text-white/80">
-              <button onClick={clearCart} data-testid="clear-basket-btn" className="text-xs uppercase tracking-[0.28em] text-white/50 hover:text-red-400 self-start">Clear basket</button>
+              <button type="button" onClick={clearCart} data-testid="clear-basket-btn" className="text-xs uppercase tracking-[0.28em] text-white/50 hover:text-red-400 self-start">Clear basket</button>
               <div className="text-right sm:text-right max-w-sm">
                 <div className="text-sm text-white/60 mb-1">{totalLabel}</div>
                 <div className="text-lg">{hasPricedItems ? <span data-testid="cart-total" className="text-[#D4AF37] font-serif text-2xl">{formatPrice(cartTotal)}</span> : <span data-testid="cart-total-on-request" className="text-[#D4AF37] font-serif text-2xl">Price on request</span>}</div>
@@ -116,15 +116,27 @@ export default function Cart() {
             </div>
           </div>
 
-          <form onSubmit={submit} className="lg:col-span-5 border border-white/10 p-8 space-y-5">
-            <div><div className="eyebrow mb-2">Send Inquiry</div><p className="text-xs leading-relaxed text-white/55">No payment is taken online. Send your selection and we&apos;ll confirm price, availability and delivery with you directly.</p></div>
-            <input required data-testid="inq-name" placeholder="Full name" value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
-            <input required type="email" data-testid="inq-email" placeholder="Email" value={form.customer_email} onChange={(e) => setForm({ ...form, customer_email: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
-            <input data-testid="inq-phone" required type="tel" inputMode="tel" autoComplete="tel" placeholder="Mobile / WhatsApp Number" value={form.customer_phone} onChange={(e) => { setForm({ ...form, customer_phone: e.target.value }); if (phoneError) setPhoneError(""); }} className={`w-full bg-[#0a0a0a] border ${phoneError ? "border-red-500/70" : "border-white/15"} focus:border-[#D4AF37] outline-none px-4 py-3 text-sm`} />
-            {phoneError && <div data-testid="inq-phone-error" className="text-xs text-red-400">{phoneError}</div>}
-            <textarea data-testid="inq-message" placeholder="Notes (optional)" rows="4" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm resize-none" />
-            <button disabled={submitting} data-testid="submit-inquiry-btn" className="w-full bg-[#D4AF37] text-black py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-50">{submitting ? "Sending…" : "Send inquiry"}</button>
-            {waLink && waLink !== "#" && <a data-testid="wa-basket-btn" href={waLink} target="_blank" rel="noreferrer" className="w-full inline-flex items-center justify-center gap-2 border border-white/25 py-4 uppercase text-xs tracking-[0.28em] hover:border-[#D4AF37]"><MessageCircle size={14} /> Enquire on WhatsApp</a>}
+          <form onSubmit={submit} className="lg:col-span-5 border border-white/10 p-8 space-y-5" aria-labelledby="basket-inquiry-heading">
+            <div><div id="basket-inquiry-heading" className="eyebrow mb-2">Send Inquiry</div><p className="text-xs leading-relaxed text-white/55">No payment is taken online. Send your selection and we&apos;ll confirm price, availability and delivery with you directly.</p></div>
+            <div>
+              <label htmlFor="inq-name" className="sr-only">Full name</label>
+              <input id="inq-name" name="customer_name" autoComplete="name" required data-testid="inq-name" placeholder="Full name" value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
+            </div>
+            <div>
+              <label htmlFor="inq-email" className="sr-only">Email</label>
+              <input id="inq-email" name="customer_email" autoComplete="email" required type="email" data-testid="inq-email" placeholder="Email" value={form.customer_email} onChange={(e) => setForm({ ...form, customer_email: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
+            </div>
+            <div>
+              <label htmlFor="inq-phone" className="sr-only">Mobile or WhatsApp number</label>
+              <input id="inq-phone" name="customer_phone" data-testid="inq-phone" required type="tel" inputMode="tel" autoComplete="tel" placeholder="Mobile / WhatsApp Number" value={form.customer_phone} onChange={(e) => { setForm({ ...form, customer_phone: e.target.value }); if (phoneError) setPhoneError(""); }} aria-invalid={phoneError ? "true" : undefined} aria-describedby={phoneError ? "inq-phone-error" : undefined} className={`w-full bg-[#0a0a0a] border ${phoneError ? "border-red-500/70" : "border-white/15"} focus:border-[#D4AF37] outline-none px-4 py-3 text-sm`} />
+              {phoneError && <div id="inq-phone-error" data-testid="inq-phone-error" role="alert" className="text-xs text-red-400 mt-2">{phoneError}</div>}
+            </div>
+            <div>
+              <label htmlFor="inq-message" className="sr-only">Notes</label>
+              <textarea id="inq-message" name="message" data-testid="inq-message" placeholder="Notes (optional)" rows="4" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm resize-none" />
+            </div>
+            <button type="submit" disabled={submitting} aria-busy={submitting ? "true" : undefined} data-testid="submit-inquiry-btn" className="w-full bg-[#D4AF37] text-black py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-50">{submitting ? "Sending…" : "Send inquiry"}</button>
+            {waLink && waLink !== "#" && <a data-testid="wa-basket-btn" href={waLink} target="_blank" rel="noreferrer" className="w-full inline-flex items-center justify-center gap-2 border border-white/25 py-4 uppercase text-xs tracking-[0.28em] hover:border-[#D4AF37]"><MessageCircle size={14} aria-hidden="true" /> Enquire on WhatsApp</a>}
           </form>
         </div>
       )}
