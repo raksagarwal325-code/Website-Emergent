@@ -249,14 +249,14 @@ export function InfluencerCard({ item, product, index = 0, animate = true }) {
             <Link
               to={productPath(product)}
               data-testid={`influencer-card-${index}-product-link`}
-              className="mt-1 text-[11px] text-white/60 hover:text-[#D4AF37] leading-snug line-clamp-2 transition-colors block"
+              className="mt-1 text-xs text-white/60 hover:text-[#D4AF37] leading-snug line-clamp-2 transition-colors block"
             >
               <span className="text-[#BF9972]">Featuring · </span>
               {product.name}
             </Link>
           ) : (
             item?.caption && (
-              <div className="mt-1 text-[11px] text-white/50 leading-snug line-clamp-2">
+              <div className="mt-1 text-xs text-white/50 leading-snug line-clamp-2">
                 {item.caption}
               </div>
             )
