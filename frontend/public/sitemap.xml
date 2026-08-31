@@ -7,9 +7,14 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://samratglass.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
   <url><loc>https://samratglass.com/catalog</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://samratglass.com/collections</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/spaces</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://samratglass.com/craft</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://samratglass.com/about</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://samratglass.com/gallery</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/styled-by</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://samratglass.com/custom-lighting-bulk-orders</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://samratglass.com/architects-interior-designers</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://samratglass.com/faq</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://samratglass.com/guides</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://samratglass.com/guides/choose-chandelier-size-room</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
