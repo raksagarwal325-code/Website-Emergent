@@ -1,7 +1,7 @@
 import { sanitizePublicProduct } from "./api";
 
 describe("sanitizePublicProduct", () => {
-  it("removes internal tags and unconfirmed specs from the customer-facing product payload", () => {
+  it("removes internal tags, unconfirmed specs, and known taxonomy values from the customer-facing product payload", () => {
     const source = {
       id: "product-1",
       name: "Test Light",
@@ -16,6 +16,7 @@ describe("sanitizePublicProduct", () => {
         Holder: "to be confirmed",
         Material: "Glass and metal",
         Finish: "Antique gold",
+        Style: "heritage / classical indian luxury",
         Weight: "N/A",
       },
     };
@@ -33,6 +34,7 @@ describe("sanitizePublicProduct", () => {
     });
     expect(source.tags).toHaveLength(3);
     expect(source.specs.Height).toBe("Needs confirmation");
+    expect(source.specs.Style).toBe("heritage / classical indian luxury");
   });
 
   it("leaves nullish values unchanged", () => {

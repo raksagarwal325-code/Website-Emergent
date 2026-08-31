@@ -29,13 +29,22 @@ const PUBLIC_SPEC_PLACEHOLDERS = new Set([
   "to be confirmed before order",
 ]);
 
+// Known internal classification values that were written into legacy product
+// spec fields for editorial/cataloguing purposes. These are not customer-facing
+// specifications and should not propagate into product or project pages.
+const PUBLIC_INTERNAL_SPEC_VALUES = new Set([
+  "heritage / classical indian luxury",
+]);
+
 const sanitizePublicSpecs = (specs) => {
   if (!specs || typeof specs !== "object" || Array.isArray(specs)) return specs;
   return Object.fromEntries(
     Object.entries(specs).filter(([, value]) => {
       if (value == null) return false;
       const normalized = String(value).trim().toLowerCase();
-      return normalized && !PUBLIC_SPEC_PLACEHOLDERS.has(normalized);
+      return normalized
+        && !PUBLIC_SPEC_PLACEHOLDERS.has(normalized)
+        && !PUBLIC_INTERNAL_SPEC_VALUES.has(normalized);
     })
   );
 };
@@ -43,8 +52,9 @@ const sanitizePublicSpecs = (specs) => {
 // Product tags are catalogue/search metadata. They include internal collection
 // tokens and SEO keyword phrases that must remain available to Admin/back-end
 // workflows but must never be rendered as customer-facing product copy.
-// Editorial spec placeholders are handled the same way: Admin keeps the raw
-// values, while public product detail receives only confirmed specifications.
+// Editorial spec placeholders and known internal taxonomy values are handled
+// the same way: Admin keeps the raw values, while public views receive only
+// confirmed customer-facing specifications.
 export const sanitizePublicProduct = (product) => {
   if (!product || typeof product !== "object") return product;
   return {
@@ -64,6 +74,10 @@ export const api = {
    * (Admin, catalogue PDF, gallery cross-references, styled-by page, etc.)
    * can still get a flat array of items. The public cap is 48/page, admins
    * get 5000/page — either way we page until total_pages is reached.
+   *
+   * This helper is consumed by public catalogue/project presentation code, so
+   * each returned product is passed through the same public sanitizer used by
+   * getProduct(). Raw Admin exports remain available through adminProductsExport.
    */
   adminProductsExport: () => client.get("/admin/products/export").then(r => r.data),
 
@@ -88,7 +102,7 @@ export const api = {
       for (const p of items) {
         if (p?.id && !seen.has(p.id)) {
           seen.add(p.id);
-          collected.push(p);
+          collected.push(sanitizePublicProduct(p));
         }
       }
       const totalPages = res?.total_pages || 1;
