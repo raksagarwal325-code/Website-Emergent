@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useReducedMotion } from "framer-motion";
 import { Star, ExternalLink, PenLine, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
 import { useSettings } from "../context/SettingsContext";
@@ -30,8 +31,10 @@ const AUTOPLAY_MS = 5000;
 export default function GoogleReviews({ variant = "full" }) {
   const [data, setData] = useState(null);
   const { hp } = useSettings();
+  const prefersReducedMotion = useReducedMotion();
   const [idx, setIdx] = useState(0);
-  const [paused, setPaused] = useState(false);
+  const [interactionPaused, setInteractionPaused] = useState(false);
+  const [userPaused, setUserPaused] = useState(false);
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -61,12 +64,12 @@ export default function GoogleReviews({ variant = "full" }) {
   }, [data, hp]);
 
   useEffect(() => {
-    if (paused || allReviews.length < 2) return;
+    if (prefersReducedMotion || interactionPaused || userPaused || allReviews.length < 2) return undefined;
     timerRef.current = setInterval(() => {
       setIdx((i) => (i + 1) % allReviews.length);
     }, AUTOPLAY_MS);
     return () => clearInterval(timerRef.current);
-  }, [paused, allReviews.length]);
+  }, [prefersReducedMotion, interactionPaused, userPaused, allReviews.length]);
 
   useEffect(() => {
     if (idx >= allReviews.length) setIdx(0);
@@ -78,6 +81,11 @@ export default function GoogleReviews({ variant = "full" }) {
   const hasReviews = allReviews.length > 0;
   const prev = () => setIdx((i) => (i - 1 + allReviews.length) % allReviews.length);
   const next = () => setIdx((i) => (i + 1) % allReviews.length);
+  const rotationPaused = prefersReducedMotion || interactionPaused || userPaused;
+
+  const handleBlurCapture = (event) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) setInteractionPaused(false);
+  };
 
   return (
     <section data-testid="google-reviews-section" className="relative border border-white/10 bg-[#0a0a0a] p-8 md:p-12">
@@ -117,7 +125,7 @@ export default function GoogleReviews({ variant = "full" }) {
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]"
               >
-                <PenLine size={13} /> Review us on Google
+                <PenLine size={13} aria-hidden="true" /> Review us on Google
               </a>
               <a
                 data-testid="gr-view-btn"
@@ -126,7 +134,7 @@ export default function GoogleReviews({ variant = "full" }) {
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em] text-white/80 hover:text-white"
               >
-                <ExternalLink size={13} /> View all reviews on Google
+                <ExternalLink size={13} aria-hidden="true" /> View all reviews on Google
               </a>
             </div>
           )}
@@ -141,8 +149,10 @@ export default function GoogleReviews({ variant = "full" }) {
         {hasReviews && (
           <div
             className="lg:col-span-7 relative"
-            onMouseEnter={() => setPaused(true)}
-            onMouseLeave={() => setPaused(false)}
+            onMouseEnter={() => setInteractionPaused(true)}
+            onMouseLeave={() => setInteractionPaused(false)}
+            onFocusCapture={() => setInteractionPaused(true)}
+            onBlurCapture={handleBlurCapture}
             data-testid="gr-slideshow"
           >
             <div className="relative min-h-[260px] md:min-h-[280px]">
@@ -190,7 +200,7 @@ export default function GoogleReviews({ variant = "full" }) {
                     aria-label="Previous review"
                     className="absolute left-1 md:left-2 top-1/2 -translate-y-1/2 w-9 h-9 md:w-10 md:h-10 border border-white/25 bg-black/75 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/85 flex items-center justify-center transition-colors z-10"
                   >
-                    <ChevronLeft size={17} />
+                    <ChevronLeft size={17} aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -199,30 +209,45 @@ export default function GoogleReviews({ variant = "full" }) {
                     aria-label="Next review"
                     className="absolute right-1 md:right-2 top-1/2 -translate-y-1/2 w-9 h-9 md:w-10 md:h-10 border border-white/25 bg-black/75 hover:border-[#D4AF37] hover:text-[#D4AF37] text-white/85 flex items-center justify-center transition-colors z-10"
                   >
-                    <ChevronRight size={17} />
+                    <ChevronRight size={17} aria-hidden="true" />
                   </button>
                 </>
               )}
             </div>
 
             {allReviews.length > 1 && (
-              <div className="mt-3 flex items-center justify-center" data-testid="gr-dots">
-                {allReviews.map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setIdx(i)}
-                    aria-label={`Go to review ${i + 1}`}
-                    aria-current={i === idx ? "true" : undefined}
-                    data-testid={`gr-dot-${i}`}
-                    className="min-w-[44px] min-h-[44px] flex items-center justify-center group focus:outline-none focus-visible:ring-1 focus-visible:ring-[#D4AF37]"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`h-2 rounded-none transition-all ${i === idx ? "w-9 bg-[#D4AF37]" : "w-4 bg-white/45 group-hover:bg-white/70"}`}
-                    />
-                  </button>
-                ))}
+              <div className="mt-3 flex flex-col items-center justify-center gap-1" data-testid="gr-controls">
+                <div className="flex items-center justify-center" data-testid="gr-dots">
+                  {allReviews.map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setIdx(i)}
+                      aria-label={`Go to review ${i + 1}`}
+                      aria-current={i === idx ? "true" : undefined}
+                      data-testid={`gr-dot-${i}`}
+                      className="min-w-[44px] min-h-[44px] flex items-center justify-center group focus:outline-none focus-visible:ring-1 focus-visible:ring-[#D4AF37]"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`h-2 rounded-none transition-all ${i === idx ? "w-9 bg-[#D4AF37]" : "w-4 bg-white/45 group-hover:bg-white/70"}`}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  data-testid="gr-rotation-toggle"
+                  onClick={() => setUserPaused((value) => !value)}
+                  aria-pressed={userPaused || prefersReducedMotion}
+                  disabled={prefersReducedMotion}
+                  className="min-h-[44px] px-3 text-[10px] uppercase tracking-[0.2em] text-white/60 hover:text-[#D4AF37] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#D4AF37] disabled:cursor-default disabled:text-white/40"
+                >
+                  {prefersReducedMotion ? "Auto-rotation off" : userPaused ? "Resume review rotation" : "Pause review rotation"}
+                </button>
+                <span className="sr-only" aria-live="polite">
+                  {rotationPaused ? "Review rotation paused" : "Review rotation active"}
+                </span>
               </div>
             )}
           </div>
