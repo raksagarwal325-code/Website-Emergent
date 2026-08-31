@@ -2,19 +2,16 @@
  * Product availability helpers for schema.org output and visible UI copy.
  *
  * Google no longer accepts `MadeToOrder` for Product rich results, so we
- * normalise every published product's status to a supported enum value:
+ * normalise every published product's schema status to a supported enum:
  *   * Number(stock) > 0                     -> InStock
- *   * published && Number(stock) <= 0       -> PreOrder   (default)
+ *   * published && Number(stock) <= 0       -> PreOrder   (schema fallback)
  *   * unpublished                           -> null       (no schema)
  *
- * Callers MUST skip emitting Product schema entirely when this helper
- * returns null. This matches the product API contract — the public
- * /products endpoint 404s drafts, but we guard defensively.
- *
- * Numeric coercion is intentional: some legacy rows carry `stock` as a
- * string ("0", "5") from CSV imports. `Number("")` and `Number(null)`
- * both coerce to 0/NaN, which falls through the > 0 check to the
- * PreOrder branch — safe.
+ * Important: the schema fallback is not enough evidence to show a customer-
+ * facing "Pre-order" message. A zero/unknown stock value only tells us that
+ * ready stock is not confirmed; it does not prove the item is explicitly a
+ * pre-order. Visible pre-order copy therefore requires an explicit product
+ * flag while the generic UI can continue to say "Available on request".
  */
 
 const SCHEMA_URLS = {
@@ -40,15 +37,17 @@ export function schemaAvailabilityFor(product) {
 }
 
 /**
- * `true` when the product is published *and* not currently in stock — used
- * to decide whether to surface the "Made to order…" note on the product
- * detail page.
+ * True only when the product is explicitly marked as a pre-order / made-to-
+ * order item. Do not infer this from stock=0: many enquiry-based catalogue
+ * items intentionally have no ready-stock count and should simply display
+ * "Available on request" instead of a second, potentially conflicting label.
  */
 export function isMadeToOrder(product) {
   if (!product || typeof product !== "object") return false;
   if (product.status && product.status !== "published") return false;
-  const stock = Number(product.stock);
-  return !(Number.isFinite(stock) && stock > 0);
+  return product.made_to_order === true ||
+    product.preorder === true ||
+    String(product.availability || "").toLowerCase() === "preorder";
 }
 
 export const AVAILABILITY = SCHEMA_URLS;
