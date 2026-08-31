@@ -26,9 +26,21 @@ function renderBrowser() {
 }
 
 describe("CatalogueBrowser accessibility", () => {
+  beforeAll(() => {
+    global.ResizeObserver = class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+  });
+
   beforeEach(() => {
     mockListProducts.mockReset();
     mockListProducts.mockResolvedValue({ items: [], total: 0, total_pages: 1 });
+  });
+
+  afterAll(() => {
+    delete global.ResizeObserver;
   });
 
   test("search input has a persistent programmatic label", () => {
