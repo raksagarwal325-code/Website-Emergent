@@ -14,6 +14,14 @@ const client = axios.create({
   headers: { "X-Requested-With": "fetch" },
 });
 
+// Product tags are catalogue/search metadata. They include internal collection
+// tokens and SEO keyword phrases that must remain available to Admin/back-end
+// workflows but must never be rendered as customer-facing product copy.
+export const sanitizePublicProduct = (product) => {
+  if (!product || typeof product !== "object") return product;
+  return { ...product, tags: [] };
+};
+
 export const api = {
   authMe: () => client.get("/auth/me").then(r => r.data),
   authSession: (session_id) => client.post("/auth/session", { session_id }).then(r => r.data),
@@ -57,7 +65,7 @@ export const api = {
     }
     return collected;
   },
-  getProduct: (id) => client.get(`/products/${id}`).then(r => r.data),
+  getProduct: (id) => client.get(`/products/${id}`).then(r => sanitizePublicProduct(r.data)),
   createProduct: (data) => client.post("/products", data).then(r => r.data),
   updateProduct: (id, data) => client.put(`/products/${id}`, data).then(r => r.data),
   deleteProduct: (id) => client.delete(`/products/${id}`).then(r => r.data),
