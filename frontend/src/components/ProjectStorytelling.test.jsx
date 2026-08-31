@@ -4,7 +4,17 @@ import ProjectStorytelling from "./ProjectStorytelling";
 
 jest.mock("framer-motion", () => ({
   motion: {
-    button: ({ children, ...props }) => <button {...props}>{children}</button>,
+    button: ({
+      children,
+      initial,
+      whileInView,
+      viewport,
+      transition,
+      animate,
+      exit,
+      variants,
+      ...props
+    }) => <button {...props}>{children}</button>,
   },
 }));
 
