@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { api } from "../lib/api";
 import { mergeHomepage } from "../lib/homepageDefaults";
 import { normalizeHomepageClaims } from "../lib/homepageClaimNormalization";
+import { normalizePublicSettings } from "../lib/publicClaimNormalization";
 
 const SettingsContext = createContext(null);
 
@@ -11,7 +12,7 @@ export function SettingsProvider({ children }) {
   const refresh = useCallback(async () => {
     try {
       const s = await api.getSettings();
-      setSettings(s);
+      setSettings(normalizePublicSettings(s));
     } catch (e) {
       /* ignore */
     }
