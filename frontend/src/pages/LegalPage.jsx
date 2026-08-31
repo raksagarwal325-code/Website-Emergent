@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { LEGAL_PAGES, LEGAL_ORDER, LEGAL_DEFAULT_UPDATED_AT } from "../lib/legalContent";
+import { normalizePublicLegalPage } from "../lib/publicClaimNormalization";
 import { api } from "../lib/api";
 import SEO from "../components/SEO";
 
@@ -161,9 +162,10 @@ export default function LegalPage() {
   // Fall back to the code-shipped default whenever the admin override
   // is missing, blank, or fails to parse into at least one section.
   const useOverride = override && Array.isArray(override.sections) && override.sections.length > 0;
-  const page = useOverride
+  const rawPage = useOverride
     ? { title: defaults.title, intro: override.intro || defaults.intro, sections: override.sections }
     : defaults;
+  const page = normalizePublicLegalPage(slug, rawPage);
   const lastUpdatedLabel = updatedAt || LEGAL_DEFAULT_UPDATED_AT;
 
   return (
