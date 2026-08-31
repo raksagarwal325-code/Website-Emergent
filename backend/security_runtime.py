@@ -15,6 +15,7 @@ import asyncio
 import inspect
 import io
 import ipaddress
+import json
 import re
 import socket
 import sys
@@ -309,6 +310,75 @@ def _install_security_headers(server_module) -> None:
     app.state.sge_security_headers_installed = True
 
 
+def _install_public_api_sanitization(server_module) -> None:
+    """Normalize anonymous product/settings JSON at the HTTP trust boundary.
+
+    Admin routes and authenticated product reads remain raw. This complements
+    the frontend sanitizer so crawlers, integrations and browsers all receive
+    the same customer-safe public payload without rewriting MongoDB records.
+    """
+    app = server_module.app
+    if getattr(app.state, "sge_public_api_sanitization_installed", False):
+        return
+
+    from starlette.responses import Response
+    from public_product_sanitizer import sanitize_public_product, sanitize_public_settings
+
+    @app.middleware("http")
+    async def _public_api_sanitization(request, call_next):
+        path = request.url.path.rstrip("/") or "/"
+        is_settings = path == "/api/settings"
+        is_product_list = path == "/api/products"
+        is_product_detail = path.startswith("/api/products/") and path != "/api/products/categories"
+        if not (is_settings or is_product_list or is_product_detail):
+            return await call_next(request)
+
+        # Product read routes are also used by signed-in Admin. Authenticate
+        # before the endpoint runs so those responses retain their raw tags and
+        # catalogue fields exactly as before.
+        if is_product_list or is_product_detail:
+            admin = await server_module._auth.load_admin(server_module.db, request)
+            if admin is not None:
+                return await call_next(request)
+
+        response = await call_next(request)
+        if response.status_code != 200:
+            return response
+
+        chunks = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk.encode("utf-8") if isinstance(chunk, str) else chunk)
+        original_body = b"".join(chunks)
+
+        try:
+            payload = json.loads(original_body.decode("utf-8"))
+            if is_settings:
+                payload = sanitize_public_settings(payload)
+            elif is_product_list and isinstance(payload, dict):
+                payload = dict(payload)
+                if isinstance(payload.get("items"), list):
+                    payload["items"] = [sanitize_public_product(item) for item in payload["items"]]
+            elif is_product_detail:
+                payload = sanitize_public_product(payload)
+            body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            # If an unexpected non-JSON response ever reaches these routes,
+            # preserve it byte-for-byte rather than turning a read into a 500.
+            body = original_body
+
+        headers = dict(response.headers)
+        headers.pop("content-length", None)
+        return Response(
+            content=body,
+            status_code=response.status_code,
+            headers=headers,
+            media_type=response.media_type,
+            background=response.background,
+        )
+
+    app.state.sge_public_api_sanitization_installed = True
+
+
 def install_runtime_hardening() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -321,6 +391,7 @@ def install_runtime_hardening() -> None:
 
     _install_cors_hardening(server_module)
     _install_security_headers(server_module)
+    _install_public_api_sanitization(server_module)
     _install_image_delivery(server_module)
     install_upload_validation()
 
