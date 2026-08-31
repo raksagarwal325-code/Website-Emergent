@@ -5,18 +5,17 @@
  * "../lib/productAvailability"` in ProductDetail.jsx blanked every live
  * `/product/<id>` page with a `ReferenceError: schemaAvailabilityFor is
  * not defined`. This test renders the component with a mocked product
- * fixture so the same identifiers are exercised at render time — if the
- * import is ever removed again, this test fails immediately.
+ * fixture so the same identifiers are exercised at render time.
  *
- * Two fixtures cover the two schema.org branches we care about:
- *   1. published + Number(stock) > 0     -> InStock (no visible note)
- *   2. published + Number(stock) <= 0    -> PreOrder (visible note)
+ * Availability policy:
+ *   1. published + Number(stock) > 0     -> InStock (no visible preorder note)
+ *   2. published + Number(stock) <= 0    -> PreOrder in schema, but visible UI
+ *      stays "Available on request" unless the product is explicitly flagged
+ *      as preorder/made-to-order.
  */
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-
-// --- Mocks (must be declared BEFORE the ProductDetail import) --------------
 
 const inStockFixture = {
   id: "p-in-stock",
@@ -35,25 +34,24 @@ const inStockFixture = {
   specs: {},
 };
 
-const preOrderFixture = {
+const zeroStockFixture = {
   ...inStockFixture,
-  id: "p-preorder",
+  id: "p-on-request",
   name: "Copper Ottoman Lantern",
-  sku: "SGE-CH-PREORDER-001",
+  sku: "SGE-CH-REQUEST-001",
   stock: 0,
 };
 
-// Every hook & side-effect ProductDetail touches gets a minimal stub. We
-// mutate `mockCurrentFixture` between tests so the same api mock returns the
-// right product for each render. The `mock` prefix is required by Jest —
-// jest.mock() factories may only reference variables whose names start with
-// `mock` (case-insensitive).
+const explicitPreorderFixture = {
+  ...zeroStockFixture,
+  id: "p-preorder",
+  sku: "SGE-CH-PREORDER-001",
+  preorder: true,
+};
+
 let mockCurrentFixture = inStockFixture;
 let mockReviews = [];
 
-// CRA sets Jest's `resetMocks: true`, so any mock implementation attached
-// at file scope is wiped before each test. We register the mocks bare here
-// and re-attach implementations inside `beforeEach`.
 jest.mock("../lib/api", () => ({
   __esModule: true,
   api: {
@@ -86,7 +84,6 @@ const { api, formatPrice, formatProductPrice, formatPhone } = require("../lib/ap
 const { useCatalog } = require("../context/CatalogContext");
 
 beforeEach(() => {
-  // Rewire implementations after Jest's per-test mock reset.
   mockCurrentFixture = inStockFixture;
   mockReviews = [];
   api.getProduct.mockImplementation(() => Promise.resolve(mockCurrentFixture));
@@ -111,9 +108,6 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = jest.fn();
 });
 
-// Real MemoryRouter with a `:id` route — useParams resolves naturally from
-// the URL, so we don't need to mock react-router-dom (whose v7 package.json
-// `exports` field trips Jest's resolver).
 const renderProduct = () =>
   render(
     <MemoryRouter initialEntries={[`/product/${mockCurrentFixture.id}`]}>
@@ -127,18 +121,22 @@ describe("ProductDetail — availability regression (hotfix)", () => {
   test("renders an in-stock product without a ReferenceError and shows no made-to-order note", async () => {
     mockCurrentFixture = inStockFixture;
     renderProduct();
-    await waitFor(() =>
-      expect(screen.getByText(inStockFixture.name)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(inStockFixture.name)).toBeInTheDocument());
     expect(screen.queryByTestId("made-to-order-note")).toBeNull();
   });
 
-  test("renders a stock=0 published product with the made-to-order note visible", async () => {
-    mockCurrentFixture = preOrderFixture;
+  test("zero stock alone does not show a duplicate preorder message", async () => {
+    mockCurrentFixture = zeroStockFixture;
     renderProduct();
-    await waitFor(() =>
-      expect(screen.getByText(preOrderFixture.name)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(zeroStockFixture.name)).toBeInTheDocument());
+    expect(screen.queryByTestId("made-to-order-note")).toBeNull();
+    expect(screen.getAllByText("Available on request").length).toBeGreaterThan(0);
+  });
+
+  test("an explicitly flagged preorder still shows the preorder note", async () => {
+    mockCurrentFixture = explicitPreorderFixture;
+    renderProduct();
+    await waitFor(() => expect(screen.getByText(explicitPreorderFixture.name)).toBeInTheDocument());
     const note = await screen.findByTestId("made-to-order-note");
     expect(note).toBeInTheDocument();
     expect(note.textContent).toMatch(/pre-?order/i);

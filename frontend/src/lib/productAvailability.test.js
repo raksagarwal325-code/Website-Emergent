@@ -11,7 +11,7 @@ describe("schemaAvailabilityFor", () => {
       .toBe(AVAILABILITY.InStock);
   });
 
-  test("returns PreOrder for a published product with 0 stock (default)", () => {
+  test("returns PreOrder for a published product with 0 stock (schema fallback)", () => {
     expect(schemaAvailabilityFor({ stock: 0, status: "published" }))
       .toBe(AVAILABILITY.PreOrder);
   });
@@ -55,18 +55,24 @@ describe("schemaAvailabilityFor", () => {
 });
 
 describe("isMadeToOrder", () => {
-  test("true for a published product with no stock", () => {
-    expect(isMadeToOrder({ stock: 0, status: "published" })).toBe(true);
-    expect(isMadeToOrder({ status: "published" })).toBe(true);
+  test("does not infer a visible preorder label from zero or missing stock", () => {
+    expect(isMadeToOrder({ stock: 0, status: "published" })).toBe(false);
+    expect(isMadeToOrder({ status: "published" })).toBe(false);
   });
 
-  test("false for a published product with stock", () => {
+  test("true only for an explicitly marked published preorder / made-to-order product", () => {
+    expect(isMadeToOrder({ stock: 0, status: "published", made_to_order: true })).toBe(true);
+    expect(isMadeToOrder({ stock: 0, status: "published", preorder: true })).toBe(true);
+    expect(isMadeToOrder({ stock: 0, status: "published", availability: "preorder" })).toBe(true);
+  });
+
+  test("false for a normal published product with stock", () => {
     expect(isMadeToOrder({ stock: 3, status: "published" })).toBe(false);
     expect(isMadeToOrder({ stock: "7", status: "published" })).toBe(false);
   });
 
-  test("false for draft/unpublished products (visible note should not be shown)", () => {
-    expect(isMadeToOrder({ stock: 0, status: "draft" })).toBe(false);
-    expect(isMadeToOrder({ stock: 0, status: "archived" })).toBe(false);
+  test("false for draft/unpublished products even when explicitly flagged", () => {
+    expect(isMadeToOrder({ stock: 0, status: "draft", made_to_order: true })).toBe(false);
+    expect(isMadeToOrder({ stock: 0, status: "archived", preorder: true })).toBe(false);
   });
 });
