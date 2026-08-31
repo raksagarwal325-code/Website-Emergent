@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { api } from "../lib/api";
 import { mergeHomepage } from "../lib/homepageDefaults";
+import { normalizeHomepageClaims } from "../lib/homepageClaimNormalization";
 
 const SettingsContext = createContext(null);
 
@@ -18,7 +19,9 @@ export function SettingsProvider({ children }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const hp = mergeHomepage(settings?.homepage_content);
+  // Admin can retain old homepage wording for years. Merge defaults first,
+  // then normalize only the known legacy claims that the public audit flagged.
+  const hp = normalizeHomepageClaims(mergeHomepage(settings?.homepage_content));
 
   return (
     <SettingsContext.Provider value={{ settings, hp, refresh }}>
