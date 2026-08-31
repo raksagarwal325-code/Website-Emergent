@@ -2,6 +2,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { api } from "../lib/api";
 import { galleryImageAlt } from "../lib/imageSeo";
+import { projectConfigurationLabel } from "../lib/projectProducts";
 
 const SnapshotItem = ({ label, value }) => value ? (
   <div className="border-t border-white/8 pt-3">
@@ -19,6 +20,7 @@ export default function ProjectStorytelling({
   onImageOpen,
 }) {
   const hasExtendedSnapshot = optionalSnapshot.some(([, value]) => Boolean(value));
+  const configurationLabel = projectConfigurationLabel(project.customisation);
 
   return (
     <section id="project-story" className="border-t border-[#BF9972]/15 scroll-mt-28" data-testid="project-storytelling">
@@ -42,7 +44,7 @@ export default function ProjectStorytelling({
                 )}
                 {project.customisation && (
                   <div className="mt-9">
-                    <div className="eyebrow mb-3">Customisation</div>
+                    <div className="eyebrow mb-3">{configurationLabel}</div>
                     <p className="text-white/70 leading-relaxed">{project.customisation}</p>
                   </div>
                 )}
@@ -58,7 +60,11 @@ export default function ProjectStorytelling({
                     <SnapshotItem label={productPresentation.snapshotLabel} value={productPresentation.snapshotValue} />
                   )}
                   {hasExtendedSnapshot && optionalSnapshot.map(([label, value]) => (
-                    <SnapshotItem key={label} label={label} value={value} />
+                    <SnapshotItem
+                      key={label}
+                      label={label === "Customisation" ? configurationLabel : label}
+                      value={value}
+                    />
                   ))}
                 </div>
               </div>
