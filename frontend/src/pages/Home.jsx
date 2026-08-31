@@ -75,7 +75,7 @@ export default function Home() {
 
   return (
     <div data-testid="page-home">
-      <SEO title="Samrat Glass Emporium · Handcrafted Chandeliers & Decorative Lighting · Firozabad" description="1000+ designs of hand-blown chandeliers, crystal hurricanes, pendants and glass lamps — crafted in Firozabad since 1981. 4.9★ · 236+ Google reviews." image={settings?.hero_image} path="/" />
+      <SEO title="Samrat Glass Emporium · Handcrafted Chandeliers & Decorative Lighting · Firozabad" description="Handcrafted chandeliers, hanging lights, wall lights, table lamps and decorative glass lighting from Firozabad — by Samrat Glass Emporium, established in 1981." image={settings?.hero_image} path="/" />
       <WelcomeIntro />
 
       <section className="relative overflow-hidden grain min-h-[calc(100vh-5rem)] border-b border-white/10">
@@ -123,9 +123,9 @@ export default function Home() {
       <CollageSection />
 
       <section className="border-y border-white/10"><div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-white/10">{[
-        { icon: Truck, title: "Pan-India Shipping", body: "Insured door-delivery in 7–10 business days." },
-        { icon: ShieldCheck, title: "Handcrafted Quality", body: "Every piece inspected before dispatch. Replacement guaranteed on transit damage." },
-        { icon: MessageCircle, title: "WhatsApp Support", body: "Bulk enquiries, custom sizes & installation guidance — reply within hours." },
+        { icon: Truck, title: "Pan-India Shipping", body: "Insured door delivery across India. Standard pieces typically dispatch in 7–10 business days; transit time varies by destination." },
+        { icon: ShieldCheck, title: "Handcrafted Quality", body: "Each order is inspected before dispatch. For transit damage, share unboxing photos within 48 hours so we can review a replacement." },
+        { icon: MessageCircle, title: "WhatsApp Support", body: "Bulk enquiries, custom sizes & installation guidance — we aim to respond within one business day." },
       ].map((f) => <div key={f.title} className="p-8 flex items-start gap-4"><f.icon size={20} strokeWidth={1.4} className="text-[#D4AF37] mt-1" /><div><div className="font-serif text-lg">{f.title}</div><div className="text-sm text-white/60 mt-1">{f.body}</div></div></div>)}</div></section>
 
       <SeasonalSpotlight products={featured} eyebrow={F.eyebrow} title={F.title} viewAllText={F.view_all_text} viewAllLink={F.view_all_link} />
