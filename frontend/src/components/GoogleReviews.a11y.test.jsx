@@ -1,21 +1,17 @@
 /**
  * Accessibility regression tests for the Google Reviews component.
  *
- * Covers the exact issues flagged by Lighthouse/PageSpeed:
- *   A. Star markup uses valid semantics (role="img" + aria-label on a
- *      graphical rating summary; child icons are aria-hidden so the
- *      rating is announced exactly once).
- *   B. Contrast — the small metadata under the aggregate ("Based on X
- *      Google reviews") and review-age text ("2 weeks ago") use the
- *      bumped white/70 and white/65 opacities.
- *   C. Carousel dot buttons expose a ≥44×44 CSS px interactive area
- *      while keeping the small visual pill. The visible bar is now an
- *      inner <span> with aria-hidden.
- *   D. Prev/next carousel controls remain keyboard-accessible with
- *      valid aria-labels.
+ * Covers rating semantics, contrast/tap targets, keyboard controls, and
+ * motion controls for the auto-advancing review carousel.
  */
 import React from "react";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
+
+let mockReducedMotion = false;
+
+jest.mock("framer-motion", () => ({
+  useReducedMotion: () => mockReducedMotion,
+}));
 
 jest.mock("../lib/api", () => ({
   __esModule: true,
@@ -67,10 +63,12 @@ async function renderReviews() {
 }
 
 describe("GoogleReviews accessibility", () => {
+  beforeEach(() => {
+    mockReducedMotion = false;
+  });
+
   test("Stars markup uses role='img' with an aria-label describing the rating", async () => {
     await renderReviews();
-    // Every rendered <Stars> group must be a graphical role with a full
-    // "X out of 5 stars" label — not a bare aria-label on a <span>.
     const groups = document.querySelectorAll("span[role='img']");
     expect(groups.length).toBeGreaterThan(0);
     for (const g of groups) {
@@ -93,9 +91,6 @@ describe("GoogleReviews accessibility", () => {
 
   test("no <span> in Stars uses aria-label without a role (prohibited-aria fix)", async () => {
     await renderReviews();
-    // Any <span> that carries an aria-label MUST also declare a role,
-    // otherwise Lighthouse flags "ARIA attribute is not allowed on this
-    // element".
     const labelled = document.querySelectorAll("span[aria-label]");
     for (const el of labelled) {
       expect(el.getAttribute("role")).toBeTruthy();
@@ -109,10 +104,8 @@ describe("GoogleReviews accessibility", () => {
       const cls = btn.className;
       expect(cls).toMatch(/min-w-\[44px\]/);
       expect(cls).toMatch(/min-h-\[44px\]/);
-      // Accessible label preserved.
       expect(btn.getAttribute("aria-label")).toMatch(/^Go to review \d+$/);
     }
-    // Active dot advertises current state.
     expect(screen.getByTestId("gr-dot-0").getAttribute("aria-current")).toBe("true");
     expect(screen.getByTestId("gr-dot-1").getAttribute("aria-current")).toBeNull();
   });
@@ -131,8 +124,6 @@ describe("GoogleReviews accessibility", () => {
     const next = screen.getByTestId("gr-next");
     expect(prev.getAttribute("aria-label")).toBe("Previous review");
     expect(next.getAttribute("aria-label")).toBe("Next review");
-    // Buttons — not <div role="button"> — so keyboard/enter behaviour
-    // is native.
     expect(prev.tagName).toBe("BUTTON");
     expect(next.tagName).toBe("BUTTON");
   });
@@ -140,11 +131,67 @@ describe("GoogleReviews accessibility", () => {
   test("aggregate metadata uses the higher-contrast text opacity", async () => {
     await renderReviews();
     const total = screen.getByTestId("gr-total");
-    // "Based on X Google reviews" wrapper uses text-white/70; the
-    // number inside uses text-white/90 — both above the pre-fix
-    // white/50 & white/80 respectively.
     const wrapper = total.parentElement;
     expect(wrapper.className).toMatch(/text-white\/70/);
     expect(total.className).toMatch(/text-white\/90/);
+  });
+
+  test("provides a keyboard-operable pause and resume control", async () => {
+    jest.useFakeTimers();
+    try {
+      await renderReviews();
+      const first = screen.getByTestId("gr-review-0");
+      const second = screen.getByTestId("gr-review-1");
+
+      expect(first).toHaveAttribute("aria-hidden", "false");
+      expect(second).toHaveAttribute("aria-hidden", "true");
+
+      act(() => { jest.advanceTimersByTime(5000); });
+      expect(first).toHaveAttribute("aria-hidden", "true");
+      expect(second).toHaveAttribute("aria-hidden", "false");
+
+      fireEvent.click(screen.getByRole("button", { name: "Pause review rotation" }));
+      const resume = screen.getByRole("button", { name: "Resume review rotation" });
+      expect(resume).toHaveAttribute("aria-pressed", "true");
+
+      act(() => { jest.advanceTimersByTime(10000); });
+      expect(second).toHaveAttribute("aria-hidden", "false");
+    } finally {
+      jest.runOnlyPendingTimers();
+      jest.useRealTimers();
+    }
+  });
+
+  test("pauses auto-rotation while keyboard focus is inside the carousel", async () => {
+    jest.useFakeTimers();
+    try {
+      await renderReviews();
+      const next = screen.getByRole("button", { name: "Next review" });
+      fireEvent.focus(next);
+
+      act(() => { jest.advanceTimersByTime(10000); });
+      expect(screen.getByTestId("gr-review-0")).toHaveAttribute("aria-hidden", "false");
+    } finally {
+      jest.runOnlyPendingTimers();
+      jest.useRealTimers();
+    }
+  });
+
+  test("disables auto-rotation when reduced motion is preferred", async () => {
+    jest.useFakeTimers();
+    try {
+      mockReducedMotion = true;
+      await renderReviews();
+
+      const toggle = screen.getByRole("button", { name: "Auto-rotation off" });
+      expect(toggle).toBeDisabled();
+      expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+      act(() => { jest.advanceTimersByTime(10000); });
+      expect(screen.getByTestId("gr-review-0")).toHaveAttribute("aria-hidden", "false");
+    } finally {
+      jest.runOnlyPendingTimers();
+      jest.useRealTimers();
+    }
   });
 });
