@@ -18,6 +18,9 @@ def test_public_product_sanitizer_removes_internal_tags_and_placeholders():
             "Height": "To be confirmed before order",
             "Width": "",
             "Style": "heritage / classical indian luxury",
+            "Suspension Type": "Adjustable chain suspension; hanging length to be confirmed before order",
+            "Holder Type": "B22 or compatible holders; confirm before order",
+            "Bulb Type": "LED-compatible bulbs; confirm holder compatibility before order",
             "Material": "Glass and metal",
             "Finish": "Antique gold",
         },
@@ -32,6 +35,9 @@ def test_public_product_sanitizer_removes_internal_tags_and_placeholders():
     }
     assert source["tags"][0] == "collection:tarangrekha"
     assert source["specs"]["Height"] == "To be confirmed before order"
+    assert "Suspension Type" in source["specs"]
+    assert "Holder Type" in source["specs"]
+    assert "Bulb Type" in source["specs"]
 
 
 def test_public_product_sanitizer_leaves_non_dict_values_unchanged():
