@@ -10,6 +10,8 @@
  *     the lead form with `enquiry_type = "trade"`.
  *  4. Submitting either form posts to /api/contact with the correct
  *     `enquiry_type` (backend reuse assertion).
+ *  5. The shared commercial lead form exposes accessible field names and
+ *     programmatically associates validation errors with the affected field.
  */
 import React from "react";
 import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
@@ -98,6 +100,24 @@ describe("Custom Lighting / Bulk Orders landing", () => {
     ).toBe("#lead-form");
   });
 
+  test("shared lead form exposes accessible names and semantics", () => {
+    render(
+      <MemoryRouter initialEntries={["/custom-lighting-bulk-orders"]}>
+        <Routes>
+          <Route path="/custom-lighting-bulk-orders" element={<CustomLighting />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("form", { name: /Tell us about your project/i })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /Full name/i })).toHaveAttribute("autocomplete", "name");
+    expect(screen.getByRole("textbox", { name: /Email address/i })).toHaveAttribute("autocomplete", "email");
+    expect(screen.getByRole("textbox", { name: /Mobile or WhatsApp number/i })).toHaveAttribute("autocomplete", "tel");
+    expect(screen.getByRole("textbox", { name: /Subject/i })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /Project details/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Send message/i })).toHaveAttribute("type", "submit");
+  });
+
   test("submitting the form posts to /api/contact with enquiry_type='bulk'", async () => {
     render(
       <MemoryRouter initialEntries={["/custom-lighting-bulk-orders"]}>
@@ -130,7 +150,7 @@ describe("Custom Lighting / Bulk Orders landing", () => {
     expect(payload.message).toMatch(/pendants/);
   });
 
-  test("rejects submission when phone is missing", async () => {
+  test("rejects submission when phone is missing and associates the error with the field", async () => {
     render(
       <MemoryRouter initialEntries={["/custom-lighting-bulk-orders"]}>
         <Routes>
@@ -152,7 +172,8 @@ describe("Custom Lighting / Bulk Orders landing", () => {
     // Bypass the HTML5 gate by manually calling the submit path with
     // whitespace which is not caught by `required` but IS caught by our
     // normaliser.
-    fireEvent.change(screen.getByTestId("custom-lighting-form-phone"), {
+    const phone = screen.getByTestId("custom-lighting-form-phone");
+    fireEvent.change(phone, {
       target: { value: "   " },
     });
     await act(async () => {
@@ -160,10 +181,12 @@ describe("Custom Lighting / Bulk Orders landing", () => {
     });
     // Backend was never called because the client-side normaliser rejected.
     expect(mockCreateContact).not.toHaveBeenCalled();
-    // Inline error displayed on the phone field.
-    expect(
-      screen.getByTestId("custom-lighting-form-phone-error").textContent,
-    ).toMatch(/required/i);
+    // Inline error is a live alert and is programmatically associated with the phone field.
+    const error = screen.getByTestId("custom-lighting-form-phone-error");
+    expect(error.textContent).toMatch(/required/i);
+    expect(error).toHaveAttribute("role", "alert");
+    expect(phone).toHaveAttribute("aria-invalid", "true");
+    expect(phone).toHaveAttribute("aria-describedby", error.id);
   });
 });
 

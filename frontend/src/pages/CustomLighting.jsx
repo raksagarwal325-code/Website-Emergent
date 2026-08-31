@@ -185,6 +185,10 @@ export function CommercialLeadForm({
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
+  const fieldId = (name) => `${testIdPrefix}-form-${name}`;
+  const phoneErrorId = `${fieldId("phone")}-error`;
+  const headingId = `${testIdPrefix}-form-heading`;
+
   const submit = async (e) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.message) {
@@ -216,12 +220,13 @@ export function CommercialLeadForm({
     <form
       id="lead-form"
       onSubmit={submit}
+      aria-labelledby={headingId}
       data-testid={`${testIdPrefix}-form`}
       className="border border-white/10 p-8 md:p-10 space-y-5 bg-[#0d0510]"
     >
       <div>
         <div className="eyebrow mb-1">Send a message</div>
-        <div className="font-serif text-2xl">{heading}</div>
+        <h2 id={headingId} className="font-serif text-2xl">{heading}</h2>
         {subheading && (
           <p
             className="mt-2 text-sm text-white/50"
@@ -232,35 +237,57 @@ export function CommercialLeadForm({
       </div>
       {done && (
         <div
+          role="status"
+          aria-live="polite"
           data-testid={`${testIdPrefix}-form-success`}
           className="border border-[#25D366]/40 p-4 text-sm text-[#25D366]"
         >
           Thanks — your enquiry has been recorded. We&apos;ll be in touch shortly.
         </div>
       )}
-      <input
-        required
-        data-testid={`${testIdPrefix}-form-name`}
-        placeholder="Full name"
-        value={form.name}
-        onChange={(e) => setForm({ ...form, name: e.target.value })}
-        className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm"
-      />
-      <input
-        required
-        type="email"
-        data-testid={`${testIdPrefix}-form-email`}
-        placeholder="Email"
-        value={form.email}
-        onChange={(e) => setForm({ ...form, email: e.target.value })}
-        className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm"
-      />
+
       <div>
+        <label htmlFor={fieldId("name")} className="sr-only">Full name</label>
         <input
+          id={fieldId("name")}
+          name="name"
+          required
+          autoComplete="name"
+          data-testid={`${testIdPrefix}-form-name`}
+          placeholder="Full name"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm"
+        />
+      </div>
+
+      <div>
+        <label htmlFor={fieldId("email")} className="sr-only">Email address</label>
+        <input
+          id={fieldId("email")}
+          name="email"
+          required
+          type="email"
+          autoComplete="email"
+          data-testid={`${testIdPrefix}-form-email`}
+          placeholder="Email"
+          value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm"
+        />
+      </div>
+
+      <div>
+        <label htmlFor={fieldId("phone")} className="sr-only">Mobile or WhatsApp number</label>
+        <input
+          id={fieldId("phone")}
+          name="phone"
           required
           type="tel"
           inputMode="tel"
           autoComplete="tel"
+          aria-invalid={phoneError ? "true" : undefined}
+          aria-describedby={phoneError ? phoneErrorId : undefined}
           data-testid={`${testIdPrefix}-form-phone`}
           placeholder="Mobile / WhatsApp Number"
           value={form.phone}
@@ -271,35 +298,58 @@ export function CommercialLeadForm({
           className={`w-full bg-[#0a0a0a] border ${phoneError ? "border-red-500/70" : "border-white/15"} focus:border-[#D4AF37] outline-none px-4 py-3 text-sm`}
         />
         {phoneError && (
-          <div data-testid={`${testIdPrefix}-form-phone-error`} className="mt-1.5 text-xs text-red-400">{phoneError}</div>
+          <div
+            id={phoneErrorId}
+            role="alert"
+            data-testid={`${testIdPrefix}-form-phone-error`}
+            className="mt-1.5 text-xs text-red-400"
+          >
+            {phoneError}
+          </div>
         )}
       </div>
-      <input
-        data-testid={`${testIdPrefix}-form-subject`}
-        placeholder={subjectPlaceholder}
-        value={form.subject}
-        onChange={(e) => setForm({ ...form, subject: e.target.value })}
-        className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm"
-      />
-      <textarea
-        required
-        rows="7"
-        data-testid={`${testIdPrefix}-form-message`}
-        placeholder={messagePlaceholder}
-        value={form.message}
-        onChange={(e) => setForm({ ...form, message: e.target.value })}
-        className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm resize-none"
-      />
+
+      <div>
+        <label htmlFor={fieldId("subject")} className="sr-only">Subject</label>
+        <input
+          id={fieldId("subject")}
+          name="subject"
+          data-testid={`${testIdPrefix}-form-subject`}
+          placeholder={subjectPlaceholder}
+          value={form.subject}
+          onChange={(e) => setForm({ ...form, subject: e.target.value })}
+          className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm"
+        />
+      </div>
+
+      <div>
+        <label htmlFor={fieldId("message")} className="sr-only">Project details</label>
+        <textarea
+          id={fieldId("message")}
+          name="message"
+          required
+          rows="7"
+          data-testid={`${testIdPrefix}-form-message`}
+          placeholder={messagePlaceholder}
+          value={form.message}
+          onChange={(e) => setForm({ ...form, message: e.target.value })}
+          className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm resize-none"
+        />
+      </div>
+
       {/* Hidden enquiry-type input so the value is visible in the DOM for
           testing and submitted as part of the form data set. */}
       <input
         type="hidden"
+        name="enquiry_type"
         data-testid={`${testIdPrefix}-form-enquiry-type`}
         value={form.enquiry_type}
         readOnly
       />
       <button
+        type="submit"
         disabled={submitting}
+        aria-busy={submitting ? "true" : "false"}
         data-testid={`${testIdPrefix}-form-submit`}
         className="bg-[#D4AF37] text-black px-10 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-50"
       >
