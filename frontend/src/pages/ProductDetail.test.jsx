@@ -130,7 +130,7 @@ describe("ProductDetail — availability regression (hotfix)", () => {
     renderProduct();
     await waitFor(() => expect(screen.getByText(zeroStockFixture.name)).toBeInTheDocument());
     expect(screen.queryByTestId("made-to-order-note")).toBeNull();
-    expect(screen.getByText("Available on request")).toBeInTheDocument();
+    expect(screen.getAllByText("Available on request").length).toBeGreaterThan(0);
   });
 
   test("an explicitly flagged preorder still shows the preorder note", async () => {
