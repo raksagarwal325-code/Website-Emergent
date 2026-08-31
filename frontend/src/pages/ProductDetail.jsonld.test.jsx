@@ -201,17 +201,14 @@ describe("Product JSON-LD — merchant listing fields", () => {
     expect(p.merchantReturnLink).toMatch(/\/legal\/returns$/);
   });
 
-  test("Offer includes a valid shippingDetails for India, 7-10 business days", async () => {
+  test("Offer includes India shippingDetails without an unverified transit-time estimate", async () => {
     const ld = await renderAndGetProductJsonLd();
     const s = ld.offers.shippingDetails;
     expect(s).toBeDefined();
     expect(s["@type"]).toBe("OfferShippingDetails");
     expect(s.shippingDestination["@type"]).toBe("DefinedRegion");
     expect(s.shippingDestination.addressCountry).toBe("IN");
-    expect(s.deliveryTime["@type"]).toBe("ShippingDeliveryTime");
-    expect(s.deliveryTime.transitTime.minValue).toBe(7);
-    expect(s.deliveryTime.transitTime.maxValue).toBe(10);
-    expect(s.deliveryTime.transitTime.unitCode).toBe("DAY");
+    expect(s.deliveryTime).toBeUndefined();
   });
 
   test("shippingDetails does NOT invent a monetary shippingRate", async () => {
