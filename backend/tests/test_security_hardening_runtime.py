@@ -10,6 +10,7 @@ import asyncio
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 import httpx
 import pytest
@@ -29,6 +30,21 @@ def _api_base() -> str:
 
 API = _api_base()
 CSRF = {"X-Requested-With": "fetch"}
+
+
+def _cors_api_base() -> str:
+    """Test application CORS directly when Emergent Preview owns OPTIONS.
+
+    Emergent Preview's Cloudflare edge answers preflight requests itself with
+    a wildcard 204 before they reach FastAPI.  That is platform behaviour, not
+    the application's CORSMiddleware.  The preview pod exposes the same backend
+    on localhost:8001, so use it only for this application-CORS regression.
+    GitHub CI already runs the API on localhost:8001 and is unchanged.
+    """
+    host = (urlparse(API).hostname or "").lower()
+    if host == "preview.emergentagent.com" or host.endswith(".preview.emergentagent.com"):
+        return "http://127.0.0.1:8001/api"
+    return API
 
 
 def _mongo():
@@ -85,7 +101,7 @@ def test_cors_allows_only_expected_request_headers():
     # so this test continues to exercise the allowed-header policy rather than
     # the separate untrusted-origin rejection policy.
     origin = "https://samratglass.com"
-    with httpx.Client(base_url=API, timeout=15) as client:
+    with httpx.Client(base_url=_cors_api_base(), timeout=15) as client:
         good = client.options(
             "/settings",
             headers={
