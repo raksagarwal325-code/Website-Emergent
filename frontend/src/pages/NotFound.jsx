@@ -14,7 +14,7 @@ export default function NotFound() {
       <SEO
         title="Page not found · Samrat Glass Emporium"
         description="The page you're looking for doesn't exist. Browse our catalogue or reach us on WhatsApp."
-        path="/404"
+        noindex
       />
       <div className="eyebrow mb-6">Error · 404</div>
       <h1
