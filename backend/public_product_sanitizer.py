@@ -90,6 +90,13 @@ CRAFT_ITEM_REPLACEMENTS = {
 }
 
 
+def _public_spec_is_unresolved(normalized: str) -> bool:
+    """Return True when a populated spec still explicitly says it is unconfirmed."""
+    if "to be confirmed" in normalized or "needs confirmation" in normalized:
+        return True
+    return "confirm" in normalized and "before order" in normalized
+
+
 def sanitize_public_product(doc: dict | None):
     """Return a customer-safe product copy without mutating the source doc."""
     if not isinstance(doc, dict):
@@ -110,6 +117,8 @@ def sanitize_public_product(doc: dict | None):
             if normalized in PUBLIC_SPEC_PLACEHOLDERS:
                 continue
             if normalized in PUBLIC_INTERNAL_SPEC_VALUES:
+                continue
+            if _public_spec_is_unresolved(normalized):
                 continue
             clean_specs[key] = value
         out["specs"] = clean_specs
