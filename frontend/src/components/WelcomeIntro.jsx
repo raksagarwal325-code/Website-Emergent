@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
@@ -11,6 +11,14 @@ const INTRO_DURATION_DESKTOP_MS = 4800;
 const INTRO_DURATION_MOBILE_MS = 4200;
 const CRITICAL_IMAGE_COUNT = 2;
 const INTRO_IMAGE_COUNT = 6;
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
 
 function shuffleInPlace(items) {
   for (let i = items.length - 1; i > 0; i -= 1) {
@@ -25,6 +33,8 @@ export default function WelcomeIntro() {
   const prefersReducedMotion = useReducedMotion();
   const [visible, setVisible] = useState(false);
   const [ready, setReady] = useState(false);
+  const dialogRef = useRef(null);
+  const previouslyFocusedRef = useRef(null);
 
   const heroImage = api.resolveImage(settings?.hero_image || BRAND_PLACEHOLDER_HERO);
 
@@ -48,6 +58,11 @@ export default function WelcomeIntro() {
     while (merged.length < INTRO_IMAGE_COUNT) merged.push(...fallback);
     return merged.slice(0, INTRO_IMAGE_COUNT);
   }, [heroImage, hp?.atelier?.images, hp?.gallery?.items]);
+
+  const dismiss = () => {
+    try { window.sessionStorage.setItem(SESSION_KEY, "1"); } catch (_) {}
+    setVisible(false);
+  };
 
   useEffect(() => {
     if (prefersReducedMotion || typeof window === "undefined") return undefined;
@@ -114,10 +129,63 @@ export default function WelcomeIntro() {
     return () => { document.body.style.overflow = previousOverflow; };
   }, [visible]);
 
-  const dismiss = () => {
-    try { window.sessionStorage.setItem(SESSION_KEY, "1"); } catch (_) {}
-    setVisible(false);
-  };
+  useEffect(() => {
+    if (!visible || typeof document === "undefined") return undefined;
+
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    const dialog = dialogRef.current;
+    const focusables = () => Array.from(dialog?.querySelectorAll(FOCUSABLE_SELECTOR) || [])
+      .filter((element) => element instanceof HTMLElement && !element.hasAttribute("disabled"));
+
+    const focusFirst = () => {
+      const [first] = focusables();
+      if (first) first.focus();
+      else dialog?.focus();
+    };
+
+    const frame = window.requestAnimationFrame?.(focusFirst);
+    if (frame == null) focusFirst();
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        dismiss();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const items = focusables();
+      if (!items.length) {
+        event.preventDefault();
+        dialog?.focus();
+        return;
+      }
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && (active === first || !dialog?.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog?.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      if (frame != null) window.cancelAnimationFrame?.(frame);
+      document.removeEventListener("keydown", onKeyDown);
+      const previous = previouslyFocusedRef.current;
+      if (previous?.isConnected) previous.focus();
+      previouslyFocusedRef.current = null;
+    };
+  }, [visible]);
 
   if (prefersReducedMotion) return null;
 
@@ -127,10 +195,12 @@ export default function WelcomeIntro() {
     <AnimatePresence>
       {visible && (
         <motion.div
+          ref={dialogRef}
           data-testid="welcome-intro"
           role="dialog"
           aria-modal="true"
           aria-label="Samrat Glass Emporium — A Legacy in Light"
+          tabIndex={-1}
           className="fixed inset-0 z-[100] overflow-hidden bg-[#12070f]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
