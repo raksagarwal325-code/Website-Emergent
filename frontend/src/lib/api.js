@@ -14,12 +14,44 @@ const client = axios.create({
   headers: { "X-Requested-With": "fetch" },
 });
 
+const PUBLIC_SPEC_PLACEHOLDERS = new Set([
+  "",
+  "-",
+  "—",
+  "n/a",
+  "na",
+  "not available",
+  "unknown",
+  "none",
+  "null",
+  "needs confirmation",
+  "to be confirmed",
+  "to be confirmed before order",
+]);
+
+const sanitizePublicSpecs = (specs) => {
+  if (!specs || typeof specs !== "object" || Array.isArray(specs)) return specs;
+  return Object.fromEntries(
+    Object.entries(specs).filter(([, value]) => {
+      if (value == null) return false;
+      const normalized = String(value).trim().toLowerCase();
+      return normalized && !PUBLIC_SPEC_PLACEHOLDERS.has(normalized);
+    })
+  );
+};
+
 // Product tags are catalogue/search metadata. They include internal collection
 // tokens and SEO keyword phrases that must remain available to Admin/back-end
 // workflows but must never be rendered as customer-facing product copy.
+// Editorial spec placeholders are handled the same way: Admin keeps the raw
+// values, while public product detail receives only confirmed specifications.
 export const sanitizePublicProduct = (product) => {
   if (!product || typeof product !== "object") return product;
-  return { ...product, tags: [] };
+  return {
+    ...product,
+    tags: [],
+    specs: sanitizePublicSpecs(product.specs),
+  };
 };
 
 export const api = {
@@ -72,7 +104,7 @@ export const api = {
   categories: () => client.get("/products/categories").then(r => r.data),
 
   listReviews: (product_id) => client.get(`/reviews`, { params: { product_id } }).then(r => r.data),
-  createReview: (data) => client.post("/reviews", data).then(r => r.data),
+  createReview: (data) => client.post(`/reviews`, data).then(r => r.data),
 
   // Admin-only review moderation
   adminListReviews: (params = {}) => client.get("/admin/reviews", { params }).then(r => r.data),
