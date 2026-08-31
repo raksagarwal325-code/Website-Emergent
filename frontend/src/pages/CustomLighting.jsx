@@ -37,8 +37,8 @@ export default function CustomLighting() {
         </h1>
         <p className="mt-6 text-white/70 max-w-3xl leading-relaxed">
           Made-to-order decorative lighting for residences, hospitality, retail
-          and large-scale projects. Hand-blown, hand-cut and hand-assembled in
-          Firozabad — the way we&apos;ve been doing it since 1981.
+          and large-scale projects. Handcrafted and hand-assembled in Firozabad,
+          with glass-working, cutting and finishing processes varying by design.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <a
@@ -70,7 +70,7 @@ export default function CustomLighting() {
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[
-            [Sparkles, "Handcrafted in Firozabad", "Hand-blown glass and hand-turned brass by the same karigars who make our catalogue pieces."],
+            [Sparkles, "Handcrafted in Firozabad", "Handcrafted glass and metalwork using processes appropriate to each design, coordinated directly with our Firozabad workshop."],
             [Ruler, "Custom sizes & specifications", "Bespoke dimensions, finishes, glass colours, arm counts and light configurations."],
             [Package, "Bulk & project quantities", "Comfortable running production runs sized for hotels, residences and multi-unit developments."],
             [ShieldCheck, "Direct manufacturer coordination", "You talk to the workshop, not a reseller — faster clarifications, faster decisions."],
@@ -144,7 +144,7 @@ export default function CustomLighting() {
       <CommercialLeadForm
         enquiryType="bulk"
         heading="Tell us about your project."
-        subheading="We&apos;ll respond within a few hours during business days."
+        subheading="We aim to respond within one business day."
         subjectPlaceholder="Subject (e.g., 40 pendants for a boutique hotel)"
         messagePlaceholder="Share quantities, timelines, dimensions, references or drawings…"
         analyticsSource="custom_lighting_landing"
