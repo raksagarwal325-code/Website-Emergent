@@ -10,13 +10,18 @@ is ``on_request``.
 from __future__ import annotations
 
 from collections import Counter
+from datetime import date, datetime, timedelta
 from typing import Callable, Iterable
+from zoneinfo import ZoneInfo
 
 
 REQUIRED_FIELDS = (
     "id", "title", "description", "link", "image_link",
-    "availability", "price", "brand",
+    "availability", "price", "brand", "mpn",
 )
+
+PREORDER_LEAD_DAYS = 30
+STORE_TIMEZONE = ZoneInfo("Asia/Kolkata")
 
 
 def _clean(value) -> str:
@@ -31,12 +36,18 @@ def _availability(doc: dict) -> str:
     return "in_stock" if stock > 0 else "preorder"
 
 
+def _feed_date() -> date:
+    """Return the storefront's local calendar date for a feed snapshot."""
+    return datetime.now(STORE_TIMEZONE).date()
+
+
 def build_feed_row(
     doc: dict,
     *,
     site_origin: str,
     slug_builder: Callable[[dict], str],
     image_url_builder: Callable[[str], str],
+    as_of_date: date | None = None,
 ) -> tuple[dict | None, list[str]]:
     """Return one compliant feed row, or explicit reasons it is ineligible."""
     reasons: list[str] = []
@@ -77,15 +88,24 @@ def build_feed_row(
     if reasons:
         return None, sorted(set(reasons))
 
+    availability = _availability(doc)
+    availability_date = (
+        ((as_of_date or _feed_date()) + timedelta(days=PREORDER_LEAD_DAYS)).isoformat()
+        if availability == "preorder"
+        else ""
+    )
+
     return {
         "id": product_id,
         "title": title,
         "description": description,
         "link": link,
         "image_link": image_link,
-        "availability": _availability(doc),
+        "availability": availability,
+        "availability_date": availability_date,
         "price": f"{price_value:.2f} INR",
         "brand": "Samrat Glass Emporium",
+        "mpn": product_id,
         "condition": "new",
         "_warnings": warnings,
     }, []
@@ -97,16 +117,19 @@ def build_feed(
     site_origin: str,
     slug_builder: Callable[[dict], str],
     image_url_builder: Callable[[str], str],
+    as_of_date: date | None = None,
 ) -> tuple[list[dict], list[dict], dict[str, int]]:
     rows: list[dict] = []
     excluded: list[dict] = []
     reason_counts: Counter[str] = Counter()
+    snapshot_date = as_of_date or _feed_date()
     for doc in docs:
         row, reasons = build_feed_row(
             doc,
             site_origin=site_origin,
             slug_builder=slug_builder,
             image_url_builder=image_url_builder,
+            as_of_date=snapshot_date,
         )
         if row:
             rows.append(row)
