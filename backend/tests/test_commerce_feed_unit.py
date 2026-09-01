@@ -1,3 +1,5 @@
+from datetime import date
+
 from commerce_feed import REQUIRED_FIELDS, build_feed, build_feed_row
 
 
@@ -34,6 +36,7 @@ def build_one(doc):
         site_origin="https://samratglass.com",
         slug_builder=slug,
         image_url_builder=image,
+        as_of_date=date(2026, 9, 1),
     )
 
 
@@ -43,12 +46,15 @@ def test_eligible_product_has_openai_required_fields():
     assert all(row[field] for field in REQUIRED_FIELDS)
     assert row["price"] == "42000.00 INR"
     assert row["availability"] == "preorder"
+    assert row["availability_date"] == "2026-10-01"
+    assert row["mpn"] == "SGE-CH-001"
     assert row["link"].endswith("/product/sample-sge-ch-001")
 
 
 def test_in_stock_mapping():
     row, _ = build_one(product(stock=3))
     assert row["availability"] == "in_stock"
+    assert row["availability_date"] == ""
 
 
 def test_price_on_request_never_leaks_stored_price():
@@ -81,6 +87,7 @@ def test_readiness_summary_counts_each_reason():
         site_origin="https://samratglass.com",
         slug_builder=slug,
         image_url_builder=image,
+        as_of_date=date(2026, 9, 1),
     )
     assert len(rows) == 1
     assert len(excluded) == 1
