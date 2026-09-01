@@ -910,7 +910,7 @@ async def admin_commerce_products_feed(admin: _AdminUser = Depends(require_admin
     output = io.StringIO(newline="")
     writer = csv.DictWriter(
         output,
-        fieldnames=[*COMMERCE_FEED_FIELDS, "condition"],
+        fieldnames=[*COMMERCE_FEED_FIELDS, "availability_date", "condition"],
         extrasaction="ignore",
     )
     writer.writeheader()
