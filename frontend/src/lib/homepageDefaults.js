@@ -156,12 +156,12 @@ export const HOMEPAGE_DEFAULTS = {
     items: [
       { title: "40+ Years of Experience", body: "Since 1981, our craft has been refined across four decades of continuous production." },
       { title: "Skilled Master Craftsmen", body: "A trusted team of professionals and traditional artisans working side-by-side." },
-      { title: "Handcrafted, Traditionally", body: "Every piece is hand-blown, hand-cut and hand-assembled using time-honoured techniques." },
+      { title: "Handcrafted, Traditionally", body: "Handcrafted and hand-assembled in Firozabad using glass-working, cutting, finishing and decorative assembly techniques appropriate to each design." },
       { title: "Full Lighting Range", body: "Chandeliers, wall lights, table lamps, hanging lights, sconces & floor lamps." },
       { title: "Custom Designs on Demand", body: "Bespoke sizes, finishes and configurations tailored to your project." },
-      { title: "Trusted Across India", body: "Thousands of homes, hotels, restaurants and showrooms lit by Samrat." },
+      { title: "Trusted Across India", body: "Lighting supplied for homes, hotels, restaurants and showrooms across India." },
       { title: "Quality & Timely Delivery", body: "Rigorous finishing checks and disciplined production timelines." },
-      { title: "Made in Firozabad", body: "Based in the City of Glass — India's spiritual home of glass-making." },
+      { title: "Made in Firozabad", body: "Based in Firozabad, one of India's best-known centres for glass-making." },
     ],
   },
   atelier: {
