@@ -26,6 +26,7 @@ import {
   trackCatalogueDownload,
   trackSearch,
   _resetLastPageViewKeyForTests,
+  _resetOpenAILeadDedupeForTests,
 } from "./analytics";
 
 const setLocation = (pathname, search = "") => {
@@ -38,9 +39,11 @@ beforeEach(() => {
   window.__GA_DNT__ = false;
   window.__GA_LOADED__ = true;
   window.gtag = jest.fn();
+  window.oaiq = jest.fn();
   window.dataLayer = [];
   setLocation("/");
   _resetLastPageViewKeyForTests();
+  _resetOpenAILeadDedupeForTests();
 });
 
 // ---------- 1. Script initialization behaviour --------------------------
@@ -66,6 +69,7 @@ describe("script initialization", () => {
     trackViewItem({ id: "x", name: "n", sku: "s", category: "c" });
     trackGenerateLead({ source: "contact_form" });
     expect(window.gtag).not.toHaveBeenCalled();
+    expect(window.oaiq).not.toHaveBeenCalled();
   });
 });
 
@@ -124,6 +128,7 @@ describe("no tracking on /admin", () => {
     trackAddToCart({ id: "p-1", name: "Chandelier", sku: "S-1", category: "chandelier" }, 3);
     trackGenerateLead({ source: "inquiry_basket", cart_size: 2 });
     expect(window.gtag).not.toHaveBeenCalled();
+    expect(window.oaiq).not.toHaveBeenCalled();
   });
 });
 
@@ -136,12 +141,38 @@ describe("successful lead events", () => {
     expect(name).toBe("generate_lead");
     expect(params.source).toBe("contact_form");
     expect(params.enquiry_type).toBe("bulk");
+    expect(window.oaiq).toHaveBeenCalledWith(
+      "measure", "lead_created", { type: "customer_action" },
+    );
   });
 
   test("trackGenerateLead from inquiry_basket includes cart_size but nothing else", () => {
     trackGenerateLead({ source: "inquiry_basket", cart_size: 3 });
     const [, , params] = window.gtag.mock.calls[0];
     expect(params).toEqual({ source: "inquiry_basket", cart_size: 3 });
+  });
+
+  test("rapid duplicate OpenAI lead calls are counted only once", () => {
+    const now = jest.spyOn(Date, "now");
+    now.mockReturnValueOnce(1000).mockReturnValueOnce(1000);
+
+    trackGenerateLead({ source: "contact_form" });
+    trackGenerateLead({ source: "contact_form" });
+
+    expect(window.oaiq).toHaveBeenCalledTimes(1);
+    expect(window.gtag).toHaveBeenCalledTimes(2);
+    now.mockRestore();
+  });
+
+  test("a later genuine OpenAI lead is still counted", () => {
+    const now = jest.spyOn(Date, "now");
+    now.mockReturnValueOnce(1000).mockReturnValueOnce(3000);
+
+    trackGenerateLead({ source: "contact_form" });
+    trackGenerateLead({ source: "contact_form" });
+
+    expect(window.oaiq).toHaveBeenCalledTimes(2);
+    now.mockRestore();
   });
 
   test("catalogue_download event fires with source but no PII", () => {
@@ -260,6 +291,14 @@ describe("analytics failure is swallowed", () => {
     expect(() => trackAddToCart({ id: "p-1", name: "n", sku: "s", category: "c" }, 1)).not.toThrow();
     expect(() => trackGenerateLead({ source: "contact_form" })).not.toThrow();
     expect(() => pageView({ path: "/x", search: "" })).not.toThrow();
+  });
+
+  test("thrown OpenAI pixel never breaks a successful lead flow", () => {
+    window.oaiq = jest.fn(() => { throw new Error("blocked by extension"); });
+    expect(() => trackGenerateLead({ source: "contact_form" })).not.toThrow();
+    expect(window.gtag).toHaveBeenCalledWith(
+      "event", "generate_lead", { source: "contact_form" },
+    );
   });
 });
 

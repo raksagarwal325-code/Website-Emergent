@@ -54,12 +54,21 @@ const _dispatch = (name, params, pathname) => {
 // genuine enquiry actions are measured. The payload is a fixed, PII-free
 // event defined in Ads Manager; names, phones, emails and messages never
 // enter this function.
+const OPENAI_LEAD_DEDUPE_MS = 2000;
+let _lastOpenAILeadAt = null;
+
 const _measureOpenAILead = (pathname) => {
   if (!_hasWindow() || window.__GA_DNT__) return;
   const p = pathname == null
     ? (window.location && window.location.pathname) || "/"
     : String(pathname);
   if (p.startsWith(ADMIN_PATH_PREFIX) || typeof window.oaiq !== "function") return;
+  const now = Date.now();
+  if (
+    _lastOpenAILeadAt != null &&
+    now - _lastOpenAILeadAt < OPENAI_LEAD_DEDUPE_MS
+  ) return;
+  _lastOpenAILeadAt = now;
   _safe(() => window.oaiq(
     "measure",
     "lead_created",
@@ -91,6 +100,7 @@ export const pageView = ({ path, search, title } = {}) => {
 
 // Public reset — only for tests. Never called from app code.
 export const _resetLastPageViewKeyForTests = () => { _lastPageViewKey = null; };
+export const _resetOpenAILeadDedupeForTests = () => { _lastOpenAILeadAt = null; };
 
 // ---------- Generic event ------------------------------------------------
 export const trackEvent = (name, params = {}) => _dispatch(name, params);
