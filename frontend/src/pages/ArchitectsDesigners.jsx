@@ -143,7 +143,7 @@ export default function ArchitectsDesigners() {
       <CommercialLeadForm
         enquiryType="trade"
         heading="Tell us about your project."
-        subheading="We prioritise practice-side enquiries and respond within a few hours during business days."
+        subheading="We usually respond within a few business hours and aim to reply within one business day."
         subjectPlaceholder="Project name / studio / site location"
         messagePlaceholder="Share the brief, scope, quantities, references, drawings or a mood board…"
         analyticsSource="architects_designers_landing"
