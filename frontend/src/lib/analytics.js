@@ -55,7 +55,26 @@ const _dispatch = (name, params, pathname) => {
 // event defined in Ads Manager; names, phones, emails and messages never
 // enter this function.
 const OPENAI_LEAD_DEDUPE_MS = 2000;
+const OPENAI_LEAD_DEDUPE_KEY = "sge_openai_last_lead";
 let _lastOpenAILeadAt = null;
+
+const _readStoredOpenAILead = () => {
+  try {
+    const stored = JSON.parse(window.sessionStorage.getItem(OPENAI_LEAD_DEDUPE_KEY));
+    return stored && Number.isFinite(stored.at) ? stored : null;
+  } catch (_) {
+    return null;
+  }
+};
+
+const _createOpenAILeadEventId = (now) => {
+  try {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return window.crypto.randomUUID();
+    }
+  } catch (_) { /* fall through */ }
+  return `lead-${now}-${Math.random().toString(36).slice(2, 12)}`;
+};
 
 const _measureOpenAILead = (pathname) => {
   if (!_hasWindow() || window.__GA_DNT__) return;
@@ -64,15 +83,21 @@ const _measureOpenAILead = (pathname) => {
     : String(pathname);
   if (p.startsWith(ADMIN_PATH_PREFIX) || typeof window.oaiq !== "function") return;
   const now = Date.now();
-  if (
-    _lastOpenAILeadAt != null &&
-    now - _lastOpenAILeadAt < OPENAI_LEAD_DEDUPE_MS
-  ) return;
+  const stored = _readStoredOpenAILead();
+  const lastAt = Math.max(_lastOpenAILeadAt || 0, stored?.at || 0);
+  if (lastAt && now - lastAt < OPENAI_LEAD_DEDUPE_MS) return;
+
+  const eventId = _createOpenAILeadEventId(now);
   _lastOpenAILeadAt = now;
+  _safe(() => window.sessionStorage.setItem(
+    OPENAI_LEAD_DEDUPE_KEY,
+    JSON.stringify({ at: now, eventId }),
+  ));
   _safe(() => window.oaiq(
     "measure",
     "lead_created",
     { type: "customer_action" },
+    { event_id: eventId },
   ));
 };
 
@@ -100,7 +125,10 @@ export const pageView = ({ path, search, title } = {}) => {
 
 // Public reset — only for tests. Never called from app code.
 export const _resetLastPageViewKeyForTests = () => { _lastPageViewKey = null; };
-export const _resetOpenAILeadDedupeForTests = () => { _lastOpenAILeadAt = null; };
+export const _resetOpenAILeadDedupeForTests = () => {
+  _lastOpenAILeadAt = null;
+  _safe(() => window.sessionStorage.removeItem(OPENAI_LEAD_DEDUPE_KEY));
+};
 
 // ---------- Generic event ------------------------------------------------
 export const trackEvent = (name, params = {}) => _dispatch(name, params);
