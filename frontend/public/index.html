@@ -32,6 +32,34 @@
           })();
         </script>
 
+        <!-- OpenAI Ads pixel — loaded once on public pages only. Lead events
+             are dispatched from src/lib/analytics.js after a successful
+             enquiry submission or an intentional WhatsApp enquiry click.
+             No customer-entered values are included in our event payload. -->
+        <script>
+          (function () {
+            try {
+              var dnt = (navigator && (navigator.doNotTrack === '1' || navigator.msDoNotTrack === '1'))
+                        || (window && window.doNotTrack === '1');
+              var path = (window.location && window.location.pathname) || '/';
+              if (dnt || path.indexOf('/admin') === 0 || window.__OAI_PIXEL_LOADED__) return;
+              window.__OAI_PIXEL_LOADED__ = true;
+              !function(w,d,s,u){
+                if(w.oaiq)return;
+                var q=function(){q.q.push(arguments)};
+                q.q=[];
+                w.oaiq=q;
+                var j=d.createElement(s);
+                j.async=1;
+                j.src=u;
+                var f=d.getElementsByTagName(s)[0];
+                f.parentNode.insertBefore(j,f);
+              }(window,document,'script','https://bzrcdn.openai.com/sdk/oaiq.min.js');
+              oaiq('init', { pixelId: '3KaeL8X9cQfcmnHL5J6TCF', debug: true });
+            } catch (e) { /* conversion tracking must never break the app */ }
+          })();
+        </script>
+
         <!-- Open Graph / Facebook / WhatsApp preview -->
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Samrat Glass Emporium" />
