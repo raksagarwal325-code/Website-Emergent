@@ -123,7 +123,7 @@ export default function Contact() {
         <form onSubmit={submit} className="lg:col-span-7 border border-white/10 p-8 md:p-10 space-y-5 h-fit">
           <div>
             <div className="eyebrow mb-1">Send a message</div>
-            <div className="font-serif text-2xl">We&apos;ll reply within hours.</div>
+            <div className="font-serif text-2xl">We usually respond within a few business hours and aim to reply within one business day.</div>
           </div>
           <input required data-testid="contact-name" placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
           <input required type="email" data-testid="contact-email-input" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
