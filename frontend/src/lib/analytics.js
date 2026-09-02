@@ -50,6 +50,23 @@ const _dispatch = (name, params, pathname) => {
   _safe(() => window.gtag("event", name, params || {}));
 };
 
+// OpenAI Ads conversion tracking is intentionally narrower than GA4: only
+// genuine enquiry actions are measured. The payload is a fixed, PII-free
+// event defined in Ads Manager; names, phones, emails and messages never
+// enter this function.
+const _measureOpenAILead = (pathname) => {
+  if (!_hasWindow() || window.__GA_DNT__) return;
+  const p = pathname == null
+    ? (window.location && window.location.pathname) || "/"
+    : String(pathname);
+  if (p.startsWith(ADMIN_PATH_PREFIX) || typeof window.oaiq !== "function") return;
+  _safe(() => window.oaiq(
+    "measure",
+    "lead_created",
+    { type: "customer_action" },
+  ));
+};
+
 // ---------- Page view (SPA) ---------------------------------------------
 let _lastPageViewKey = null;
 
@@ -126,6 +143,7 @@ export const trackGenerateLead = ({ source, enquiry_type, cart_size } = {}) => {
   if (enquiry_type) params.enquiry_type = String(enquiry_type).slice(0, 20);
   if (cart_size != null) params.cart_size = Number(cart_size) || 0;
   _dispatch("generate_lead", params);
+  _measureOpenAILead();
 };
 
 export const trackWhatsAppClick = ({ source, page, product } = {}) => {
@@ -172,6 +190,7 @@ export const installWhatsAppClickListener = () => {
         el.getAttribute("data-testid") ||
         el.getAttribute("data-source") ||
         "unknown";
+      _measureOpenAILead();
       trackWhatsAppClick({
         source,
         page:
