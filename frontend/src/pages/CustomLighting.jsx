@@ -144,7 +144,7 @@ export default function CustomLighting() {
       <CommercialLeadForm
         enquiryType="bulk"
         heading="Tell us about your project."
-        subheading="We aim to respond within one business day."
+        subheading="We usually respond within a few business hours and aim to reply within one business day."
         subjectPlaceholder="Subject (e.g., 40 pendants for a boutique hotel)"
         messagePlaceholder="Share quantities, timelines, dimensions, references or drawings…"
         analyticsSource="custom_lighting_landing"
