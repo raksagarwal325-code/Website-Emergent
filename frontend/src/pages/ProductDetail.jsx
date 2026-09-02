@@ -483,6 +483,7 @@ export default function ProductDetail() {
             {reviewSubmitted ? (
               <div
                 role="status"
+                aria-live="polite"
                 data-testid="review-submitted-thanks"
                 className="mt-8 border border-[#D4AF37]/50 bg-[#D4AF37]/[0.06] p-6 text-sm text-white/85 leading-relaxed"
               >
@@ -693,13 +694,6 @@ function ProductTabs({ product, settings, waLink, active, onSelect, sectionRef }
               <p className="text-white/75 leading-relaxed whitespace-pre-wrap text-[15px]">
                 {product.description || product.short_description || "No description provided."}
               </p>
-              {product.tags?.length > 0 && (
-                <div className="mt-8 flex flex-wrap gap-2">
-                  {product.tags.map((t) => (
-                    <span key={t} className="text-[10px] uppercase tracking-[0.24em] border border-white/15 px-3 py-1 text-white/70">{t}</span>
-                  ))}
-                </div>
-              )}
             </div>
             <div className="md:col-span-4 border border-white/10 p-6">
               <div className="eyebrow mb-3">At a glance</div>
@@ -776,10 +770,10 @@ function ProductTabs({ product, settings, waLink, active, onSelect, sectionRef }
         {active === "inquiry" && (
           <div data-testid="tab-content-inquiry" className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="border border-white/10 p-8">
-              <div className="eyebrow mb-3">Chat instantly</div>
+              <div className="eyebrow mb-3">Chat with us</div>
               <h3 className="font-serif text-2xl mb-3">Talk to us on WhatsApp</h3>
               <p className="text-white/60 text-sm leading-relaxed mb-6">
-                Get availability, custom size quotes, bulk pricing, or installation advice within minutes.
+                For availability, custom-size quotes, bulk pricing or installation advice, we usually respond within a few business hours and aim to reply within one business day.
               </p>
               <a
                 data-testid="tab-wa-btn"
@@ -795,7 +789,7 @@ function ProductTabs({ product, settings, waLink, active, onSelect, sectionRef }
               <div className="eyebrow mb-3">Email or basket</div>
               <h3 className="font-serif text-2xl mb-3">Send us a detailed inquiry</h3>
               <p className="text-white/60 text-sm leading-relaxed mb-6">
-                Add this piece to your inquiry basket along with others, then submit — we&apos;ll respond by email or phone.
+                Add this piece to your inquiry basket along with others, then submit — we usually respond within a few business hours and aim to reply within one business day.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Link to="/cart" className="inline-flex items-center gap-2 border border-white/25 hover:border-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em]">
