@@ -142,7 +142,10 @@ describe("successful lead events", () => {
     expect(params.source).toBe("contact_form");
     expect(params.enquiry_type).toBe("bulk");
     expect(window.oaiq).toHaveBeenCalledWith(
-      "measure", "lead_created", { type: "customer_action" },
+      "measure",
+      "lead_created",
+      { type: "customer_action" },
+      { event_id: expect.any(String) },
     );
   });
 
@@ -150,6 +153,14 @@ describe("successful lead events", () => {
     trackGenerateLead({ source: "inquiry_basket", cart_size: 3 });
     const [, , params] = window.gtag.mock.calls[0];
     expect(params).toEqual({ source: "inquiry_basket", cart_size: 3 });
+  });
+
+  test("OpenAI lead includes an event_id for platform deduplication", () => {
+    trackGenerateLead({ source: "contact_form" });
+
+    const options = window.oaiq.mock.calls[0][3];
+    expect(options.event_id).toEqual(expect.any(String));
+    expect(options.event_id.length).toBeGreaterThan(0);
   });
 
   test("rapid duplicate OpenAI lead calls are counted only once", () => {
@@ -161,6 +172,21 @@ describe("successful lead events", () => {
 
     expect(window.oaiq).toHaveBeenCalledTimes(1);
     expect(window.gtag).toHaveBeenCalledTimes(2);
+    now.mockRestore();
+  });
+
+  test("session storage suppresses a duplicate after module memory is unavailable", () => {
+    const now = jest.spyOn(Date, "now");
+    now.mockReturnValue(1000);
+    window.sessionStorage.setItem(
+      "sge_openai_last_lead",
+      JSON.stringify({ at: 1000, eventId: "lead-existing" }),
+    );
+
+    trackGenerateLead({ source: "contact_form" });
+
+    expect(window.oaiq).not.toHaveBeenCalled();
+    expect(window.gtag).toHaveBeenCalledTimes(1);
     now.mockRestore();
   });
 
