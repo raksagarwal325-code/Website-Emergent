@@ -4,26 +4,26 @@ import { motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
 import SEO from "../components/SEO";
 import { api } from "../lib/api";
-import CollageSection from "../components/CollageSection";
-import ReasonsSection from "../components/ReasonsSection";
-import TrustedBySection from "../components/TrustedBySection";
 import WelcomeIntro from "../components/WelcomeIntro";
-import SeasonalSpotlight from "../components/SeasonalSpotlight";
-import FounderTeaser from "../components/FounderTeaser";
 import HeroSlideshow from "../components/HeroSlideshow";
 import CategoryShowcase from "../components/CategoryShowcase";
-import ShopBySpaceSection from "../components/ShopBySpaceSection";
 import { useSettings } from "../context/SettingsContext";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
 import { editorialGroup, editorialItem, editorialItemSoft, LUXURY_EASE } from "../lib/motion";
 import { waGeneralLink } from "../lib/whatsapp";
 
+const ShopBySpaceSection = lazy(() => import("../components/ShopBySpaceSection"));
+const TrustedBySection = lazy(() => import("../components/TrustedBySection"));
+const CollageSection = lazy(() => import("../components/CollageSection"));
+const SeasonalSpotlight = lazy(() => import("../components/SeasonalSpotlight"));
 const GoogleReviews = lazy(() => import("../components/GoogleReviews"));
+const ReasonsSection = lazy(() => import("../components/ReasonsSection"));
+const FounderTeaser = lazy(() => import("../components/FounderTeaser"));
 const AtelierShowcase = lazy(() => import("../components/AtelierShowcase"));
 const GalleryPreview = lazy(() => import("../components/GalleryPreview"));
 const InfluencerPromotions = lazy(() => import(/* webpackChunkName: "influencer" */ "../components/InfluencerPromotions"));
 
-function DeferredSection({ children, minHeight = 480, rootMargin = "800px 0px" }) {
+function DeferredSection({ children, minHeight = 480, rootMargin = "500px 0px" }) {
   const [ready, setReady] = useState(false);
   const ref = useRef(null);
 
@@ -58,14 +58,38 @@ function DeferredSection({ children, minHeight = 480, rootMargin = "800px 0px" }
   );
 }
 
-export default function Home() {
+function DeferredSeasonalSpotlight({ eyebrow, title, viewAllText, viewAllLink }) {
   const [featured, setFeatured] = useState([]);
-  const { settings, hp } = useSettings();
-  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
-    api.listProducts({ featured: true, limit: 96 }).then((res) => setFeatured(res?.items || [])).catch(() => {});
+    let alive = true;
+    api
+      .listProducts({ featured: true, limit: 24 })
+      .then((res) => {
+        if (alive) setFeatured(res?.items || []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, []);
+
+  return (
+    <Suspense fallback={<div aria-hidden="true" className="min-h-[700px]" />}>
+      <SeasonalSpotlight
+        products={featured}
+        eyebrow={eyebrow}
+        title={title}
+        viewAllText={viewAllText}
+        viewAllLink={viewAllLink}
+      />
+    </Suspense>
+  );
+}
+
+export default function Home() {
+  const { settings, hp } = useSettings();
+  const prefersReducedMotion = useReducedMotion();
 
   const waLink = waGeneralLink(settings?.whatsapp_number) || "#";
   const H = hp.hero;
@@ -118,9 +142,16 @@ export default function Home() {
       </section>
 
       <div className="relative z-10"><CategoryShowcase /></div>
-      <ShopBySpaceSection />
-      <TrustedBySection />
-      <CollageSection />
+
+      <DeferredSection minHeight={650} rootMargin="350px 0px">
+        <Suspense fallback={<div aria-hidden="true" className="min-h-[650px]" />}><ShopBySpaceSection /></Suspense>
+      </DeferredSection>
+      <DeferredSection minHeight={420} rootMargin="350px 0px">
+        <Suspense fallback={<div aria-hidden="true" className="min-h-[420px]" />}><TrustedBySection /></Suspense>
+      </DeferredSection>
+      <DeferredSection minHeight={700} rootMargin="350px 0px">
+        <Suspense fallback={<div aria-hidden="true" className="min-h-[700px]" />}><CollageSection /></Suspense>
+      </DeferredSection>
 
       <section className="border-y border-white/10"><div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-white/10">{[
         { icon: Truck, title: "Pan-India Shipping", body: "Insured door delivery across India. Standard pieces typically dispatch in 7–10 business days; transit time varies by destination." },
@@ -128,15 +159,21 @@ export default function Home() {
         { icon: MessageCircle, title: "WhatsApp Support", body: "Bulk enquiries, custom sizes & installation guidance — we aim to respond within one business day." },
       ].map((f) => <div key={f.title} className="p-8 flex items-start gap-4"><f.icon size={20} strokeWidth={1.4} className="text-[#D4AF37] mt-1" /><div><div className="font-serif text-lg">{f.title}</div><div className="text-sm text-white/60 mt-1">{f.body}</div></div></div>)}</div></section>
 
-      <SeasonalSpotlight products={featured} eyebrow={F.eyebrow} title={F.title} viewAllText={F.view_all_text} viewAllLink={F.view_all_link} />
+      <DeferredSection minHeight={700} rootMargin="350px 0px">
+        <DeferredSeasonalSpotlight eyebrow={F.eyebrow} title={F.title} viewAllText={F.view_all_text} viewAllLink={F.view_all_link} />
+      </DeferredSection>
 
       <section className="max-w-7xl mx-auto px-6 pb-6">
         <DeferredSection minHeight={420}>
           <Suspense fallback={<div aria-hidden="true" className="min-h-[420px]" />}><GoogleReviews /></Suspense>
         </DeferredSection>
       </section>
-      <ReasonsSection />
-      <FounderTeaser />
+      <DeferredSection minHeight={620}>
+        <Suspense fallback={<div aria-hidden="true" className="min-h-[620px]" />}><ReasonsSection /></Suspense>
+      </DeferredSection>
+      <DeferredSection minHeight={520}>
+        <Suspense fallback={<div aria-hidden="true" className="min-h-[520px]" />}><FounderTeaser /></Suspense>
+      </DeferredSection>
       <DeferredSection minHeight={900}>
         <Suspense fallback={<div aria-hidden="true" className="min-h-[900px]" />}><AtelierShowcase /></Suspense>
       </DeferredSection>
