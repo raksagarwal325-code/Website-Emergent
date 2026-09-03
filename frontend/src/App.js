@@ -1,6 +1,6 @@
 import React from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import { CatalogProvider } from "@/context/CatalogContext";
@@ -42,19 +42,12 @@ const ChandelierManufacturerIndia = React.lazy(() => import("@/pages/ChandelierM
 const GuidesIndex = React.lazy(() => import("@/pages/GuidesIndex"));
 const GuidePage = React.lazy(() => import("@/pages/GuidePage"));
 
-function App() {
-  React.useEffect(() => {
-    const remove = () => {
-      const el = document.getElementById("emergent-badge");
-      if (el) el.remove();
-    };
-    remove();
-    const t = setInterval(remove, 500);
-    setTimeout(() => clearInterval(t), 5000);
-    return () => clearInterval(t);
-  }, []);
+function RouteScopedEffects() {
+  const { pathname } = useLocation();
 
   React.useEffect(() => {
+    if (pathname !== "/") return undefined;
+
     let start = null;
     const selector = '[data-testid="influencer-carousel-viewport"]';
 
@@ -93,9 +86,11 @@ function App() {
       document.removeEventListener("touchend", onTouchEnd);
       document.removeEventListener("touchcancel", onTouchCancel);
     };
-  }, []);
+  }, [pathname]);
 
   React.useEffect(() => {
+    if (!pathname.startsWith("/product/")) return undefined;
+
     const selector = '[data-testid="product-main-image"], button[data-testid^="thumb-"] img';
     const attached = new WeakSet();
 
@@ -151,6 +146,21 @@ function App() {
       attributeFilter: ["src"],
     });
     return () => observer.disconnect();
+  }, [pathname]);
+
+  return null;
+}
+
+function App() {
+  React.useEffect(() => {
+    const remove = () => {
+      const el = document.getElementById("emergent-badge");
+      if (el) el.remove();
+    };
+    remove();
+    const t = setInterval(remove, 500);
+    setTimeout(() => clearInterval(t), 5000);
+    return () => clearInterval(t);
   }, []);
 
   return (
@@ -160,6 +170,7 @@ function App() {
         <BrowserRouter>
           <ScrollToTop />
           <AnalyticsRouteTracker />
+          <RouteScopedEffects />
           <Header />
           <main className="flex-1">
             <React.Suspense fallback={<div aria-hidden="true" className="min-h-[40vh]" />}>
