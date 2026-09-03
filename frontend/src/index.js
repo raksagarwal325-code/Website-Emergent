@@ -1,19 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@/index.css";
 import "@/liveImageFallback.css";
-import "@/mobileQuickNavCleanup.css";
 import App from "@/App";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60_000,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
 
 // Responsive WebP variants are an optimisation, not a hard dependency.
 // If a variant request fails on the live site, retry the exact original
@@ -41,8 +30,6 @@ document.addEventListener("error", restoreOriginalProductImage, true);
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <App />
   </React.StrictMode>,
 );
