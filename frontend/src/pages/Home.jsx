@@ -1,17 +1,15 @@
 import React, { useEffect, useRef, useState, Suspense, lazy } from "react";
 import { Link } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
 import SEO from "../components/SEO";
 import { api } from "../lib/api";
-import WelcomeIntro from "../components/WelcomeIntro";
-import HeroSlideshow from "../components/HeroSlideshow";
 import CategoryShowcase from "../components/CategoryShowcase";
 import { useSettings } from "../context/SettingsContext";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
-import { editorialGroup, editorialItem, editorialItemSoft, LUXURY_EASE } from "../lib/motion";
 import { waGeneralLink } from "../lib/whatsapp";
 
+const WelcomeIntro = lazy(() => import("../components/WelcomeIntro"));
+const HeroSlideshow = lazy(() => import("../components/HeroSlideshow"));
 const ShopBySpaceSection = lazy(() => import("../components/ShopBySpaceSection"));
 const TrustedBySection = lazy(() => import("../components/TrustedBySection"));
 const CollageSection = lazy(() => import("../components/CollageSection"));
@@ -87,9 +85,30 @@ function DeferredSeasonalSpotlight({ eyebrow, title, viewAllText, viewAllLink })
   );
 }
 
+function useDesktopEnhancements() {
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const media = window.matchMedia("(min-width: 768px)");
+    const sync = () => setEnabled(media.matches);
+    sync();
+
+    if (media.addEventListener) media.addEventListener("change", sync);
+    else media.addListener(sync);
+
+    return () => {
+      if (media.removeEventListener) media.removeEventListener("change", sync);
+      else media.removeListener(sync);
+    };
+  }, []);
+
+  return enabled;
+}
+
 export default function Home() {
   const { settings, hp } = useSettings();
-  const prefersReducedMotion = useReducedMotion();
+  const desktopEnhancements = useDesktopEnhancements();
 
   const waLink = waGeneralLink(settings?.whatsapp_number) || "#";
   const H = hp.hero;
@@ -100,42 +119,45 @@ export default function Home() {
   return (
     <div data-testid="page-home">
       <SEO title="Samrat Glass Emporium · Handcrafted Chandeliers & Decorative Lighting · Firozabad" description="Handcrafted chandeliers, hanging lights, wall lights, table lamps and decorative glass lighting from Firozabad — by Samrat Glass Emporium, established in 1981." image={settings?.hero_image} path="/" />
-      <WelcomeIntro />
+      {desktopEnhancements && (
+        <Suspense fallback={null}>
+          <WelcomeIntro />
+        </Suspense>
+      )}
 
       <section className="relative overflow-hidden grain min-h-[calc(100vh-5rem)] border-b border-white/10">
-        <motion.div
-          className="absolute inset-0 opacity-45"
-          initial={prefersReducedMotion ? false : { opacity: 0.34, scale: 1.015 }}
-          animate={{ opacity: 0.45, scale: prefersReducedMotion ? 1 : 1.035 }}
-          transition={prefersReducedMotion ? { duration: 0 } : { duration: 7, ease: LUXURY_EASE }}
-        >
+        <div className="absolute inset-0 opacity-45">
           <picture>
             <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
             <img src={settings?.hero_image || BRAND_PLACEHOLDER_HERO} alt="" className="w-full h-full object-cover" loading="eager" fetchPriority="high" decoding="async" />
           </picture>
-          <HeroSlideshow />
+          {desktopEnhancements && (
+            <Suspense fallback={null}>
+              <HeroSlideshow />
+            </Suspense>
+          )}
           <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(42,17,37,0.54) 0%, rgba(22,7,15,0.7) 58%, #16070f 100%)" }} />
           <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 80% 20%, rgba(163,99,80,0.30), transparent 45%)" }} />
-        </motion.div>
+        </div>
 
         <div className="relative max-w-7xl mx-auto px-6 min-h-[calc(100vh-5rem)] flex items-center py-10 md:py-12">
-          <motion.div className="max-w-2xl" initial={prefersReducedMotion ? false : "hidden"} animate="visible" variants={editorialGroup}>
-            <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft}>
+          <div className="max-w-2xl">
+            <div>
               <div className="mb-5 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2"><span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]" /><span className="text-xs uppercase tracking-[0.28em] text-[#BF9972]">{H.eyebrow}</span></div>
               <h1 className="font-serif text-5xl sm:text-6xl lg:text-6xl xl:text-7xl leading-[1.02]">{H.headline_line1}<br /><span className="italic brand-gradient-text">{H.headline_line2}</span></h1>
-              <motion.div aria-hidden className="mt-6 h-px w-40 origin-left bg-gradient-to-r from-[#D4AF37]/90 to-transparent" initial={prefersReducedMotion ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, delay: 0.25, ease: LUXURY_EASE }} />
-            </motion.div>
-            <motion.div variants={prefersReducedMotion ? undefined : editorialItem}>
+              <div aria-hidden className="mt-6 h-px w-40 origin-left bg-gradient-to-r from-[#D4AF37]/90 to-transparent" />
+            </div>
+            <div>
               <p className="mt-5 text-white/70 max-w-lg leading-relaxed">{H.description}</p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <Link to={H.primary_cta_link || "/catalog"} data-testid="hero-explore-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] transition-colors">{H.primary_cta_text} <ArrowUpRight size={14} /></Link>
                 {H.secondary_cta_text && (heroSecondaryExternal ? <a href={heroSecondaryHref} target="_blank" rel="noreferrer" data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors"><MessageCircle size={14} /> {H.secondary_cta_text}</a> : <Link to={heroSecondaryHref} data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors"><MessageCircle size={14} /> {H.secondary_cta_text}</Link>)}
               </div>
-            </motion.div>
-            <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft} className="mt-8 pt-5 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
+            </div>
+            <div className="mt-8 pt-5 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
               {(H.trust || []).map((t, i) => <div key={i}><div className="font-serif text-xl md:text-2xl brand-gradient-text leading-none">{t.value}</div><div className="text-xs font-medium uppercase tracking-[0.18em] text-white/60 mt-2">{t.label}</div></div>)}
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         </div>
 
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#16070f] pointer-events-none" />
