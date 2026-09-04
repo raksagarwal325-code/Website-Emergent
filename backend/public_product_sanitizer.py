@@ -22,6 +22,13 @@ PUBLIC_INTERNAL_SPEC_VALUES = {
     "heritage / classical indian luxury",
 }
 
+CATALOGUE_IMAGE_SPEC_KEYS = {
+    "_catalog_image_off": "catalog_image_off",
+    "_catalog_image_on": "catalog_image_on",
+    "catalogue image off": "catalog_image_off",
+    "catalogue image on": "catalog_image_on",
+}
+
 LEGACY_DELIVERY_VALUES = {
     "Pan-India shipping",
     "Pan-India shipping · 7–10 business days",
@@ -110,6 +117,13 @@ def sanitize_public_product(doc: dict | None):
         clean_specs = {}
         for key, value in specs.items():
             if value is None:
+                continue
+            normalized_key = str(key).strip().lower()
+            catalogue_field = CATALOGUE_IMAGE_SPEC_KEYS.get(normalized_key)
+            if catalogue_field:
+                image_value = str(value).strip()
+                if image_value:
+                    out[catalogue_field] = image_value
                 continue
             normalized = str(value).strip().lower()
             if not normalized:
