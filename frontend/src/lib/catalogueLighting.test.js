@@ -1,4 +1,8 @@
-import { getCatalogueLightImages } from "./catalogueLighting";
+import {
+  CATALOGUE_LIGHT_MODE_STORAGE_KEY,
+  getCatalogueLightImages,
+  readCatalogueLightMode,
+} from "./catalogueLighting";
 
 describe("getCatalogueLightImages", () => {
   it("keeps legacy products unchanged when no lighting pair is configured", () => {
@@ -27,5 +31,20 @@ describe("getCatalogueLightImages", () => {
       off: "/white-off.jpg",
       on: "/white-off.jpg",
     });
+  });
+});
+
+describe("readCatalogueLightMode", () => {
+  beforeEach(() => {
+    window.localStorage.removeItem(CATALOGUE_LIGHT_MODE_STORAGE_KEY);
+  });
+
+  it("defaults new visitors to lights on", () => {
+    expect(readCatalogueLightMode()).toBe("on");
+  });
+
+  it("preserves a visitor's explicit lights off choice", () => {
+    window.localStorage.setItem(CATALOGUE_LIGHT_MODE_STORAGE_KEY, "off");
+    expect(readCatalogueLightMode()).toBe("off");
   });
 });
