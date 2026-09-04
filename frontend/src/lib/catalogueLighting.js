@@ -9,11 +9,12 @@ export function getCatalogueLightImages(product) {
 }
 
 export function readCatalogueLightMode() {
-  if (typeof window === "undefined") return "off";
+  if (typeof window === "undefined") return "on";
   try {
-    return window.localStorage.getItem(CATALOGUE_LIGHT_MODE_STORAGE_KEY) === "on" ? "on" : "off";
+    const stored = window.localStorage.getItem(CATALOGUE_LIGHT_MODE_STORAGE_KEY);
+    return stored === "off" ? "off" : "on";
   } catch {
-    return "off";
+    return "on";
   }
 }
 
