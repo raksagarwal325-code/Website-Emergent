@@ -1,19 +1,19 @@
 import React from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
-import { Toaster } from "sonner";
 
 import { CatalogProvider } from "@/context/CatalogContext";
 import { SettingsProvider } from "@/context/SettingsContext";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import Home from "@/pages/Home";
-import AdminAuthGate from "@/components/AdminAuthGate";
 import FloatingActions from "@/components/FloatingActions";
 import MobileReachStrip from "@/components/MobileReachStrip";
 import AnalyticsRouteTracker from "@/components/AnalyticsRouteTracker";
 import ScrollToTop from "@/components/ScrollToTop";
 
+const Toaster = React.lazy(() => import("sonner").then((module) => ({ default: module.Toaster })));
+const AdminAuthGate = React.lazy(() => import("@/components/AdminAuthGate"));
 const Catalog = React.lazy(() => import("@/pages/Catalog"));
 const CategoryPage = React.lazy(() => import("@/pages/CategoryPage"));
 const CollectionsIndex = React.lazy(() => import("@/pages/CollectionsIndex"));
@@ -209,18 +209,20 @@ function App() {
           <Footer />
           <FloatingActions />
           <MobileReachStrip />
-          <Toaster
-            theme="dark"
-            position="top-right"
-            toastOptions={{
-              style: {
-                background: "#0d0d0d",
-                border: "1px solid rgba(212,175,55,0.4)",
-                color: "#fff",
-                borderRadius: 0,
-              },
-            }}
-          />
+          <React.Suspense fallback={null}>
+            <Toaster
+              theme="dark"
+              position="top-right"
+              toastOptions={{
+                style: {
+                  background: "#0d0d0d",
+                  border: "1px solid rgba(212,175,55,0.4)",
+                  color: "#fff",
+                  borderRadius: 0,
+                },
+              }}
+            />
+          </React.Suspense>
         </BrowserRouter>
         </SettingsProvider>
       </CatalogProvider>
