@@ -137,6 +137,18 @@ def sanitize_public_product(doc: dict | None):
             clean_specs[key] = value
         out["specs"] = clean_specs
 
+    # Standard catalogue convention: products with exactly two gallery images
+    # use image #1 as the illuminated/black-background view and image #2 as the
+    # unlit/white-background view. Explicit Admin catalogue-image specs above
+    # take priority. One-image and 3+ image products are deliberately not
+    # guessed and continue to use the frontend's safe fallback behaviour.
+    images = doc.get("images")
+    if isinstance(images, list) and len(images) == 2:
+        if not out.get("catalog_image_on") and images[0]:
+            out["catalog_image_on"] = images[0]
+        if not out.get("catalog_image_off") and images[1]:
+            out["catalog_image_off"] = images[1]
+
     return out
 
 
