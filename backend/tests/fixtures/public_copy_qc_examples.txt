@@ -1,0 +1,7 @@
+QC regression examples captured from indexed public product copy on 2026-09-04.
+
+These strings are intentionally NOT product source data. They exist only as test/reference fixtures for public-copy sanitization patterns.
+
+1) Tarangrekha chandelier eight-light chandelier eight-arm chandelier gold scroll glass frosted glass chandelier antique brass chandelier Firozabad handcrafted collection:tarangrekha collection-label:tarangrekha:Tarangrekha
+2) Ratnanchal hanging lantern crystal fringe light diamond cut crystal teardrop crystal drops single-light lantern antique brass hanging light Firozabad handcrafted collection:ratnanchal collection-label:ratnanchal:Ratnanchal
+3) Leherpushp hanging light amber flower glass fluted glass pendant single-light pendant wave rim hanging light antique brass pendant Firozabad handcrafted collection:leherpushp collection-label:leherpushp:Leherpushp

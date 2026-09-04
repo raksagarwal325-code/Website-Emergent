@@ -1,6 +1,7 @@
 """Sanitize customer-facing API data without mutating stored Admin records."""
 
 from copy import deepcopy
+import re
 
 
 PUBLIC_SPEC_PLACEHOLDERS = {
@@ -28,6 +29,18 @@ CATALOGUE_IMAGE_SPEC_KEYS = {
     "catalogue image off": "catalog_image_off",
     "catalogue image on": "catalog_image_on",
 }
+
+PUBLIC_COPY_FIELDS = (
+    "short_description",
+    "description",
+)
+
+COLLECTION_CONTROL_MARKERS = (
+    "collection:",
+    "collection-label:",
+    "collection-display:",
+    "collection-featured:",
+)
 
 LEGACY_DELIVERY_VALUES = {
     "Pan-India shipping",
@@ -104,6 +117,51 @@ def _public_spec_is_unresolved(normalized: str) -> bool:
     return "confirm" in normalized and "before order" in normalized
 
 
+def _contains_collection_control_marker(value: str) -> bool:
+    normalized = value.lower()
+    return any(marker in normalized for marker in COLLECTION_CONTROL_MARKERS)
+
+
+def _sanitize_public_copy(value):
+    """Remove leaked catalogue/search metadata from customer-facing prose.
+
+    Internal collection/search metadata historically landed in some description
+    fields as a standalone keyword line, for example a dense keyword phrase
+    ending in ``collection:... collection-label:...``.  Admin/source data must
+    remain untouched, so public responses drop only lines that contain a known
+    collection control marker.
+
+    For a legacy single-line value, preserve completed prose before the leaked
+    metadata tail when a sentence boundary exists; otherwise suppress the
+    metadata-only value rather than exposing internal tokens to customers.
+    """
+    if not isinstance(value, str) or not _contains_collection_control_marker(value):
+        return value
+
+    lines = value.splitlines()
+    if len(lines) > 1:
+        kept = [line for line in lines if not _contains_collection_control_marker(line)]
+        return "\n".join(kept).strip()
+
+    lower = value.lower()
+    marker_positions = [
+        lower.find(marker)
+        for marker in COLLECTION_CONTROL_MARKERS
+        if lower.find(marker) >= 0
+    ]
+    if not marker_positions:
+        return value
+
+    prefix = value[: min(marker_positions)].rstrip(" ,;|·—-")
+    sentence_ends = [prefix.rfind(mark) for mark in (".", "!", "?")]
+    last_sentence_end = max(sentence_ends)
+    if last_sentence_end >= 0:
+        return prefix[: last_sentence_end + 1].strip()
+
+    # No completed prose before the marker: this is the legacy SEO-keyword line.
+    return ""
+
+
 def sanitize_public_product(doc: dict | None):
     """Return a customer-safe product copy without mutating the source doc."""
     if not isinstance(doc, dict):
@@ -111,6 +169,10 @@ def sanitize_public_product(doc: dict | None):
 
     out = dict(doc)
     out["tags"] = []
+
+    for field in PUBLIC_COPY_FIELDS:
+        if field in doc:
+            out[field] = _sanitize_public_copy(doc.get(field))
 
     specs = doc.get("specs")
     if isinstance(specs, dict):
