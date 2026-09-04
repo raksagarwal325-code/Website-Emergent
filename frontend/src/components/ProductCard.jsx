@@ -122,7 +122,7 @@ export default function ProductCard({ product, index = 0 }) {
 
   return (
     <>
-      <div className="sticky top-20 z-40 col-span-full mb-1 flex flex-wrap items-center justify-between gap-2 border border-white/15 bg-[#11070e]/95 p-2.5 shadow-[0_12px_32px_rgba(0,0,0,0.35)] backdrop-blur-xl no-print sm:gap-3 sm:p-3" data-testid="catalogue-light-toggle-wrap">
+      <div className="sticky top-[166px] z-30 col-span-full mb-1 flex flex-wrap items-center justify-between gap-2 border border-white/15 bg-[#11070e]/95 p-2.5 shadow-[0_12px_32px_rgba(0,0,0,0.35)] backdrop-blur-xl no-print md:top-[142px] sm:gap-3 sm:p-3" data-testid="catalogue-light-toggle-wrap">
         <div className="min-w-0">
           <div className="text-[9px] uppercase tracking-[0.24em] text-[#BF9972] sm:text-[10px] sm:tracking-[0.26em]">Lighting preview</div>
           <div className="mt-1 hidden text-xs text-white/45 md:block">Compare the same piece unlit or illuminated.</div>
