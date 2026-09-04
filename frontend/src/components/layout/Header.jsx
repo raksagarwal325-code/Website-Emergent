@@ -190,7 +190,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
         <Link to="/" data-testid="header-brand" className="flex items-center gap-3 whitespace-nowrap">
           <span className="logo-badge inline-flex h-10 w-10 flex-shrink-0">
-            <img src="/logo.jpeg" alt="Samrat Glass Emporium" className="w-full h-full object-cover" />
+            <img src="/logo-header.webp" alt="Samrat Glass Emporium" className="w-full h-full object-cover" />
           </span>
           <span className="font-serif text-base md:text-lg tracking-wide leading-tight">
             <span className="block text-white">Samrat Glass</span>
