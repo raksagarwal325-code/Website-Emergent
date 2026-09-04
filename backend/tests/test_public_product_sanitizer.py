@@ -40,6 +40,69 @@ def test_public_product_sanitizer_removes_internal_tags_and_placeholders():
     assert "Bulb Type" in source["specs"]
 
 
+def test_public_product_sanitizer_removes_multiline_keyword_leak_from_copy():
+    leaked_line = (
+        "Tarangrekha chandelier eight-light chandelier eight-arm chandelier "
+        "gold scroll glass frosted glass chandelier antique brass chandelier "
+        "Firozabad handcrafted collection:tarangrekha "
+        "collection-label:tarangrekha:Tarangrekha"
+    )
+    source = {
+        "id": "product-2",
+        "name": "Tarangrekha Gold-Scroll Frosted Glass Eight-Light Chandelier",
+        "short_description": "A refined eight-light chandelier with frosted glass shades.",
+        "description": (
+            "Eight ivory frosted glass shades distribute a warm, softly diffused glow.\n\n"
+            f"{leaked_line}"
+        ),
+        "tags": ["collection:tarangrekha"],
+    }
+
+    result = sanitize_public_product(source)
+
+    assert result["short_description"] == source["short_description"]
+    assert result["description"] == (
+        "Eight ivory frosted glass shades distribute a warm, softly diffused glow."
+    )
+    assert "collection:" not in result["description"]
+    assert "eight-arm chandelier" not in result["description"]
+    # Admin/source text remains unchanged.
+    assert leaked_line in source["description"]
+
+
+def test_public_product_sanitizer_suppresses_single_line_metadata_only_copy():
+    source = {
+        "id": "product-3",
+        "name": "Ratnanchal Diamond-Cut Crystal-Fringe Hanging Lantern",
+        "description": (
+            "Ratnanchal hanging lantern crystal fringe light diamond cut crystal "
+            "teardrop crystal drops single-light lantern antique brass hanging light "
+            "Firozabad handcrafted collection:ratnanchal "
+            "collection-label:ratnanchal:Ratnanchal"
+        ),
+    }
+
+    result = sanitize_public_product(source)
+
+    assert result["description"] == ""
+    assert "collection:" in source["description"]
+
+
+def test_public_product_sanitizer_preserves_completed_prose_before_single_line_metadata_tail():
+    source = {
+        "id": "product-4",
+        "description": (
+            "Clear fluted glass creates layered reflections. "
+            "Leherpushp hanging light fluted glass pendant Firozabad handcrafted "
+            "collection:leherpushp collection-label:leherpushp:Leherpushp"
+        ),
+    }
+
+    result = sanitize_public_product(source)
+
+    assert result["description"] == "Clear fluted glass creates layered reflections."
+
+
 def test_public_product_sanitizer_leaves_non_dict_values_unchanged():
     assert sanitize_public_product(None) is None
 
