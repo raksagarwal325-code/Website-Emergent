@@ -24,10 +24,30 @@
               window.gtag = function () { window.dataLayer.push(arguments); };
               gtag('js', new Date());
               gtag('config', 'G-7N4W2XVR2S', { send_page_view: false, anonymize_ip: true });
-              var s = document.createElement('script');
-              s.async = true;
-              s.src = 'https://www.googletagmanager.com/gtag/js?id=G-7N4W2XVR2S';
-              document.head.appendChild(s);
+
+              var loadGtag = function () {
+                if (window.__GA_SCRIPT_STARTED__) return;
+                window.__GA_SCRIPT_STARTED__ = true;
+                var s = document.createElement('script');
+                s.async = true;
+                s.src = 'https://www.googletagmanager.com/gtag/js?id=G-7N4W2XVR2S';
+                document.head.appendChild(s);
+              };
+
+              var scheduleGtag = function () {
+                if (typeof window.requestIdleCallback === 'function') {
+                  window.requestIdleCallback(loadGtag, { timeout: 1500 });
+                } else {
+                  window.setTimeout(loadGtag, 250);
+                }
+              };
+
+              if (document.readyState === 'complete') scheduleGtag();
+              else window.addEventListener('load', scheduleGtag, { once: true });
+
+              ['pointerdown', 'keydown', 'touchstart'].forEach(function (eventName) {
+                window.addEventListener(eventName, loadGtag, { once: true, passive: true });
+              });
             } catch (e) { /* analytics must never break the app */ }
           })();
         </script>
