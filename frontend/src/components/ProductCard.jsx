@@ -45,6 +45,21 @@ export default function ProductCard({ product, index = 0 }) {
     return () => window.removeEventListener(CATALOGUE_LIGHT_MODE_EVENT, syncMode);
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.Image !== "function") return undefined;
+    const alternate = lightMode === "on" ? lightImages.off : lightImages.on;
+    const alternateUrl = api.resolveImage(alternate);
+    if (!alternateUrl || alternateUrl === img) return undefined;
+
+    const preloader = new window.Image();
+    preloader.decoding = "async";
+    preloader.src = alternateUrl;
+    return () => {
+      preloader.onload = null;
+      preloader.onerror = null;
+    };
+  }, [img, lightImages.off, lightImages.on, lightMode]);
+
   const projectCount = useMemo(() => {
     const items = hp?.gallery?.items || [];
     return items.reduce((n, it) => n + ((it.products || []).includes(product.id) ? 1 : 0), 0);
@@ -107,18 +122,18 @@ export default function ProductCard({ product, index = 0 }) {
 
   return (
     <>
-      <div className="col-span-full mb-1 flex flex-wrap items-center justify-between gap-3 border border-white/10 bg-[#11070e]/70 p-3 no-print sm:p-4" data-testid="catalogue-light-toggle-wrap">
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.26em] text-[#BF9972]">Lighting preview</div>
-          <div className="mt-1 text-xs text-white/45">Compare the same piece unlit or illuminated.</div>
+      <div className="sticky top-20 z-40 col-span-full mb-1 flex flex-wrap items-center justify-between gap-2 border border-white/15 bg-[#11070e]/95 p-2.5 shadow-[0_12px_32px_rgba(0,0,0,0.35)] backdrop-blur-xl no-print sm:gap-3 sm:p-3" data-testid="catalogue-light-toggle-wrap">
+        <div className="min-w-0">
+          <div className="text-[9px] uppercase tracking-[0.24em] text-[#BF9972] sm:text-[10px] sm:tracking-[0.26em]">Lighting preview</div>
+          <div className="mt-1 hidden text-xs text-white/45 md:block">Compare the same piece unlit or illuminated.</div>
         </div>
-        <div className="inline-flex border border-white/15 bg-black/30 p-1" role="group" aria-label="Catalogue lighting preview">
+        <div className="inline-flex shrink-0 border border-white/15 bg-black/40 p-1" role="group" aria-label="Catalogue lighting preview">
           <button
             type="button"
             data-testid="catalogue-lights-off"
             aria-pressed={lightMode === "off"}
             onClick={() => setLightMode(writeCatalogueLightMode("off"))}
-            className={`inline-flex items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors ${lightMode === "off" ? "bg-[#D4AF37] text-black" : "text-white/65 hover:text-white"}`}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-2 text-[9px] uppercase tracking-[0.16em] transition-colors sm:gap-2 sm:px-3 sm:text-[10px] sm:tracking-[0.18em] ${lightMode === "off" ? "bg-[#D4AF37] text-black" : "text-white/65 hover:text-white"}`}
           >
             <Sun size={13} /> Lights Off
           </button>
@@ -127,7 +142,7 @@ export default function ProductCard({ product, index = 0 }) {
             data-testid="catalogue-lights-on"
             aria-pressed={lightMode === "on"}
             onClick={() => setLightMode(writeCatalogueLightMode("on"))}
-            className={`inline-flex items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors ${lightMode === "on" ? "bg-[#D4AF37] text-black" : "text-white/65 hover:text-white"}`}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-2 text-[9px] uppercase tracking-[0.16em] transition-colors sm:gap-2 sm:px-3 sm:text-[10px] sm:tracking-[0.18em] ${lightMode === "on" ? "bg-[#D4AF37] text-black" : "text-white/65 hover:text-white"}`}
           >
             <Moon size={13} /> Lights On
           </button>
