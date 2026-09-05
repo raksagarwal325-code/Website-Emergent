@@ -122,12 +122,12 @@ function GalleryDimensionPlate({ config, imageSrc }) {
           <div>
             <div className="text-[8px] uppercase tracking-[0.22em] text-[#BF9972]">Overall Height</div>
             <div className="mt-1 font-serif text-base text-white sm:text-lg">{config.height} / {config.heightCm}</div>
-            <div className="mt-1 text-[9px] text-white/45">≈ {config.heightHuman}</div>
+            <div className="mt-1 text-[10px] font-medium text-white/65">≈ {config.heightHuman}</div>
           </div>
           <div>
             <div className="text-[8px] uppercase tracking-[0.22em] text-[#BF9972]">Overall Width</div>
             <div className="mt-1 font-serif text-base text-white sm:text-lg">{config.width} / {config.widthCm}</div>
-            <div className="mt-1 text-[9px] text-white/45">≈ {config.widthHuman}</div>
+            <div className="mt-1 text-[10px] font-medium text-white/65">≈ {config.widthHuman}</div>
           </div>
           <div>
             <div className="text-[8px] uppercase tracking-[0.22em] text-[#BF9972]">Lights</div>
@@ -221,6 +221,21 @@ export default function ProductDimensionPilot() {
       image.style.visibility = "visible";
     };
   }, [dimensionSelected, galleryFrameTarget]);
+
+  React.useEffect(() => {
+    if (!thumbnailTarget) return undefined;
+    const realThumbs = thumbnailTarget.querySelectorAll('button[data-testid^="thumb-"]:not([data-dimension-thumb])');
+    realThumbs.forEach((button) => {
+      if (dimensionSelected) {
+        button.style.borderColor = "rgba(255,255,255,0.10)";
+      } else {
+        button.style.removeProperty("border-color");
+      }
+    });
+    return () => {
+      realThumbs.forEach((button) => button.style.removeProperty("border-color"));
+    };
+  }, [dimensionSelected, thumbnailTarget]);
 
   const config = sku ? PILOTS[sku] : null;
   if (!config) return null;
