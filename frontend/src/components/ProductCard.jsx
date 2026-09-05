@@ -15,22 +15,6 @@ import {
 } from "../lib/catalogueLighting";
 import { toast } from "sonner";
 
-const GLANCE_SPEC_KEYS = [
-  "Height",
-  "Width",
-  "Diameter",
-  "Dimensions",
-  "Material",
-  "Glass",
-  "Crystal",
-  "Finish",
-  "Lights",
-  "Number of Lights",
-  "Holder",
-  "Wattage",
-  "Weight",
-];
-
 function isMeaningfulSpec(value) {
   if (value === null || value === undefined) return false;
   if (typeof value === "string") return value.trim().length > 0;
@@ -65,21 +49,32 @@ export default function ProductCard({ product, index = 0 }) {
 
   const glanceRows = useMemo(() => {
     const specs = product?.specs || {};
-    const specRows = GLANCE_SPEC_KEYS
-      .filter((key) => isMeaningfulSpec(specs[key]))
-      .slice(0, 6)
-      .map((key) => ({
-        label: key === "Dimensions" ? "Approx. Dimensions" : key,
-        value: String(specs[key]),
-      }));
+    const rows = [];
 
-    return [
-      { label: "Reference Code", value: product?.sku || "" },
-      { label: "Category", value: product?.category || "" },
-      ...specRows,
-      { label: "Availability", value: product?.stock > 0 ? `${product.stock} available` : "Available on request" },
-      ...(product?.rating > 0 ? [{ label: "Rating", value: `${product.rating.toFixed(1)} / 5` }] : []),
-    ].filter((row) => isMeaningfulSpec(row.value));
+    if (isMeaningfulSpec(specs.Dimensions)) {
+      rows.push({ label: "Approx. Dimensions", value: String(specs.Dimensions) });
+    } else {
+      ["Height", "Width", "Diameter"].forEach((key) => {
+        if (isMeaningfulSpec(specs[key])) rows.push({ label: key, value: String(specs[key]) });
+      });
+    }
+
+    const lights = isMeaningfulSpec(specs["Number of Lights"])
+      ? specs["Number of Lights"]
+      : specs.Lights;
+    if (isMeaningfulSpec(lights)) rows.push({ label: "Number of Lights", value: String(lights) });
+
+    if (isMeaningfulSpec(specs.Material)) {
+      rows.push({ label: "Material", value: String(specs.Material) });
+    } else if (isMeaningfulSpec(specs.Glass)) {
+      rows.push({ label: "Material", value: String(specs.Glass) });
+    } else if (isMeaningfulSpec(specs.Crystal)) {
+      rows.push({ label: "Material", value: String(specs.Crystal) });
+    }
+
+    if (isMeaningfulSpec(specs.Finish)) rows.push({ label: "Finish", value: String(specs.Finish) });
+
+    return rows.slice(0, 5);
   }, [product]);
 
   useEffect(() => {
@@ -168,10 +163,7 @@ export default function ProductCard({ product, index = 0 }) {
             data-testid={`product-glance-overlay-${product.id}`}
             className={`pointer-events-none absolute inset-x-3 bottom-3 z-20 hidden max-h-[78%] overflow-hidden border border-[#D4AF37]/35 bg-[#10070d]/95 p-4 text-left shadow-[0_16px_45px_rgba(0,0,0,0.58)] backdrop-blur-xl transition-all duration-200 md:block ${glanceOpen ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"}`}
           >
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="text-[9px] uppercase tracking-[0.26em] text-[#D4AF37]">At a glance</div>
-              <div className="text-[9px] uppercase tracking-[0.18em] text-white/35">Hover preview</div>
-            </div>
+            <div className="mb-3 text-[9px] uppercase tracking-[0.26em] text-[#D4AF37]">At a glance</div>
             <dl className="space-y-1.5">
               {glanceRows.map((row) => (
                 <div key={`${row.label}-${row.value}`} className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-3 text-[11px] leading-snug">
