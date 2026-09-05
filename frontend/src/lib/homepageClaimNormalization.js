@@ -11,6 +11,9 @@ const LEGACY_HERO_CRAFT =
 const SAFE_HERO_CRAFT =
   "A curated catalog of crystal chandeliers, pendant lights, wall sconces, table lamps & decorative lighting — handcrafted and hand-assembled by our artisans in Firozabad, with processes varying by design.";
 
+const LEGACY_HERO_HEADLINE_LINE2 = "turns houses into homes.";
+const SAFE_HERO_HEADLINE_LINE2 = "turn houses into homes.";
+
 const LEGACY_ABOUT_TAGLINE =
   "The story of four generations of glass — and the craft that lights every corner of it.";
 
@@ -87,6 +90,9 @@ export function normalizeHomepageClaims(homepage) {
     out.hero = { ...homepage.hero };
     if (out.hero.description === LEGACY_HERO_CRAFT) {
       out.hero.description = SAFE_HERO_CRAFT;
+    }
+    if (out.hero.headline_line2 === LEGACY_HERO_HEADLINE_LINE2) {
+      out.hero.headline_line2 = SAFE_HERO_HEADLINE_LINE2;
     }
   }
 
