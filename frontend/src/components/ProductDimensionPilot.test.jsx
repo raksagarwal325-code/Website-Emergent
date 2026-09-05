@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ProductDimensionPilot from "./ProductDimensionPilot";
 
@@ -69,9 +69,9 @@ describe("ProductDimensionPilot sitewide gallery", () => {
     });
 
     fireEvent.click(dimensionThumb);
-    expect(await screen.findByTestId("dimension-gallery-panel")).toBeInTheDocument();
-    expect(screen.getByText('56" H × 52" W')).toBeInTheDocument();
-    expect(screen.getByText("4 ft 4 in wide")).toBeInTheDocument();
+    const panel = await screen.findByTestId("dimension-gallery-panel");
+    expect(within(panel).getByText('56" H × 52" W')).toBeInTheDocument();
+    expect(within(panel).getByText("4 ft 4 in wide")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("thumb-0"));
     await waitFor(() => {
