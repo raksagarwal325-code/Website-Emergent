@@ -4,6 +4,7 @@ describe("normalizeHomepageClaims", () => {
   it("normalizes known legacy homepage claims without mutating saved settings", () => {
     const saved = {
       hero: {
+        headline_line2: "turns houses into homes.",
         description: "A curated catalog of crystal chandeliers, pendant lights, wall sconces, table lamps & decorative lighting — hand-blown and hand-assembled by our artisans in Firozabad.",
       },
       collage: {
@@ -71,6 +72,7 @@ describe("normalizeHomepageClaims", () => {
 
     const result = normalizeHomepageClaims(saved);
 
+    expect(result.hero.headline_line2).toBe("turn houses into homes.");
     expect(result.hero.description).toContain("handcrafted and hand-assembled");
     expect(result.hero.description).toContain("processes varying by design");
     expect(result.collage.title).toBe("1000+ Light Options");
@@ -93,6 +95,7 @@ describe("normalizeHomepageClaims", () => {
     expect(result.faq.items[0].a).not.toContain("all happen in-house");
     expect(result.faq.items[1].a).toContain("within 48 hours");
 
+    expect(saved.hero.headline_line2).toBe("turns houses into homes.");
     expect(saved.collage.title).toBe("1000+ Light Options");
     expect(saved.about.tagline).toContain("four generations");
     expect(saved.craft.items[0].kicker).toContain("1400°C");
@@ -101,7 +104,7 @@ describe("normalizeHomepageClaims", () => {
 
   it("leaves unrelated custom copy unchanged", () => {
     const custom = {
-      hero: { description: "Custom homepage description" },
+      hero: { headline_line2: "Custom hero line", description: "Custom homepage description" },
       collage: { title: "Studio Collection", highlight: "Now" },
       about: { tagline: "Custom about tagline" },
       craft: { items: [{ title: "Custom process", kicker: "Custom", body: "Custom craft body" }] },
