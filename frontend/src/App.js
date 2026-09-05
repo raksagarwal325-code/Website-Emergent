@@ -21,6 +21,7 @@ const CollectionPage = React.lazy(() => import("@/pages/CollectionPage"));
 const SpacesIndex = React.lazy(() => import("@/pages/SpacesIndex"));
 const SpacePage = React.lazy(() => import("@/pages/SpacePage"));
 const ProductDetail = React.lazy(() => import("@/pages/ProductDetail"));
+const ProductDimensionPilot = React.lazy(() => import("@/components/ProductDimensionPilot"));
 const Favorites = React.lazy(() => import("@/pages/Favorites"));
 const Cart = React.lazy(() => import("@/pages/Cart"));
 const Contact = React.lazy(() => import("@/pages/Contact"));
@@ -190,7 +191,7 @@ function App() {
                 <Route path="/gallery" element={<Gallery />} />
                 <Route path="/gallery/:slug" element={<GalleryProject />} />
                 <Route path="/styled-by" element={<StyledBy />} />
-                <Route path="/product/:id" element={<ProductDetail />} />
+                <Route path="/product/:id" element={<><ProductDetail /><ProductDimensionPilot /></>} />
                 <Route path="/favorites" element={<Favorites />} />
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/contact" element={<Contact />} />
