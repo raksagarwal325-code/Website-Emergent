@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Heart, ShoppingBag, ArrowUpRight, Sparkles, Sun, Moon } from "lucide-react";
+import { Heart, ShoppingBag, ArrowUpRight, Sparkles, Sun, Moon, Eye } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
 import { useSettings } from "../context/SettingsContext";
 import { api, formatProductPrice } from "../lib/api";
@@ -14,6 +14,28 @@ import {
   writeCatalogueLightMode,
 } from "../lib/catalogueLighting";
 import { toast } from "sonner";
+
+const GLANCE_SPEC_KEYS = [
+  "Height",
+  "Width",
+  "Diameter",
+  "Dimensions",
+  "Material",
+  "Glass",
+  "Crystal",
+  "Finish",
+  "Lights",
+  "Number of Lights",
+  "Holder",
+  "Wattage",
+  "Weight",
+];
+
+function isMeaningfulSpec(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  return true;
+}
 
 function ProductPlaceholder({ name }) {
   return (
@@ -38,6 +60,27 @@ export default function ProductCard({ product, index = 0 }) {
   const selectedImage = lightMode === "on" ? lightImages.on : lightImages.off;
   const img = api.resolveImage(selectedImage);
   const [mediaAspect, setMediaAspect] = useState(4 / 5);
+  const [glanceOpen, setGlanceOpen] = useState(false);
+  const hoverTimerRef = useRef(null);
+
+  const glanceRows = useMemo(() => {
+    const specs = product?.specs || {};
+    const specRows = GLANCE_SPEC_KEYS
+      .filter((key) => isMeaningfulSpec(specs[key]))
+      .slice(0, 6)
+      .map((key) => ({
+        label: key === "Dimensions" ? "Approx. Dimensions" : key,
+        value: String(specs[key]),
+      }));
+
+    return [
+      { label: "Reference Code", value: product?.sku || "" },
+      { label: "Category", value: product?.category || "" },
+      ...specRows,
+      { label: "Availability", value: product?.stock > 0 ? `${product.stock} available` : "Available on request" },
+      ...(product?.rating > 0 ? [{ label: "Rating", value: `${product.rating.toFixed(1)} / 5` }] : []),
+    ].filter((row) => isMeaningfulSpec(row.value));
+  }, [product]);
 
   useEffect(() => {
     const syncMode = (event) => setLightMode(event?.detail === "on" ? "on" : "off");
@@ -59,6 +102,10 @@ export default function ProductCard({ product, index = 0 }) {
       preloader.onerror = null;
     };
   }, [img, lightImages.off, lightImages.on, lightMode]);
+
+  useEffect(() => () => {
+    if (hoverTimerRef.current) window.clearTimeout(hoverTimerRef.current);
+  }, []);
 
   const projectCount = useMemo(() => {
     const items = hp?.gallery?.items || [];
@@ -85,12 +132,29 @@ export default function ProductCard({ product, index = 0 }) {
     });
   };
 
+  const showDesktopGlance = () => {
+    if (hoverTimerRef.current) window.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = window.setTimeout(() => setGlanceOpen(true), 350);
+  };
+
+  const hideDesktopGlance = () => {
+    if (hoverTimerRef.current) window.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = null;
+    setGlanceOpen(false);
+  };
+
   const badge = (product.badge || "").trim();
 
   const card = (
-    <div data-testid={`product-card-${product.id}`} className="group relative flex flex-col border border-white/8 hover:border-[#D4AF37]/50 bg-[#1a0a17]/60 transition-all duration-500 fade-up h-full" style={{ animationDelay: `${index * 60}ms` }}>
+    <div
+      data-testid={`product-card-${product.id}`}
+      className="group relative flex flex-col border border-white/8 hover:border-[#D4AF37]/50 bg-[#1a0a17]/60 transition-all duration-500 fade-up h-full"
+      style={{ animationDelay: `${index * 60}ms` }}
+      onMouseEnter={showDesktopGlance}
+      onMouseLeave={hideDesktopGlance}
+    >
       {badge && <div data-testid={`product-badge-${product.id}`} className="absolute top-2 left-2 sm:top-4 sm:left-4 z-10 inline-flex items-center gap-1 border border-[#BF9972]/50 bg-black/60 backdrop-blur-sm px-2 py-1 text-[8px] sm:text-[10px] uppercase tracking-[0.18em] sm:tracking-[0.22em] text-[#D4AF37]"><span className="w-1 h-1 rounded-full bg-[#D4AF37]"></span>{badge}</div>}
-      <button onClick={(e) => { e.preventDefault(); toggleFavorite(product); }} aria-label={fav ? "Remove favorite" : "Add favorite"} data-testid={`favorite-toggle-${product.id}`} className={`absolute top-2 right-2 sm:top-4 sm:right-4 z-10 h-9 w-9 sm:h-10 sm:w-10 rounded-full flex items-center justify-center border backdrop-blur-md transition-all ${fav ? "border-[#D4AF37]/70 bg-black/80 text-[#D4AF37]" : "border-white/25 bg-black/70 text-white/80 hover:border-[#D4AF37]/60 hover:text-[#D4AF37]"}`}>
+      <button onClick={(e) => { e.preventDefault(); toggleFavorite(product); }} aria-label={fav ? "Remove favorite" : "Add favorite"} data-testid={`favorite-toggle-${product.id}`} className={`absolute top-2 right-2 sm:top-4 sm:right-4 z-30 h-9 w-9 sm:h-10 sm:w-10 rounded-full flex items-center justify-center border backdrop-blur-md transition-all ${fav ? "border-[#D4AF37]/70 bg-black/80 text-[#D4AF37]" : "border-white/25 bg-black/70 text-white/80 hover:border-[#D4AF37]/60 hover:text-[#D4AF37]"}`}>
         <Heart size={15} className="sm:hidden" fill={fav ? "#D4AF37" : "none"} strokeWidth={1.6} />
         <Heart size={17} className="hidden sm:block" fill={fav ? "#D4AF37" : "none"} strokeWidth={1.6} />
       </button>
@@ -98,6 +162,25 @@ export default function ProductCard({ product, index = 0 }) {
         <div className="overflow-hidden bg-[#0e0510] flex items-center justify-center relative transition-[aspect-ratio] duration-500" {...containerGuardProps} style={{ ...containerGuardStyle, aspectRatio: mediaAspect }}>
           {img ? <img src={img} alt={product.name} className="product-image block h-full w-full object-contain object-center p-1.5 opacity-95 group-hover:opacity-100 sm:p-3" loading="lazy" onLoad={handleImageLoad} {...imgGuardProps} style={imgGuardStyle} /> : <ProductPlaceholder name={product.name} />}
           {projectCount > 0 && <div data-testid={`product-projects-badge-${product.id}`} className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 inline-flex items-center gap-1 border border-[#D4AF37]/40 bg-black/70 backdrop-blur-sm px-2 py-1 text-[8px] sm:text-[10px] uppercase tracking-[0.16em] sm:tracking-[0.2em] text-[#D4AF37]" title={`Featured in ${projectCount} real installation${projectCount === 1 ? "" : "s"}`}><Sparkles size={9} strokeWidth={1.6} /><span className="hidden sm:inline">Featured in </span>{projectCount} project{projectCount === 1 ? "" : "s"}</div>}
+
+          <div
+            aria-hidden={!glanceOpen}
+            data-testid={`product-glance-overlay-${product.id}`}
+            className={`pointer-events-none absolute inset-x-3 bottom-3 z-20 hidden max-h-[78%] overflow-hidden border border-[#D4AF37]/35 bg-[#10070d]/95 p-4 text-left shadow-[0_16px_45px_rgba(0,0,0,0.58)] backdrop-blur-xl transition-all duration-200 md:block ${glanceOpen ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"}`}
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="text-[9px] uppercase tracking-[0.26em] text-[#D4AF37]">At a glance</div>
+              <div className="text-[9px] uppercase tracking-[0.18em] text-white/35">Hover preview</div>
+            </div>
+            <dl className="space-y-1.5">
+              {glanceRows.map((row) => (
+                <div key={`${row.label}-${row.value}`} className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-3 text-[11px] leading-snug">
+                  <dt className="text-white/48">{row.label}</dt>
+                  <dd className="truncate text-right text-white/90" title={row.value}>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
         </div>
       </Link>
       <div className="flex flex-col flex-1 p-3 sm:p-5">
@@ -110,6 +193,34 @@ export default function ProductCard({ product, index = 0 }) {
             return <><span data-testid={`product-price-${product.id}`} className="text-[#D4AF37] font-serif text-[15px] sm:text-lg truncate">{p.label && <span className="text-[8px] sm:text-[10px] uppercase tracking-[0.18em] sm:tracking-[0.22em] text-[#BF9972] mr-1 font-sans not-italic">{p.label}</span>}{p.primary}</span>{p.compareAt && <span data-testid={`product-mrp-${product.id}`} className="hidden sm:inline text-white/40 line-through text-xs flex-shrink-0">{p.compareAt}</span>}</>;
           })()}</div>
         </div>
+
+        <button
+          type="button"
+          data-testid={`product-glance-toggle-${product.id}`}
+          aria-expanded={glanceOpen}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setGlanceOpen((value) => !value);
+          }}
+          className="mt-1 inline-flex min-h-[38px] items-center justify-between border-y border-white/10 py-2 text-[9px] uppercase tracking-[0.18em] text-white/62 md:hidden"
+        >
+          <span className="inline-flex items-center gap-2"><Eye size={12} /> At a glance</span>
+          <span className="text-[#D4AF37]">{glanceOpen ? "Close" : "View"}</span>
+        </button>
+        {glanceOpen && (
+          <div data-testid={`product-glance-mobile-${product.id}`} className="border-b border-white/10 py-3 md:hidden">
+            <dl className="space-y-1.5">
+              {glanceRows.map((row) => (
+                <div key={`${row.label}-${row.value}`} className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-3 text-[10px] leading-snug">
+                  <dt className="text-white/45">{row.label}</dt>
+                  <dd className="text-right text-white/85">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+
         <div className="pt-2.5 sm:pt-3 mt-auto grid grid-cols-2 gap-1.5 sm:gap-2">
           <Link to={productPath(product)} data-testid={`view-btn-${product.id}`} className="inline-flex items-center justify-center gap-1 bg-[#D4AF37] text-black px-2 sm:px-3 py-2.5 text-[9px] sm:text-[11px] uppercase tracking-[0.12em] sm:tracking-[0.16em] hover:bg-[#B5952F] transition-colors">View <ArrowUpRight size={10} className="sm:hidden" /><ArrowUpRight size={12} className="hidden sm:block" /></Link>
           <button onClick={handleAdd} data-testid={`quick-add-${product.id}`} className="inline-flex items-center justify-center gap-1 border border-[#D4AF37]/60 text-[#D4AF37] hover:bg-[#D4AF37]/10 px-2 sm:px-3 py-2.5 text-[9px] sm:text-[11px] uppercase tracking-[0.12em] sm:tracking-[0.16em] transition-colors"><ShoppingBag size={10} className="sm:hidden" /><ShoppingBag size={12} className="hidden sm:block" /> Inquire</button>
