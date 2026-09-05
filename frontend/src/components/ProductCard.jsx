@@ -168,7 +168,7 @@ export default function ProductCard({ product, index = 0 }) {
               {glanceRows.map((row) => (
                 <div key={`${row.label}-${row.value}`} className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-3 text-[11px] leading-snug">
                   <dt className="text-white/48">{row.label}</dt>
-                  <dd className="truncate text-right text-white/90" title={row.value}>{row.value}</dd>
+                  <dd className={`${row.label === "Material" || row.label === "Finish" ? "line-clamp-2 whitespace-normal break-words" : "truncate"} text-right text-white/90`} title={row.value}>{row.value}</dd>
                 </div>
               ))}
             </dl>
