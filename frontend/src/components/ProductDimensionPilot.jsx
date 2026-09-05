@@ -13,6 +13,10 @@ const PILOTS = {
     mode: "gallery",
     height: '56"',
     width: '52"',
+    heightCm: "142 cm",
+    widthCm: "132 cm",
+    heightHuman: "4 ft 8 in tall",
+    widthHuman: "4 ft 4 in wide",
     lights: "24",
     label: "Gajmahal",
   },
@@ -83,6 +87,7 @@ function GalleryDimensionPlate({ config, imageSrc }) {
           <div className="text-right">
             <div className="text-[8px] uppercase tracking-[0.24em] text-[#BF9972]">Approx. dimensions</div>
             <div className="mt-2 font-serif text-lg text-white sm:text-xl">{config.height} H × {config.width} W</div>
+            <div className="mt-1 text-[10px] tracking-[0.08em] text-white/55">{config.heightCm} H × {config.widthCm} W</div>
           </div>
         </div>
 
@@ -96,35 +101,43 @@ function GalleryDimensionPlate({ config, imageSrc }) {
             />
           )}
 
-          <div className="pointer-events-none absolute bottom-[12%] left-2 top-[10%] w-px bg-[#D4AF37]/65" aria-hidden="true">
-            <span className="absolute -left-1.5 top-0 h-px w-3 bg-[#D4AF37]/65" />
-            <span className="absolute -left-1.5 bottom-0 h-px w-3 bg-[#D4AF37]/65" />
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 whitespace-nowrap bg-[#12070f]/90 px-2 py-1 text-[8px] uppercase tracking-[0.2em] text-[#E5C453]">
-              Height · {config.height}
+          <div className="pointer-events-none absolute bottom-[12%] left-2 top-[10%] w-px bg-[#D4AF37]/80" aria-hidden="true">
+            <span className="absolute -left-2 top-0 h-px w-4 bg-[#D4AF37]/80" />
+            <span className="absolute -left-2 bottom-0 h-px w-4 bg-[#D4AF37]/80" />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 whitespace-nowrap bg-[#12070f]/95 px-2 py-1.5 text-[8px] uppercase tracking-[0.18em] text-[#E5C453]">
+              Overall height · {config.height} / {config.heightCm}
             </span>
           </div>
 
-          <div className="pointer-events-none absolute bottom-2 left-[14%] right-[14%] h-px bg-[#D4AF37]/65" aria-hidden="true">
-            <span className="absolute -top-1.5 left-0 h-3 w-px bg-[#D4AF37]/65" />
-            <span className="absolute -top-1.5 right-0 h-3 w-px bg-[#D4AF37]/65" />
-            <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap bg-[#12070f]/90 px-2 py-1 text-[8px] uppercase tracking-[0.2em] text-[#E5C453]">
-              Width · {config.width}
+          <div className="pointer-events-none absolute bottom-2 left-[14%] right-[14%] h-px bg-[#D4AF37]/80" aria-hidden="true">
+            <span className="absolute -top-2 left-0 h-4 w-px bg-[#D4AF37]/80" />
+            <span className="absolute -top-2 right-0 h-4 w-px bg-[#D4AF37]/80" />
+            <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap bg-[#12070f]/95 px-2 py-1.5 text-[8px] uppercase tracking-[0.18em] text-[#E5C453]">
+              Overall width · {config.width} / {config.widthCm}
             </span>
           </div>
         </div>
 
-        <div className="relative z-10 grid grid-cols-3 gap-3 border-t border-white/10 pt-5">
+        <div className="relative z-10 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-white/10 pt-5 sm:grid-cols-4">
           <div>
-            <div className="text-[8px] uppercase tracking-[0.24em] text-[#BF9972]">Height</div>
-            <div className="mt-1 font-serif text-lg text-white">{config.height}</div>
+            <div className="text-[8px] uppercase tracking-[0.22em] text-[#BF9972]">Overall Height</div>
+            <div className="mt-1 font-serif text-base text-white sm:text-lg">{config.height} / {config.heightCm}</div>
+            <div className="mt-1 text-[9px] text-white/45">≈ {config.heightHuman}</div>
           </div>
           <div>
-            <div className="text-[8px] uppercase tracking-[0.24em] text-[#BF9972]">Width</div>
-            <div className="mt-1 font-serif text-lg text-white">{config.width}</div>
+            <div className="text-[8px] uppercase tracking-[0.22em] text-[#BF9972]">Overall Width</div>
+            <div className="mt-1 font-serif text-base text-white sm:text-lg">{config.width} / {config.widthCm}</div>
+            <div className="mt-1 text-[9px] text-white/45">≈ {config.widthHuman}</div>
           </div>
           <div>
-            <div className="text-[8px] uppercase tracking-[0.24em] text-[#BF9972]">Lights</div>
-            <div className="mt-1 font-serif text-lg text-white">{config.lights}</div>
+            <div className="text-[8px] uppercase tracking-[0.22em] text-[#BF9972]">Lights</div>
+            <div className="mt-1 font-serif text-base text-white sm:text-lg">{config.lights}</div>
+            <div className="mt-1 text-[9px] text-white/45">light points</div>
+          </div>
+          <div>
+            <div className="text-[8px] uppercase tracking-[0.22em] text-[#BF9972]">Approx. Footprint</div>
+            <div className="mt-1 font-serif text-base text-white sm:text-lg">{config.widthHuman}</div>
+            <div className="mt-1 text-[9px] text-white/45">widest span</div>
           </div>
         </div>
       </div>
@@ -146,7 +159,7 @@ function GalleryDimensionThumbnail({ config, active, onSelect }) {
         <div className="h-6 w-px bg-[#D4AF37]/60" aria-hidden="true" />
         <div className="mt-2 text-[7px] uppercase tracking-[0.2em] text-[#D4AF37]">Dimensions</div>
         <div className="mt-1 font-serif text-[11px] leading-tight text-white">{config.height} × {config.width}</div>
-        <div className="mt-1 text-[7px] uppercase tracking-[0.16em] text-white/45">Scale</div>
+        <div className="mt-1 text-[7px] tracking-[0.08em] text-white/45">{config.heightCm.replace(" cm", "")} × {config.widthCm}</div>
       </div>
     </button>
   );
