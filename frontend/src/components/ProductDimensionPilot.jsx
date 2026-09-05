@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { getProductDimensionData } from "../lib/productDimensions";
+import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
 
 function measurementText(measurement) {
   if (!measurement) return null;
@@ -20,6 +21,8 @@ function GalleryDimensionPlate({ product, config, imageSrc }) {
     <div
       data-testid="dimension-gallery-panel"
       className="absolute inset-0 z-20 overflow-hidden bg-[#12070f] px-5 py-6 sm:px-10 sm:py-10"
+      {...containerGuardProps}
+      style={{ ...containerGuardStyle }}
     >
       <div
         className="absolute inset-0 bg-[radial-gradient(circle_at_72%_42%,rgba(212,175,55,0.08),transparent_38%)]"
@@ -62,6 +65,8 @@ function GalleryDimensionPlate({ product, config, imageSrc }) {
               alt=""
               aria-hidden="true"
               className="h-full w-full object-contain object-center opacity-90"
+              {...imgGuardProps}
+              style={imgGuardStyle}
             />
           )}
 
