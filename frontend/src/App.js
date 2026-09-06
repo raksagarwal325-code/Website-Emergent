@@ -31,6 +31,7 @@ const SpacesAdmin = React.lazy(() => import("@/pages/SpacesAdmin"));
 const Catalogue = React.lazy(() => import("@/pages/Catalogue"));
 const About = React.lazy(() => import("@/pages/About"));
 const Craft = React.lazy(() => import("@/pages/Craft"));
+const Experience = React.lazy(() => import("@/pages/Experience"));
 const FAQ = React.lazy(() => import("@/pages/FAQ"));
 const Gallery = React.lazy(() => import("@/pages/Gallery"));
 const GalleryProject = React.lazy(() => import("@/pages/GalleryProject"));
@@ -185,6 +186,7 @@ function App() {
                 <Route path="/space/:slug" element={<SpacePage />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/craft" element={<Craft />} />
+                <Route path="/experience" element={<Experience />} />
                 <Route path="/faq" element={<FAQ />} />
                 <Route path="/guides" element={<GuidesIndex />} />
                 <Route path="/guides/:slug" element={<GuidePage />} />
