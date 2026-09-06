@@ -1,8 +1,9 @@
 const https = require('https');
 
 const HOST = 'samratglass.com';
-const KEY = '513b2f270aaae19c310a4180567023ae';
-const KEY_LOCATION = `https://${HOST}/${KEY}.txt`;
+const VERIFICATION_FILE = '513b2f270aaae19c310a4180567023ae.txt';
+const INDEXNOW_KEY = VERIFICATION_FILE.replace(/\.txt$/, '');
+const KEY_LOCATION = `https://${HOST}/${VERIFICATION_FILE}`;
 const INDEXNOW_ENDPOINT = 'https://api.indexnow.org/indexnow';
 const SITEMAPS = [
   `https://${HOST}/api/sitemap.xml`,
@@ -94,7 +95,7 @@ async function collectUrls() {
 function submitChunk(urlList) {
   const payload = JSON.stringify({
     host: HOST,
-    key: KEY,
+    key: INDEXNOW_KEY,
     keyLocation: KEY_LOCATION,
     urlList,
   });
