@@ -12,27 +12,30 @@ export default function ShopBySpaceSection() {
   const [direction, setDirection] = useState(1);
   const sectionRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
-  const visibleSpaces = useMemo(() => SHOP_BY_SPACE.slice(0, 8), []);
+  const visibleSpaces = useMemo(() => SHOP_BY_SPACE, []);
 
   useEffect(() => {
     const node = sectionRef.current;
     if (!node) return undefined;
     let cancelled = false;
     const load = () => {
-      api.listAllProducts({ limit: 5000 }).then((items) => {
-        if (cancelled) return;
-        const map = {};
-        visibleSpaces.forEach((space) => {
-          const tag = spaceTag(space);
-          const product = (items || []).find((p) => Array.isArray(p?.tags) && p.tags.includes(tag) && p?.images?.[0]);
-          if (product?.images?.[0]) map[space.slug] = api.resolveImage(product.images[0]);
-        });
-        setCovers(map);
-        Object.values(map).forEach((src) => {
-          const image = new Image();
-          image.src = src;
-        });
-      }).catch(() => {});
+      Promise.all(
+        visibleSpaces.map(async (space) => {
+          const res = await api.listProducts({ tag: spaceTag(space), limit: 1 });
+          const product = res?.items?.find((item) => item?.images?.[0]);
+          return [space.slug, product?.images?.[0] ? api.resolveImage(product.images[0]) : null];
+        }),
+      )
+        .then((entries) => {
+          if (cancelled) return;
+          const map = Object.fromEntries(entries.filter(([, src]) => Boolean(src)));
+          setCovers(map);
+          Object.values(map).forEach((src) => {
+            const image = new Image();
+            image.src = src;
+          });
+        })
+        .catch(() => {});
     };
     if (typeof IntersectionObserver === "undefined") {
       load();
