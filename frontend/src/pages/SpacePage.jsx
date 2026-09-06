@@ -32,14 +32,11 @@ export default function SpacePage() {
     if (!space) return;
     let active = true;
     setLoading(true);
-    api.listAllProducts({ limit: 5000 })
+    const tag = spaceTag(space);
+    api.listAllProducts({ tag, limit: 48 })
       .then((items) => {
         if (!active) return;
-        const tag = spaceTag(space);
-        const matched = (items || []).filter((product) =>
-          Array.isArray(product?.tags) && product.tags.includes(tag),
-        );
-        setProducts(matched);
+        setProducts(items || []);
       })
       .catch(() => { if (active) setProducts([]); })
       .finally(() => { if (active) setLoading(false); });
