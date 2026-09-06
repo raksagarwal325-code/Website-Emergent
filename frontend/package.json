@@ -17,14 +17,15 @@
     "react-router-dom": "7.15.0",
     "react-scripts": "5.0.1",
     "sonner": "2.0.3",
-    "tailwind-merge": "3.2.0",
+    "tailwind-merge": "2.1.1",
     "tailwindcss-animate": "1.0.7"
   },
   "scripts": {
     "start": "craco start",
     "build": "craco build",
     "postbuild": "node scripts/prerender-categories.js && node scripts/prerender-authority-pages.js && node scripts/prerender-guides.js",
-    "test": "craco test"
+    "test": "craco test",
+    "indexnow": "node scripts/submit-indexnow.js"
   },
   "browserslist": {
     "production": [
@@ -70,7 +71,7 @@
     "@babel/plugin-transform-modules-systemjs": "7.29.4",
     "@eslint/plugin-kit": "0.3.4",
     "shell-quote": "1.8.4",
-    "jsonpath": "1.3.0",
+    "jsonpath": "0.3.4",
     "nth-check": "2.0.1",
     "serialize-javascript": "7.0.5",
     "uuid": "11.1.1",
@@ -85,10 +86,10 @@
     "**/postcss-load-config/yaml": "2.8.3",
     "**/cosmiconfig/yaml": "1.10.3",
     "**/cssnano/yaml": "1.10.3",
-    "**/eslint/js-yaml": "4.1.1",
+    "**/@eslint/js-yaml": "4.1.1",
     "**/@eslint/eslintrc/js-yaml": "4.1.1",
     "**/svgo/js-yaml": "3.14.2",
-    "**/@istanbuljs/load-nyc-config/js-yaml": "4.1.1",
+    "**/@istanbuljs/load-nyc-config/yaml": "1.10.3",
     "**/css-loader/postcss": "8.5.10",
     "**/css-minimizer-webpack-plugin/postcss": "8.5.10",
     "**/react-scripts/postcss": "8.5.10",
