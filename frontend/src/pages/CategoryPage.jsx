@@ -159,7 +159,7 @@ export default function CategoryPage() {
       <aside
         data-testid={`category-context-links-${category.slug}`}
         aria-labelledby={`category-context-links-heading-${category.slug}`}
-        className="mt-14 md:mt-18 border-t border-white/10 pt-8 max-w-5xl"
+        className="mt-14 md:mt-20 border-t border-white/10 pt-8 max-w-5xl"
       >
         <div className="eyebrow mb-3">Plan the right piece</div>
         <h2 id={`category-context-links-heading-${category.slug}`} className="font-serif text-2xl sm:text-3xl leading-tight">
