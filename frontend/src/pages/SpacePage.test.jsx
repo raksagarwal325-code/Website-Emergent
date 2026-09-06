@@ -26,24 +26,24 @@ function renderAt(path) {
 describe("SpacePage", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  test("shows only products explicitly tagged for the selected space", async () => {
+  test("requests only products explicitly tagged for the selected space", async () => {
     api.listAllProducts.mockResolvedValue([
-      { id: "1", name: "Tagged Chandelier", tags: ["space:double-height-staircase"] },
-      { id: "2", name: "Other Chandelier", tags: ["space:living-room"] },
+      { id: "1", name: "Tagged Chandelier", tags: [] },
     ]);
 
     const { container } = renderAt("/space/double-height-staircase");
 
     expect(screen.getByRole("heading", { level: 1, name: /Double-Height & Staircase/i })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Tagged Chandelier")).toBeInTheDocument());
-    expect(screen.queryByText("Other Chandelier")).not.toBeInTheDocument();
+    expect(api.listAllProducts).toHaveBeenCalledWith({
+      tag: "space:double-height-staircase",
+      limit: 48,
+    });
     expect(container.textContent).toMatch(/1\s+verified\s+piece/i);
   });
 
-  test("does not guess relevance when no product has the exact space tag", async () => {
-    api.listAllProducts.mockResolvedValue([
-      { id: "1", name: "Double Height Words Only", description: "Suitable for double height interiors", tags: [] },
-    ]);
+  test("shows the curated empty state when the selected tag has no published products", async () => {
+    api.listAllProducts.mockResolvedValue([]);
 
     renderAt("/space/double-height-staircase");
 
