@@ -123,7 +123,8 @@ export default function SpacePage() {
           <div className="mb-6 text-xs uppercase tracking-[0.22em] text-white/45">
             {products.length} verified {products.length === 1 ? "piece" : "pieces"}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
+          <style>{`.space-product-grid [data-testid="catalogue-light-toggle-wrap"] { position: static; top: auto; }`}</style>
+          <div className="space-product-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
             {products.map((product, index) => (
               <ProductCard key={product.id} product={product} index={index} />
             ))}
