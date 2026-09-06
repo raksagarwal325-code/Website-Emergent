@@ -46,6 +46,9 @@ function guideSchemas(guide) {
         author: { '@id': `${SITE_ORIGIN}/#business` },
         publisher: { '@id': `${SITE_ORIGIN}/#business` },
         inLanguage: 'en-IN',
+        ...(guide.image ? { image: guide.image } : {}),
+        ...(guide.datePublished ? { datePublished: guide.datePublished } : {}),
+        ...(guide.dateModified ? { dateModified: guide.dateModified } : {}),
       },
     },
     {
