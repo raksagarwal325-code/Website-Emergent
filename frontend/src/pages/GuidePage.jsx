@@ -32,6 +32,9 @@ export default function GuidePage() {
     publisher: { "@id": `${site}/#business` },
     about: { "@id": `${site}/#business` },
     inLanguage: "en-IN",
+    ...(guide.image ? { image: guide.image } : {}),
+    ...(guide.datePublished ? { datePublished: guide.datePublished } : {}),
+    ...(guide.dateModified ? { dateModified: guide.dateModified } : {}),
   };
   const breadcrumbSchema = {
     "@context": "https://schema.org",
@@ -45,7 +48,7 @@ export default function GuidePage() {
 
   return (
     <article className="max-w-4xl mx-auto px-6 py-16">
-      <SEO title={guide.seoTitle} description={guide.description} path={`/guides/${guide.slug}`} />
+      <SEO title={guide.seoTitle} description={guide.description} image={guide.image} path={`/guides/${guide.slug}`} type="article" />
       <SchemaLD id={`guide-${guide.slug}`} data={webpageSchema} />
       <SchemaLD id={`guide-breadcrumb-${guide.slug}`} data={breadcrumbSchema} />
 
