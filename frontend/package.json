@@ -24,7 +24,8 @@
     "start": "craco start",
     "build": "craco build",
     "postbuild": "node scripts/prerender-categories.js && node scripts/prerender-authority-pages.js && node scripts/prerender-guides.js",
-    "test": "craco test"
+    "test": "craco test",
+    "indexnow": "node scripts/submit-indexnow.js"
   },
   "browserslist": {
     "production": [
@@ -74,9 +75,8 @@
     "nth-check": "2.0.1",
     "serialize-javascript": "7.0.5",
     "uuid": "11.1.1",
-    "@tootallnate/once": "2.0.1",
     "webpack-dev-server": "5.2.4",
-    "resolve-url-loader": "5.0.0",
+    "resolve-url-loader": "^5.0.0",
     "**/resolve-url-loader/postcss": "8.5.10",
     "**/axios/form-data": "4.0.4",
     "**/jsdom/form-data": "3.0.4",
