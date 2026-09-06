@@ -24,7 +24,8 @@
     "start": "craco start",
     "build": "craco build",
     "postbuild": "node scripts/prerender-categories.js && node scripts/prerender-authority-pages.js && node scripts/prerender-guides.js",
-    "test": "craco test"
+    "test": "craco test",
+    "indexnow": "node scripts/submit-indexnow.js"
   },
   "browserslist": {
     "production": [
