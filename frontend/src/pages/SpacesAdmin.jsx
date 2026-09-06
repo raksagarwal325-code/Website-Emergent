@@ -1,10 +1,33 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Check, Search, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Flame, Lightbulb, Search, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { SHOP_BY_SPACE, spaceTag } from "../lib/spaces";
 import { suggestionsForSpace } from "../lib/spaceSuggestions";
+
+function CategoryIcon({ category, size = 15 }) {
+  if (category === "Candle Stand") return <Flame size={size} />;
+  if (String(category || "").includes("Chandelier")) return <Sparkles size={size} />;
+  return <Lightbulb size={size} />;
+}
+
+function ProductThumb({ product }) {
+  const [failed, setFailed] = useState(false);
+  const src = Array.isArray(product?.images) ? product.images.find(Boolean) : "";
+  return (
+    <div className="relative h-24 w-24 md:h-28 md:w-28 shrink-0 overflow-hidden border border-white/10 bg-[#0a0a0a]">
+      {src && !failed ? (
+        <img src={src} alt={product?.name || "Product"} className="h-full w-full object-contain p-1" loading="lazy" onError={() => setFailed(true)} />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-white/25"><CategoryIcon category={product?.category} size={26} /></div>
+      )}
+      <div className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center border border-[#D4AF37]/45 bg-black/80 text-[#D4AF37]" title={product?.category || "Product category"}>
+        <CategoryIcon category={product?.category} />
+      </div>
+    </div>
+  );
+}
 
 export default function SpacesAdmin() {
   const [products, setProducts] = useState([]);
@@ -76,7 +99,6 @@ export default function SpacesAdmin() {
     }
     for (const row of strong) {
       // Sequential writes avoid clobbering tags when a product is suggested for multiple spaces.
-      // The admin can still remove any assignment individually afterwards.
       // eslint-disable-next-line no-await-in-loop
       await toggle(row.product, space);
     }
@@ -92,7 +114,7 @@ export default function SpacesAdmin() {
         <div className="eyebrow mb-3">Catalogue curation</div>
         <h1 className="font-serif text-4xl md:text-5xl">Space Assignments</h1>
         <p className="mt-4 max-w-3xl text-white/55 leading-relaxed">
-          Suggestions are generated from catalogue evidence such as category, product name and description. Nothing is published until you approve it. A product may belong to more than one space.
+          Suggestions are generated from catalogue evidence such as category, product name and description. Strong fit now requires direct space-application evidence; category-only matches remain Possible fit. Nothing is published until you approve it.
         </p>
       </div>
 
@@ -137,22 +159,28 @@ export default function SpacesAdmin() {
               Approve all strong in filter
             </button>
           </div>
-          <p className="mt-4 text-xs leading-relaxed text-white/45">Strong suggestions are high-confidence catalogue matches. Possible suggestions always need closer review. Existing approved assignments are excluded from this list.</p>
+          <p className="mt-4 text-xs leading-relaxed text-white/45">Strong fit requires direct catalogue evidence for the selected space. Suitable product types without that direct evidence are kept under Possible fit for closer review. Existing approved assignments are excluded.</p>
         </div>
       )}
 
       {loading ? <div className="py-16 text-white/40">Loading products…</div> : mode === "suggestions" ? (
         <div className="space-y-3">
           {suggestions.map((row) => (
-            <div key={row.product.id} className="border border-white/10 p-5 md:p-6">
+            <div key={row.product.id} className="border border-white/10 p-4 md:p-5">
               <div className="flex flex-col lg:flex-row gap-5 lg:items-center lg:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="font-serif text-xl">{row.product.name}</div>
-                    <span className={`text-[10px] uppercase tracking-[0.16em] px-2 py-1 border ${row.confidence === "strong" ? "border-[#D4AF37]/55 text-[#D4AF37]" : "border-white/20 text-white/55"}`}>{row.confidence} · {row.score}/100</span>
+                <div className="flex min-w-0 gap-4 md:gap-5">
+                  <ProductThumb product={row.product} />
+                  <div className="min-w-0 self-center">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="font-serif text-xl">{row.product.name}</div>
+                      <span className={`text-[10px] uppercase tracking-[0.16em] px-2 py-1 border ${row.confidence === "strong" ? "border-[#D4AF37]/55 text-[#D4AF37]" : "border-white/20 text-white/55"}`}>{row.confidence} · {row.score}/100</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.18em] text-white/40">
+                      <span>{row.product.sku}</span><span>·</span>
+                      <span className="inline-flex items-center gap-1.5"><CategoryIcon category={row.product.category} size={12} /> {row.product.category}</span>
+                    </div>
+                    <div className="mt-3 text-sm leading-relaxed text-white/50">{row.reasons.join(" · ")}</div>
                   </div>
-                  <div className="mt-2 text-xs uppercase tracking-[0.18em] text-white/40">{row.product.sku} · {row.product.category}</div>
-                  <div className="mt-3 text-sm text-white/50">{row.reasons.join(" · ")}</div>
                 </div>
                 <button type="button" disabled={savingId === `${row.product.id}:${space.slug}`} onClick={() => toggle(row.product, space)} className="shrink-0 border border-[#D4AF37]/55 px-4 py-3 text-xs uppercase tracking-[0.18em] text-[#D4AF37] hover:bg-[#D4AF37]/10 disabled:opacity-40">
                   <Check size={13} className="inline mr-2" /> Approve for {space.label}

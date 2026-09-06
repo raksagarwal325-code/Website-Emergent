@@ -2,49 +2,58 @@ const normalize = (value) => String(value || "").toLowerCase();
 
 const RULES = {
   "living-room": {
-    strongCategories: ["Chandelier", "Hanging Light", "Wall Light", "Floor Lamp", "Table Lamp"],
-    keywords: ["living", "statement", "ambient", "wall", "floor lamp", "table lamp"],
-    excludes: ["gate"],
+    categoryWeights: { "Wall Light": 52, "Floor Lamp": 50, "Table Lamp": 48, Chandelier: 46, "Hanging Light": 44 },
+    applicationKeywords: ["living room", "living-area", "living area", "lounge"],
+    secondaryKeywords: ["statement", "ambient"],
+    excludes: ["gate light", "outdoor gate"],
   },
   "dining-room": {
-    strongCategories: ["Chandelier", "Hanging Light", "Wall Light", "Table Chandelier", "Candle Stand"],
-    keywords: ["dining", "table", "pendant", "cluster", "chandelier", "candle"],
-    excludes: ["gate"],
+    categoryWeights: { Chandelier: 52, "Hanging Light": 50, "Table Chandelier": 46, "Wall Light": 38, "Candle Stand": 36 },
+    applicationKeywords: ["dining room", "dining table", "dining tables", "over dining", "above dining"],
+    secondaryKeywords: ["pendant", "cluster", "candle"],
+    excludes: ["gate light", "outdoor gate"],
   },
   "double-height-staircase": {
-    strongCategories: ["Chandelier", "Hanging Light", "Floor Chandelier"],
-    keywords: ["double height", "double-height", "staircase", "cascade", "cascading", "tier", "grand", "large"],
-    excludes: ["table lamp", "gate"],
+    categoryWeights: { Chandelier: 48, "Hanging Light": 46, "Floor Chandelier": 36 },
+    applicationKeywords: ["double height", "double-height", "staircase", "stairwell", "stair void"],
+    secondaryKeywords: ["cascade", "cascading", "tier", "grand", "large"],
+    excludes: ["table lamp", "gate light"],
   },
   "foyer-entrance": {
-    strongCategories: ["Chandelier", "Hanging Light", "Wall Light", "Floor Chandelier", "Table Chandelier"],
-    keywords: ["foyer", "entrance", "entry", "lantern", "statement", "hall"],
-    excludes: ["gate light"],
+    categoryWeights: { Chandelier: 46, "Hanging Light": 46, "Wall Light": 44, "Floor Chandelier": 34, "Table Chandelier": 32 },
+    applicationKeywords: ["foyer", "entrance hall", "entry hall", "entryway"],
+    secondaryKeywords: ["lantern", "statement", "hall"],
+    excludes: ["gate light", "outdoor gate"],
   },
   bedroom: {
-    strongCategories: ["Wall Light", "Hanging Light", "Table Lamp", "Floor Lamp", "Chandelier"],
-    keywords: ["bedroom", "bedside", "soft", "ambient", "wall", "table lamp"],
-    excludes: ["gate", "banquet"],
+    categoryWeights: { "Wall Light": 52, "Table Lamp": 52, "Hanging Light": 40, "Floor Lamp": 38, Chandelier: 30 },
+    applicationKeywords: ["bedroom", "bedside", "bed side", "nightstand"],
+    secondaryKeywords: ["soft", "ambient"],
+    excludes: ["gate light", "banquet"],
   },
   "hotel-hospitality": {
-    strongCategories: ["Chandelier", "Hanging Light", "Wall Light", "Floor Chandelier", "Table Chandelier", "Table Lamp"],
-    keywords: ["hotel", "hospitality", "lobby", "suite", "grand", "custom", "project"],
-    excludes: ["gate"],
+    categoryWeights: { Chandelier: 46, "Hanging Light": 44, "Wall Light": 44, "Floor Chandelier": 38, "Table Chandelier": 36, "Table Lamp": 34 },
+    applicationKeywords: ["hotel", "hospitality", "hotel lobby", "lobby", "suite"],
+    secondaryKeywords: ["grand", "custom", "project"],
+    excludes: ["gate light", "outdoor gate"],
   },
   restaurant: {
-    strongCategories: ["Chandelier", "Hanging Light", "Wall Light", "Table Chandelier", "Candle Stand"],
-    keywords: ["restaurant", "dining", "pendant", "ambient", "candle", "table"],
-    excludes: ["gate"],
+    categoryWeights: { Chandelier: 46, "Hanging Light": 48, "Wall Light": 42, "Table Chandelier": 42, "Candle Stand": 40 },
+    applicationKeywords: ["restaurant", "restaurant dining", "dining area"],
+    secondaryKeywords: ["pendant", "ambient", "candle", "table"],
+    excludes: ["gate light", "outdoor gate"],
   },
   "retail-showroom": {
-    strongCategories: ["Chandelier", "Hanging Light", "Wall Light", "Floor Chandelier", "Table Chandelier"],
-    keywords: ["showroom", "retail", "boutique", "display", "statement", "grand"],
-    excludes: ["gate"],
+    categoryWeights: { Chandelier: 44, "Hanging Light": 42, "Wall Light": 40, "Floor Chandelier": 38, "Table Chandelier": 36 },
+    applicationKeywords: ["showroom", "retail", "boutique", "display area"],
+    secondaryKeywords: ["display", "statement", "grand"],
+    excludes: ["gate light", "outdoor gate"],
   },
   "banquet-event-space": {
-    strongCategories: ["Chandelier", "Hanging Light", "Floor Chandelier", "Table Chandelier", "Candle Stand"],
-    keywords: ["banquet", "event", "wedding", "grand", "large", "cascade", "tier", "custom", "candle"],
-    excludes: ["gate", "bedside"],
+    categoryWeights: { Chandelier: 48, "Hanging Light": 44, "Floor Chandelier": 42, "Table Chandelier": 38, "Candle Stand": 36 },
+    applicationKeywords: ["banquet", "event space", "wedding venue", "wedding hall", "event hall"],
+    secondaryKeywords: ["grand", "large", "cascade", "tier", "custom", "candle"],
+    excludes: ["gate light", "bedside"],
   },
 };
 
@@ -56,32 +65,34 @@ export function scoreSpaceSuggestion(product, space) {
     product.name,
     product.short_description,
     product.description,
-    product.category,
     ...(Array.isArray(product.tags) ? product.tags.filter((tag) => !String(tag).startsWith("space:")) : []),
   ].join(" "));
 
   const reasons = [];
-  let score = 0;
+  let score = Number(rule.categoryWeights[product.category] || 0);
+  if (score > 0) reasons.push(`${product.category} is a suitable product type for this setting`);
 
-  if (rule.strongCategories.includes(product.category)) {
-    score += 45;
-    reasons.push(`${product.category} is commonly suitable for this setting`);
+  const applicationMatches = rule.applicationKeywords.filter((keyword) => haystack.includes(keyword));
+  if (applicationMatches.length) {
+    score += Math.min(36, 26 + ((applicationMatches.length - 1) * 5));
+    reasons.push(`Direct application evidence: ${applicationMatches.slice(0, 2).join(", ")}`);
   }
 
-  const matchedKeywords = rule.keywords.filter((keyword) => haystack.includes(keyword));
-  if (matchedKeywords.length) {
-    score += Math.min(40, matchedKeywords.length * 12);
-    reasons.push(`Catalogue text matches: ${matchedKeywords.slice(0, 3).join(", ")}`);
+  const secondaryMatches = rule.secondaryKeywords.filter((keyword) => haystack.includes(keyword));
+  if (secondaryMatches.length) {
+    score += Math.min(12, secondaryMatches.length * 4);
+    reasons.push(`Supporting catalogue clues: ${secondaryMatches.slice(0, 3).join(", ")}`);
   }
 
   const excluded = rule.excludes.find((keyword) => haystack.includes(keyword));
   if (excluded) {
-    score -= 70;
+    score -= 80;
     reasons.push(`Conflicting application signal: ${excluded}`);
   }
 
   score = Math.max(0, Math.min(100, score));
-  const confidence = score >= 70 ? "strong" : score >= 45 ? "possible" : "none";
+  const hasDirectEvidence = applicationMatches.length > 0;
+  const confidence = score >= 70 && hasDirectEvidence ? "strong" : score >= 40 ? "possible" : "none";
   return { score, confidence, reasons };
 }
 
