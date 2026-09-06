@@ -9,6 +9,65 @@ import { getCategoryBySlug, resolveCategoryBySlug, NAV_CATEGORIES, SITE_ORIGIN }
 import { buildItemList, CATALOG_PAGE_SIZE } from "../lib/listingSchema";
 import { api } from "../lib/api";
 
+const CATEGORY_CONTEXT_LINKS = {
+  chandeliers: [
+    { label: "How to choose the right chandelier size", path: "/guides/choose-chandelier-size-room" },
+    { label: "Chandeliers for double-height living rooms", path: "/guides/chandelier-double-height-living-room" },
+    { label: "How high should a chandelier hang?", path: "/guides/how-high-should-chandelier-hang" },
+    { label: "Can a chandelier be custom-made?", path: "/guides/can-chandelier-be-custom-made" },
+    { label: "See real chandelier installations", path: "/gallery" },
+    { label: "Discuss custom lighting", path: "/custom-lighting-bulk-orders" },
+  ],
+  "hanging-lights": [
+    { label: "How high should decorative lighting hang?", path: "/guides/how-high-should-chandelier-hang" },
+    { label: "Plan layered lighting for a living room", path: "/guides/choose-lighting-living-room" },
+    { label: "See hanging lights in real installations", path: "/gallery" },
+    { label: "Discuss custom pendant or cluster requirements", path: "/custom-lighting-bulk-orders" },
+  ],
+  "wall-lights": [
+    { label: "How to choose wall lights and installation height", path: "/guides/wall-light-installation-height" },
+    { label: "Plan layered lighting for a living room", path: "/guides/choose-lighting-living-room" },
+    { label: "See wall lights in real installations", path: "/gallery" },
+    { label: "Discuss coordinated project lighting", path: "/custom-lighting-bulk-orders" },
+  ],
+  "table-lamps": [
+    { label: "How to layer lighting in a living room", path: "/guides/choose-lighting-living-room" },
+    { label: "See real residential and hospitality projects", path: "/gallery" },
+    { label: "Explore handcrafted lighting in Firozabad", path: "/craft" },
+  ],
+  "floor-lamps": [
+    { label: "How to layer lighting in a living room", path: "/guides/choose-lighting-living-room" },
+    { label: "Lighting guidance for architects and interiors", path: "/guides/lighting-for-architects-interior-projects" },
+    { label: "Discuss project or custom requirements", path: "/custom-lighting-bulk-orders" },
+  ],
+  "floor-chandeliers": [
+    { label: "How to choose scale for statement lighting", path: "/guides/choose-chandelier-size-room" },
+    { label: "Lighting guidance for large interior volumes", path: "/guides/chandelier-double-height-living-room" },
+    { label: "See statement pieces in real projects", path: "/gallery" },
+    { label: "Discuss a custom statement piece", path: "/custom-lighting-bulk-orders" },
+  ],
+  "table-chandeliers": [
+    { label: "How to plan layered decorative lighting", path: "/guides/choose-lighting-living-room" },
+    { label: "See real project installations", path: "/gallery" },
+    { label: "Discuss banquet, hospitality or custom quantities", path: "/custom-lighting-bulk-orders" },
+  ],
+  "ceiling-lights": [
+    { label: "How to plan layered lighting for a living room", path: "/guides/choose-lighting-living-room" },
+    { label: "Lighting guidance for architects and interior projects", path: "/guides/lighting-for-architects-interior-projects" },
+    { label: "Discuss coordinated project lighting", path: "/custom-lighting-bulk-orders" },
+  ],
+  "gate-lights": [
+    { label: "Lighting guidance for architects and interior projects", path: "/guides/lighting-for-architects-interior-projects" },
+    { label: "See completed Samrat Glass projects", path: "/gallery" },
+    { label: "Discuss quantities, finishes or project requirements", path: "/custom-lighting-bulk-orders" },
+  ],
+  "candle-stands": [
+    { label: "Explore the Samrat Glass craft story", path: "/craft" },
+    { label: "See decorative lighting in real interiors", path: "/gallery" },
+    { label: "Discuss custom or hospitality quantities", path: "/custom-lighting-bulk-orders" },
+  ],
+};
+
 export default function CategoryPage() {
   const { slug } = useParams();
   const curated = getCategoryBySlug(slug);
@@ -39,6 +98,11 @@ export default function CategoryPage() {
 
   const path = `/category/${category.slug}`;
   const canonical = `${SITE_ORIGIN}${path}`;
+  const contextLinks = CATEGORY_CONTEXT_LINKS[category.slug] || [
+    { label: "Browse practical lighting guides", path: "/guides" },
+    { label: "See real Samrat Glass installations", path: "/gallery" },
+    { label: "Discuss custom or bulk lighting", path: "/custom-lighting-bulk-orders" },
+  ];
   const collectionSchema = listing ? {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
@@ -91,6 +155,31 @@ export default function CategoryPage() {
       )}
 
       <CatalogueBrowser lockedCategory={category.db_name} onListingChange={handleListingChange} />
+
+      <aside
+        data-testid={`category-context-links-${category.slug}`}
+        aria-labelledby={`category-context-links-heading-${category.slug}`}
+        className="mt-14 md:mt-20 border-t border-white/10 pt-8 max-w-5xl"
+      >
+        <div className="eyebrow mb-3">Plan the right piece</div>
+        <h2 id={`category-context-links-heading-${category.slug}`} className="font-serif text-2xl sm:text-3xl leading-tight">
+          Useful guidance and real-world examples
+        </h2>
+        <p className="mt-3 text-sm text-white/55 leading-relaxed max-w-3xl">
+          Compare scale, placement and project requirements before you enquire. These related Samrat Glass resources connect this collection with practical guidance, completed installations and custom work.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3">
+          {contextLinks.map((item) => (
+            <Link
+              key={`${category.slug}-${item.path}-${item.label}`}
+              to={item.path}
+              className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 hover:border-[#D4AF37] pb-1 transition-colors"
+            >
+              {item.label} →
+            </Link>
+          ))}
+        </div>
+      </aside>
     </div>
   );
 }
