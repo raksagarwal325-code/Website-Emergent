@@ -34,6 +34,11 @@ describe("SpacePage", () => {
     const { container } = renderAt("/space/double-height-staircase");
 
     expect(screen.getByRole("heading", { level: 1, name: /Double-Height & Staircase/i })).toBeInTheDocument();
+    expect(screen.getByTestId("double-height-project-guidance")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Double-height chandelier guide/i })).toHaveAttribute(
+      "href",
+      "/double-height-chandeliers-india",
+    );
     await waitFor(() => expect(screen.getByText("Tagged Chandelier")).toBeInTheDocument());
     expect(api.listAllProducts).toHaveBeenCalledWith({
       tag: "space:double-height-staircase",
