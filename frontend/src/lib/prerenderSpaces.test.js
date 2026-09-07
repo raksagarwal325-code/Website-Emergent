@@ -7,7 +7,7 @@ describe("double-height space prerender", () => {
     const html = inject(template);
     const canonical = `https://samratglass.com/${page.slug}`;
 
-    expect(html).toContain(`<h1>${page.h1}</h1>`);
+    expect(html).toContain("<h1>Lighting for Double-Height &amp; Staircase Spaces</h1>");
     expect(html).toContain(`<link rel="canonical" href="${canonical}" />`);
     expect(html).toContain('href="/double-height-chandeliers-india"');
     expect(html).toContain('href="/category/chandeliers"');
