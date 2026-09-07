@@ -40,6 +40,7 @@ const NotFound = React.lazy(() => import("@/pages/NotFound"));
 const CustomLighting = React.lazy(() => import("@/pages/CustomLighting"));
 const ArchitectsDesigners = React.lazy(() => import("@/pages/ArchitectsDesigners"));
 const ChandelierManufacturerIndia = React.lazy(() => import("@/pages/ChandelierManufacturerIndia"));
+const DoubleHeightChandeliersIndia = React.lazy(() => import("@/pages/DoubleHeightChandeliersIndia"));
 const GuidesIndex = React.lazy(() => import("@/pages/GuidesIndex"));
 const GuidePage = React.lazy(() => import("@/pages/GuidePage"));
 
@@ -198,6 +199,7 @@ function App() {
                 <Route path="/custom-lighting-bulk-orders" element={<CustomLighting />} />
                 <Route path="/architects-interior-designers" element={<ArchitectsDesigners />} />
                 <Route path="/chandelier-manufacturer-india" element={<ChandelierManufacturerIndia />} />
+                <Route path="/double-height-chandeliers-india" element={<DoubleHeightChandeliersIndia />} />
                 <Route path="/admin" element={<AdminAuthGate><Admin /></AdminAuthGate>} />
                 <Route path="/admin/collections" element={<AdminAuthGate><CollectionsAdmin /></AdminAuthGate>} />
                 <Route path="/admin/spaces" element={<AdminAuthGate><SpacesAdmin /></AdminAuthGate>} />
