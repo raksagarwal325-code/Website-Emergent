@@ -61,6 +61,7 @@ export default function SpacePage() {
   const relatedGuides = (SPACE_GUIDE_MAP[space.slug] || [])
     .map((guideSlug) => GUIDE_BY_SLUG.get(guideSlug))
     .filter(Boolean);
+  const isDoubleHeight = space.slug === "double-height-staircase";
 
   return (
     <div data-testid="space-page" className="max-w-7xl mx-auto px-6 py-16 md:py-20">
@@ -79,7 +80,29 @@ export default function SpacePage() {
         <div className="eyebrow text-[#D4AF37] mb-4">Shop by Space</div>
         <h1 className="font-serif text-5xl md:text-7xl leading-[0.95]">{space.label}</h1>
         <p className="text-white/55 mt-6 max-w-3xl text-base md:text-lg leading-relaxed">{space.description}</p>
+        {isDoubleHeight && (
+          <p className="text-white/50 mt-4 max-w-3xl text-sm md:text-base leading-relaxed">
+            This collection is for browsing designs already curated for tall vertical spaces. For project planning, chandelier scale, suspension drop, customisation and real double-height installation guidance, see our dedicated project page.
+          </p>
+        )}
       </header>
+
+      {isDoubleHeight && (
+        <section className="mb-12 md:mb-16 border border-[#D4AF37]/25 bg-[#D4AF37]/[0.04] p-5 md:p-6" data-testid="double-height-project-guidance">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-3xl">
+              <div className="eyebrow mb-2">Planning a double-height project?</div>
+              <h2 className="font-serif text-2xl md:text-3xl">Use the project guide for scale, customisation and installation proof.</h2>
+            </div>
+            <Link
+              to="/double-height-chandeliers-india"
+              className="inline-flex shrink-0 items-center gap-2 text-[#D4AF37] text-xs uppercase tracking-[0.2em] link-underline"
+            >
+              Double-height chandelier guide <ArrowUpRight size={14} />
+            </Link>
+          </div>
+        </section>
+      )}
 
       {relatedGuides.length > 0 && (
         <section className="mb-12 md:mb-16 border-y border-white/10 py-7 md:py-8" data-testid="space-related-guides">
