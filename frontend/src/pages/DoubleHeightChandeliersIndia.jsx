@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Building2, Home, MessageCircle, Ruler, Sparkles, Staircase } from "lucide-react";
+import { ArrowRight, Building2, Home, MessageCircle, Ruler, Sparkles } from "lucide-react";
 import SEO from "../components/SEO";
 import { useSettings } from "../context/SettingsContext";
 import { waCustomLightingLink } from "../lib/whatsapp";
@@ -152,7 +152,7 @@ export default function DoubleHeightChandeliersIndia() {
           {[
             [Ruler, "Ceiling height", "The total vertical volume and usable suspension range."],
             [Home, "Room proportions", "Approximate width, length and the occupied zone below."],
-            [Staircase, "Viewing levels", "Sightlines from the ground floor, staircase and upper landing."],
+            [Building2, "Viewing levels", "Sightlines from the ground floor, staircase and upper landing."],
             [Sparkles, "Fixture character", "Glass-led, crystal, heritage or more restrained decorative forms."],
             [Building2, "Project context", "Residential, hospitality or another project setting."],
           ].map(([Icon, title, body]) => (
