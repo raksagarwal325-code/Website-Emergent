@@ -31,6 +31,63 @@ const faq = [
   ],
 ];
 
+const installations = [
+  {
+    city: "Lucknow",
+    sku: "SGE-CH-011",
+    title: "Noorjahan Grand Two-Tier 24-Light Crystal Chandelier",
+    detail: "Custom 24-light chandelier executed for a private residence double-height lobby in 2025, developed from a client reference.",
+    path: "/gallery/client-inspired-grand-crystal-chandelier-lucknow-private-residence",
+  },
+  {
+    city: "Nagpur",
+    sku: "SGE-CH-002",
+    title: "Noorvastra Etched-Tulip Crystal Chandelier",
+    detail: "Adapted from the original eight-light single-tier format to a custom twelve-light two-tier chandelier for a double-height staircase, completed in 2022.",
+    path: "/gallery/noorvastra-etched-tulip-crystal-chandelier-custom-twelve-light-two-tier-installa",
+  },
+  {
+    city: "Mumbai",
+    sku: "SGE-CH-069",
+    title: "Chrome-to-Gold Crystal Chandelier Adaptation",
+    detail: "Twelve-light two-tier chandelier adapted from chrome to a gold finish for a private double-height residence.",
+    path: "/gallery/chrome-to-gold-crystal-chandelier-adaptation-mumbai-private-residence",
+  },
+];
+
+const products = [
+  {
+    sku: "SGE-CH-011",
+    title: "Noorjahan Grand Two-Tier 24-Light Crystal Chandelier",
+    note: "A grand two-tier format with the vertical presence needed for large residential volumes.",
+    path: "/product/noorjahan-grand-two-tier-24-light-crystal-chandelier-sge-ch-011",
+  },
+  {
+    sku: "SGE-CH-111",
+    title: "Tarangrekha Crackle-Mosaic Glass Two-Tier Twelve-Light Chandelier",
+    note: "Two-tier glass composition that reads clearly across a taller room.",
+    path: "/product/tarangrekha-crackle-mosaic-glass-two-tier-twelve-light-chandelier-sge-ch-111",
+  },
+  {
+    sku: "SGE-CH-033",
+    title: "Gajmahal Elephant-Arm Diamond-Cut Glass Three-Tier Chandelier",
+    note: "A three-tier heritage-led composition for interiors that can carry stronger ornamental scale.",
+    path: "/product/gajmahal-elephant-arm-diamond-cut-glass-three-tier-chandelier-sge-ch-033",
+  },
+  {
+    sku: "SGE-CH-019",
+    title: "Nooranjali Pleated-Shade Crystal-Drop Two-Tier Chandelier",
+    note: "A layered two-tier design combining shades and crystal drops for tall formal spaces.",
+    path: "/product/8cc15f2a-9c51-4e92-83cd-231103e467b3",
+  },
+  {
+    sku: "SGE-CH-048",
+    title: "Rajdarbar Crystal-Draped Two-Tier Antique Gold Twelve-Light Chandelier",
+    note: "A twelve-light two-tier antique-gold composition with strong visual weight for larger rooms.",
+    path: "/product/rajdarbar-crystal-draped-two-tier-antique-gold-chandelier-twelve-light-sge-ch-048",
+  },
+];
+
 function JsonLd() {
   useEffect(() => {
     const schemas = [
@@ -165,15 +222,61 @@ export default function DoubleHeightChandeliersIndia() {
         </div>
       </section>
 
-      <section className="mb-20 border border-white/10 bg-[#0d0510] p-7 sm:p-10">
-        <div className="eyebrow mb-4">Real-space proof</div>
-        <h2 className="font-serif text-3xl sm:text-4xl max-w-4xl">Use installations and room-led collections as evidence, not generic scale claims.</h2>
+      <section className="mb-20">
+        <div className="eyebrow mb-4">Verified installations</div>
+        <h2 className="font-serif text-3xl sm:text-4xl max-w-4xl">Real double-height projects show what changed for the room.</h2>
         <p className="mt-5 max-w-4xl text-white/65 leading-relaxed">
-          Samrat&apos;s project gallery includes completed residential installations, while the Double-Height & Staircase space collection groups lighting intended for tall interiors. These references are more useful than judging a chandelier only from a cut-out product photograph.
+          These completed residential projects demonstrate three different responses to tall interiors: a client-reference build, a change in light count and tiering, and a finish adaptation. Each project links to the corresponding installation record in Samrat&apos;s gallery.
         </p>
-        <div className="mt-7 flex flex-wrap gap-5 text-sm">
-          <Link to="/gallery" className="inline-flex items-center gap-2 text-[#D4AF37]">View real installations <ArrowRight size={13} /></Link>
+        <div className="mt-8 grid lg:grid-cols-3 gap-4">
+          {installations.map((project) => (
+            <Link key={project.path} to={project.path} className="group border border-white/10 bg-[#0d0510] p-6 hover:border-[#D4AF37]/60 transition-colors">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-[#D4AF37]">{project.city} · {project.sku}</div>
+              <h3 className="mt-3 font-serif text-xl group-hover:text-[#D4AF37]">{project.title}</h3>
+              <p className="mt-3 text-sm text-white/58 leading-relaxed">{project.detail}</p>
+              <span className="mt-5 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[#D4AF37]">View installation <ArrowRight size={12} /></span>
+            </Link>
+          ))}
+        </div>
+        <div className="mt-6 flex flex-wrap gap-5 text-sm">
+          <Link to="/gallery" className="inline-flex items-center gap-2 text-[#D4AF37]">View all real installations <ArrowRight size={13} /></Link>
           <Link to="/space/double-height-staircase" className="inline-flex items-center gap-2 text-[#D4AF37]">Browse Double-Height & Staircase <ArrowRight size={13} /></Link>
+        </div>
+      </section>
+
+      <section className="mb-20">
+        <div className="eyebrow mb-4">Suitable chandelier directions</div>
+        <h2 className="font-serif text-3xl sm:text-4xl mb-6 max-w-4xl">The architecture determines which format deserves consideration.</h2>
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            ["Multi-tier glass chandeliers", "Layered glass compositions can build enough vertical presence for large living rooms and foyers."],
+            ["Crystal chandeliers", "Crystal-led designs can carry visual depth across multiple viewing levels when proportioned to the room."],
+            ["Heritage & classical forms", "Ornamental arms, decorative glass and traditional profiles suit interiors with stronger architectural character."],
+            ["Vertical compositions", "Tall, cascading or deliberately elongated arrangements can work where the void is narrow but high."],
+          ].map(([title, body]) => (
+            <div key={title} className="border border-white/10 p-6">
+              <h3 className="font-serif text-xl">{title}</h3>
+              <p className="mt-3 text-sm text-white/55 leading-relaxed">{body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mb-20">
+        <div className="eyebrow mb-4">Selected designs for tall spaces</div>
+        <h2 className="font-serif text-3xl sm:text-4xl max-w-4xl">Start with proven multi-tier and statement chandelier formats.</h2>
+        <p className="mt-5 max-w-4xl text-white/65 leading-relaxed">
+          The following pieces are useful starting points for a tall-space shortlist. Final suitability still depends on ceiling height, room proportions, suspension requirements and the visual scale of the installation.
+        </p>
+        <div className="mt-8 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {products.map((product) => (
+            <Link key={product.path} to={product.path} className="group border border-white/10 p-6 hover:border-[#D4AF37]/60 transition-colors">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-[#D4AF37]">{product.sku}</div>
+              <h3 className="mt-3 font-serif text-xl group-hover:text-[#D4AF37]">{product.title}</h3>
+              <p className="mt-3 text-sm text-white/55 leading-relaxed">{product.note}</p>
+              <span className="mt-5 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[#D4AF37]">View product <ArrowRight size={12} /></span>
+            </Link>
+          ))}
         </div>
       </section>
 

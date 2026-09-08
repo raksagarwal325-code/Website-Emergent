@@ -50,6 +50,48 @@ describe("DoubleHeightChandeliersIndia", () => {
     expect(JSON.parse(faq.textContent).mainEntity).toHaveLength(5);
   });
 
+  test("shows verified double-height installation proof", () => {
+    render(
+      <MemoryRouter>
+        <DoubleHeightChandeliersIndia />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: /Lucknow · SGE-CH-011/i })).toHaveAttribute(
+      "href",
+      "/gallery/client-inspired-grand-crystal-chandelier-lucknow-private-residence",
+    );
+    expect(screen.getByRole("link", { name: /Nagpur · SGE-CH-002/i })).toHaveAttribute(
+      "href",
+      "/gallery/noorvastra-etched-tulip-crystal-chandelier-custom-twelve-light-two-tier-installa",
+    );
+    expect(screen.getByRole("link", { name: /Mumbai · SGE-CH-069/i })).toHaveAttribute(
+      "href",
+      "/gallery/chrome-to-gold-crystal-chandelier-adaptation-mumbai-private-residence",
+    );
+  });
+
+  test("links to selected tall-space chandelier products", () => {
+    render(
+      <MemoryRouter>
+        <DoubleHeightChandeliersIndia />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: /SGE-CH-011 Noorjahan Grand Two-Tier 24-Light.*View product/i })).toHaveAttribute(
+      "href",
+      "/product/noorjahan-grand-two-tier-24-light-crystal-chandelier-sge-ch-011",
+    );
+    expect(screen.getByRole("link", { name: /SGE-CH-111 Tarangrekha.*View product/i })).toHaveAttribute(
+      "href",
+      "/product/tarangrekha-crackle-mosaic-glass-two-tier-twelve-light-chandelier-sge-ch-111",
+    );
+    expect(screen.getByRole("link", { name: /SGE-CH-048 Rajdarbar.*View product/i })).toHaveAttribute(
+      "href",
+      "/product/rajdarbar-crystal-draped-two-tier-antique-gold-chandelier-twelve-light-sge-ch-048",
+    );
+  });
+
   test("links to tall-space products, guides, manufacturer evidence and enquiry paths", () => {
     render(
       <MemoryRouter>
