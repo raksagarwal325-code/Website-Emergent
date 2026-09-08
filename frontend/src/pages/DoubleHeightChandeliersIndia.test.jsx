@@ -78,15 +78,15 @@ describe("DoubleHeightChandeliersIndia", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("link", { name: /SGE-CH-011 Noorjahan Grand Two-Tier 24-Light/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /SGE-CH-011 Noorjahan Grand Two-Tier 24-Light.*View product/i })).toHaveAttribute(
       "href",
       "/product/noorjahan-grand-two-tier-24-light-crystal-chandelier-sge-ch-011",
     );
-    expect(screen.getByRole("link", { name: /SGE-CH-111 Tarangrekha/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /SGE-CH-111 Tarangrekha.*View product/i })).toHaveAttribute(
       "href",
       "/product/tarangrekha-crackle-mosaic-glass-two-tier-twelve-light-chandelier-sge-ch-111",
     );
-    expect(screen.getByRole("link", { name: /SGE-CH-048 Rajdarbar/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /SGE-CH-048 Rajdarbar.*View product/i })).toHaveAttribute(
       "href",
       "/product/rajdarbar-crystal-draped-two-tier-antique-gold-chandelier-twelve-light-sge-ch-048",
     );
