@@ -16,6 +16,29 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+const doubleHeightFaq = [
+  [
+    "What makes a chandelier suitable for a double-height space?",
+    "A double-height chandelier needs to be considered in relation to ceiling height, room width, viewing level, suspension drop and the vertical volume of the space. A larger diameter alone does not make a chandelier suitable for a tall interior.",
+  ],
+  [
+    "Can a double-height chandelier be customised?",
+    "Selected Samrat designs can be evaluated for changes in scale, finish, glass colour or configuration, subject to technical feasibility. Share the ceiling height, room dimensions, site photographs or drawings before quotation.",
+  ],
+  [
+    "How much drop should a chandelier have in a double-height room?",
+    "There is no single correct drop for every project. The appropriate suspension depends on ceiling height, the occupied zone below, sightlines from upper levels and the proportions of the chandelier itself.",
+  ],
+  [
+    "Do you supply double-height chandeliers across India?",
+    "Yes. Samrat Glass Emporium supplies eligible chandeliers and decorative lighting across India, subject to product size, quantity, destination and packing requirements.",
+  ],
+  [
+    "What should I send before requesting a quotation?",
+    "For a useful first evaluation, share the ceiling height, approximate room dimensions, site photographs, preferred style and any architect or interior drawings available.",
+  ],
+];
+
 const pages = [
   {
     slug: "chandelier-manufacturer-india",
@@ -47,14 +70,36 @@ const pages = [
     breadcrumbName: "Double-Height Chandeliers",
     breadcrumbLabel: "Double-height",
     aboutId: `${SITE_ORIGIN}/#business`,
+    faq: doubleHeightFaq,
     body: `<p class="prerender-eyebrow">For tall residential and project spaces</p>
     <h1>Double-Height Chandeliers for Villas, Foyers &amp; Staircases</h1>
     <p class="prerender-intro">Samrat Glass Emporium manufactures and supplies handcrafted chandeliers from Firozabad for double-height residences, foyers, staircases and other high-ceiling interiors. The right fixture is chosen around the scale of the space — not simply by selecting the largest chandelier available.</p>
-    <section><h2>A double-height chandelier is a spatial decision</h2><p>In a tall room, the chandelier is read from more than one level and often from several directions. Diameter, total height, tiering, suspension length and the visual weight of the glass all affect whether the fixture feels balanced.</p></section>
-    <section><h2>What we evaluate</h2><p>Ceiling height, room proportions, viewing levels, fixture character and project context help narrow the right chandelier for a tall interior.</p></section>
-    <section><h2>Selected customisation</h2><p>Selected designs can be evaluated for changes in scale, finish, glass colour or configuration where technically feasible. Share ceiling height, approximate room dimensions, site photographs, preferred style and any architect or interior drawings available before quotation.</p></section>
-    <section><h2>Glass-led decorative lighting since 1981</h2><p>Samrat Glass Emporium is based in Firozabad, Uttar Pradesh and has worked in handcrafted decorative lighting since 1981. Glass remains central to the collection through shades, bowls, drops, patterned elements and ornamental forms.</p></section>
-    <nav class="prerender-cross" aria-label="Related pages"><a href="/space/double-height-staircase">Explore Tall-Space Lighting</a> <a href="/guides/chandelier-double-height-living-room">Double-Height Guide</a> <a href="/chandelier-manufacturer-india">Manufacturer Profile</a> <a href="/contact">Request a Quote</a></nav>`,
+    <section><h2>A double-height chandelier is a spatial decision</h2><p>In a tall room, the chandelier is read from more than one level and often from several directions. Diameter, total height, tiering, suspension length and the visual weight of the glass all affect whether the fixture feels balanced. A chandelier can be physically large yet still feel poorly proportioned if its vertical composition does not respond to the architecture.</p></section>
+    <section><h2>What we evaluate before shortlisting</h2><p>Ceiling height, room proportions, viewing levels, fixture character and project context help narrow the right chandelier for a tall interior. A useful first brief includes approximate room dimensions, photographs, preferred style and any architect or interior drawings available.</p></section>
+    <section><h2>Verified double-height installations</h2>
+      <article><h3>Lucknow — SGE-CH-011</h3><p>Noorjahan Grand Two-Tier 24-Light Crystal Chandelier, custom executed for a private residence double-height lobby in 2025 from a client reference.</p><p><a href="/gallery/client-inspired-grand-crystal-chandelier-lucknow-private-residence">View the Lucknow installation</a></p></article>
+      <article><h3>Nagpur — SGE-CH-002</h3><p>Noorvastra Etched-Tulip Crystal Chandelier adapted from the original eight-light single-tier format to a custom twelve-light two-tier chandelier for a double-height staircase, completed in 2022.</p><p><a href="/gallery/noorvastra-etched-tulip-crystal-chandelier-custom-twelve-light-two-tier-installa">View the Nagpur installation</a></p></article>
+      <article><h3>Mumbai — SGE-CH-069</h3><p>Twelve-light two-tier crystal chandelier adapted from chrome to a gold finish for a private double-height residence.</p><p><a href="/gallery/chrome-to-gold-crystal-chandelier-adaptation-mumbai-private-residence">View the Mumbai installation</a></p></article>
+    </section>
+    <section><h2>Chandelier directions that can suit tall interiors</h2><p>Depending on the architecture, useful starting directions include multi-tier glass chandeliers, crystal chandeliers, heritage or classical forms, and vertically composed or cascading designs. The correct choice depends on the room rather than on a fixed “double-height” size.</p></section>
+    <section><h2>Selected designs for tall spaces</h2><ul>
+      <li><a href="/product/noorjahan-grand-two-tier-24-light-crystal-chandelier-sge-ch-011">SGE-CH-011 — Noorjahan Grand Two-Tier 24-Light Crystal Chandelier</a></li>
+      <li><a href="/product/tarangrekha-crackle-mosaic-glass-two-tier-twelve-light-chandelier-sge-ch-111">SGE-CH-111 — Tarangrekha Crackle-Mosaic Glass Two-Tier Twelve-Light Chandelier</a></li>
+      <li><a href="/product/gajmahal-elephant-arm-diamond-cut-glass-three-tier-chandelier-sge-ch-033">SGE-CH-033 — Gajmahal Elephant-Arm Diamond-Cut Glass Three-Tier Chandelier</a></li>
+      <li><a href="/product/8cc15f2a-9c51-4e92-83cd-231103e467b3">SGE-CH-019 — Nooranjali Pleated-Shade Crystal-Drop Two-Tier Chandelier</a></li>
+      <li><a href="/product/rajdarbar-crystal-draped-two-tier-antique-gold-chandelier-twelve-light-sge-ch-048">SGE-CH-048 — Rajdarbar Crystal-Draped Two-Tier Antique Gold Twelve-Light Chandelier</a></li>
+    </ul><p>These are starting points for a shortlist; final suitability depends on ceiling height, room proportions, suspension requirements and visual scale.</p></section>
+    <section><h2>Selected customisation</h2><p>Selected designs can be evaluated for changes in scale, finish, glass colour or configuration where technically feasible. Not every design can be modified in every way, and custom requests are reviewed before quotation.</p></section>
+    <section><h2>Glass-led decorative lighting since 1981</h2><p>Samrat Glass Emporium is based in Firozabad, Uttar Pradesh and has worked in handcrafted decorative lighting since 1981. Glass remains central to the collection through shades, bowls, drops, patterned elements and ornamental forms. For taller interiors, that glass-led identity can be expressed through multi-tier, vertically composed and statement chandelier formats suited to the scale of the room.</p></section>
+    <section><h2>Planning guidance</h2><p><a href="/guides/chandelier-double-height-living-room">Double-height living room chandeliers</a> · <a href="/guides/choose-chandelier-size-room">Choose chandelier size for a room</a> · <a href="/guides/how-high-should-chandelier-hang">How high should a chandelier hang?</a></p></section>
+    <section><h2>Frequently asked questions</h2>
+      <h3>What makes a chandelier suitable for a double-height space?</h3><p>A double-height chandelier needs to be considered in relation to ceiling height, room width, viewing level, suspension drop and the vertical volume of the space. A larger diameter alone does not make a chandelier suitable for a tall interior.</p>
+      <h3>Can a double-height chandelier be customised?</h3><p>Selected Samrat designs can be evaluated for changes in scale, finish, glass colour or configuration, subject to technical feasibility. Share the ceiling height, room dimensions, site photographs or drawings before quotation.</p>
+      <h3>How much drop should a chandelier have in a double-height room?</h3><p>There is no single correct drop for every project. The appropriate suspension depends on ceiling height, the occupied zone below, sightlines from upper levels and the proportions of the chandelier itself.</p>
+      <h3>Do you supply double-height chandeliers across India?</h3><p>Yes. Samrat Glass Emporium supplies eligible chandeliers and decorative lighting across India, subject to product size, quantity, destination and packing requirements.</p>
+      <h3>What should I send before requesting a quotation?</h3><p>For a useful first evaluation, share the ceiling height, approximate room dimensions, site photographs, preferred style and any architect or interior drawings available.</p>
+    </section>
+    <nav class="prerender-cross" aria-label="Related pages"><a href="/space/double-height-staircase">Explore Tall-Space Lighting</a> <a href="/custom-lighting-bulk-orders">Custom Lighting</a> <a href="/chandelier-manufacturer-india">Manufacturer Profile</a> <a href="/category/chandeliers">Explore Chandeliers</a> <a href="/contact">Request a Quote</a></nav>`,
   },
 ];
 
@@ -62,7 +107,7 @@ const page = pages[0];
 
 function schemas(target = page) {
   const canonical = `${SITE_ORIGIN}/${target.slug}`;
-  return [
+  const result = [
     {
       id: `${target.schemaPrefix}-webpage`,
       data: {
@@ -90,6 +135,23 @@ function schemas(target = page) {
       },
     },
   ];
+
+  if (target.faq?.length) {
+    result.push({
+      id: `${target.schemaPrefix}-faq`,
+      data: {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: target.faq.map(([question, answer]) => ({
+          "@type": "Question",
+          name: question,
+          acceptedAnswer: { "@type": "Answer", text: answer },
+        })),
+      },
+    });
+  }
+
+  return result;
 }
 
 function bodyHtml(target = page) {
