@@ -61,7 +61,7 @@ export default function AIProductGenerator({ onDone, setEditingProduct }) {
         } catch (e) { patchRow(row.client_id, { state: "error", error: e?.response?.data?.detail || e.message || "Upload failed" }); }
       }
       if (!uploaded.length) return;
-      const response = await api.aiAnalyzeProductBatch(uploaded.map((r) => ({ client_id: r.client_id, image_urls: r.imageUrls, category: r.category, height: r.height, width: r.width, notes: r.notes })));
+      const response = await api.aiAnalyzeProductBatch(uploaded.map((r) => ({ client_id: r.client_id, image_urls: r.imageUrls, image_filenames: r.files.map((file) => file.name), category: r.category, height: r.height, width: r.width, notes: r.notes })));
       response.results.forEach((result) => patchRow(result.client_id, result.success ? { state: "ready", draft: result.draft, warnings: result.warnings || [], validation: result.validation || [] } : { state: "error", error: result.error || "Analysis failed" }));
       toast.success("Batch analysed — review warnings, then create all drafts");
     } catch (e) { toast.error(e?.response?.data?.detail || e.message || "Batch analysis failed"); }
