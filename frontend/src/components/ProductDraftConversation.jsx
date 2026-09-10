@@ -17,6 +17,7 @@ export default function ProductDraftConversation({
   const [messages, setMessages] = useState([starter]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(!compact);
   const sessionId = useMemo(
     () => `draft-review-${product?.sku || "new"}-${Date.now()}`,
     [product?.sku],
@@ -67,6 +68,20 @@ export default function ProductDraftConversation({
       setBusy(false);
     }
   };
+
+  if (compact && !expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="mt-3 inline-flex items-center gap-2 border border-[#D4AF37]/40 px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-[#D4AF37]"
+        data-testid="open-product-correction"
+      >
+        <MessageSquare size={12} />
+        Correct this draft with AI
+      </button>
+    );
+  }
 
   return (
     <div className={`border border-[#D4AF37]/35 bg-black/35 ${compact ? "mt-3 p-3" : "p-4"}`} data-testid="product-draft-conversation">
