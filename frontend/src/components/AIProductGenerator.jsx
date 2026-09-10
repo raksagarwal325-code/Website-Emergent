@@ -9,13 +9,23 @@ const isWhite = (name) => /(?:a|[\s_-](?:white|light|off))(?:\.[^.]+)?$/i.test(n
 
 export const pairProductFiles = (files) => {
   const groups = new Map();
-  Array.from(files || []).forEach((file) => {
+  Array.from(files || []).forEach((file, position) => {
     const key = pairKey(file.name) || file.name;
-    groups.set(key, [...(groups.get(key) || []), file]);
+    groups.set(key, [...(groups.get(key) || []), { file, position }]);
   });
-  return Array.from(groups.entries()).map(([key, group], index) => {
-    const ordered = [...group].sort((a, b) => Number(isWhite(a.name)) - Number(isWhite(b.name))).slice(0, 2);
-    return { client_id: `${Date.now()}-${index}-${key}`, files: ordered, previews: ordered.map((file) => typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : ""), category: "Chandelier", height: "", width: "", notes: "", state: "queued", selected: true, warnings: group.length > 2 ? ["More than two matching images; only the first pair will be used."] : [] };
+  const paired = [];
+  const singles = [];
+  groups.forEach((group, key) => {
+    if (group.length >= 2) paired.push({ key, position: group[0].position, entries: group.slice(0, 2), warning: group.length > 2 ? "More than two matching images; only the first pair will be used." : "" });
+    else singles.push(group[0]);
+  });
+  for (let i = 0; i < singles.length; i += 2) {
+    const entries = singles.slice(i, i + 2);
+    paired.push({ key: `upload-order-${entries[0].position}`, position: entries[0].position, entries, warning: entries.length === 1 ? "No second image was selected; this product will be analysed from one image." : "" });
+  }
+  return paired.sort((a, b) => a.position - b.position).map(({ key, entries, warning }, index) => {
+    const ordered = [...entries].sort((a, b) => Number(isWhite(a.file.name)) - Number(isWhite(b.file.name))).map(({ file }) => file);
+    return { client_id: `${Date.now()}-${index}-${key}`, files: ordered, previews: ordered.map((file) => typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : ""), category: "Chandelier", height: "", width: "", notes: "", state: "queued", selected: true, warnings: warning ? [warning] : [] };
   });
 };
 
@@ -75,7 +85,7 @@ export default function AIProductGenerator({ onDone, setEditingProduct }) {
   };
 
   return <section className="border border-[#D4AF37]/35 bg-[#0d0510] p-5 md:p-6 space-y-5" data-testid="ai-product-generator">
-    <div className="flex items-start gap-3"><div className="w-9 h-9 grid place-items-center rounded-full border border-[#D4AF37]/60 text-[#D4AF37]"><Sparkles size={16} /></div><div><div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">AI bulk product upload</div><h2 className="font-serif text-xl">Pair, analyse, review and create in one batch</h2><p className="text-xs text-white/50 mt-1">Files ending in A, white, light or off become the second image. Every listing stays unpublished as Needs Review.</p></div></div>
+    <div className="flex items-start gap-3"><div className="w-9 h-9 grid place-items-center rounded-full border border-[#D4AF37]/60 text-[#D4AF37]"><Sparkles size={16} /></div><div><div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">AI bulk product upload</div><h2 className="font-serif text-xl">Pair, analyse, review and create in one batch</h2><p className="text-xs text-white/50 mt-1">Matching filenames are paired first; remaining files are paired in selection order (black, then white). Every listing stays unpublished as Needs Review.</p></div></div>
     <label className="block border-2 border-dashed border-[#D4AF37]/25 hover:border-[#D4AF37]/60 cursor-pointer p-6 text-center" data-testid="ai-gen-dropzone"><input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(e) => { setRows((cur) => [...cur, ...pairProductFiles(e.target.files)]); e.target.value = ""; }} className="hidden" data-testid="ai-gen-file-input" /><Upload size={20} className="mx-auto text-[#D4AF37]" /><div className="text-sm mt-2">Choose all black-and-white product image pairs</div><div className="text-[10px] uppercase tracking-widest text-white/40 mt-1">Up to 30 products per batch</div></label>
     {rows.length > 0 && <div className="overflow-x-auto border border-white/10"><table className="w-full min-w-[1050px] text-sm"><thead className="bg-black/40 text-[10px] uppercase tracking-widest text-white/45"><tr>{["Use", "Images", "Category", "Height", "Width", "Family / reference / facts", "Result", ""].map((h) => <th key={h} className="p-3 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.client_id} className="border-t border-white/10 align-top">
       <td className="p-3"><input type="checkbox" checked={row.selected} disabled={busy || row.state === "created"} onChange={(e) => update(row.client_id, "selected", e.target.checked)} /></td>
