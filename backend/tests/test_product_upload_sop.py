@@ -104,7 +104,7 @@ def test_validation_blocks_wrong_product_name_dimension_and_placeholder():
     record["name"] = "Rajsi [Variant]"
     record["status"] = "draft"
     errors = validate_record(record, "Chandelier")
-    assert "Product name must identify the item as Chandelier" in errors
+    assert "Product name must end with Chandelier" in errors
     assert "Height must include a unit or use the approved confirmation fallback" in errors
     assert "Template placeholders must be removed" in errors
 
@@ -171,8 +171,11 @@ def test_unconfirmed_ai_family_is_removed_instead_of_invented():
     assert corrected["specs"]["Collection / Family"] == DIMENSION_FALLBACK
 
 
-def test_long_title_may_continue_after_product_type_per_approved_sop_style():
+def test_product_name_must_end_with_exact_category_term():
     record = normalize_ai_record(_ai(), "Chandelier")
     record["name"] = "Diamond-Cut Tulip Chandelier — Six-Light Clear Glass"
     record["status"] = "draft"
-    assert "Product name must identify the item as Chandelier" not in validate_record(record, "Chandelier")
+    assert "Product name must end with Chandelier" in validate_record(record, "Chandelier")
+
+    record["name"] = "Diamond-Cut Tulip Six-Light Clear Glass Chandelier"
+    assert "Product name must end with Chandelier" not in validate_record(record, "Chandelier")
