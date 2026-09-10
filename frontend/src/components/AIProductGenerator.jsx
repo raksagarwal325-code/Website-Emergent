@@ -30,7 +30,7 @@ export const pairProductFiles = (files) => {
   });
 };
 
-const Status = ({ row }) => {
+export const Status = ({ row }) => {
   if (["uploading", "analyzing", "creating"].includes(row.state)) return <span className="inline-flex items-center gap-1 text-[#D4AF37]"><Loader2 size={12} className="animate-spin" /> {row.state}</span>;
   if (row.state === "ready" && (row.validation || []).length) return <span className="inline-flex items-center gap-1 text-amber-300"><AlertCircle size={12} /> needs correction</span>;
   if (row.state === "ready" || row.state === "created") return <span className="inline-flex items-center gap-1 text-emerald-400"><CheckCircle2 size={12} /> {row.state === "created" ? "draft created" : "ready"}</span>;
