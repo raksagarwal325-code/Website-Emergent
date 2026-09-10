@@ -64,6 +64,9 @@ export const sanitizePublicProduct = (product) => {
   };
 };
 
+export const prepareListedProduct = (product, { raw = false } = {}) =>
+  raw ? product : sanitizePublicProduct(product);
+
 export const api = {
   authMe: () => client.get("/auth/me").then(r => r.data),
   authSession: (session_id) => client.post("/auth/session", { session_id }).then(r => r.data),
@@ -106,7 +109,7 @@ export const api = {
       for (const p of items) {
         if (p?.id && !seen.has(p.id)) {
           seen.add(p.id);
-          collected.push(raw ? p : sanitizePublicProduct(p));
+          collected.push(prepareListedProduct(p, { raw }));
         }
       }
       const totalPages = res?.total_pages || 1;
