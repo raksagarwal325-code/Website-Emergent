@@ -272,7 +272,7 @@ def validate_record(record: dict, category: str) -> list[str]:
     all_values = [name, record.get("short_description") or "", description, *[str(v) for v in specs.values()]]
     if any("made to order" in value.casefold() for value in all_values):
         errors.append("Made to Order cannot be used as a factual value")
-    if any(re.search(r"\\[[^\\]]+\\]", value) for value in all_values):
+    if any(re.search(r"\[[^\]]+\]", value) for value in all_values):
         errors.append("Template placeholders must be removed")
     for dimension in ("Height", "Width"):
         value = str(specs.get(dimension) or "").strip()
