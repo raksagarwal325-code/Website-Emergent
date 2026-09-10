@@ -1,4 +1,4 @@
-from product_upload_sop import DIMENSION_FALLBACK, SCHEMAS, normalize_ai_record, validate_record
+from product_upload_sop import DIMENSION_FALLBACK, SCHEMAS, find_similar_product, normalize_ai_record, validate_record
 
 
 def _ai():
@@ -52,3 +52,15 @@ def test_multiline_confidence_notes_become_complete_warnings():
     ai["confidence_notes"] = "Confirm the glass colour.\nConfirm the suspension height."
     record = normalize_ai_record(ai, "Chandelier")
     assert record["confidence_notes"] == ["Confirm the glass colour.", "Confirm the suspension height."]
+
+
+def test_duplicate_name_matching_ignores_case_punctuation_and_spacing():
+    products = [{"sku": "SGE-CH-114", "name": "Rajsi Diamond-Lattice Urn-Shaped Six-Light Glass Chandelier — Gold Accents"}]
+    match, score = find_similar_product("rajsi diamond lattice urn shaped six light glass chandelier gold accents", products)
+    assert match["sku"] == "SGE-CH-114"
+    assert score == 1.0
+
+
+def test_distinct_family_variant_is_not_a_duplicate():
+    products = [{"sku": "SGE-CH-114", "name": "Rajsi Diamond-Lattice Urn-Shaped Six-Light Glass Chandelier — Gold Accents"}]
+    assert find_similar_product("Meher Diamond-Cut Tulip Twelve-Light Clear Glass Chandelier", products) is None
