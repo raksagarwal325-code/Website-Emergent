@@ -5,6 +5,7 @@ import io
 import json
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +27,7 @@ from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E4
 from watermark import apply_watermark  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
+from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -2894,6 +2896,131 @@ async def ai_regenerate_from_name(payload: AIRelatedRequest, admin: _AdminUser =
 
 class AIBulkRequest(BaseModel):
     images: List[str]  # list of /api/files/... URLs or absolute URLs
+
+
+class AISopBatchItem(BaseModel):
+    client_id: str
+    image_urls: List[str]
+    category: str
+    height: str = ""
+    width: str = ""
+    notes: str = ""
+
+
+class AISopBatchRequest(BaseModel):
+    items: List[AISopBatchItem]
+
+
+class AISopCommitRequest(BaseModel):
+    products: List[dict]
+
+
+async def _next_sku_numbers() -> dict:
+    next_by_category = {}
+    for category, prefix in SKU_PREFIX.items():
+        highest = 0
+        cursor = db.products.find({"sku": {"$regex": f"^SGE-{prefix}-[0-9]+$", "$options": "i"}}, {"_id": 0, "sku": 1})
+        async for row in cursor:
+            try:
+                highest = max(highest, int(row["sku"].rsplit("-", 1)[-1]))
+            except (KeyError, ValueError):
+                pass
+        next_by_category[category] = highest + 1
+    return next_by_category
+
+
+async def _generate_sop_product(item: AISopBatchItem) -> dict:
+    import base64
+    import re as _re
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent, TextDelta, StreamDone
+
+    if item.category not in PRODUCT_SOP_SCHEMAS:
+        raise HTTPException(400, f"Unsupported category: {item.category}")
+    if not 1 <= len(item.image_urls) <= 2:
+        raise HTTPException(400, "Each product needs one or two images")
+    images = []
+    for url in item.image_urls:
+        image_bytes, _mime = await _resolve_product_image(AIRegenerateRequest(image_url=url))
+        images.append(ImageContent(image_base64=base64.b64encode(image_bytes).decode("ascii")))
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "EMERGENT_LLM_KEY is not configured")
+    existing = await db.products.find({"category": item.category}, {"_id": 0, "name": 1, "sku": 1}).sort("created_at", -1).to_list(120)
+    context = "\n".join(f"- {p.get('sku', '')}: {p.get('name', '')}" for p in existing)
+    message = (
+        f"Known facts: Height={item.height or 'unknown'}; Width={item.width or 'unknown'}; "
+        f"owner notes={item.notes or 'none'}.\nExisting {item.category} names for duplicate/family comparison:\n{context or '(none)'}"
+    )
+    chat = LlmChat(api_key=api_key, session_id=f"ai-sop-{uuid.uuid4().hex[:12]}", system_message=sop_prompt(item.category)).with_model("gemini", "gemini-3-flash-preview")
+    parts = []
+    async for ev in chat.stream_message(UserMessage(text=message, file_contents=images)):
+        if isinstance(ev, TextDelta): parts.append(ev.content)
+        elif isinstance(ev, StreamDone): break
+    raw = "".join(parts).strip()
+    match = _re.search(r"\{.*\}", raw, _re.DOTALL)
+    if not match:
+        raise HTTPException(502, f"AI returned no JSON. Raw: {raw[:200]}")
+    try:
+        return normalize_ai_record(json.loads(match.group(0)), item.category, item.height, item.width)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(502, f"AI JSON parse failed: {exc}") from exc
+
+
+@api.post("/ai/analyze-product-batch")
+async def ai_analyze_product_batch(payload: AISopBatchRequest, admin: _AdminUser = Depends(require_admin)):
+    """Analyze paired product images without creating catalogue rows."""
+    if not payload.items:
+        raise HTTPException(400, "No products provided")
+    if len(payload.items) > 30:
+        raise HTTPException(400, "Maximum 30 products per batch")
+    counters = await _next_sku_numbers()
+    results = []
+    for item in payload.items:
+        try:
+            draft = await _generate_sop_product(item)
+            prefix = SKU_PREFIX[item.category]
+            draft.update({
+                "sku": f"SGE-{prefix}-{counters[item.category]:03d}", "category": item.category,
+                "price": 0.0, "currency": "INR", "images": item.image_urls,
+                "stock": 0, "featured": False, "badge": "Needs Review",
+                "fixed_price": False, "price_display": "on_request", "status": "draft",
+            })
+            counters[item.category] += 1
+            duplicate = await db.products.find_one({"category": item.category, "name": {"$regex": f"^{re.escape(draft['name'])}$", "$options": "i"}}, {"_id": 0, "id": 1, "sku": 1, "name": 1})
+            warnings = list(draft.pop("confidence_notes", []))
+            if duplicate:
+                warnings.append(f"Possible duplicate: {duplicate.get('sku')} — {duplicate.get('name')}")
+            validation = validate_record(draft, item.category)
+            results.append({"client_id": item.client_id, "success": True, "draft": draft, "warnings": warnings, "validation": validation})
+        except HTTPException as exc:
+            results.append({"client_id": item.client_id, "success": False, "error": exc.detail})
+        except Exception as exc:
+            logger.exception("SOP batch analysis failed")
+            results.append({"client_id": item.client_id, "success": False, "error": str(exc)})
+    return {"results": results}
+
+
+@api.post("/ai/commit-product-batch")
+async def ai_commit_product_batch(payload: AISopCommitRequest, admin: _AdminUser = Depends(require_admin)):
+    """Create validated Needs Review drafts; failures never stop other rows."""
+    results = []
+    for raw in payload.products[:30]:
+        category = raw.get("category")
+        errors = validate_record(raw, category)
+        if errors:
+            results.append({"sku": raw.get("sku"), "success": False, "error": "; ".join(errors)})
+            continue
+        collision = await db.products.find_one({"$or": [{"sku": raw.get("sku")}, {"name": {"$regex": f"^{re.escape(raw.get('name', ''))}$", "$options": "i"}}]}, {"_id": 0, "sku": 1, "name": 1})
+        if collision:
+            results.append({"sku": raw.get("sku"), "success": False, "error": f"Duplicate/conflict with {collision.get('sku')} — {collision.get('name')}"})
+            continue
+        allowed = ProductCreate(**{**raw, "status": "draft", "badge": "Needs Review", "price_display": "on_request", "fixed_price": False, "price": 0.0, "currency": "INR"})
+        product = Product(**allowed.model_dump())
+        await db.products.insert_one(product.model_dump())
+        persisted = await db.products.find_one({"id": product.id}, {"_id": 0})
+        persistence_errors = validate_record(persisted or {}, category)
+        results.append({"sku": product.sku, "success": not persistence_errors, "product": persisted, "error": "; ".join(persistence_errors) if persistence_errors else None})
+    return {"results": results, "created": sum(1 for r in results if r["success"])}
 
 
 @api.post("/ai/generate-products-bulk")

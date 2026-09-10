@@ -82,7 +82,8 @@ def visitor_token():
 ADMIN_GET = ["/inquiries", "/contact", "/proxy-image?url=https://images.unsplash.com/x", "/stats", "/export/products.csv"]
 ADMIN_POST = ["/upload", "/ai/generate-product", "/ai/name-suggestions",
               "/ai/regenerate-details", "/ai/regenerate-from-name",
-              "/ai/generate-products-bulk", "/admin/instagram/cover",
+              "/ai/generate-products-bulk", "/ai/analyze-product-batch",
+              "/ai/commit-product-batch", "/admin/instagram/cover",
               "/watermark/preview", "/watermark/reprocess"]
 
 
