@@ -389,8 +389,8 @@ def validate_record(record: dict, category: str) -> list[str]:
         errors.append("New products must remain Draft / Needs Review")
     name = str(record.get("name") or "").strip()
     expected_ending = CATEGORY_PROFILES[category]["name_ending"]
-    if expected_ending.casefold() not in name.casefold():
-        errors.append(f"Product name must identify the item as {expected_ending}")
+    if not name.casefold().endswith(expected_ending.casefold()):
+        errors.append(f"Product name must end with {expected_ending}")
     all_values = [name, record.get("short_description") or "", description, *[str(v) for v in specs.values()]]
     if any("made to order" in value.casefold() for value in all_values):
         errors.append("Made to Order cannot be used as a factual value")
