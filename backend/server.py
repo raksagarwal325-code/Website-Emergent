@@ -2916,6 +2916,19 @@ class AISopCommitRequest(BaseModel):
     products: List[dict]
 
 
+class AISopConversationMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class AISopConversationRequest(BaseModel):
+    product: dict
+    instruction: str = Field(min_length=1, max_length=4000)
+    history: List[AISopConversationMessage] = Field(default_factory=list)
+    image_filenames: List[str] = Field(default_factory=list)
+    session_id: str = ""
+
+
 async def _next_sku_numbers() -> dict:
     next_by_category = {}
     for category, prefix in SKU_PREFIX.items():
@@ -2983,6 +2996,146 @@ async def _generate_sop_product(item: AISopBatchItem) -> dict:
     except json.JSONDecodeError:
         logger.warning("AI product generation returned malformed JSON")
         raise HTTPException(502, "AI returned an invalid product response")
+
+
+@api.post("/ai/revise-product-conversation")
+async def ai_revise_product_conversation(
+    payload: AISopConversationRequest,
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Revise one draft through a persistent, SOP-controlled conversation."""
+    import base64
+    import re as _re
+    from emergentintegrations.llm.chat import (
+        ImageContent, LlmChat, StreamDone, TextDelta, UserMessage,
+    )
+
+    current = dict(payload.product or {})
+    category = str(current.get("category") or "").strip()
+    if category not in PRODUCT_SOP_SCHEMAS:
+        raise HTTPException(400, f"Unsupported category: {category or 'missing'}")
+
+    recovered = conversation_facts(payload.image_filenames)
+    recovered_category = recovered.get("category")
+    if recovered_category and recovered_category != category:
+        raise HTTPException(
+            400,
+            f"Uploaded conversation confirms category {recovered_category}; draft category is {category}",
+        )
+
+    images = []
+    for url in (current.get("images") or [])[:2]:
+        try:
+            image_bytes, _mime = await _resolve_product_image(
+                AIRegenerateRequest(image_url=url)
+            )
+            images.append(
+                ImageContent(image_base64=base64.b64encode(image_bytes).decode("ascii"))
+            )
+        except Exception:
+            logger.warning("Could not attach a draft image to revision conversation")
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "EMERGENT_LLM_KEY is not configured")
+
+    transcript = "\n".join(
+        f"{message.role.upper()}: {message.content}"
+        for message in payload.history[-12:]
+    )
+    owner_notes = facts_as_notes(recovered)
+    instruction = payload.instruction.strip()
+    system_message = sop_prompt(category) + """
+You are also a product-draft correction assistant. Continue a natural conversation
+about ONE product. Treat the current draft, images, conversation history, explicit
+owner correction, and recovered uploaded-conversation facts as context.
+
+Authority: the newest explicit owner correction wins unless it contradicts an
+unchanged physical fact visible in the images. Recovered uploaded-conversation
+facts remain authoritative. Never silently invent a family, dimension, material,
+count, electrical value, price, stock, warranty or certification.
+
+Return JSON only:
+{"action":"revision","message":"concise explanation","product":{the complete SOP record}}
+or, only when essential information is genuinely missing:
+{"action":"question","message":"one focused question"}
+
+For a revision, return the complete record required by the category SOP: name,
+20-35 word short_description, paragraph_1, paragraph_2, exactly 8 key_features,
+tags, all specification fields in the approved order, and confidence_notes.
+Do not ask the owner to manually repair fields you can correctly regenerate.
+"""
+    user_text = (
+        f"CURRENT DRAFT:\n{json.dumps(current, ensure_ascii=False)}\n\n"
+        f"RECOVERED OWNER FACTS: {owner_notes or 'none'}\n\n"
+        f"CONVERSATION SO FAR:\n{transcript or '(first correction)'}\n\n"
+        f"NEW OWNER MESSAGE: {instruction}"
+    )
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=payload.session_id or f"product-review-{uuid.uuid4().hex[:12]}",
+        system_message=system_message,
+    ).with_model("gemini", "gemini-3-flash-preview")
+    parts = []
+    async for event in chat.stream_message(UserMessage(text=user_text, file_contents=images)):
+        if isinstance(event, TextDelta):
+            parts.append(event.content)
+        elif isinstance(event, StreamDone):
+            break
+    raw = "".join(parts).strip()
+    match = _re.search(r"\{.*\}", raw, _re.DOTALL)
+    if not match:
+        raise HTTPException(502, "AI returned an invalid conversation response")
+    try:
+        response = json.loads(match.group(0))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(502, "AI returned malformed conversation JSON") from exc
+
+    assistant_message = str(response.get("message") or "").strip()
+    if response.get("action") == "question":
+        return {
+            "action": "question",
+            "message": assistant_message or "Please confirm the missing product fact.",
+        }
+
+    generated = response.get("product")
+    if not isinstance(generated, dict):
+        raise HTTPException(502, "AI revision did not return a complete product")
+
+    current_specs = current.get("specs") or {}
+    effective_height = str(recovered.get("height") or current_specs.get("Height") or "")
+    effective_width = str(recovered.get("width") or current_specs.get("Width") or "")
+    normalized = normalize_ai_record(generated, category, effective_height, effective_width)
+    normalized = apply_owner_facts(normalized, "; ".join(
+        part for part in (owner_notes, instruction) if part
+    ))
+
+    revised = {
+        **current,
+        **normalized,
+        "sku": current.get("sku"),
+        "category": category,
+        "images": current.get("images") or [],
+        "price": 0.0,
+        "currency": "INR",
+        "stock": 0,
+        "featured": False,
+        "badge": "Needs Review",
+        "fixed_price": False,
+        "price_display": "on_request",
+        "status": "draft",
+    }
+    validation = validate_record(revised, category)
+    if recovered.get("action") == "replace":
+        target = recovered.get("target_sku") or "the existing product"
+        validation.append(f"Uploaded conversation requires replacing {target}; do not create a new SKU")
+    return {
+        "action": "revision",
+        "message": assistant_message or "I revised the draft using your correction and the category SOP.",
+        "product": revised,
+        "validation": validation,
+        "warnings": normalized.pop("confidence_notes", []),
+    }
 
 
 @api.post("/ai/analyze-product-batch")
