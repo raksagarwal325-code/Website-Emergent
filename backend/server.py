@@ -2959,11 +2959,13 @@ async def _generate_sop_product(item: AISopBatchItem) -> dict:
     raw = "".join(parts).strip()
     match = _re.search(r"\{.*\}", raw, _re.DOTALL)
     if not match:
-        raise HTTPException(502, f"AI returned no JSON. Raw: {raw[:200]}")
+        logger.warning("AI product generation returned no JSON")
+        raise HTTPException(502, "AI returned an invalid product response")
     try:
         return normalize_ai_record(json.loads(match.group(0)), item.category, item.height, item.width)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(502, f"AI JSON parse failed: {exc}") from exc
+    except json.JSONDecodeError:
+        logger.warning("AI product generation returned malformed JSON")
+        raise HTTPException(502, "AI returned an invalid product response")
 
 
 @api.post("/ai/analyze-product-batch")
@@ -2994,9 +2996,9 @@ async def ai_analyze_product_batch(payload: AISopBatchRequest, admin: _AdminUser
             results.append({"client_id": item.client_id, "success": True, "draft": draft, "warnings": warnings, "validation": validation})
         except HTTPException as exc:
             results.append({"client_id": item.client_id, "success": False, "error": exc.detail})
-        except Exception as exc:
+        except Exception:
             logger.exception("SOP batch analysis failed")
-            results.append({"client_id": item.client_id, "success": False, "error": str(exc)})
+            results.append({"client_id": item.client_id, "success": False, "error": "Product analysis failed; please retry"})
     return {"results": results}
 
 

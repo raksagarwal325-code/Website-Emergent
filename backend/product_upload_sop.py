@@ -4,7 +4,6 @@ AI supplies product-specific copy. This module owns the non-negotiable shape,
 defaults and validation so model output can never silently bypass the SOP.
 """
 from collections import OrderedDict
-import re
 
 
 SCHEMAS = {
@@ -102,7 +101,7 @@ def validate_record(record: dict, category: str) -> list[str]:
     description = record.get("description") or ""
     if description.count("\n\n") < 2 or "Key Features\n" not in description:
         errors.append("Description must have two paragraphs followed by Key Features")
-    bullets = re.findall(r"(?m)^•\s+.+$", description)
+    bullets = [line for line in description.splitlines() if line.startswith("• ") and line[2:].strip()]
     if len(bullets) != 8:
         errors.append("Description must contain exactly 8 Key Features")
     if "Needs product-specific confirmation" in description:
