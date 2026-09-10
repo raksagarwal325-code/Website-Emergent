@@ -80,3 +80,13 @@ describe("ProductDraftConversation", () => {
     expect(onApply).not.toHaveBeenCalled();
   });
 });
+
+
+  test("keeps the compact batch conversation collapsed until requested", () => {
+    render(<ProductDraftConversation compact product={product} />);
+    expect(screen.getByText("Correct this draft with AI")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/For example/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Correct this draft with AI"));
+    expect(screen.getByPlaceholderText(/For example/i)).toBeInTheDocument();
+  });

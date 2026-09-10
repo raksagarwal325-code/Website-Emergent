@@ -113,7 +113,7 @@ def sop_prompt(category: str) -> str:
 Return strict JSON only with: name, short_description, paragraph_1, paragraph_2, key_features, tags, specs, confidence_notes.
 
 APPROVED SOP — NON-NEGOTIABLE:
-- Identity: {profile['identity']}. The product name must be long, specific, unique, truthful and end with {profile['name_ending']}.
+- Identity: {profile['identity']}. The product name must be long, specific, unique, truthful and end with {profile['name_ending']} as its final words.\n- Begin the title with a distinctive catalogue model name, not a generic feature such as a light count, glass, crystal, diamond-cut, heritage or colour. A model name is a marketing identifier and must not be copied into Collection / Family unless owner-confirmed.
 - Owner notes are confirmed facts and outrank visual inference and catalogue comparison. Use every supplied family, reference, light count and other stated fact exactly.
 - Existing catalogue rows are duplicate/reference evidence only. Never reuse an existing title for a different item or conceal a possible duplicate by rewording.
 - {GLOBAL_CONTROLS}
@@ -325,6 +325,23 @@ def apply_owner_facts(record: dict, notes: str) -> dict:
     return record
 
 
+def enforce_product_name_ending(value: str, category: str) -> str:
+    """Keep the long descriptive title while making the category its final words."""
+    ending = CATEGORY_PROFILES[category]["name_ending"]
+    name = " ".join(str(value or "").strip().split())
+    if name.casefold().endswith(ending.casefold()):
+        return name[:140]
+    without_ending = re.sub(
+        rf"(?i)(?<![A-Za-z]){re.escape(ending)}(?![A-Za-z])",
+        "",
+        name,
+    )
+    without_ending = re.sub(r"\s+[—–-]\s+", " ", without_ending)
+    without_ending = " ".join(without_ending.strip(" ,;:—–-").split())
+    max_prefix = max(1, 140 - len(ending) - 1)
+    return f"{without_ending[:max_prefix].rstrip()} {ending}".strip()
+
+
 def normalize_ai_record(ai: dict, category: str, height: str = "", width: str = "") -> dict:
     fields = SCHEMAS[category]
     raw_specs = ai.get("specs") if isinstance(ai.get("specs"), dict) else {}
@@ -356,7 +373,7 @@ def normalize_ai_record(ai: dict, category: str, height: str = "", width: str = 
     elif not isinstance(confidence_notes, (list, tuple)):
         confidence_notes = []
     return {
-        "name": str(ai.get("name") or "New Product · Needs Review").strip()[:140],
+        "name": enforce_product_name_ending(ai.get("name") or "New Product · Needs Review", category),
         "short_description": str(ai.get("short_description") or "").strip()[:220],
         "description": description,
         "tags": tags[:20],
@@ -391,6 +408,13 @@ def validate_record(record: dict, category: str) -> list[str]:
     expected_ending = CATEGORY_PROFILES[category]["name_ending"]
     if not name.casefold().endswith(expected_ending.casefold()):
         errors.append(f"Product name must end with {expected_ending}")
+    generic_opening = re.compile(
+        r"^(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+        r"diamond|crystal|glass|heritage|clear|gold|silver|black|white)(?:[- ]|$)",
+        re.I,
+    )
+    if generic_opening.search(name):
+        errors.append("Product name must begin with a distinctive catalogue model name")
     all_values = [name, record.get("short_description") or "", description, *[str(v) for v in specs.values()]]
     if any("made to order" in value.casefold() for value in all_values):
         errors.append("Made to Order cannot be used as a factual value")
