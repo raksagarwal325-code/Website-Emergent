@@ -4,6 +4,8 @@ AI supplies product-specific copy. This module owns the non-negotiable shape,
 defaults and validation so model output can never silently bypass the SOP.
 """
 from collections import OrderedDict
+from difflib import SequenceMatcher
+import re
 
 
 SCHEMAS = {
@@ -36,6 +38,8 @@ Return strict JSON only with: name, short_description, paragraph_1, paragraph_2,
 
 NON-NEGOTIABLE RULES:
 - Use a long, specific catalogue name: family/identity, visible glass/design, colour or configuration, then product type. Reuse the supplied family/reference only when supported.
+- Existing catalogue names are a duplicate reference set. Never reuse an existing title for a different item. Preserve a supported family root, but add truthful variant descriptors that distinguish the product.
+- If these photographs may show an existing catalogue product, say so in confidence_notes. Never conceal a possible duplicate merely by rewording its name.
 - short_description is one sentence of 20-35 words.
 - paragraph_1 and paragraph_2 are narrative prose. Do not put specifications in them.
 - key_features is an array of exactly 8 concise, evidence-based strings.
@@ -49,6 +53,33 @@ NON-NEGOTIABLE RULES:
 - The two images must agree. Report any mismatch or obscured count in confidence_notes.
 - No markdown and no text outside the JSON object.
 """
+
+
+def normalize_product_name(value: str) -> str:
+    """Normalize punctuation and spacing before catalogue-name comparison."""
+    return " ".join(re.findall(r"[a-z0-9]+", str(value or "").casefold()))
+
+
+def find_similar_product(name: str, products: list[dict], threshold: float = 0.92):
+    """Return the closest exact/near duplicate and its score, if one exists."""
+    wanted = normalize_product_name(name)
+    if not wanted:
+        return None
+    wanted_tokens = set(wanted.split())
+    best = None
+    for product in products:
+        candidate = normalize_product_name(product.get("name", ""))
+        if not candidate:
+            continue
+        candidate_tokens = set(candidate.split())
+        sequence_score = SequenceMatcher(None, wanted, candidate).ratio()
+        token_score = len(wanted_tokens & candidate_tokens) / max(len(wanted_tokens | candidate_tokens), 1)
+        score = max(sequence_score, token_score)
+        if wanted == candidate:
+            score = 1.0
+        if score >= threshold and (best is None or score > best[1]):
+            best = (product, score)
+    return best
 
 
 def normalize_ai_record(ai: dict, category: str, height: str = "", width: str = "") -> dict:
