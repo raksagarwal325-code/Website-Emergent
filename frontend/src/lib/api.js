@@ -92,17 +92,21 @@ export const api = {
     const collected = [];
     const seen = new Set();
     let page = 1;
-    const per = params.limit || 48;
+    // Admin editors need the stored SOP fields exactly as persisted, including
+    // explicit confirmation fallbacks. Public consumers still receive the
+    // sanitized specification set by default.
+    const { raw = false, ...requestParams } = params;
+    const per = requestParams.limit || 48;
     // Hard safety cap so a runaway loop can never happen.
     for (let i = 0; i < 200; i++) {
       const res = await client
-        .get("/products", { params: { ...params, page, limit: per } })
+        .get("/products", { params: { ...requestParams, page, limit: per } })
         .then((r) => r.data);
       const items = res?.items || [];
       for (const p of items) {
         if (p?.id && !seen.has(p.id)) {
           seen.add(p.id);
-          collected.push(sanitizePublicProduct(p));
+          collected.push(raw ? p : sanitizePublicProduct(p));
         }
       }
       const totalPages = res?.total_pages || 1;
