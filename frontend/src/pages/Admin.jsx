@@ -701,7 +701,7 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
                 {p.category || "—"} · {p.status === "draft" ? "Price on request" : `₹${p.price?.toLocaleString("en-IN")}`} · {p.stock} in stock
               </div>
               <div className="text-xs text-white/50 hidden md:block mt-0.5">
-                {p.stock ? `${p.stock} in stock` : "Made to order"}
+                {p.stock ? `${p.stock} in stock` : (p.price_display === "on_request" || !p.price ? "Price on request" : "Out of stock")}
               </div>
             </div>
             <div className="hidden md:block" data-testid={`admin-product-category-${p.id}`}>
