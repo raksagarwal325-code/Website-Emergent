@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 
 const CATEGORIES = ["Chandelier", "Hanging Light", "Wall Light", "Table Lamp", "Floor Lamp", "Candle Stand", "Floor Chandelier", "Table Chandelier", "Gate Light"];
 const pairKey = (name) => name.replace(/\.[^.]+$/, "").replace(/[\s_-]*(?:a|white|light|off|black|dark|lit|on)$/i, "").trim().toLowerCase();
-const isWhite = (name) => /(?:^|[\s_-])(?:a|white|light|off)(?:\.[^.]+)?$/i.test(name);
+const isWhite = (name) => /(?:a|[\s_-](?:white|light|off))(?:\.[^.]+)?$/i.test(name);
 
 export const pairProductFiles = (files) => {
   const groups = new Map();
