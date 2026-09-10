@@ -28,6 +28,75 @@ SKU_PREFIX = {
 
 DIMENSION_FALLBACK = "To be confirmed before order"
 
+
+# Reconciled from the approved category SOPs.  Keep behavioural differences
+# here instead of relying on an LLM to remember them.
+CATEGORY_PROFILES = {
+    "Candle Stand": {
+        "identity": "freestanding candle holder or hurricane form",
+        "name_ending": "Candle Stand",
+        "configuration": "Count candle holders and genuine arms independently; a single stem is not an arm.",
+        "special": "Candle Type and candle exclusion in Package Includes must be explicit when applicable.",
+    },
+    "Chandelier": {
+        "identity": "ceiling-suspended centrepiece",
+        "name_ending": "Chandelier",
+        "configuration": "Count holders as lights and supporting side-light arms separately; a central light is not an arm.",
+        "special": "Suspension Type and Collection / Family must be evidence-based.",
+    },
+    "Floor Chandelier": {
+        "identity": "freestanding floor centrepiece",
+        "name_ending": "Floor Chandelier",
+        "configuration": "Count holders as lights and structural light-bearing arms separately.",
+        "special": "Base Type must describe the visible freestanding support.",
+    },
+    "Floor Lamp": {
+        "identity": "freestanding floor lamp",
+        "name_ending": "Floor Lamp",
+        "configuration": "Count lights independently from arms; a central stem or decorative branch is not an arm.",
+        "special": "Base Type and Shade Type must be evidence-based; preserve a shade-less design as Not applicable.",
+    },
+    "Gate Light": {
+        "identity": "gate, pillar, post or approved outdoor-mounted light",
+        "name_ending": "Gate Light",
+        "configuration": "Count lights independently from structural arms and frame details.",
+        "special": "Mounting Type is required. Never claim an IP rating; use covered-outdoor wording only when owner-confirmed.",
+    },
+    "Hanging Light": {
+        "identity": "ceiling-suspended hanging light",
+        "name_ending": "Hanging Light",
+        "configuration": "For independent pendants or cascades, do not invent arms; use an accurate Not applicable statement.",
+        "special": "Suspension Type and Collection / Family must be evidence-based.",
+    },
+    "Table Chandelier": {
+        "identity": "freestanding tabletop centrepiece",
+        "name_ending": "Table Chandelier",
+        "configuration": "Count holders as lights and structural light-bearing arms separately.",
+        "special": "Base Type must describe the visible tabletop support.",
+    },
+    "Table Lamp": {
+        "identity": "freestanding table lamp",
+        "name_ending": "Table Lamp",
+        "configuration": "A single central holder is one light and normally has no arms.",
+        "special": "Shade Type must describe the verified shade or accurately state Not applicable.",
+    },
+    "Wall Light": {
+        "identity": "wall-mounted decorative light",
+        "name_ending": "Wall Light",
+        "configuration": "Count lights independently from arms; the backplate and decorative scrolls are not arms.",
+        "special": "Wall-mount construction and Collection / Family must be evidence-based.",
+    },
+}
+
+GLOBAL_CONTROLS = (
+    "Treat owner notes as authoritative facts. Inspect every image. Check duplicate SKU, name and image use. "
+    "Keep the illuminated black/dark image first and the matching white/light image second whenever both exist. "
+    "Both images must depict the identical product, colour, glass, base, arms and light configuration. "
+    "New products must remain Draft / Needs Review with Price on request unless an approved numeric price exists. "
+    "Never invent dimensions, materials, holder or bulb details, wattage, weight, IP rating, origin, certification, "
+    "warranty or family. Preserve product-specific facts; do not copy them blindly from a reference listing."
+)
+
 NUMBER_WORDS = {
     1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six",
     7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten", 11: "Eleven", 12: "Twelve",
@@ -38,28 +107,29 @@ NUMBER_WORDS = {
 
 def sop_prompt(category: str) -> str:
     fields = SCHEMAS[category]
-    return f"""You are preparing ONE Samrat Glass Emporium {category} catalogue record from two photographs of the SAME product.
-The first photograph is normally illuminated on black; the second is normally unlit on white. Treat both as evidence of one product.
+    profile = CATEGORY_PROFILES[category]
+    return f"""You are preparing ONE Samrat Glass Emporium {category} catalogue record from one or two photographs of the SAME product.
 
 Return strict JSON only with: name, short_description, paragraph_1, paragraph_2, key_features, tags, specs, confidence_notes.
 
-NON-NEGOTIABLE RULES:
-- Use a long, specific catalogue name: family/identity, visible glass/design, colour or configuration, then product type. Reuse the supplied family/reference only when supported.
-- Owner notes are confirmed facts and outrank visual inference and catalogue comparison. Use every supplied family name, light count and reference exactly; never replace them with a different family or count.
-- Existing catalogue names are a duplicate reference set. Never reuse an existing title for a different item. Preserve a supported family root, but add truthful variant descriptors that distinguish the product.
-- If these photographs may show an existing catalogue product, say so in confidence_notes. Never conceal a possible duplicate merely by rewording its name.
-- short_description is one sentence of 20-35 words.
-- paragraph_1 and paragraph_2 are narrative prose. Do not put specifications in them.
-- key_features is an array of exactly 8 concise, evidence-based strings.
+APPROVED SOP — NON-NEGOTIABLE:
+- Identity: {profile['identity']}. The product name must be long, specific, unique, truthful and end with {profile['name_ending']}.
+- Owner notes are confirmed facts and outrank visual inference and catalogue comparison. Use every supplied family, reference, light count and other stated fact exactly.
+- Existing catalogue rows are duplicate/reference evidence only. Never reuse an existing title for a different item or conceal a possible duplicate by rewording.
+- {GLOBAL_CONTROLS}
+- Image order is normally illuminated black/dark first, matching white/light second. Report a missing pair, mismatch, obscured count or uncertain identity in confidence_notes.
+- short_description is exactly one sentence of 20-35 words.
+- Write exactly two narrative paragraphs, followed by exactly 8 concise, product-specific Key Features.
+- Keep dimensions, holder, bulb, package, customization and confirmation wording out of narrative paragraphs.
 - specs contains exactly these keys in this exact order: {', '.join(fields)}.
 - Product Type is exactly {category}.
-- Height and Width use supplied values verbatim; when absent use "{DIMENSION_FALLBACK}".
-- Count lights and structural arms independently. Never count a central column or decorative scroll as an arm.
-- Never invent dimensions, material, holder, wattage, weather/IP rating, collection, origin, certification or warranty.
-- For an unknown non-dimensional value use "To be confirmed before order". Use an accurate "Not applicable — ..." value when a field truly does not apply.
-- Do not claim solid brass or crystal from appearance alone.
-- The two images must agree. Report any mismatch or obscured count in confidence_notes.
-- No markdown and no text outside the JSON object.
+- Height and Width use supplied values verbatim with units; when absent use "{DIMENSION_FALLBACK}".
+- {profile['configuration']}
+- {profile['special']}
+- Unknown non-dimensional facts use "{DIMENSION_FALLBACK}". A genuinely inapplicable field uses a precise "Not applicable — ..." statement.
+- Never write "Made to Order" as a factual specification and never leave a required field empty.
+- Do not infer solid brass or crystal from appearance alone.
+- No bracketed placeholders, markdown, or text outside the JSON object.
 """
 
 
@@ -195,4 +265,17 @@ def validate_record(record: dict, category: str) -> list[str]:
         errors.append("AI did not supply eight product-specific Key Features")
     if (record.get("status") or "draft") != "draft":
         errors.append("New products must remain Draft / Needs Review")
+    name = str(record.get("name") or "").strip()
+    expected_ending = CATEGORY_PROFILES[category]["name_ending"]
+    if not name.casefold().endswith(expected_ending.casefold()):
+        errors.append(f"Product name must end with {expected_ending}")
+    all_values = [name, record.get("short_description") or "", description, *[str(v) for v in specs.values()]]
+    if any("made to order" in value.casefold() for value in all_values):
+        errors.append("Made to Order cannot be used as a factual value")
+    if any(re.search(r"\[[^\]]+\]", value) for value in all_values):
+        errors.append("Template placeholders must be removed")
+    for dimension in ("Height", "Width"):
+        value = str(specs.get(dimension) or "").strip()
+        if value != DIMENSION_FALLBACK and not re.search(r'(?:["″]|\\b(?:mm|cm|m|ft|feet|foot)\\b)', value, re.I):
+            errors.append(f"{dimension} must include a unit or use the approved confirmation fallback")
     return errors

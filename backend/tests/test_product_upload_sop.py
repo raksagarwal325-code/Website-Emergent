@@ -1,4 +1,4 @@
-from product_upload_sop import DIMENSION_FALLBACK, SCHEMAS, apply_owner_facts, find_similar_product, normalize_ai_record, owner_facts, validate_record
+from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, apply_owner_facts, find_similar_product, normalize_ai_record, owner_facts, sop_prompt, validate_record
 
 
 def _ai():
@@ -79,3 +79,39 @@ def test_owner_family_and_light_count_override_ai_inference():
 
 def test_owner_fact_parser_accepts_label_style_notes():
     assert owner_facts("Family: Rajsi; 6 light holders") == {"family": "Rajsi", "lights": 6}
+
+
+def test_every_schema_has_an_embedded_category_profile():
+    assert set(CATEGORY_PROFILES) == set(SCHEMAS)
+    assert CATEGORY_PROFILES["Gate Light"]["special"].startswith("Mounting Type is required")
+    assert "Candle Type" in CATEGORY_PROFILES["Candle Stand"]["special"]
+    assert "Shade Type" in CATEGORY_PROFILES["Table Lamp"]["special"]
+
+
+def test_prompt_embeds_global_and_category_specific_sop_controls():
+    prompt = sop_prompt("Gate Light")
+    assert "Owner notes are confirmed facts" in prompt
+    assert "duplicate SKU, name and image use" in prompt
+    assert "exactly two narrative paragraphs" in prompt
+    assert "exactly 8" in prompt
+    assert "Mounting Type is required" in prompt
+    assert "Never claim an IP rating" in prompt
+    assert ", ".join(SCHEMAS["Gate Light"]) in prompt
+
+
+def test_validation_blocks_wrong_product_name_dimension_and_placeholder():
+    record = normalize_ai_record(_ai(), "Chandelier", height="24", width='18"')
+    record["name"] = "Rajsi [Variant]"
+    record["status"] = "draft"
+    errors = validate_record(record, "Chandelier")
+    assert "Product name must end with Chandelier" in errors
+    assert "Height must include a unit or use the approved confirmation fallback" in errors
+    assert "Template placeholders must be removed" in errors
+
+
+def test_validation_blocks_made_to_order_as_a_factual_value():
+    record = normalize_ai_record(_ai(), "Chandelier")
+    record["status"] = "draft"
+    record["specs"]["Height"] = "Made to Order"
+    errors = validate_record(record, "Chandelier")
+    assert "Made to Order cannot be used as a factual value" in errors
