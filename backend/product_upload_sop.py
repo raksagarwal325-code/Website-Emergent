@@ -160,6 +160,122 @@ def find_similar_product(name: str, products: list[dict], threshold: float = 0.9
     return best
 
 
+
+# Owner decisions recovered from all 607 lines of the uploaded source
+# conversation.  Pair keys prevent generic filenames such as 1.png from
+# leaking facts into an unrelated later upload.
+CONVERSATION_PAIR_FACTS = {
+    ("chatgpt image aug 22 2026 04 39 00 pm.png", "chatgpt image aug 22 2026 04 39 03 pm.png"):
+        {"category": "Gate Light"},
+    ("126.png", "126a.png"):
+        {"category": "Wall Light"},
+    ("097 (1).png", "097a (1).png"):
+        {"category": "Chandelier", "lights": 4, "arms": 3, "references": ["SGE-WL-064"]},
+    ("097 (2).png", "097a.jpeg"):
+        {"category": "Chandelier", "action": "replace", "target_sku": "SGE-CH-018"},
+    ("10 (2).png", "10a (2).png"):
+        {"category": "Chandelier", "lights": 5, "references": ["SGE-WL-043", "SGE-WL-044", "SGE-WL-123"], "detail": "Brass bands"},
+    ("098.png", "098a.png"):
+        {"category": "Chandelier", "lights": 5, "height": '24"', "width": '24"'},
+    ("099 (1).png", "099a (1).png"):
+        {"category": "Chandelier", "lights": 5, "height": '24"', "width": '24"'},
+    ("100 (1).png", "100a (1).png"):
+        {"category": "Chandelier", "lights": 5, "height": '24"', "width": '24"'},
+    ("101 (2).png", "101a (2).png"):
+        {"category": "Chandelier", "lights": 5, "height": '24"', "width": '24"'},
+    ("102 (1).png", "102a (2).png"):
+        {"category": "Chandelier", "lights": 5, "height": '24"', "width": '24"'},
+    ("8 (1).png", "8a (1).png"):
+        {"category": "Chandelier", "lights": 12, "references": ["SGE-WL-043"]},
+    ("6 (1).png", "6a (1).png"):
+        {"category": "Chandelier", "lights": 8, "references": ["SGE-CH-111"]},
+    ("20 (1).png", "20a (1).png"):
+        {"category": "Floor Lamp", "references": ["SGE-FL-007"], "detail": "Same fixture; glass differs"},
+    ("chatgpt image aug 19 2026 08 39 21 pm (3).png", "chatgpt image aug 19 2026 10 04 06 am (3).png"):
+        {"category": "Hanging Light", "family": "Kandil Bell-Jar", "lights": 3, "detail": "Diamond-lattice glass"},
+    ("chatgpt image aug 4 2026 11 21 02 pm.png", "chatgpt image aug 11 2026 11 42 44 pm.png"):
+        {"category": "Candle Stand"},
+    ("chatgpt image sep 6 2026 03 57 18 pm.png", "chatgpt image sep 6 2026 03 57 22 pm.png"):
+        {"category": "Chandelier", "lights": 6},
+    ("chatgpt image sep 8 2026 05 13 43 pm.png", "chatgpt image sep 8 2026 05 13 49 pm.png"):
+        {"category": "Chandelier", "lights": 6},
+    ("chatgpt image sep 8 2026 12 06 01 pm.png", "chatgpt image sep 8 2026 12 06 06 pm.png"):
+        {"category": "Chandelier", "lights": 6},
+}
+
+# Category-only statements from the conversation. These are deliberately
+# separate from product facts: they can correct classification but cannot
+# manufacture a family, count, dimension or reference.
+CONVERSATION_CATEGORY_GROUPS = {
+    "Wall Light": {
+        "1.png", "1a.png", "2 (3).png", "2a (3).png", "3.png", "3a.png",
+        "4.png", "4a.png", "5.png", "5a.png", "6.png", "6a.png", "7.png",
+        "7a.png", "8.png", "8a.png", "9.png", "9a.png", "10 (1).png",
+        "10a (1).png", "12.png", "12a.png", "13.png", "13a (1).png",
+        "14 (1).png", "14a (1).png", "15.png", "15a.png",
+    },
+    "Hanging Light": {
+        "chatgpt image aug 19 2026 08 34 55 pm (1).png",
+        "chatgpt image aug 19 2026 08 34 57 pm (6).png",
+        "chatgpt image aug 19 2026 08 39 21 pm (1).png",
+        "chatgpt image aug 19 2026 10 04 07 am (6).png",
+        "chatgpt image aug 19 2026 10 04 07 am (7).png",
+        "chatgpt image aug 19 2026 10 10 13 am (5).png",
+        "chatgpt image jul 29 2026 01 24 48 am.png",
+        "chatgpt image jul 29 2026 01 24 52 am.png",
+        "chatgpt image jul 30 2026 01 13 46 am.png",
+        "chatgpt image jul 30 2026 01 18 14 am.png",
+        "chatgpt image aug 10 2026 08 05 55 pm.png",
+        "chatgpt image aug 10 2026 08 06 02 pm.png",
+        "chatgpt image aug 10 2026 08 06 08 pm.png",
+        "chatgpt image aug 10 2026 08 06 20 pm.png",
+        "chatgpt image aug 11 2026 11 47 24 pm (1).png",
+        "chatgpt image aug 11 2026 11 47 25 pm (2).png",
+        "chatgpt image aug 11 2026 11 47 25 pm (3).png",
+        "chatgpt image aug 11 2026 11 47 26 pm (4).png",
+    },
+}
+
+
+def normalize_filename(value: str) -> str:
+    value = str(value or "").casefold().replace("_", " ")
+    value = re.sub(r"[,]+", "", value)
+    value = re.sub(r"\s*\((\d+)\)", r" (\1)", value)
+    return " ".join(value.split())
+
+
+def conversation_facts(filenames: list[str], category: str = "") -> dict:
+    """Resolve exact pair facts and safe category-only decisions."""
+    normalized = tuple(normalize_filename(name) for name in filenames or [])
+    pair = tuple(sorted(normalized))
+    for key, fact in CONVERSATION_PAIR_FACTS.items():
+        if pair == tuple(sorted(key)):
+            return {**fact, "source": "approved uploaded conversation"}
+    matched_categories = {
+        group_category
+        for group_category, names in CONVERSATION_CATEGORY_GROUPS.items()
+        if normalized and all(name in names for name in normalized)
+    }
+    if len(matched_categories) == 1:
+        return {"category": matched_categories.pop(), "source": "approved uploaded conversation"}
+    return {}
+
+
+def facts_as_notes(facts: dict) -> str:
+    parts = []
+    if facts.get("family"):
+        parts.append(f"{facts['family']} family")
+    if facts.get("lights") is not None:
+        parts.append(f"{facts['lights']} lights")
+    if facts.get("arms") is not None:
+        parts.append(f"{facts['arms']} arms")
+    if facts.get("references"):
+        parts.append("references " + ", ".join(facts["references"]))
+    if facts.get("detail"):
+        parts.append(str(facts["detail"]))
+    return "; ".join(parts)
+
+
 def owner_facts(notes: str) -> dict:
     """Extract the small set of owner-confirmed facts the SOP permits us to enforce."""
     value = str(notes or "").strip()
@@ -184,6 +300,12 @@ def apply_owner_facts(record: dict, notes: str) -> dict:
     specs = record.get("specs") or {}
     name = str(record.get("name") or "").strip()
     family = facts.get("family")
+    family_field = "Collection / Family"
+    if family_field in specs and not family:
+        generated_family = str(specs.get(family_field) or "").strip()
+        if generated_family and generated_family != DIMENSION_FALLBACK and re.match(rf"^{re.escape(generated_family)}\b", name, re.I):
+            name = re.sub(rf"^{re.escape(generated_family)}\s+", "", name, count=1, flags=re.I)
+        specs[family_field] = DIMENSION_FALLBACK
     if family:
         previous_family = str(specs.get("Collection / Family") or "").strip()
         specs["Collection / Family"] = family
@@ -267,8 +389,8 @@ def validate_record(record: dict, category: str) -> list[str]:
         errors.append("New products must remain Draft / Needs Review")
     name = str(record.get("name") or "").strip()
     expected_ending = CATEGORY_PROFILES[category]["name_ending"]
-    if not name.casefold().endswith(expected_ending.casefold()):
-        errors.append(f"Product name must end with {expected_ending}")
+    if expected_ending.casefold() not in name.casefold():
+        errors.append(f"Product name must identify the item as {expected_ending}")
     all_values = [name, record.get("short_description") or "", description, *[str(v) for v in specs.values()]]
     if any("made to order" in value.casefold() for value in all_values):
         errors.append("Made to Order cannot be used as a factual value")

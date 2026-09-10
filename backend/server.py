@@ -27,7 +27,7 @@ from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E4
 from watermark import apply_watermark  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
-from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply_owner_facts, find_similar_product, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
+from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply_owner_facts, conversation_facts, facts_as_notes, find_similar_product, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -2901,6 +2901,7 @@ class AIBulkRequest(BaseModel):
 class AISopBatchItem(BaseModel):
     client_id: str
     image_urls: List[str]
+    image_filenames: List[str] = Field(default_factory=list)
     category: str
     height: str = ""
     width: str = ""
@@ -2947,9 +2948,22 @@ async def _generate_sop_product(item: AISopBatchItem) -> dict:
         raise HTTPException(500, "EMERGENT_LLM_KEY is not configured")
     existing = await db.products.find({"category": item.category}, {"_id": 0, "name": 1, "sku": 1}).sort("created_at", -1).to_list(120)
     context = "\n".join(f"- {p.get('sku', '')}: {p.get('name', '')}" for p in existing)
+    recovered = conversation_facts(item.image_filenames)
+    recovered_category = recovered.get("category")
+    if recovered_category and recovered_category != item.category:
+        raise HTTPException(
+            400,
+            f"Uploaded conversation confirms category {recovered_category}; selected category is {item.category}",
+        )
+    recovered_notes = facts_as_notes(recovered)
+    effective_notes = "; ".join(part for part in (recovered_notes, item.notes.strip()) if part)
+    effective_height = item.height.strip() or str(recovered.get("height") or "").strip()
+    effective_width = item.width.strip() or str(recovered.get("width") or "").strip()
     message = (
-        f"Known facts: Height={item.height or 'unknown'}; Width={item.width or 'unknown'}; "
-        f"owner notes={item.notes or 'none'}.\nExisting {item.category} names for duplicate/family comparison:\n{context or '(none)'}"
+        f"Known facts: Height={effective_height or 'unknown'}; Width={effective_width or 'unknown'}; "
+        f"owner/conversation facts={effective_notes or 'none'}. "
+        "Facts recovered from the approved uploaded conversation are authoritative and must not be reinterpreted.\n"
+        f"Existing {item.category} names for duplicate comparison:\n{context or '(none)'}"
     )
     chat = LlmChat(api_key=api_key, session_id=f"ai-sop-{uuid.uuid4().hex[:12]}", system_message=sop_prompt(item.category)).with_model("gemini", "gemini-3-flash-preview")
     parts = []
@@ -2962,8 +2976,10 @@ async def _generate_sop_product(item: AISopBatchItem) -> dict:
         logger.warning("AI product generation returned no JSON")
         raise HTTPException(502, "AI returned an invalid product response")
     try:
-        normalized = normalize_ai_record(json.loads(match.group(0)), item.category, item.height, item.width)
-        return apply_owner_facts(normalized, item.notes)
+        normalized = normalize_ai_record(
+            json.loads(match.group(0)), item.category, effective_height, effective_width
+        )
+        return apply_owner_facts(normalized, effective_notes)
     except json.JSONDecodeError:
         logger.warning("AI product generation returned malformed JSON")
         raise HTTPException(502, "AI returned an invalid product response")
@@ -3012,6 +3028,18 @@ async def ai_analyze_product_batch(payload: AISopBatchRequest, admin: _AdminUser
             counters[item.category] += 1
             warnings = list(draft.pop("confidence_notes", []))
             validation = validate_record(draft, item.category)
+            recovered = conversation_facts(item.image_filenames)
+            recovered_category = recovered.get("category")
+            if recovered_category and recovered_category != item.category:
+                validation.append(
+                    f"Uploaded conversation confirms category {recovered_category}; "
+                    f"selected category is {item.category}"
+                )
+            if recovered.get("action") == "replace":
+                target = recovered.get("target_sku") or "the conversation-confirmed existing product"
+                validation.append(
+                    f"Uploaded conversation requires replacing {target}; do not create a new SKU"
+                )
             catalogue = catalogue_by_category.get(item.category, [])
             duplicate = find_similar_product(draft["name"], catalogue)
             if duplicate:
