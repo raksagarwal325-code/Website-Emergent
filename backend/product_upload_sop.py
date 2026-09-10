@@ -76,13 +76,18 @@ def normalize_ai_record(ai: dict, category: str, height: str = "", width: str = 
     tags = ai.get("tags") or []
     if isinstance(tags, str):
         tags = [x.strip() for x in tags.split(",") if x.strip()]
+    confidence_notes = ai.get("confidence_notes") or []
+    if isinstance(confidence_notes, str):
+        confidence_notes = [line.strip() for line in confidence_notes.splitlines() if line.strip()]
+    elif not isinstance(confidence_notes, (list, tuple)):
+        confidence_notes = []
     return {
         "name": str(ai.get("name") or "New Product · Needs Review").strip()[:140],
         "short_description": str(ai.get("short_description") or "").strip()[:220],
         "description": description,
         "tags": tags[:20],
         "specs": dict(specs),
-        "confidence_notes": [str(x).strip() for x in (ai.get("confidence_notes") or []) if str(x).strip()],
+        "confidence_notes": [str(x).strip() for x in confidence_notes if str(x).strip()],
     }
 
 

@@ -38,3 +38,17 @@ def test_missing_ai_features_block_creation_instead_of_inventing_copy():
     record = normalize_ai_record(ai, "Wall Light")
     record["status"] = "draft"
     assert "AI did not supply eight product-specific Key Features" in validate_record(record, "Wall Light")
+
+
+def test_string_confidence_note_stays_one_complete_warning():
+    ai = _ai()
+    ai["confidence_notes"] = "The count of six lights is visible but should be confirmed."
+    record = normalize_ai_record(ai, "Chandelier")
+    assert record["confidence_notes"] == ["The count of six lights is visible but should be confirmed."]
+
+
+def test_multiline_confidence_notes_become_complete_warnings():
+    ai = _ai()
+    ai["confidence_notes"] = "Confirm the glass colour.\nConfirm the suspension height."
+    record = normalize_ai_record(ai, "Chandelier")
+    assert record["confidence_notes"] == ["Confirm the glass colour.", "Confirm the suspension height."]
