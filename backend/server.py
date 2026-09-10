@@ -2983,9 +2983,24 @@ async def ai_analyze_product_batch(payload: AISopBatchRequest, admin: _AdminUser
             {"category": category}, {"_id": 0, "name": 1, "sku": 1, "images": 1}
         ).to_list(5000)
     batch_by_category = {category: [] for category in catalogue_by_category}
-    for item in payload.items:
+
+    # Run independent AI calls concurrently so a normal multi-product batch does
+    # not exceed the reverse proxy request timeout. Bound concurrency to avoid a
+    # large upload overwhelming the model provider.
+    semaphore = asyncio.Semaphore(6)
+
+    async def generate(item):
+        async with semaphore:
+            return await _generate_sop_product(item)
+
+    generated = await asyncio.gather(*(generate(item) for item in payload.items), return_exceptions=True)
+    for item, generated_draft in zip(payload.items, generated):
         try:
-            draft = await _generate_sop_product(item)
+            if isinstance(generated_draft, HTTPException):
+                raise generated_draft
+            if isinstance(generated_draft, Exception):
+                raise generated_draft
+            draft = generated_draft
             prefix = SKU_PREFIX[item.category]
             draft.update({
                 "sku": f"SGE-{prefix}-{counters[item.category]:03d}", "category": item.category,
