@@ -336,7 +336,7 @@ def enforce_product_name_ending(value: str, category: str) -> str:
         "",
         name,
     )
-    without_ending = re.sub(r"\s*[—–-]\s*", " ", without_ending)
+    without_ending = re.sub(r"\s+[—–-]\s+", " ", without_ending)
     without_ending = " ".join(without_ending.strip(" ,;:—–-").split())
     max_prefix = max(1, 140 - len(ending) - 1)
     return f"{without_ending[:max_prefix].rstrip()} {ending}".strip()
