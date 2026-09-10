@@ -28,6 +28,13 @@ SKU_PREFIX = {
 
 DIMENSION_FALLBACK = "To be confirmed before order"
 
+NUMBER_WORDS = {
+    1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six",
+    7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten", 11: "Eleven", 12: "Twelve",
+    13: "Thirteen", 14: "Fourteen", 15: "Fifteen", 16: "Sixteen",
+    18: "Eighteen", 20: "Twenty", 24: "Twenty-Four", 30: "Thirty",
+}
+
 
 def sop_prompt(category: str) -> str:
     fields = SCHEMAS[category]
@@ -38,6 +45,7 @@ Return strict JSON only with: name, short_description, paragraph_1, paragraph_2,
 
 NON-NEGOTIABLE RULES:
 - Use a long, specific catalogue name: family/identity, visible glass/design, colour or configuration, then product type. Reuse the supplied family/reference only when supported.
+- Owner notes are confirmed facts and outrank visual inference and catalogue comparison. Use every supplied family name, light count and reference exactly; never replace them with a different family or count.
 - Existing catalogue names are a duplicate reference set. Never reuse an existing title for a different item. Preserve a supported family root, but add truthful variant descriptors that distinguish the product.
 - If these photographs may show an existing catalogue product, say so in confidence_notes. Never conceal a possible duplicate merely by rewording its name.
 - short_description is one sentence of 20-35 words.
@@ -80,6 +88,49 @@ def find_similar_product(name: str, products: list[dict], threshold: float = 0.9
         if score >= threshold and (best is None or score > best[1]):
             best = (product, score)
     return best
+
+
+def owner_facts(notes: str) -> dict:
+    """Extract the small set of owner-confirmed facts the SOP permits us to enforce."""
+    value = str(notes or "").strip()
+    facts = {}
+    family_match = re.search(r"(?:^|[;,.]\s*)([A-Za-z][A-Za-z'’\-]*(?:\s+[A-Za-z][A-Za-z'’\-]*){0,2})\s+family\b", value, re.I)
+    if not family_match:
+        family_match = re.search(r"\bfamily\s*[:=\-]\s*([A-Za-z][A-Za-z'’\-]*(?:\s+[A-Za-z][A-Za-z'’\-]*){0,2})", value, re.I)
+    if family_match:
+        facts["family"] = family_match.group(1).strip()
+    lights_match = re.search(r"\b(\d{1,2})\s*(?:lights?|light[- ]sources?|bulbs?|holders?)\b", value, re.I)
+    if lights_match:
+        facts["lights"] = int(lights_match.group(1))
+    reference_match = re.search(r"\bSGE-[A-Z]{2}-\d{3}\b", value, re.I)
+    if reference_match:
+        facts["reference_sku"] = reference_match.group(0).upper()
+    return facts
+
+
+def apply_owner_facts(record: dict, notes: str) -> dict:
+    """Make owner-confirmed family/count facts non-overridable after AI generation."""
+    facts = owner_facts(notes)
+    specs = record.get("specs") or {}
+    name = str(record.get("name") or "").strip()
+    family = facts.get("family")
+    if family:
+        previous_family = str(specs.get("Collection / Family") or "").strip()
+        specs["Collection / Family"] = family
+        if previous_family and re.match(rf"^{re.escape(previous_family)}\b", name, re.I):
+            name = re.sub(rf"^{re.escape(previous_family)}\b", family, name, count=1, flags=re.I)
+        elif not re.match(rf"^{re.escape(family)}\b", name, re.I):
+            name = f"{family} {name}"
+    lights = facts.get("lights")
+    if lights is not None and "Number of Lights" in specs:
+        specs["Number of Lights"] = str(lights)
+        light_word = NUMBER_WORDS.get(lights, str(lights))
+        count_pattern = r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|eighteen|twenty(?:-four)?|thirty|\d{1,2})[- ]light\b"
+        if re.search(count_pattern, name, re.I):
+            name = re.sub(count_pattern, f"{light_word}-Light", name, count=1, flags=re.I)
+    record["name"] = name[:140]
+    record["specs"] = specs
+    return record
 
 
 def normalize_ai_record(ai: dict, category: str, height: str = "", width: str = "") -> dict:

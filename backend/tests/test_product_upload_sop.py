@@ -1,4 +1,4 @@
-from product_upload_sop import DIMENSION_FALLBACK, SCHEMAS, find_similar_product, normalize_ai_record, validate_record
+from product_upload_sop import DIMENSION_FALLBACK, SCHEMAS, apply_owner_facts, find_similar_product, normalize_ai_record, owner_facts, validate_record
 
 
 def _ai():
@@ -64,3 +64,18 @@ def test_duplicate_name_matching_ignores_case_punctuation_and_spacing():
 def test_distinct_family_variant_is_not_a_duplicate():
     products = [{"sku": "SGE-CH-114", "name": "Rajsi Diamond-Lattice Urn-Shaped Six-Light Glass Chandelier — Gold Accents"}]
     assert find_similar_product("Meher Diamond-Cut Tulip Twelve-Light Clear Glass Chandelier", products) is None
+
+
+def test_owner_family_and_light_count_override_ai_inference():
+    record = normalize_ai_record(_ai(), "Chandelier")
+    record["name"] = "Prastara Diamond-Lattice Tulip Nine-Light Glass Chandelier"
+    record["specs"]["Collection / Family"] = "Prastara"
+    record["specs"]["Number of Lights"] = "9"
+    corrected = apply_owner_facts(record, "Rajsi family; same as SGE-CH-050; 6 Lights")
+    assert corrected["name"] == "Rajsi Diamond-Lattice Tulip Six-Light Glass Chandelier"
+    assert corrected["specs"]["Collection / Family"] == "Rajsi"
+    assert corrected["specs"]["Number of Lights"] == "6"
+
+
+def test_owner_fact_parser_accepts_label_style_notes():
+    assert owner_facts("Family: Rajsi; 6 light holders") == {"family": "Rajsi", "lights": 6}

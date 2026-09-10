@@ -27,7 +27,7 @@ from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E4
 from watermark import apply_watermark  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
-from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, find_similar_product, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
+from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply_owner_facts, find_similar_product, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -2962,7 +2962,8 @@ async def _generate_sop_product(item: AISopBatchItem) -> dict:
         logger.warning("AI product generation returned no JSON")
         raise HTTPException(502, "AI returned an invalid product response")
     try:
-        return normalize_ai_record(json.loads(match.group(0)), item.category, item.height, item.width)
+        normalized = normalize_ai_record(json.loads(match.group(0)), item.category, item.height, item.width)
+        return apply_owner_facts(normalized, item.notes)
     except json.JSONDecodeError:
         logger.warning("AI product generation returned malformed JSON")
         raise HTTPException(502, "AI returned an invalid product response")
