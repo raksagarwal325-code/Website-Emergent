@@ -123,7 +123,7 @@ def test_conversation_facts_restore_confirmed_six_light_decision_from_filename()
         "Chandelier",
     )
     assert facts["lights"] == 6
-    assert facts["source"] == "approved conversation"
+    assert facts["source"] == "approved uploaded conversation"
 
 
 def test_conversation_facts_do_not_leak_across_categories():
