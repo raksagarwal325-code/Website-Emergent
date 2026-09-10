@@ -3195,6 +3195,22 @@ async def ai_analyze_product_batch(payload: AISopBatchRequest, admin: _AdminUser
                     f"Uploaded conversation requires replacing {target}; do not create a new SKU"
                 )
             catalogue = catalogue_by_category.get(item.category, [])
+            same_as_match = re.search(
+                r"\b(?:same as|identical to|duplicate of|replace(?:s|d)?(?: by| with)?)\b[^;\n]{0,40}\b(SGE-[A-Z]{2}-\d{3})\b",
+                item.notes or "",
+                re.I,
+            )
+            if same_as_match:
+                referenced_sku = same_as_match.group(1).upper()
+                referenced_product = next(
+                    (product for product in catalogue if str(product.get("sku") or "").upper() == referenced_sku),
+                    None,
+                )
+                if referenced_product:
+                    validation.append(
+                        f"Owner notes identify this as existing {referenced_sku} — "
+                        f"{referenced_product.get('name')}; update that product instead of creating a new SKU"
+                    )
             duplicate = find_similar_product(draft["name"], catalogue)
             if duplicate:
                 product, score = duplicate
