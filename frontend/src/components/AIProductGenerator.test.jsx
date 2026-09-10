@@ -1,4 +1,5 @@
-import { pairProductFiles } from "./AIProductGenerator";
+import { render, screen } from "@testing-library/react";
+import { pairProductFiles, Status } from "./AIProductGenerator";
 
 describe("AI bulk product image pairing", () => {
   const image = (name) => new File(["image"], name, { type: "image/png" });
@@ -23,5 +24,14 @@ describe("AI bulk product image pairing", () => {
     expect(rows.map((row) => row.files.map((file) => file.name))).toEqual([
       names.slice(0, 2), names.slice(2, 4), names.slice(4, 6),
     ]);
+  });
+});
+
+
+describe("AI SOP result status", () => {
+  test("does not label a draft ready when SOP validation failed", () => {
+    render(<Status row={{ state: "ready", validation: ["Product name must end with Chandelier"] }} />);
+    expect(screen.getByText("needs correction")).toBeInTheDocument();
+    expect(screen.queryByText("ready")).not.toBeInTheDocument();
   });
 });
