@@ -1,4 +1,4 @@
-from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, apply_owner_facts, find_similar_product, normalize_ai_record, owner_facts, sop_prompt, validate_record
+from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, apply_owner_facts, conversation_facts, find_similar_product, normalize_ai_record, owner_facts, sop_prompt, validate_record
 
 
 def _ai():
@@ -104,7 +104,7 @@ def test_validation_blocks_wrong_product_name_dimension_and_placeholder():
     record["name"] = "Rajsi [Variant]"
     record["status"] = "draft"
     errors = validate_record(record, "Chandelier")
-    assert "Product name must end with Chandelier" in errors
+    assert "Product name must identify the item as Chandelier" in errors
     assert "Height must include a unit or use the approved confirmation fallback" in errors
     assert "Template placeholders must be removed" in errors
 
@@ -115,3 +115,32 @@ def test_validation_blocks_made_to_order_as_a_factual_value():
     record["specs"]["Height"] = "Made to Order"
     errors = validate_record(record, "Chandelier")
     assert "Made to Order cannot be used as a factual value" in errors
+
+
+def test_conversation_facts_restore_confirmed_six_light_decision_from_filename():
+    facts = conversation_facts(
+        ["ChatGPT Image Sep 8, 2026, 05_13_43 PM.png", "ChatGPT Image Sep 8, 2026, 05_13_49 PM.png"],
+        "Chandelier",
+    )
+    assert facts["lights"] == 6
+    assert facts["source"] == "approved conversation"
+
+
+def test_conversation_facts_do_not_leak_across_categories():
+    assert conversation_facts(["ChatGPT Image Sep 8, 2026, 05_13_43 PM.png"], "Table Lamp") == {}
+
+
+def test_unconfirmed_ai_family_is_removed_instead_of_invented():
+    record = normalize_ai_record(_ai(), "Chandelier")
+    record["name"] = "Meher Diamond-Cut Tulip Six-Light Glass Chandelier"
+    record["specs"]["Collection / Family"] = "Meher"
+    corrected = apply_owner_facts(record, "")
+    assert corrected["name"] == "Diamond-Cut Tulip Six-Light Glass Chandelier"
+    assert corrected["specs"]["Collection / Family"] == DIMENSION_FALLBACK
+
+
+def test_long_title_may_continue_after_product_type_per_approved_sop_style():
+    record = normalize_ai_record(_ai(), "Chandelier")
+    record["name"] = "Diamond-Cut Tulip Chandelier — Six-Light Clear Glass"
+    record["status"] = "draft"
+    assert "Product name must identify the item as Chandelier" not in validate_record(record, "Chandelier")
