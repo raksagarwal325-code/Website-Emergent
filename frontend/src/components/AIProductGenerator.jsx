@@ -1,192 +1,92 @@
-import React, { useState } from "react";
-import { Sparkles, Upload, Loader2, CheckCircle2, AlertCircle, X, Edit3 } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { AlertCircle, CheckCircle2, Edit3, Loader2, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 
-// Small pill for the per-image status.
-const StatusPill = ({ state, error }) => {
-  if (state === "pending")
-    return <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-white/40"><Loader2 size={10} className="animate-spin" /> Queued</span>;
-  if (state === "analyzing")
-    return <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-[#D4AF37]"><Loader2 size={10} className="animate-spin" /> Analyzing…</span>;
-  if (state === "done")
-    return <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-emerald-400"><CheckCircle2 size={11} /> Draft created</span>;
-  if (state === "error")
-    return <span title={error} className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-red-400"><AlertCircle size={11} /> Failed</span>;
-  return null;
+const CATEGORIES = ["Chandelier", "Hanging Light", "Wall Light", "Table Lamp", "Floor Lamp", "Candle Stand", "Floor Chandelier", "Table Chandelier", "Gate Light"];
+const pairKey = (name) => name.replace(/\.[^.]+$/, "").replace(/[\s_-]*(?:a|white|light|off|black|dark|lit|on)$/i, "").trim().toLowerCase();
+const isWhite = (name) => /(?:a|[\s_-](?:white|light|off))(?:\.[^.]+)?$/i.test(name);
+
+export const pairProductFiles = (files) => {
+  const groups = new Map();
+  Array.from(files || []).forEach((file) => {
+    const key = pairKey(file.name) || file.name;
+    groups.set(key, [...(groups.get(key) || []), file]);
+  });
+  return Array.from(groups.entries()).map(([key, group], index) => {
+    const ordered = [...group].sort((a, b) => Number(isWhite(a.name)) - Number(isWhite(b.name))).slice(0, 2);
+    return { client_id: `${Date.now()}-${index}-${key}`, files: ordered, previews: ordered.map((file) => typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : ""), category: "Chandelier", height: "", width: "", notes: "", state: "queued", selected: true, warnings: group.length > 2 ? ["More than two matching images; only the first pair will be used."] : [] };
+  });
 };
 
-/**
- * AI Product Generator
- * - Bulk-upload N images
- * - Each is uploaded to /api/upload (watermarked as usual)
- * - Then /api/ai/generate-product is called with the stored image URL
- * - Each success creates a draft product (status: "draft", badge: "Needs Review")
- * - When done, the admin can click "Edit & Review" to open the standard product form
- */
+const Status = ({ row }) => {
+  if (["uploading", "analyzing", "creating"].includes(row.state)) return <span className="inline-flex items-center gap-1 text-[#D4AF37]"><Loader2 size={12} className="animate-spin" /> {row.state}</span>;
+  if (row.state === "ready" || row.state === "created") return <span className="inline-flex items-center gap-1 text-emerald-400"><CheckCircle2 size={12} /> {row.state === "created" ? "draft created" : "ready"}</span>;
+  if (row.state === "error") return <span className="inline-flex items-center gap-1 text-red-400"><AlertCircle size={12} /> failed</span>;
+  return <span className="text-white/45">{row.files.length === 2 ? "paired" : "one image"}</span>;
+};
+
 export default function AIProductGenerator({ onDone, setEditingProduct }) {
-  const [items, setItems] = useState([]); // { file, preview, state, error?, imageUrl?, draft? }
+  const [rows, setRows] = useState([]);
   const [busy, setBusy] = useState(false);
+  const patchRow = (id, patch) => setRows((cur) => cur.map((row) => row.client_id === id ? { ...row, ...patch } : row));
+  const selectedReady = useMemo(() => rows.filter((r) => r.selected && r.state === "ready" && !(r.validation || []).length), [rows]);
+  const update = (id, field, value) => patchRow(id, { [field]: value });
+  const remove = (row) => { row.previews.forEach(URL.revokeObjectURL); setRows((cur) => cur.filter((r) => r.client_id !== row.client_id)); };
+  const clear = () => { rows.forEach((r) => r.previews.forEach(URL.revokeObjectURL)); setRows([]); };
 
-  const addFiles = (fileList) => {
-    const files = Array.from(fileList || []);
-    const nextItems = files.map((f) => ({
-      file: f,
-      preview: URL.createObjectURL(f),
-      state: "pending",
-    }));
-    setItems((cur) => [...cur, ...nextItems]);
-  };
-
-  const removeItem = (idx) => setItems((cur) => cur.filter((_, i) => i !== idx));
-
-  const runAll = async () => {
-    if (busy || items.length === 0) return;
+  const analyze = async () => {
+    const pending = rows.filter((r) => r.selected && !["created", "ready"].includes(r.state));
+    if (!pending.length || busy) return;
     setBusy(true);
-    // Snapshot the pending list we're about to process
-    const pendingIdxs = items.map((it, i) => (it.state === "pending" ? i : -1)).filter((i) => i >= 0);
-    for (const idx of pendingIdxs) {
-      // 1) Upload the image
-      setItems((cur) => cur.map((it, i) => (i === idx ? { ...it, state: "analyzing" } : it)));
-      try {
-        const uploaded = await api.upload(items[idx].file);
-        // 2) Ask AI to generate the draft product
-        const draft = await api.aiGenerateProduct(uploaded.url);
-        setItems((cur) =>
-          cur.map((it, i) =>
-            i === idx ? { ...it, state: "done", imageUrl: uploaded.url, draft } : it,
-          ),
-        );
-      } catch (e) {
-        setItems((cur) =>
-          cur.map((it, i) =>
-            i === idx
-              ? { ...it, state: "error", error: e?.response?.data?.detail || e?.message || "Failed" }
-              : it,
-          ),
-        );
+    try {
+      const uploaded = [];
+      for (const row of pending) {
+        patchRow(row.client_id, { state: "uploading", error: "" });
+        try {
+          const saved = [];
+          for (const file of row.files) saved.push(await api.upload(file));
+          uploaded.push({ ...row, imageUrls: saved.map((u) => u.url) });
+          patchRow(row.client_id, { state: "analyzing", imageUrls: saved.map((u) => u.url) });
+        } catch (e) { patchRow(row.client_id, { state: "error", error: e?.response?.data?.detail || e.message || "Upload failed" }); }
       }
-    }
-    setBusy(false);
-    const created = items.filter((it) => it.state === "done").length; // stale snapshot — recompute
-    if (created >= 0) toast.success("AI drafts ready — click Review to edit each one");
-    onDone?.();
+      if (!uploaded.length) return;
+      const response = await api.aiAnalyzeProductBatch(uploaded.map((r) => ({ client_id: r.client_id, image_urls: r.imageUrls, category: r.category, height: r.height, width: r.width, notes: r.notes })));
+      response.results.forEach((result) => patchRow(result.client_id, result.success ? { state: "ready", draft: result.draft, warnings: result.warnings || [], validation: result.validation || [] } : { state: "error", error: result.error || "Analysis failed" }));
+      toast.success("Batch analysed — review warnings, then create all drafts");
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message || "Batch analysis failed"); }
+    finally { setBusy(false); }
   };
 
-  const readyCount = items.filter((it) => it.state === "done").length;
-  const errorCount = items.filter((it) => it.state === "error").length;
+  const createAll = async () => {
+    if (!selectedReady.length || busy) return;
+    setBusy(true);
+    selectedReady.forEach((r) => patchRow(r.client_id, { state: "creating" }));
+    try {
+      const response = await api.aiCommitProductBatch(selectedReady.map((r) => r.draft));
+      response.results.forEach((result) => {
+        const row = selectedReady.find((r) => r.draft.sku === result.sku);
+        if (row) patchRow(row.client_id, result.success ? { state: "created", draft: result.product } : { state: "error", error: result.error });
+      });
+      toast.success(`${response.created} Needs Review draft${response.created === 1 ? "" : "s"} created`);
+      onDone?.();
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message || "Could not create drafts"); }
+    finally { setBusy(false); }
+  };
 
-  return (
-    <div className="border border-[#D4AF37]/35 p-5 md:p-6 space-y-4"
-      style={{ background: "linear-gradient(180deg, rgba(212,175,55,0.05), transparent), #0d0510" }}
-      data-testid="ai-product-generator">
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 flex items-center justify-center rounded-full border border-[#D4AF37]/60 text-[#D4AF37] flex-shrink-0">
-          <Sparkles size={16} strokeWidth={1.7} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">AI Product Details Generator</div>
-          <div className="font-serif text-lg leading-tight mt-0.5">Draft product details from a product photograph.</div>
-          <p className="text-xs text-white/50 mt-1 leading-relaxed">
-            Upload one or many images. AI drafts the name, category, description, tags, SKU and specifications for each.
-            <span className="text-[#BF9972]"> All drafts are saved as <b>Needs Review</b> — nothing is auto-published.</span>
-          </p>
-        </div>
-      </div>
-
-      {/* Dropzone */}
-      <label className="block border-2 border-dashed border-[#D4AF37]/25 hover:border-[#D4AF37]/60 transition-colors cursor-pointer p-6 text-center"
-        data-testid="ai-gen-dropzone">
-        <input
-          type="file"
-          multiple
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
-          className="hidden"
-          data-testid="ai-gen-file-input"
-        />
-        <Upload size={20} className="mx-auto text-[#D4AF37]" />
-        <div className="text-sm mt-2 text-white/80">Drop product photos here — or click to select</div>
-        <div className="text-[10px] uppercase tracking-widest text-white/40 mt-1">JPG · PNG · WEBP</div>
-      </label>
-
-      {/* Grid of queued items */}
-      {items.length > 0 && (
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2 flex items-center justify-between">
-            <span>{items.length} photo{items.length === 1 ? "" : "s"} queued</span>
-            {readyCount + errorCount > 0 && (
-              <span>{readyCount} drafts · {errorCount} errors</span>
-            )}
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {items.map((it, i) => (
-              <div key={i} className="relative border border-white/10 p-2 bg-black/40" data-testid={`ai-gen-item-${i}`}>
-                <button
-                  type="button"
-                  onClick={() => removeItem(i)}
-                  className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center bg-black/60 text-white/60 hover:text-red-400 z-10"
-                  aria-label="Remove"
-                >
-                  <X size={12} />
-                </button>
-                <div className="aspect-square bg-black overflow-hidden">
-                  <img src={it.preview} alt="" className="w-full h-full object-cover" />
-                </div>
-                <div className="pt-2 pb-1">
-                  <StatusPill state={it.state} error={it.error} />
-                  {it.state === "done" && it.draft && (
-                    <>
-                      <div className="text-[11px] text-white/85 mt-1 font-serif leading-tight line-clamp-2">
-                        {it.draft.name}
-                      </div>
-                      <div className="text-[9px] uppercase tracking-widest text-[#BF9972]/80 mt-0.5">
-                        {it.draft.category} · {it.draft.sku}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setEditingProduct?.(it.draft)}
-                        data-testid={`ai-gen-review-${i}`}
-                        className="mt-2 w-full inline-flex items-center justify-center gap-1 border border-[#D4AF37]/60 text-[#D4AF37] px-2 py-1.5 text-[10px] uppercase tracking-widest hover:bg-[#D4AF37]/10"
-                      >
-                        <Edit3 size={10} /> Review & edit
-                      </button>
-                    </>
-                  )}
-                  {it.state === "error" && (
-                    <div className="text-[10px] text-red-400/80 mt-1 line-clamp-3">{it.error}</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex flex-wrap gap-3 items-center pt-2">
-        <button
-          type="button"
-          onClick={runAll}
-          disabled={busy || items.length === 0 || items.every((it) => it.state !== "pending")}
-          data-testid="ai-gen-run-btn"
-          className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {busy ? <><Loader2 size={13} className="animate-spin" /> Generating…</> : <><Sparkles size={13} /> Generate drafts</>}
-        </button>
-        {items.length > 0 && !busy && (
-          <button
-            type="button"
-            onClick={() => setItems([])}
-            className="text-[10px] uppercase tracking-widest text-white/40 hover:text-red-400"
-          >
-            Clear all
-          </button>
-        )}
-        <div className="ml-auto text-[10px] uppercase tracking-widest text-white/35">
-          ~10–15s per image · drafts stay unpublished
-        </div>
-      </div>
-    </div>
-  );
+  return <section className="border border-[#D4AF37]/35 bg-[#0d0510] p-5 md:p-6 space-y-5" data-testid="ai-product-generator">
+    <div className="flex items-start gap-3"><div className="w-9 h-9 grid place-items-center rounded-full border border-[#D4AF37]/60 text-[#D4AF37]"><Sparkles size={16} /></div><div><div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">AI bulk product upload</div><h2 className="font-serif text-xl">Pair, analyse, review and create in one batch</h2><p className="text-xs text-white/50 mt-1">Files ending in A, white, light or off become the second image. Every listing stays unpublished as Needs Review.</p></div></div>
+    <label className="block border-2 border-dashed border-[#D4AF37]/25 hover:border-[#D4AF37]/60 cursor-pointer p-6 text-center" data-testid="ai-gen-dropzone"><input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(e) => { setRows((cur) => [...cur, ...pairProductFiles(e.target.files)]); e.target.value = ""; }} className="hidden" data-testid="ai-gen-file-input" /><Upload size={20} className="mx-auto text-[#D4AF37]" /><div className="text-sm mt-2">Choose all black-and-white product image pairs</div><div className="text-[10px] uppercase tracking-widest text-white/40 mt-1">Up to 30 products per batch</div></label>
+    {rows.length > 0 && <div className="overflow-x-auto border border-white/10"><table className="w-full min-w-[1050px] text-sm"><thead className="bg-black/40 text-[10px] uppercase tracking-widest text-white/45"><tr>{["Use", "Images", "Category", "Height", "Width", "Family / reference / facts", "Result", ""].map((h) => <th key={h} className="p-3 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.client_id} className="border-t border-white/10 align-top">
+      <td className="p-3"><input type="checkbox" checked={row.selected} disabled={busy || row.state === "created"} onChange={(e) => update(row.client_id, "selected", e.target.checked)} /></td>
+      <td className="p-3"><div className="flex gap-1">{row.previews.map((src, i) => <img key={src} src={src} alt={i ? "White background" : "Black background"} className="h-14 w-14 object-contain bg-black border border-white/10" />)}</div><div className="text-[10px] text-white/35 mt-1 max-w-40">{row.files.map((f) => f.name).join(" + ")}</div></td>
+      <td className="p-3"><select value={row.category} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "category", e.target.value)} className="bg-black border border-white/15 px-2 py-2">{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></td>
+      <td className="p-3"><input value={row.height} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "height", e.target.value)} placeholder={'e.g. 24"'} className="w-24 bg-black border border-white/15 px-2 py-2" /></td>
+      <td className="p-3"><input value={row.width} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "width", e.target.value)} placeholder={'e.g. 18"'} className="w-24 bg-black border border-white/15 px-2 py-2" /></td>
+      <td className="p-3"><textarea value={row.notes} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "notes", e.target.value)} placeholder="Rajsi family; same as SGE-…; 6 lights…" rows={2} className="w-64 bg-black border border-white/15 px-2 py-2" /></td>
+      <td className="p-3 max-w-xs"><div className="text-[10px] uppercase tracking-widest"><Status row={row} /></div>{row.draft && <><div className="font-serif mt-1">{row.draft.name}</div><div className="text-[10px] text-[#BF9972]">{row.draft.sku} · {Object.keys(row.draft.specs || {}).length} specifications</div></>}{[...(row.warnings || []), ...(row.validation || [])].map((w) => <div key={w} className="text-[10px] text-amber-300 mt-1">⚠ {w}</div>)}{row.error && <div className="text-[10px] text-red-400 mt-1">{row.error}</div>}{row.state === "created" && <button onClick={() => setEditingProduct?.(row.draft)} className="mt-2 text-[10px] uppercase tracking-widest text-[#D4AF37]"><Edit3 size={10} className="inline mr-1" />Review & edit</button>}</td>
+      <td className="p-3"><button disabled={busy} onClick={() => remove(row)} aria-label="Remove product"><X size={14} /></button></td>
+    </tr>)}</tbody></table></div>}
+    <div className="flex flex-wrap gap-3"><button onClick={analyze} disabled={busy || !rows.some((r) => r.selected && !["ready", "created"].includes(r.state))} data-testid="ai-gen-run-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.24em] disabled:opacity-40">{busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Analyse batch</button><button onClick={createAll} disabled={busy || !selectedReady.length} data-testid="ai-gen-create-btn" className="border border-emerald-500/60 text-emerald-300 px-6 py-3 uppercase text-xs tracking-[0.24em] disabled:opacity-40">Create all ready drafts ({selectedReady.length})</button>{!busy && rows.length > 0 && <button onClick={clear} className="text-xs text-white/40 px-3">Clear all</button>}</div>
+  </section>;
 }
