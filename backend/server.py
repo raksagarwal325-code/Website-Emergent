@@ -3110,6 +3110,7 @@ Do not ask the owner to manually repair fields you can correctly regenerate.
         part for part in (owner_notes, instruction) if part
     ))
 
+    warnings = list(normalized.pop("confidence_notes", []))
     revised = {
         **current,
         **normalized,
@@ -3134,7 +3135,7 @@ Do not ask the owner to manually repair fields you can correctly regenerate.
         "message": assistant_message or "I revised the draft using your correction and the category SOP.",
         "product": revised,
         "validation": validation,
-        "warnings": normalized.pop("confidence_notes", []),
+        "warnings": warnings,
     }
 
 
