@@ -2901,7 +2901,7 @@ class AIBulkRequest(BaseModel):
 class AISopBatchItem(BaseModel):
     client_id: str
     image_urls: List[str]
-    image_filenames: List[str] = []
+    image_filenames: List[str] = Field(default_factory=list)
     category: str
     height: str = ""
     width: str = ""
