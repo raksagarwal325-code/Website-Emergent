@@ -15,7 +15,7 @@ export const pairProductFiles = (files) => {
   });
   return Array.from(groups.entries()).map(([key, group], index) => {
     const ordered = [...group].sort((a, b) => Number(isWhite(a.name)) - Number(isWhite(b.name))).slice(0, 2);
-    return { client_id: `${Date.now()}-${index}-${key}`, files: ordered, previews: ordered.map(URL.createObjectURL), category: "Chandelier", height: "", width: "", notes: "", state: "queued", selected: true, warnings: group.length > 2 ? ["More than two matching images; only the first pair will be used."] : [] };
+    return { client_id: `${Date.now()}-${index}-${key}`, files: ordered, previews: ordered.map((file) => typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : ""), category: "Chandelier", height: "", width: "", notes: "", state: "queued", selected: true, warnings: group.length > 2 ? ["More than two matching images; only the first pair will be used."] : [] };
   });
 };
 
