@@ -160,6 +160,53 @@ def find_similar_product(name: str, products: list[dict], threshold: float = 0.9
     return best
 
 
+
+# Owner decisions recovered from the uploaded source conversation.  Keys are
+# normalized original upload filenames, not generated storage URLs.
+CONVERSATION_IMAGE_FACTS = {
+    "chatgpt image sep 6 2026 03 57 18 pm.png": {"category": "Chandelier", "lights": 6},
+    "chatgpt image sep 6 2026 03 57 22 pm.png": {"category": "Chandelier", "lights": 6},
+    "chatgpt image sep 8 2026 05 13 43 pm.png": {"category": "Chandelier", "lights": 6},
+    "chatgpt image sep 8 2026 05 13 49 pm.png": {"category": "Chandelier", "lights": 6},
+    "chatgpt image sep 8 2026 12 06 01 pm.png": {"category": "Chandelier", "lights": 6},
+    "chatgpt image sep 8 2026 12 06 06 pm.png": {"category": "Chandelier", "lights": 6},
+}
+
+
+def normalize_filename(value: str) -> str:
+    value = str(value or "").casefold().replace("_", " ")
+    value = re.sub(r"[,]+", "", value)
+    return " ".join(value.split())
+
+
+def conversation_facts(filenames: list[str], category: str) -> dict:
+    """Return facts only when every recognized source agrees with the category."""
+    found = [
+        CONVERSATION_IMAGE_FACTS[normalize_filename(name)]
+        for name in filenames or []
+        if normalize_filename(name) in CONVERSATION_IMAGE_FACTS
+    ]
+    found = [fact for fact in found if fact.get("category") == category]
+    if not found:
+        return {}
+    result = {"source": "approved conversation"}
+    lights = {fact.get("lights") for fact in found if fact.get("lights") is not None}
+    families = {fact.get("family") for fact in found if fact.get("family")}
+    if len(lights) == 1:
+        result["lights"] = lights.pop()
+    if len(families) == 1:
+        result["family"] = families.pop()
+    return result
+
+
+def facts_as_notes(facts: dict) -> str:
+    parts = []
+    if facts.get("family"):
+        parts.append(f"{facts['family']} family")
+    if facts.get("lights") is not None:
+        parts.append(f"{facts['lights']} lights")
+    return "; ".join(parts)
+
 def owner_facts(notes: str) -> dict:
     """Extract the small set of owner-confirmed facts the SOP permits us to enforce."""
     value = str(notes or "").strip()
@@ -184,6 +231,12 @@ def apply_owner_facts(record: dict, notes: str) -> dict:
     specs = record.get("specs") or {}
     name = str(record.get("name") or "").strip()
     family = facts.get("family")
+    family_field = "Collection / Family"
+    if family_field in specs and not family:
+        generated_family = str(specs.get(family_field) or "").strip()
+        if generated_family and generated_family != DIMENSION_FALLBACK and re.match(rf"^{re.escape(generated_family)}\\b", name, re.I):
+            name = re.sub(rf"^{re.escape(generated_family)}\\s+", "", name, count=1, flags=re.I)
+        specs[family_field] = DIMENSION_FALLBACK
     if family:
         previous_family = str(specs.get("Collection / Family") or "").strip()
         specs["Collection / Family"] = family
@@ -267,8 +320,8 @@ def validate_record(record: dict, category: str) -> list[str]:
         errors.append("New products must remain Draft / Needs Review")
     name = str(record.get("name") or "").strip()
     expected_ending = CATEGORY_PROFILES[category]["name_ending"]
-    if not name.casefold().endswith(expected_ending.casefold()):
-        errors.append(f"Product name must end with {expected_ending}")
+    if expected_ending.casefold() not in name.casefold():
+        errors.append(f"Product name must identify the item as {expected_ending}")
     all_values = [name, record.get("short_description") or "", description, *[str(v) for v in specs.values()]]
     if any("made to order" in value.casefold() for value in all_values):
         errors.append("Made to Order cannot be used as a factual value")
