@@ -9,6 +9,7 @@ import AdminHomepage from "../components/AdminHomepage";
 import AIProductGenerator from "../components/AIProductGenerator";
 import ProductNameSuggester from "../components/ProductNameSuggester";
 import ProductFullRegenerator from "../components/ProductFullRegenerator";
+import ProductDraftConversation from "../components/ProductDraftConversation";
 import HeroSliderAdmin from "../components/admin/HeroSliderAdmin";
 import CategoryImagesAdmin from "../components/admin/CategoryImagesAdmin";
 import { LEGAL_DEFAULT_UPDATED_AT, serializeLegalDefault } from "../lib/legalContent";
@@ -316,6 +317,23 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
             <button type="button" onClick={() => setEditing(null)} className="text-white/50 hover:text-white"><X size={16} /></button>
           )}
         </div>
+        {editing && (
+          <ProductDraftConversation
+            product={form}
+            onApply={(revised) => setForm((current) => ({
+              ...current,
+              ...revised,
+              id: current.id,
+              sku: current.sku,
+              images: current.images,
+              status: "draft",
+              badge: "Needs Review",
+              price: 0,
+              price_display: "on_request",
+              fixed_price: false,
+            }))}
+          />
+        )}
         {/* Full-details regenerate + diff — separate from name-only tool. */}
         <ProductFullRegenerator
           form={form}
