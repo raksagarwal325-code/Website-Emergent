@@ -1,4 +1,4 @@
-from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, apply_owner_facts, conversation_facts, find_similar_product, normalize_ai_record, owner_facts, sop_prompt, validate_record
+from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, apply_owner_facts, conversation_facts, enforce_product_name_ending, find_similar_product, normalize_ai_record, owner_facts, sop_prompt, validate_record
 
 
 def _ai():
@@ -179,3 +179,24 @@ def test_product_name_must_end_with_exact_category_term():
 
     record["name"] = "Diamond-Cut Tulip Six-Light Clear Glass Chandelier"
     assert "Product name must end with Chandelier" not in validate_record(record, "Chandelier")
+
+
+def test_name_ending_is_reconciled_automatically_without_owner_chat():
+    assert enforce_product_name_ending(
+        "Ratnashobha Diamond-Lattice Tulip Six-Light Glass Chandelier — Bell-Pendant Accents",
+        "Chandelier",
+    ) == "Ratnashobha Diamond-Lattice Tulip Six-Light Glass Bell-Pendant Accents Chandelier"
+    assert enforce_product_name_ending(
+        "Six-Light Heritage Glass Chandelier with Bell Pendants",
+        "Chandelier",
+    ) == "Six-Light Heritage Glass with Bell Pendants Chandelier"
+
+
+def test_generic_description_is_not_accepted_as_a_distinctive_product_name():
+    record = normalize_ai_record(_ai(), "Chandelier")
+    record["name"] = "Six-Light Heritage Glass with Bell Pendants Chandelier"
+    record["status"] = "draft"
+    assert "Product name must begin with a distinctive catalogue model name" in validate_record(record, "Chandelier")
+
+    record["name"] = "Ratnashobha Six-Light Heritage Glass Bell-Pendant Chandelier"
+    assert "Product name must begin with a distinctive catalogue model name" not in validate_record(record, "Chandelier")
