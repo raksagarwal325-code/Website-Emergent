@@ -15,4 +15,13 @@ describe("AI bulk product image pairing", () => {
     expect(row.files).toHaveLength(1);
     expect(row.state).toBe("queued");
   });
+
+  test("pairs timestamp filenames sequentially in upload order", () => {
+    const names = ["2026_03_57_18PM.png", "2026_03_57_22PM.png", "2026_05_13_43PM.png", "2026_05_13_49PM.png", "2026_12_06_01PM.png", "2026_12_06_06PM.png"];
+    const rows = pairProductFiles(names.map(image));
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.files.map((file) => file.name))).toEqual([
+      names.slice(0, 2), names.slice(2, 4), names.slice(4, 6),
+    ]);
+  });
 });

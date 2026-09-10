@@ -27,7 +27,7 @@ from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E4
 from watermark import apply_watermark  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
-from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
+from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, find_similar_product, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -2977,6 +2977,12 @@ async def ai_analyze_product_batch(payload: AISopBatchRequest, admin: _AdminUser
         raise HTTPException(400, "Maximum 30 products per batch")
     counters = await _next_sku_numbers()
     results = []
+    catalogue_by_category = {}
+    for category in {item.category for item in payload.items if item.category in PRODUCT_SOP_SCHEMAS}:
+        catalogue_by_category[category] = await db.products.find(
+            {"category": category}, {"_id": 0, "name": 1, "sku": 1, "images": 1}
+        ).to_list(5000)
+    batch_by_category = {category: [] for category in catalogue_by_category}
     for item in payload.items:
         try:
             draft = await _generate_sop_product(item)
@@ -2988,11 +2994,22 @@ async def ai_analyze_product_batch(payload: AISopBatchRequest, admin: _AdminUser
                 "fixed_price": False, "price_display": "on_request", "status": "draft",
             })
             counters[item.category] += 1
-            duplicate = await db.products.find_one({"category": item.category, "name": {"$regex": f"^{re.escape(draft['name'])}$", "$options": "i"}}, {"_id": 0, "id": 1, "sku": 1, "name": 1})
             warnings = list(draft.pop("confidence_notes", []))
-            if duplicate:
-                warnings.append(f"Possible duplicate: {duplicate.get('sku')} — {duplicate.get('name')}")
             validation = validate_record(draft, item.category)
+            catalogue = catalogue_by_category.get(item.category, [])
+            duplicate = find_similar_product(draft["name"], catalogue)
+            if duplicate:
+                product, score = duplicate
+                validation.append(f"Possible duplicate name ({score:.0%} match): {product.get('sku')} — {product.get('name')}")
+            batch_duplicate = find_similar_product(draft["name"], batch_by_category.get(item.category, []))
+            if batch_duplicate:
+                product, score = batch_duplicate
+                validation.append(f"Duplicate name within this batch ({score:.0%} match): {product.get('sku')} — {product.get('name')}")
+            image_urls = set(item.image_urls)
+            image_collision = next((product for product in catalogue if image_urls & set(product.get("images") or [])), None)
+            if image_collision:
+                validation.append(f"Image already used by {image_collision.get('sku')} — {image_collision.get('name')}")
+            batch_by_category.setdefault(item.category, []).append({"name": draft["name"], "sku": draft["sku"], "images": item.image_urls})
             results.append({"client_id": item.client_id, "success": True, "draft": draft, "warnings": warnings, "validation": validation})
         except HTTPException as exc:
             results.append({"client_id": item.client_id, "success": False, "error": exc.detail})
@@ -3012,9 +3029,17 @@ async def ai_commit_product_batch(payload: AISopCommitRequest, admin: _AdminUser
         if errors:
             results.append({"sku": raw.get("sku"), "success": False, "error": "; ".join(errors)})
             continue
-        collision = await db.products.find_one({"$or": [{"sku": raw.get("sku")}, {"name": {"$regex": f"^{re.escape(raw.get('name', ''))}$", "$options": "i"}}]}, {"_id": 0, "sku": 1, "name": 1})
+        catalogue = await db.products.find(
+            {"category": category}, {"_id": 0, "sku": 1, "name": 1, "images": 1}
+        ).to_list(5000)
+        sku_collision = next((product for product in catalogue if str(product.get("sku", "")).casefold() == str(raw.get("sku", "")).casefold()), None)
+        name_collision = find_similar_product(raw.get("name", ""), catalogue)
+        image_urls = set(raw.get("images") or [])
+        image_collision = next((product for product in catalogue if image_urls & set(product.get("images") or [])), None)
+        collision = sku_collision or (name_collision[0] if name_collision else None) or image_collision
         if collision:
-            results.append({"sku": raw.get("sku"), "success": False, "error": f"Duplicate/conflict with {collision.get('sku')} — {collision.get('name')}"})
+            reason = "SKU" if sku_collision else "name" if name_collision else "image"
+            results.append({"sku": raw.get("sku"), "success": False, "error": f"Duplicate {reason}/conflict with {collision.get('sku')} — {collision.get('name')}"})
             continue
         allowed = ProductCreate(**{**raw, "status": "draft", "badge": "Needs Review", "price_display": "on_request", "fixed_price": False, "price": 0.0, "currency": "INR"})
         product = Product(**allowed.model_dump())
