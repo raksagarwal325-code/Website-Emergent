@@ -303,8 +303,8 @@ def apply_owner_facts(record: dict, notes: str) -> dict:
     family_field = "Collection / Family"
     if family_field in specs and not family:
         generated_family = str(specs.get(family_field) or "").strip()
-        if generated_family and generated_family != DIMENSION_FALLBACK and re.match(rf"^{re.escape(generated_family)}\\b", name, re.I):
-            name = re.sub(rf"^{re.escape(generated_family)}\\s+", "", name, count=1, flags=re.I)
+        if generated_family and generated_family != DIMENSION_FALLBACK and re.match(rf"^{re.escape(generated_family)}\b", name, re.I):
+            name = re.sub(rf"^{re.escape(generated_family)}\s+", "", name, count=1, flags=re.I)
         specs[family_field] = DIMENSION_FALLBACK
     if family:
         previous_family = str(specs.get("Collection / Family") or "").strip()
