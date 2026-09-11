@@ -57,7 +57,7 @@ jsonschema-specifications==2025.9.1
 librt==0.12.0
 markdown-it-py==4.2.0
 MarkupSafe==3.0.3
-mccabe==7.0.0
+mccabe==0.7.0
 mdurl==0.1.2
 motor==3.3.1
 multidict==6.7.1
@@ -81,7 +81,7 @@ protobuf==5.29.6
 pyasn1==0.6.3
 pyasn1_modules==0.4.2
 pycodestyle==2.14.0
-pycparser==2.23
+pycparser==3.0
 pydantic==2.13.4
 pydantic_core==2.46.4
 pyee==13.0.1
@@ -126,6 +126,6 @@ uvicorn==0.25.0
 watchfiles==1.2.0
 websockets==16.0
 yarl==1.24.2
-zipp==3.23.0
+zipp==4.1.0
 resend==2.34.0
 pytest-asyncio==1.4.0
