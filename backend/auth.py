@@ -163,10 +163,10 @@ from security_runtime import install_runtime_hardening  # noqa: E402
 
 install_runtime_hardening()
 
-# Install the bounded-time admin-only Excel catalogue export. The original
-# workbook builder remains the source of truth for layout/content; this
-# installer only changes how primary thumbnails are prepared so a large
-# catalogue cannot run into Cloudflare's request timeout.
-from catalogue_excel_fast import install_catalogue_excel  # noqa: E402
+# Install the final bounded-time, compatibility-safe admin Excel catalogue
+# export. It keeps PR #275's concurrent thumbnail preload, adds the website's
+# real product-image hosts, and avoids the optional Excel table package that
+# older desktop Excel versions may repair on open.
+from catalogue_excel_final import install_catalogue_excel  # noqa: E402
 
 install_catalogue_excel(load_admin)
