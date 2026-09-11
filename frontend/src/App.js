@@ -14,6 +14,7 @@ import ScrollToTop from "@/components/ScrollToTop";
 
 const Toaster = React.lazy(() => import("sonner").then((module) => ({ default: module.Toaster })));
 const AdminAuthGate = React.lazy(() => import("@/components/AdminAuthGate"));
+const AdminCatalogueExcelControl = React.lazy(() => import("@/components/AdminCatalogueExcelControl"));
 const Catalog = React.lazy(() => import("@/pages/Catalog"));
 const CategoryPage = React.lazy(() => import("@/pages/CategoryPage"));
 const CollectionsIndex = React.lazy(() => import("@/pages/CollectionsIndex"));
@@ -200,7 +201,7 @@ function App() {
                 <Route path="/architects-interior-designers" element={<ArchitectsDesigners />} />
                 <Route path="/chandelier-manufacturer-india" element={<ChandelierManufacturerIndia />} />
                 <Route path="/double-height-chandeliers-india" element={<DoubleHeightChandeliersIndia />} />
-                <Route path="/admin" element={<AdminAuthGate><Admin /></AdminAuthGate>} />
+                <Route path="/admin" element={<AdminAuthGate><><Admin /><AdminCatalogueExcelControl /></></AdminAuthGate>} />
                 <Route path="/admin/collections" element={<AdminAuthGate><CollectionsAdmin /></AdminAuthGate>} />
                 <Route path="/admin/spaces" element={<AdminAuthGate><SpacesAdmin /></AdminAuthGate>} />
                 <Route path="/catalogue" element={<AdminAuthGate><Catalogue /></AdminAuthGate>} />
