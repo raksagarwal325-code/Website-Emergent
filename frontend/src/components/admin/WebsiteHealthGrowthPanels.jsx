@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Layers3, Link2, RefreshCw, TrendingUp, Warehouse } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, Layers3, Link2, RefreshCw, TrendingUp, Warehouse, Wrench } from "lucide-react";
 import { API } from "../../lib/api";
 
 function Metric({ label, value, hint }) {
@@ -18,24 +18,57 @@ const severityStyle = {
   info: "border-white/10 text-white/60",
 };
 
+const actionClass = "inline-flex items-center gap-1.5 border border-[#D4AF37]/45 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-[#D4AF37] hover:bg-[#D4AF37]/10";
+
+function findingActions(item) {
+  if (item.scope === "collection") {
+    return [
+      { label: "Open collection editor", href: `/admin/collections?collection=${encodeURIComponent(item.key)}`, fix: true },
+      { label: "View collection", href: `/collection/${encodeURIComponent(item.key)}` },
+    ];
+  }
+  if (item.scope === "project") {
+    return [
+      { label: "Open project editor", href: `/admin?tab=homepage&project=${encodeURIComponent(item.key)}#project-gallery`, fix: true },
+      { label: "View project", href: `/gallery/${encodeURIComponent(item.key)}` },
+    ];
+  }
+  if (item.scope === "route") {
+    return [{ label: "Open affected route", href: item.key === "product" ? "/catalog" : `/product/${encodeURIComponent(item.key)}` }];
+  }
+  return [];
+}
+
 function Findings({ items = [], emptyMessage }) {
   if (!items.length) {
     return <div className="border border-emerald-300/20 bg-emerald-400/5 p-5 text-sm text-emerald-100">{emptyMessage}</div>;
   }
   return (
     <div className="space-y-2">
-      {items.slice(0, 100).map((item, index) => (
-        <div key={`${item.scope}-${item.key}-${item.issue}-${index}`} className={`border p-4 ${severityStyle[item.severity] || severityStyle.info}`}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[10px] uppercase tracking-[0.18em] opacity-60">{item.scope} · {item.severity}</div>
-              <div className="mt-1 text-sm text-white">{item.issue}</div>
-              {item.detail && <div className="mt-1 text-xs opacity-60">{item.detail}</div>}
+      {items.slice(0, 100).map((item, index) => {
+        const actions = findingActions(item);
+        return (
+          <div key={`${item.scope}-${item.key}-${item.issue}-${index}`} className={`border p-4 ${severityStyle[item.severity] || severityStyle.info}`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.18em] opacity-60">{item.scope} · {item.severity}</div>
+                <div className="mt-1 text-sm text-white">{item.issue}</div>
+                {item.detail && <div className="mt-1 text-xs opacity-60">{item.detail}</div>}
+              </div>
+              <div className="text-xs opacity-60">{item.key}</div>
             </div>
-            <div className="text-xs opacity-60">{item.key}</div>
+            {actions.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
+                {actions.map((action) => (
+                  <a key={action.label} href={action.href} className={actionClass}>
+                    {action.fix ? <Wrench size={12} /> : <ExternalLink size={12} />} {action.label}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
       {items.length > 100 && <div className="text-xs text-white/40">Showing first 100 of {items.length} findings.</div>}
     </div>
   );
@@ -46,16 +79,17 @@ function CollectionTable({ rows = [] }) {
     <div className="overflow-x-auto border border-white/10">
       <table className="w-full min-w-[760px] text-left text-sm">
         <thead className="bg-white/5 text-[10px] uppercase tracking-[0.18em] text-white/50">
-          <tr><th className="p-3">Collection</th><th className="p-3">Published products</th><th className="p-3">Categories</th><th className="p-3">Featured</th><th className="p-3">Findings</th></tr>
+          <tr><th className="p-3">Collection</th><th className="p-3">Published products</th><th className="p-3">Categories</th><th className="p-3">Featured</th><th className="p-3">Findings</th><th className="p-3">Actions</th></tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.slug} className="border-t border-white/10">
-              <td className="p-3"><div>{row.name}</div><div className="text-[11px] text-white/40">/collections/{row.slug}</div></td>
+              <td className="p-3"><a href={`/collection/${encodeURIComponent(row.slug)}`} className="hover:text-[#D4AF37]">{row.name}</a><div className="text-[11px] text-white/40">/collection/{row.slug}</div></td>
               <td className="p-3">{row.published_members}</td>
               <td className="p-3">{row.categories?.length || 0}</td>
               <td className="p-3">{row.featured_products}</td>
               <td className="p-3">{row.findings}</td>
+              <td className="p-3"><a href={`/admin/collections?collection=${encodeURIComponent(row.slug)}`} className={actionClass}><Wrench size={12} /> Edit</a></td>
             </tr>
           ))}
         </tbody>
@@ -67,18 +101,19 @@ function CollectionTable({ rows = [] }) {
 function ProjectTable({ rows = [] }) {
   return (
     <div className="overflow-x-auto border border-white/10">
-      <table className="w-full min-w-[860px] text-left text-sm">
+      <table className="w-full min-w-[980px] text-left text-sm">
         <thead className="bg-white/5 text-[10px] uppercase tracking-[0.18em] text-white/50">
-          <tr><th className="p-3">Project</th><th className="p-3">Location</th><th className="p-3">Images</th><th className="p-3">Linked products</th><th className="p-3">Findings</th></tr>
+          <tr><th className="p-3">Project</th><th className="p-3">Location</th><th className="p-3">Images</th><th className="p-3">Linked products</th><th className="p-3">Findings</th><th className="p-3">Actions</th></tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.slug} className="border-t border-white/10">
-              <td className="p-3"><div>{row.title}</div><div className="text-[11px] text-white/40">/gallery/{row.slug}</div></td>
+              <td className="p-3"><a href={`/gallery/${encodeURIComponent(row.slug)}`} className="hover:text-[#D4AF37]">{row.title}</a><div className="text-[11px] text-white/40">/gallery/{row.slug}</div></td>
               <td className="p-3">{row.location || "—"}</td>
               <td className="p-3">{row.images}</td>
               <td className="p-3">{row.linked_products}</td>
               <td className="p-3">{row.findings}</td>
+              <td className="p-3"><a href={`/admin?tab=homepage&project=${encodeURIComponent(row.slug)}#project-gallery`} className={actionClass}><Wrench size={12} /> Edit</a></td>
             </tr>
           ))}
         </tbody>
@@ -91,19 +126,20 @@ function DemandTable({ rows = [] }) {
   if (!rows.length) return <div className="border border-white/10 p-5 text-sm text-white/50">No product-level website inquiry demand was recorded in the last 90 days.</div>;
   return (
     <div className="overflow-x-auto border border-white/10">
-      <table className="w-full min-w-[900px] text-left text-sm">
+      <table className="w-full min-w-[980px] text-left text-sm">
         <thead className="bg-white/5 text-[10px] uppercase tracking-[0.18em] text-white/50">
-          <tr><th className="p-3">Product</th><th className="p-3">Category</th><th className="p-3">Inquiries 30d</th><th className="p-3">Qty 30d</th><th className="p-3">Inquiries 90d</th><th className="p-3">Qty 90d</th></tr>
+          <tr><th className="p-3">Product</th><th className="p-3">Category</th><th className="p-3">Inquiries 30d</th><th className="p-3">Qty 30d</th><th className="p-3">Inquiries 90d</th><th className="p-3">Qty 90d</th><th className="p-3">Actions</th></tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.product_id} className="border-t border-white/10">
-              <td className="p-3"><div>{row.name}</div><div className="text-[11px] text-white/40">{row.sku || "No SKU"}</div></td>
+              <td className="p-3"><a href={`/product/${encodeURIComponent(row.product_id)}`} className="hover:text-[#D4AF37]">{row.name}</a><div className="text-[11px] text-white/40">{row.sku || "No SKU"}</div></td>
               <td className="p-3">{row.category || "—"}</td>
               <td className="p-3">{row.inquiries_30d}</td>
               <td className="p-3">{row.quantity_30d}</td>
               <td className="p-3">{row.inquiries_90d}</td>
               <td className="p-3">{row.quantity_90d}</td>
+              <td className="p-3"><a href={`/admin?tab=products&product=${encodeURIComponent(row.product_id)}`} className={actionClass}><Wrench size={12} /> Edit</a></td>
             </tr>
           ))}
         </tbody>
@@ -151,7 +187,7 @@ export default function WebsiteHealthGrowthPanels() {
             <div className="eyebrow mb-3">Catalogue growth controls</div>
             <h2 className="font-serif text-3xl">Collection, Project, Route & Demand Health</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-white/50">
-              Read-only structural checks for collection membership, project-gallery links, public route identity and product-level website inquiry demand.
+              Read-only structural checks for collection membership, project-gallery links, public route identity and product-level website inquiry demand. Findings include direct editor links where a safe Admin destination exists.
             </p>
           </div>
           <button onClick={refresh} disabled={loading} className="inline-flex items-center gap-2 border border-[#D4AF37]/50 px-4 py-2 text-xs uppercase tracking-[0.18em] text-[#D4AF37] disabled:opacity-50">
@@ -208,9 +244,12 @@ export default function WebsiteHealthGrowthPanels() {
             </section>
 
             <section className="border border-white/10 p-5">
-              <div className="flex items-start gap-3">
-                {data?.gsc?.runtime_connected ? <CheckCircle2 size={18} className="mt-0.5 text-emerald-300" /> : <AlertTriangle size={18} className="mt-0.5 text-[#D4AF37]" />}
-                <div><div className="text-sm">Google Search Console indexing metrics</div><div className="mt-1 text-xs leading-5 text-white/50">{data?.gsc?.note}</div></div>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  {data?.gsc?.runtime_connected ? <CheckCircle2 size={18} className="mt-0.5 text-emerald-300" /> : <AlertTriangle size={18} className="mt-0.5 text-[#D4AF37]" />}
+                  <div><div className="text-sm">Google Search Console indexing metrics</div><div className="mt-1 text-xs leading-5 text-white/50">{data?.gsc?.note}</div></div>
+                </div>
+                <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer" className={actionClass}><ExternalLink size={12} /> Open Search Console</a>
               </div>
             </section>
           </div>
