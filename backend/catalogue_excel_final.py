@@ -5,6 +5,10 @@ trusted image hosts to match the website's real product-image sources, and
 removes the optional Excel table package from the generated workbook. The
 worksheet-level autofilter and styling remain, but avoiding the table part
 prevents older desktop Excel versions from opening the file in Repair mode.
+
+The route also supports category-wise exports. Filtering before thumbnail
+preparation keeps each export bounded to one product category, which improves
+image-embedding reliability and produces smaller workbooks.
 """
 from __future__ import annotations
 
@@ -27,6 +31,19 @@ base._ALLOWED_EXTERNAL_IMAGE_HOSTS.update({
     "d3adwkbyhxyrtq.cloudfront.net",
     "d33sy5i8bnduwe.cloudfront.net",
 })
+
+_CATEGORY_SLUGS = {
+    "Chandelier": "chandeliers",
+    "Hanging Light": "hanging-lights",
+    "Wall Light": "wall-lights",
+    "Table Lamp": "table-lamps",
+    "Floor Lamp": "floor-lamps",
+    "Candle Stand": "candle-stands",
+    "Floor Chandelier": "floor-chandeliers",
+    "Table Chandelier": "table-chandeliers",
+    "Ceiling Light": "ceiling-lights",
+    "Gate Light": "gate-lights",
+}
 
 
 def _strip_table_parts(payload: bytes) -> bytes:
@@ -100,15 +117,20 @@ def install_catalogue_excel(load_admin_func) -> None:
         return
 
     @app.get("/api/admin/catalogue/products.xlsx")
-    async def admin_catalogue_products_xlsx(request: Request):
+    async def admin_catalogue_products_xlsx(request: Request, category: str | None = None):
         user = await load_admin_func(server_module.db, request)
         if user is None:
             if request.cookies.get("session_token") or request.headers.get("Authorization"):
                 raise HTTPException(status_code=403, detail="Not authorized for admin.")
             raise HTTPException(status_code=401, detail="Authentication required.")
 
+        selected_category = str(category or "").strip()
+        if selected_category and selected_category not in _CATEGORY_SLUGS:
+            raise HTTPException(status_code=400, detail="Unknown catalogue category.")
+
+        product_filter = {"category": selected_category} if selected_category else {}
         products = await server_module.db.products.find(
-            {}, {"_id": 0}
+            product_filter, {"_id": 0}
         ).sort("sku", 1).to_list(length=10000)
 
         thumbnails, preload = await fast._prefetch_thumbnails(
@@ -122,12 +144,17 @@ def install_catalogue_excel(load_admin_func) -> None:
         )
 
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if selected_category:
+            filename = f"samrat-glass-{_CATEGORY_SLUGS[selected_category]}-catalogue-{stamp}.xlsx"
+        else:
+            filename = f"samrat-glass-full-product-catalogue-{stamp}.xlsx"
+
         return Response(
             content=payload,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
                 "Cache-Control": "private, no-store",
-                "Content-Disposition": f'attachment; filename="samrat-glass-full-product-catalogue-{stamp}.xlsx"',
+                "Content-Disposition": f'attachment; filename="{filename}"',
                 "X-Catalogue-Products": str(metadata["total"]),
                 "X-Catalogue-Embedded-Images": str(metadata["embedded_images"]),
                 "X-Catalogue-Image-Failures": str(metadata["image_failures"]),
@@ -135,6 +162,7 @@ def install_catalogue_excel(load_admin_func) -> None:
                 "X-Catalogue-Thumbnail-Prepared": str(preload["prepared"]),
                 "X-Catalogue-Thumbnail-Timed-Out": str(preload["timed_out"]),
                 "X-Catalogue-Compatibility": "worksheet-autofilter-no-table-part",
+                "X-Catalogue-Category": selected_category or "all",
             },
         )
 
