@@ -141,6 +141,27 @@ def _project_health(products: list[dict], settings: dict) -> dict:
         key = slugs[index]
         images = [_text(value) for value in (project.get("images") or []) if _text(value)]
         linked = [_text(value) for value in (project.get("products") or []) if _text(value)]
+        linked_details = []
+        for product_id in linked:
+            product = product_by_id.get(product_id)
+            if product is None:
+                linked_details.append({
+                    "id": product_id,
+                    "sku": "",
+                    "name": "Missing catalogue product",
+                    "category": "",
+                    "status": "missing",
+                    "missing": True,
+                })
+            else:
+                linked_details.append({
+                    "id": product_id,
+                    "sku": _text(product.get("sku")),
+                    "name": _text(product.get("name")) or "Unnamed product",
+                    "category": _text(product.get("category")),
+                    "status": _text(product.get("status")) or "published",
+                    "missing": False,
+                })
         local = []
         if not title:
             local.append(_finding("project", key, "critical", "Missing project title"))
@@ -168,6 +189,7 @@ def _project_health(products: list[dict], settings: dict) -> dict:
             "location": _text(project.get("location")),
             "images": len(images),
             "linked_products": len(linked),
+            "linked_product_details": linked_details,
             "findings": len(local),
         })
 
