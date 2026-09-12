@@ -176,3 +176,9 @@ install_catalogue_excel(load_admin)
 from admin_health import install_admin_health  # noqa: E402
 
 install_admin_health(load_admin)
+
+# Install the extended live-site health snapshot. It checks only Samrat Glass's
+# fixed production URLs and returns read-only technical/search/conversion signals.
+from admin_health_ops import install_admin_health_ops  # noqa: E402
+
+install_admin_health_ops(load_admin)
