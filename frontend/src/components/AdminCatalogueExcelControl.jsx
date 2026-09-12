@@ -3,24 +3,43 @@ import { Download, FileSpreadsheet, LoaderCircle } from "lucide-react";
 import { API } from "../lib/api";
 import { toast } from "sonner";
 
-const fallbackFilename = () => {
+const CATEGORIES = [
+  { value: "Chandelier", label: "Chandeliers" },
+  { value: "Hanging Light", label: "Hanging Lights" },
+  { value: "Wall Light", label: "Wall Lights" },
+  { value: "Table Lamp", label: "Table Lamps" },
+  { value: "Floor Lamp", label: "Floor Lamps" },
+  { value: "Candle Stand", label: "Candle Stands" },
+  { value: "Floor Chandelier", label: "Floor Chandeliers" },
+  { value: "Table Chandelier", label: "Table Chandeliers" },
+  { value: "Ceiling Light", label: "Ceiling Lights" },
+  { value: "Gate Light", label: "Gate Lights" },
+];
+
+const fallbackFilename = (category) => {
   const day = new Date().toISOString().slice(0, 10);
-  return `samrat-glass-full-product-catalogue-${day}.xlsx`;
+  const slug = String(category || "full-product")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `samrat-glass-${slug}-catalogue-${day}.xlsx`;
 };
 
-const filenameFromDisposition = (header) => {
+const filenameFromDisposition = (header, category) => {
   const match = /filename\*?=(?:UTF-8''|\")?([^\";]+)/i.exec(header || "");
-  return match ? decodeURIComponent(match[1].replace(/^\"|\"$/g, "").trim()) : fallbackFilename();
+  return match ? decodeURIComponent(match[1].replace(/^\"|\"$/g, "").trim()) : fallbackFilename(category);
 };
 
 export default function AdminCatalogueExcelControl() {
   const [downloading, setDownloading] = useState(false);
+  const [category, setCategory] = useState("Chandelier");
 
   const download = async () => {
     if (downloading) return;
     setDownloading(true);
     try {
-      const response = await fetch(`${API}/admin/catalogue/products.xlsx`, {
+      const query = category ? `?category=${encodeURIComponent(category)}` : "";
+      const response = await fetch(`${API}/admin/catalogue/products.xlsx${query}`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -43,7 +62,7 @@ export default function AdminCatalogueExcelControl() {
       const href = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = href;
-      anchor.download = filenameFromDisposition(response.headers.get("Content-Disposition"));
+      anchor.download = filenameFromDisposition(response.headers.get("Content-Disposition"), category);
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -51,10 +70,13 @@ export default function AdminCatalogueExcelControl() {
 
       const count = response.headers.get("X-Catalogue-Products");
       const images = response.headers.get("X-Catalogue-Embedded-Images");
+      const categoryLabel = category
+        ? CATEGORIES.find((item) => item.value === category)?.label || category
+        : "Full catalogue";
       toast.success(
         count
-          ? `Excel catalogue downloaded — ${count} products${images ? `, ${images} images embedded` : ""}`
-          : "Excel catalogue downloaded"
+          ? `${categoryLabel} Excel downloaded — ${count} products${images ? `, ${images} images embedded` : ""}`
+          : `${categoryLabel} Excel downloaded`
       );
     } catch (error) {
       toast.error(error?.message || "Excel export failed");
@@ -64,27 +86,45 @@ export default function AdminCatalogueExcelControl() {
   };
 
   return (
-    <div className="fixed left-4 bottom-4 z-[70] sm:left-6 sm:bottom-6">
-      <button
-        type="button"
-        data-testid="admin-download-catalogue-excel"
-        onClick={download}
-        disabled={downloading}
-        className="group flex items-center gap-3 border border-[#D4AF37]/60 bg-[#0d0d0d]/95 px-4 py-3 text-left shadow-2xl backdrop-blur transition hover:border-[#D4AF37] disabled:cursor-wait disabled:opacity-70"
-        title="Download the complete admin product catalogue as Excel with embedded primary images"
-      >
-        <span className="flex h-9 w-9 items-center justify-center bg-[#D4AF37] text-black">
-          {downloading ? <LoaderCircle size={18} className="animate-spin" /> : <FileSpreadsheet size={18} />}
-        </span>
-        <span>
-          <span className="block text-[10px] uppercase tracking-[0.24em] text-white/45">Admin catalogue</span>
-          <span className="mt-0.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-white">
-            {downloading ? "Preparing Excel…" : "Download Excel"}
-            {!downloading && <Download size={13} className="text-[#D4AF37]" />}
+    <div className="fixed left-4 bottom-4 z-[70] w-[280px] sm:left-6 sm:bottom-6">
+      <div className="border border-[#D4AF37]/60 bg-[#0d0d0d]/95 p-3 shadow-2xl backdrop-blur">
+        <label htmlFor="admin-catalogue-category" className="mb-2 block text-[10px] uppercase tracking-[0.24em] text-white/45">
+          Export category
+        </label>
+        <select
+          id="admin-catalogue-category"
+          value={category}
+          onChange={(event) => setCategory(event.target.value)}
+          disabled={downloading}
+          className="mb-3 w-full border border-white/20 bg-[#171717] px-3 py-2 text-xs text-white outline-none focus:border-[#D4AF37] disabled:cursor-wait disabled:opacity-70"
+        >
+          {CATEGORIES.map((item) => (
+            <option key={item.value} value={item.value}>{item.label}</option>
+          ))}
+          <option value="">Full catalogue — all products</option>
+        </select>
+
+        <button
+          type="button"
+          data-testid="admin-download-catalogue-excel"
+          onClick={download}
+          disabled={downloading}
+          className="group flex w-full items-center gap-3 text-left transition disabled:cursor-wait disabled:opacity-70"
+          title="Download the selected product category as Excel with embedded primary images"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-[#D4AF37] text-black">
+            {downloading ? <LoaderCircle size={18} className="animate-spin" /> : <FileSpreadsheet size={18} />}
           </span>
-          <span className="mt-0.5 hidden text-[10px] text-white/45 sm:block">All products · specs · tags · images</span>
-        </span>
-      </button>
+          <span>
+            <span className="block text-[10px] uppercase tracking-[0.24em] text-white/45">Admin catalogue</span>
+            <span className="mt-0.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-white">
+              {downloading ? "Preparing Excel…" : "Download Excel"}
+              {!downloading && <Download size={13} className="text-[#D4AF37]" />}
+            </span>
+            <span className="mt-0.5 block text-[10px] text-white/45">Selected category · specs · tags · images</span>
+          </span>
+        </button>
+      </div>
     </div>
   );
 }
