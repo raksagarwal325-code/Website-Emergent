@@ -141,7 +141,7 @@ export default function CategoryShowcase() {
           <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="max-w-2xl">
             <div className="eyebrow mb-2">The Collection</div>
             <h2 className="font-serif text-4xl leading-tight sm:text-5xl lg:text-6xl">Shop by <span className="italic brand-gradient-text">Category</span></h2>
-            <p className="mt-3 max-w-xl text-sm text-white/58 md:text-base">One collection takes the stage; the next remains visible at the edge so browsing feels continuous.</p>
+            <p className="mt-3 max-w-xl text-sm text-white/58 md:text-base">Explore chandeliers, hanging lights, wall lights and lamps to find the right piece for your space.</p>
           </motion.div>
           <motion.div variants={prefersReducedMotion ? undefined : editorialItem} className="flex items-center gap-3">
             <Link to="/catalog" data-testid="category-showcase-view-all" className="mr-2 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.22em] text-[#D4AF37] link-underline hover:text-[#E0C15D]">View full catalog <ArrowUpRight size={14} /></Link>
