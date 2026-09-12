@@ -29,8 +29,8 @@ def test_project_slugs_disambiguate_duplicate_titles():
 
 def test_collection_health_flags_orphans_and_weak_registry_entries():
     products = [
-        product("1", "SGE-1", "One", tags=["collection:raj"]) ,
-        product("2", "SGE-2", "Two", tags=["collection:orphan"]) ,
+        product("1", "SGE-1", "One", tags=["collection:raj"]),
+        product("2", "SGE-2", "Two", tags=["collection:orphan"]),
     ]
     settings = {"homepage_content": {"collections": [{"slug": "raj", "name": "Raj"}]}}
     health = _collection_health(products, settings)
@@ -66,6 +66,32 @@ def test_project_health_flags_missing_link_and_product_name_title():
     assert "Project has orphaned product links" in issues
     assert "Project has no story or fixture details" in issues
     assert "Project title matches a product name" in issues
+    assert health["rows"][0]["linked_product_details"][0]["missing"] is True
+    assert health["rows"][0]["linked_product_details"][0]["id"] == "missing"
+
+
+def test_project_health_exposes_linked_product_name_and_sku():
+    products = [product("p1", "SGE-CH-003", "Devshikhar Crystal-Rod Grand Tiered Chandelier")]
+    settings = {
+        "homepage_content": {
+            "gallery": {
+                "items": [
+                    {
+                        "title": "Nagpur Residence",
+                        "location": "Nagpur, Maharashtra",
+                        "images": ["/api/files/a.jpg"],
+                        "products": ["p1"],
+                        "note": "Installed for a private residence.",
+                    }
+                ]
+            }
+        }
+    }
+    health = _project_health(products, settings)
+    linked = health["rows"][0]["linked_product_details"][0]
+    assert linked["sku"] == "SGE-CH-003"
+    assert linked["name"] == "Devshikhar Crystal-Rod Grand Tiered Chandelier"
+    assert linked["missing"] is False
 
 
 def test_route_integrity_flags_duplicate_product_slugs():

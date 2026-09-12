@@ -23,6 +23,19 @@ describe("Website Health growth deep links", () => {
     expect(source).toContain("health-demand");
   });
 
+  test("project rows show exact linked catalogue product details", () => {
+    expect(source).toContain("linked_product_details");
+    expect(source).toContain("No catalogue product linked");
+    expect(source).toContain("Edit project");
+    expect(source).toContain("View product");
+  });
+
+  test("long structural findings are collapsible", () => {
+    expect(source).toContain("<details");
+    expect(source).toContain("Show findings (");
+    expect(source).toContain("FindingsDisclosure");
+  });
+
   test("project findings link to the project editor and public project", () => {
     expect(source).toContain("project-gallery");
     expect(source).toContain("/gallery/");

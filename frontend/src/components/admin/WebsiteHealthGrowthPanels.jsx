@@ -111,6 +111,20 @@ function Findings({ items = [], emptyMessage, products = [] }) {
   );
 }
 
+function FindingsDisclosure({ items = [], emptyMessage, products = [] }) {
+  if (!items.length) return <Findings items={items} emptyMessage={emptyMessage} products={products} />;
+  return (
+    <details className="border border-white/10 bg-black/10">
+      <summary className="cursor-pointer px-4 py-3 text-xs uppercase tracking-[0.16em] text-[#D4AF37]">
+        Show findings ({items.length})
+      </summary>
+      <div className="border-t border-white/10 p-3">
+        <Findings items={items} emptyMessage={emptyMessage} products={products} />
+      </div>
+    </details>
+  );
+}
+
 function CollectionTable({ rows = [] }) {
   return (
     <div className="overflow-x-auto border border-white/10">
@@ -138,19 +152,38 @@ function CollectionTable({ rows = [] }) {
 function ProjectTable({ rows = [] }) {
   return (
     <div className="overflow-x-auto border border-white/10">
-      <table className="w-full min-w-[980px] text-left text-sm">
+      <table className="w-full min-w-[1120px] text-left text-sm">
         <thead className="bg-white/5 text-[10px] uppercase tracking-[0.18em] text-white/50">
           <tr><th className="p-3">Project</th><th className="p-3">Location</th><th className="p-3">Images</th><th className="p-3">Linked products</th><th className="p-3">Findings</th><th className="p-3">Actions</th></tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.slug} className="border-t border-white/10">
+            <tr key={row.slug} className="border-t border-white/10 align-top">
               <td className="p-3"><a href={`/gallery/${encodeURIComponent(row.slug)}`} className="hover:text-[#D4AF37]">{row.title}</a><div className="text-[11px] text-white/40">/gallery/{row.slug}</div></td>
               <td className="p-3">{row.location || "—"}</td>
               <td className="p-3">{row.images}</td>
-              <td className="p-3">{row.linked_products}</td>
+              <td className="p-3 min-w-[320px]">
+                {row.linked_product_details?.length ? (
+                  <div className="space-y-2">
+                    {row.linked_product_details.map((product) => (
+                      <div key={product.id} className="border border-white/10 bg-black/10 px-3 py-2">
+                        <div className={product.missing ? "text-amber-200" : "text-white"}>{product.name || "Unnamed product"}</div>
+                        <div className="mt-0.5 text-[11px] text-white/45">{product.sku || (product.missing ? product.id : "No SKU")}{product.category ? ` · ${product.category}` : ""}</div>
+                        {!product.missing && product.id && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <a href={`/admin?tab=products&product=${encodeURIComponent(product.id)}`} className={actionClass}><Wrench size={12} /> Edit product</a>
+                            <a href={`/product/${encodeURIComponent(product.id)}`} className={actionClass}><ExternalLink size={12} /> View product</a>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border border-amber-300/25 bg-amber-400/5 px-3 py-2 text-xs text-amber-100">No catalogue product linked</div>
+                )}
+              </td>
               <td className="p-3">{row.findings}</td>
-              <td className="p-3"><a href={`/admin?tab=homepage&project=${encodeURIComponent(row.slug)}#project-gallery`} className={actionClass}><Wrench size={12} /> Edit</a></td>
+              <td className="p-3"><a href={`/admin?tab=homepage&project=${encodeURIComponent(row.slug)}#project-gallery`} className={actionClass}><Wrench size={12} /> Edit project</a></td>
             </tr>
           ))}
         </tbody>
@@ -280,13 +313,13 @@ export default function WebsiteHealthGrowthPanels() {
             <section id="health-collections" className="scroll-mt-36">
               <div className="mb-4 flex items-center gap-3"><Layers3 size={18} className="text-[#D4AF37]" /><h3 className="font-serif text-2xl">Collection Health</h3></div>
               <CollectionTable rows={collections?.rows || []} />
-              <div className="mt-4"><Findings items={collections?.findings || []} emptyMessage="No collection integrity findings." products={products} /></div>
+              <div className="mt-4"><FindingsDisclosure items={collections?.findings || []} emptyMessage="No collection integrity findings." products={products} /></div>
             </section>
 
             <section id="health-projects" className="scroll-mt-36">
               <div className="mb-4 flex items-center gap-3"><Warehouse size={18} className="text-[#D4AF37]" /><h3 className="font-serif text-2xl">Project Gallery Audit</h3></div>
               <ProjectTable rows={projects?.rows || []} />
-              <div className="mt-4"><Findings items={projects?.findings || []} emptyMessage="No project-gallery integrity findings." /></div>
+              <div className="mt-4"><FindingsDisclosure items={projects?.findings || []} emptyMessage="No project-gallery integrity findings." /></div>
             </section>
 
             <section id="health-routes" className="scroll-mt-36">
@@ -297,7 +330,7 @@ export default function WebsiteHealthGrowthPanels() {
                 <Metric label="Project routes" value={routes?.project_routes ?? "—"} />
                 <Metric label="Route findings" value={routes?.findings?.length || 0} hint="Duplicate/missing product identities or empty collection routes" />
               </div>
-              <Findings items={routes?.findings || []} emptyMessage="No structural route-integrity findings." />
+              <FindingsDisclosure items={routes?.findings || []} emptyMessage="No structural route-integrity findings." />
               <div className="mt-3 flex items-start gap-2 text-xs leading-5 text-white/40"><AlertTriangle size={14} className="mt-0.5 shrink-0" />This is a deterministic internal-link integrity audit. It avoids making hundreds of live HTTP requests on every Admin refresh; major production endpoints are already monitored in Technical Health above.</div>
             </section>
 
