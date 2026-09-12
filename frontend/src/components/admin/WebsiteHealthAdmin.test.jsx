@@ -1,4 +1,4 @@
-import { buildWebsiteHealth, productCompleteness } from "./WebsiteHealthAdmin";
+import { buildWebsiteHealth, groupFindings, productCompleteness } from "./WebsiteHealthAdmin";
 
 const healthyProduct = {
   id: "p1",
@@ -21,27 +21,74 @@ test("healthy product reaches full completeness", () => {
   expect(result.missing).toEqual([]);
 });
 
-test("health audit flags missing primary image and duplicate sku", () => {
+test("health audit counts affected published products instead of raw findings", () => {
   const products = [
     healthyProduct,
     {
       ...healthyProduct,
       id: "p2",
-      name: "Second Product With Same SKU",
+      sku: "SGE-CH-002",
+      name: "Second Published Chandelier",
       images: [],
       short_description: "",
       description: "",
+      specs: {},
     },
   ];
 
   const health = buildWebsiteHealth(products);
-  const criticalIssues = health.attention
-    .filter((item) => item.severity === "critical")
-    .map((item) => item.issue);
 
-  expect(criticalIssues).toContain("Missing primary image");
-  expect(criticalIssues).toContain("Duplicate SKU");
-  expect(health.criticalCount).toBeGreaterThanOrEqual(3);
+  expect(health.productsNeedingAttention).toBe(1);
+  expect(health.criticalPublishedProducts).toBe(1);
+  expect(health.publishedAttention.filter((item) => item.product.id === "p2").length).toBeGreaterThan(1);
+});
+
+test("draft findings are separated from published-site headline metrics", () => {
+  const draft = {
+    ...healthyProduct,
+    id: "draft-1",
+    sku: "DRAFT-1",
+    name: "Hidden Draft",
+    status: "draft",
+    images: [],
+    short_description: "",
+    description: "",
+    specs: {},
+    tags: [],
+    seo_slug: "",
+  };
+
+  const health = buildWebsiteHealth([healthyProduct, draft]);
+
+  expect(health.publishedCount).toBe(1);
+  expect(health.draftCount).toBe(1);
+  expect(health.productsNeedingAttention).toBe(0);
+  expect(health.draftAttention.length).toBeGreaterThan(0);
+});
+
+test("groupFindings combines multiple issues for the same product", () => {
+  const health = buildWebsiteHealth([{
+    ...healthyProduct,
+    id: "p2",
+    sku: "SGE-CH-002",
+    images: [],
+    short_description: "",
+    description: "",
+    specs: {},
+  }]);
+
+  const groups = groupFindings(health.publishedAttention);
+  expect(groups).toHaveLength(1);
+  expect(groups[0].findings.length).toBeGreaterThan(1);
+});
+
+test("missing stored SEO slug stays informational and does not inflate actionable SEO count", () => {
+  const product = { ...healthyProduct, id: "p2", sku: "SGE-CH-002", seo_slug: "" };
+  const health = buildWebsiteHealth([product]);
+
+  expect(health.seoInformationalCount).toBe(1);
+  expect(health.productsWithSeoIssues).toBe(0);
+  expect(health.publishedSeoActionable).toHaveLength(0);
 });
 
 test("image audit detects reused primary image across products", () => {
@@ -57,9 +104,10 @@ test("image audit detects reused primary image across products", () => {
 
   const health = buildWebsiteHealth(products);
   expect(health.imageIssues.some((item) => item.issue === "Primary image reused by multiple products")).toBe(true);
+  expect(health.productsWithImageIssues).toBe(2);
 });
 
-test("category snapshot calculates average completeness", () => {
+test("category snapshot separates published and draft counts", () => {
   const health = buildWebsiteHealth([
     healthyProduct,
     {
@@ -67,6 +115,7 @@ test("category snapshot calculates average completeness", () => {
       id: "p2",
       sku: "SGE-TL-001",
       category: "Table Lamp",
+      status: "draft",
       images: [],
       short_description: "",
       description: "",
@@ -79,6 +128,9 @@ test("category snapshot calculates average completeness", () => {
   const chandelier = health.categories.find((row) => row.category === "Chandelier");
   const tableLamp = health.categories.find((row) => row.category === "Table Lamp");
 
-  expect(chandelier.averageCompleteness).toBe(100);
+  expect(chandelier.published).toBe(1);
+  expect(chandelier.drafts).toBe(0);
+  expect(tableLamp.published).toBe(0);
+  expect(tableLamp.drafts).toBe(1);
   expect(tableLamp.averageCompleteness).toBeLessThan(100);
 });
