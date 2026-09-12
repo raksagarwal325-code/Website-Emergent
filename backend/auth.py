@@ -163,4 +163,16 @@ install_admin_health_ops(load_admin)
 # route identity and inquiry-demand signals. Read-only and admin-only.
 from admin_health_growth import install_admin_health_growth  # noqa: E402
 
+# During auth.py import, server.py has created `app`/`db` but has not yet
+# defined product_slug(). The first install attempt can therefore be a no-op.
+# Retry once at FastAPI startup, when server.py is fully initialised.
 install_admin_health_growth(load_admin)
+
+try:  # pragma: no cover - exercised in runtime startup
+    import server as _server_module  # noqa: E402
+
+    @_server_module.app.on_event("startup")
+    async def _install_growth_health_after_server_init():
+        install_admin_health_growth(load_admin)
+except Exception:
+    pass
