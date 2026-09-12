@@ -19,10 +19,12 @@ describe("Website Health tab architecture", () => {
     expect(source).toContain('"overview", "Catalogue Overview"');
   });
 
-  test("completeness and findings expose direct product edit actions", () => {
+  test("SOP compliance and findings expose direct product edit actions", () => {
     expect(source).toContain("Edit product");
     expect(source).toContain("tab=products&product=");
-    expect(source).toContain("Products with completeness gaps");
+    expect(source).toContain('"completeness", "SOP Compliance"');
+    expect(source).toContain("Structural SOP gaps");
+    expect(source).not.toContain("Published completeness");
   });
 
   test("Release / Sync is renamed and explained as read-only Deployment Info", () => {
