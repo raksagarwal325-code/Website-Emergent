@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Activity, Download, FileSpreadsheet, LoaderCircle } from "lucide-react";
 import { Link } from "react-router-dom";
-import { API } from "../lib/api";
+import { API, api } from "../lib/api";
+import { buildProjectSlugs } from "../lib/slug";
 import { toast } from "sonner";
 
 const CATEGORIES = [
@@ -34,6 +35,70 @@ const filenameFromDisposition = (header, category) => {
 export default function AdminCatalogueExcelControl() {
   const [downloading, setDownloading] = useState(false);
   const [category, setCategory] = useState("Chandelier");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedTab = params.get("tab");
+    const requestedProject = params.get("project");
+    if (!requestedTab && !requestedProject) return undefined;
+
+    let cancelled = false;
+    let timer = null;
+
+    const clickTab = (tab) => {
+      const button = document.querySelector(`[data-testid="admin-tab-${tab}"]`);
+      if (!button) return false;
+      button.click();
+      return true;
+    };
+
+    const focusProject = async () => {
+      if (!requestedProject) return;
+      try {
+        const settings = await api.adminGetSettings();
+        if (cancelled) return;
+        const items = settings?.homepage_content?.gallery?.items || [];
+        const slugs = buildProjectSlugs(items);
+        const index = slugs.indexOf(requestedProject);
+        if (index < 0) return;
+
+        let attempts = 0;
+        const reveal = () => {
+          if (cancelled) return;
+          const editor = document.querySelector(`[data-testid="project-editor-${index}"]`);
+          if (!editor) {
+            attempts += 1;
+            if (attempts < 30) timer = window.setTimeout(reveal, 120);
+            return;
+          }
+          const toggle = editor.querySelector("button[aria-expanded]");
+          if (toggle?.getAttribute("aria-expanded") !== "true") toggle?.click();
+          editor.scrollIntoView({ behavior: "smooth", block: "center" });
+        };
+        reveal();
+      } catch (_) {
+        // Leave the user in Project Gallery even if exact-item resolution fails.
+      }
+    };
+
+    let attempts = 0;
+    const openRequestedArea = () => {
+      if (cancelled) return;
+      const tab = requestedTab || (requestedProject ? "homepage" : "dashboard");
+      if (!clickTab(tab)) {
+        attempts += 1;
+        if (attempts < 30) timer = window.setTimeout(openRequestedArea, 100);
+        return;
+      }
+      if (requestedProject) window.setTimeout(focusProject, 80);
+    };
+
+    openRequestedArea();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, []);
 
   const download = async () => {
     if (downloading) return;
