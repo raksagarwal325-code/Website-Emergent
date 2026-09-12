@@ -117,7 +117,10 @@ const normalizeCategory = (value) => {
   const key = text(value).toLowerCase();
   return CATEGORY_ALIASES[key] || key;
 };
-const normalizeField = (value) => text(value).toLowerCase().replace(/\s+/g, " ");
+const normalizeField = (value) => text(value)
+  .toLowerCase()
+  .replace(/\s*\/\s*/g, "/")
+  .replace(/\s+/g, " ");
 const wordCount = (value) => text(value).split(/\s+/).filter(Boolean).length;
 const stripHtml = (value) => text(value)
   .replace(/<\/(p|div|h[1-6]|li)>/gi, "\n")
@@ -358,7 +361,7 @@ export function buildWebsiteHealth(products = []) {
     const result = compliance[index];
     if (result?.coverage === "covered") current.sopCovered += 1;
     if (result?.structuralPass) current.structuralPass += 1;
-    if (result?.fallbackFields.length) current.confirmationBacklog += 1;
+    if (result?.coverage === "covered" && result?.fallbackFields.length) current.confirmationBacklog += 1;
     if (result?.coverage === "covered" && !result.manualVerified) current.verificationPending += 1;
     categoryMap.set(category, current);
   });

@@ -41,6 +41,17 @@ test("one specification no longer counts as complete", () => {
   expect(result.issues.some((item) => item.issue.startsWith("Missing SOP specifications"))).toBe(true);
 });
 
+test("spacing around a slash does not create duplicate missing and unexpected specification findings", () => {
+  const specs = Object.fromEntries(SOP_RULES.chandelier.schema.map((field) => [
+    field === "Collection / Family" ? "Collection/Family" : field,
+    field === "Product Type" ? "Chandelier" : field === "Number of Lights" ? "8" : field === "Number of Arms" ? "8" : `${field} value`,
+  ]));
+  const result = evaluateSopCompliance({ ...healthyProduct, specs });
+  expect(result.structuralPass).toBe(true);
+  expect(result.issues.some((item) => item.issue.startsWith("Missing SOP specifications"))).toBe(false);
+  expect(result.issues.some((item) => item.issue.startsWith("Unexpected SOP specifications"))).toBe(false);
+});
+
 test("missing status and price display are not silently defaulted", () => {
   const product = { ...healthyProduct };
   delete product.status;
@@ -146,4 +157,18 @@ test("category snapshot exposes SOP state and counts instead of average complete
   expect(chandelier.structuralPass).toBe(1);
   expect(chandelier).not.toHaveProperty("averageCompleteness");
   expect(floorChandelier.sopStatus).toBe("Unresolved");
+});
+
+test("category snapshot does not report SOP confirmation backlog for unmapped categories", () => {
+  const floorChandelier = {
+    ...healthyProduct,
+    id: "fc-confirmation",
+    sku: "SGE-FC-002",
+    category: "Floor Chandelier",
+    specs: { Height: "To be confirmed before order" },
+  };
+  const health = buildWebsiteHealth([floorChandelier]);
+  expect(health.categories[0].sopStatus).toBe("Unresolved");
+  expect(health.categories[0].confirmationBacklog).toBe(0);
+  expect(health.confirmationBacklog).toBe(0);
 });
