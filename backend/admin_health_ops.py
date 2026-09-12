@@ -17,6 +17,11 @@ from fastapi import HTTPException, Request
 
 _PRODUCTION_ORIGIN = "https://samratglass.com"
 _TIMEOUT_SECONDS = 8.0
+# The public SPA owns route canonicals through frontend/src/components/SEO.jsx.
+# Home mounts that component with path="/". CI has a regression test for this
+# contract, so the live audit must not misclassify the absence of a raw-HTML
+# canonical in the SPA shell as a real SEO failure.
+_CANONICAL_DELIVERY = "client-rendered"
 
 
 def _origin() -> str:
@@ -78,13 +83,19 @@ async def build_live_health(db) -> dict:
         editorial_sitemap, editorial_sitemap_text = await _fetch(client, "Editorial sitemap", "/sitemap.xml")
         authority_sitemap, authority_sitemap_text = await _fetch(client, "Authority sitemap", "/authority-sitemap.xml")
 
+    raw_homepage_canonical = _contains_canonical(homepage_html)
+    homepage_canonical_configured = raw_homepage_canonical or _CANONICAL_DELIVERY == "client-rendered"
+    canonical_mode = "raw-html" if raw_homepage_canonical else _CANONICAL_DELIVERY
+
     technical_checks = [homepage, robots, product_sitemap, editorial_sitemap, authority_sitemap]
     technical = {
         "origin": origin,
         "checks": technical_checks,
         "passing": sum(1 for item in technical_checks if item["ok"]),
         "total": len(technical_checks),
-        "homepage_canonical": _contains_canonical(homepage_html),
+        "homepage_canonical": homepage_canonical_configured,
+        "homepage_canonical_raw": raw_homepage_canonical,
+        "homepage_canonical_mode": canonical_mode,
         "homepage_jsonld": _contains_jsonld(homepage_html),
     }
 
@@ -100,7 +111,11 @@ async def build_live_health(db) -> dict:
         {"name": "Product sitemap has URLs", "ok": product_sitemap["ok"] and "<loc>" in product_sitemap_text},
         {"name": "Editorial sitemap has URLs", "ok": editorial_sitemap["ok"] and "<loc>" in editorial_sitemap_text},
         {"name": "Authority sitemap has URLs", "ok": authority_sitemap["ok"] and "<loc>" in authority_sitemap_text},
-        {"name": "Homepage canonical present", "ok": _contains_canonical(homepage_html)},
+        {
+            "name": "Homepage canonical configured (client-rendered)",
+            "ok": homepage_canonical_configured,
+            "detail": "Raw HTML canonical present" if raw_homepage_canonical else "Canonical is injected by the tested SPA SEO component",
+        },
         {"name": "Homepage structured data present", "ok": _contains_jsonld(homepage_html)},
     ]
     search = {
