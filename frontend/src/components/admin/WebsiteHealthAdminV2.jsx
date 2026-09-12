@@ -685,11 +685,15 @@ export default function WebsiteHealthAdminV2() {
           </div>
         ) : tab === "overview" ? (
           <section>
-            <div className="mb-4"><div className="eyebrow mb-2">Catalogue overview</div><h2 className="font-serif text-2xl">Category snapshot</h2><p className="mt-2 text-xs text-white/45">Reference data only — it is intentionally kept out of Needs Attention.</p></div>
+            <div className="mb-4">
+              <div className="eyebrow mb-2">Catalogue overview</div>
+              <h2 className="font-serif text-2xl">Category Audit Summary</h2>
+              <p className="mt-2 text-xs text-white/45">Structure correct does not mean product details or images have been verified.</p>
+            </div>
             <div className="overflow-x-auto border border-white/10">
               <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="bg-white/5 text-[10px] uppercase tracking-[0.18em] text-white/50"><tr><th className="p-3">Category</th><th className="p-3">SOP status</th><th className="p-3">Products</th><th className="p-3">Published</th><th className="p-3">Drafts</th><th className="p-3">Structural pass</th><th className="p-3">Confirmations</th><th className="p-3">Verification pending</th></tr></thead>
-                <tbody>{health.categories.map((row) => <tr key={row.category} className="border-t border-white/10"><td className="p-3">{row.category}</td><td className="p-3">{row.sopStatus}</td><td className="p-3">{row.products}</td><td className="p-3">{row.published}</td><td className="p-3">{row.drafts}</td><td className="p-3">{row.structuralPass}/{row.sopCovered}</td><td className="p-3">{row.confirmationBacklog}</td><td className="p-3">{row.verificationPending}</td></tr>)}</tbody>
+                <thead className="bg-white/5 text-[10px] uppercase tracking-[0.18em] text-white/50"><tr><th className="p-3">Category</th><th className="p-3">Total</th><th className="p-3">Published</th><th className="p-3">Drafts</th><th className="p-3">SOP available</th><th className="p-3">Structure correct</th><th className="p-3">Unverified values accepted</th><th className="p-3">Facts still to verify</th></tr></thead>
+                <tbody>{health.categories.map((row) => <tr key={row.category} className="border-t border-white/10"><td className="p-3">{row.category}</td><td className="p-3">{row.products}</td><td className="p-3">{row.published}</td><td className="p-3">{row.drafts}</td><td className="p-3">{row.sopStatus === "Mapped" ? "Yes" : row.sopStatus === "Unresolved" ? "Needs review" : "No"}</td><td className="p-3">{row.sopCovered > 0 ? `${row.structuralPass} of ${row.sopCovered}` : "—"}</td><td className="p-3">{row.confirmationBacklog}</td><td className="p-3">{row.verificationPending}</td></tr>)}</tbody>
               </table>
             </div>
           </section>
