@@ -20,6 +20,14 @@ const severityStyle = {
 
 const actionClass = "inline-flex items-center gap-1.5 border border-[#D4AF37]/45 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-[#D4AF37] hover:bg-[#D4AF37]/10";
 
+function collectionMembershipSlugs(product) {
+  return (product?.tags || [])
+    .map((tag) => String(tag || "").trim())
+    .filter((tag) => tag.startsWith("collection:"))
+    .map((tag) => tag.slice("collection:".length).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""))
+    .filter(Boolean);
+}
+
 function findingActions(item) {
   if (item.scope === "collection") {
     return [
@@ -39,7 +47,35 @@ function findingActions(item) {
   return [];
 }
 
-function Findings({ items = [], emptyMessage }) {
+function AffectedProducts({ item, products = [] }) {
+  if (item.scope !== "collection" || item.issue !== "Orphan collection membership tag") return null;
+  const affected = products.filter((product) => collectionMembershipSlugs(product).includes(String(item.key || "").toLowerCase()));
+  if (!affected.length) return null;
+  return (
+    <div className="mt-3 border-t border-white/10 pt-3">
+      <div className="mb-2 text-[10px] uppercase tracking-[0.18em] opacity-60">Affected product{affected.length === 1 ? "" : "s"}</div>
+      <div className="space-y-2">
+        {affected.slice(0, 12).map((product) => (
+          <div key={product.id || product.sku || product.name} className="flex flex-wrap items-center justify-between gap-3 border border-white/10 bg-black/10 px-3 py-2">
+            <div>
+              <div className="text-sm text-white">{product.name || "Unnamed product"}</div>
+              <div className="mt-0.5 text-[11px] opacity-55">{product.sku || "No SKU"} · {product.category || "No category"} · {product.status || "published"}</div>
+            </div>
+            {product.id && (
+              <div className="flex flex-wrap gap-2">
+                <a href={`/admin?tab=products&product=${encodeURIComponent(product.id)}`} className={actionClass}><Wrench size={12} /> Edit product</a>
+                <a href={`/product/${encodeURIComponent(product.id)}`} className={actionClass}><ExternalLink size={12} /> View product</a>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {affected.length > 12 && <div className="mt-2 text-xs opacity-50">Showing first 12 of {affected.length} affected products.</div>}
+    </div>
+  );
+}
+
+function Findings({ items = [], emptyMessage, products = [] }) {
   if (!items.length) {
     return <div className="border border-emerald-300/20 bg-emerald-400/5 p-5 text-sm text-emerald-100">{emptyMessage}</div>;
   }
@@ -57,6 +93,7 @@ function Findings({ items = [], emptyMessage }) {
               </div>
               <div className="text-xs opacity-60">{item.key}</div>
             </div>
+            <AffectedProducts item={item} products={products} />
             {actions.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
                 {actions.map((action) => (
@@ -150,6 +187,7 @@ function DemandTable({ rows = [] }) {
 
 export default function WebsiteHealthGrowthPanels() {
   const [data, setData] = useState(null);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -163,6 +201,18 @@ export default function WebsiteHealthGrowthPanels() {
       });
       if (!response.ok) throw new Error(`Growth health check failed (${response.status})`);
       setData(await response.json());
+      try {
+        const productsResponse = await fetch(`${API}/products?include_drafts=1&limit=5000`, {
+          credentials: "include",
+          headers: { "X-Requested-With": "fetch" },
+        });
+        if (productsResponse.ok) {
+          const payload = await productsResponse.json();
+          setProducts(Array.isArray(payload) ? payload : (payload?.items || payload?.products || []));
+        }
+      } catch (_) {
+        setProducts([]);
+      }
     } catch (err) {
       setError(err?.message || "Growth health check unavailable");
       setData(null);
@@ -178,6 +228,13 @@ export default function WebsiteHealthGrowthPanels() {
   const routes = data?.route_integrity;
   const demand = data?.product_demand;
   const totalStructuralFindings = (collections?.findings?.length || 0) + (projects?.findings?.length || 0) + (routes?.findings?.length || 0);
+
+  const jumpTo = (event) => {
+    const id = event.target.value;
+    if (!id) return;
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    event.target.value = "";
+  };
 
   return (
     <section className="max-w-7xl mx-auto px-6 pb-16" data-testid="admin-website-health-growth">
@@ -208,19 +265,31 @@ export default function WebsiteHealthGrowthPanels() {
               <Metric label="Products with inquiry demand · 90d" value={demand?.products_with_inquiry_demand_90d ?? "—"} hint={`${demand?.published_products_without_inquiry_demand_90d ?? "—"} published products had no website inquiry-basket demand in 90 days`} />
             </div>
 
-            <section>
+            <div className="sticky top-24 z-20 border border-[#D4AF37]/30 bg-[#16090d]/95 p-3 backdrop-blur">
+              <label htmlFor="website-health-jump" className="mr-3 text-[10px] uppercase tracking-[0.18em] text-white/50">Jump to section</label>
+              <select id="website-health-jump" defaultValue="" onChange={jumpTo} className="min-w-[260px] border border-white/20 bg-[#16090d] px-3 py-2 text-xs text-white outline-none focus:border-[#D4AF37]">
+                <option value="">Choose a section…</option>
+                <option value="health-collections">Collection Health</option>
+                <option value="health-projects">Project Gallery Audit</option>
+                <option value="health-routes">Link / Route Integrity</option>
+                <option value="health-demand">Product Inquiry Demand</option>
+                <option value="health-gsc">Search Console Status</option>
+              </select>
+            </div>
+
+            <section id="health-collections" className="scroll-mt-36">
               <div className="mb-4 flex items-center gap-3"><Layers3 size={18} className="text-[#D4AF37]" /><h3 className="font-serif text-2xl">Collection Health</h3></div>
               <CollectionTable rows={collections?.rows || []} />
-              <div className="mt-4"><Findings items={collections?.findings || []} emptyMessage="No collection integrity findings." /></div>
+              <div className="mt-4"><Findings items={collections?.findings || []} emptyMessage="No collection integrity findings." products={products} /></div>
             </section>
 
-            <section>
+            <section id="health-projects" className="scroll-mt-36">
               <div className="mb-4 flex items-center gap-3"><Warehouse size={18} className="text-[#D4AF37]" /><h3 className="font-serif text-2xl">Project Gallery Audit</h3></div>
               <ProjectTable rows={projects?.rows || []} />
               <div className="mt-4"><Findings items={projects?.findings || []} emptyMessage="No project-gallery integrity findings." /></div>
             </section>
 
-            <section>
+            <section id="health-routes" className="scroll-mt-36">
               <div className="mb-4 flex items-center gap-3"><Link2 size={18} className="text-[#D4AF37]" /><h3 className="font-serif text-2xl">Link / Route Integrity</h3></div>
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 mb-4">
                 <Metric label="Published product routes" value={routes?.published_product_routes ?? "—"} hint={`${routes?.unique_product_routes ?? "—"} unique route identities`} />
@@ -232,7 +301,7 @@ export default function WebsiteHealthGrowthPanels() {
               <div className="mt-3 flex items-start gap-2 text-xs leading-5 text-white/40"><AlertTriangle size={14} className="mt-0.5 shrink-0" />This is a deterministic internal-link integrity audit. It avoids making hundreds of live HTTP requests on every Admin refresh; major production endpoints are already monitored in Technical Health above.</div>
             </section>
 
-            <section>
+            <section id="health-demand" className="scroll-mt-36">
               <div className="mb-4 flex items-center gap-3"><TrendingUp size={18} className="text-[#D4AF37]" /><h3 className="font-serif text-2xl">Product Inquiry Demand</h3></div>
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 mb-4">
                 <Metric label="Products with demand · 30d" value={demand?.products_with_inquiry_demand_30d ?? "—"} />
@@ -243,7 +312,7 @@ export default function WebsiteHealthGrowthPanels() {
               <DemandTable rows={demand?.top_products || []} />
             </section>
 
-            <section className="border border-white/10 p-5">
+            <section id="health-gsc" className="scroll-mt-36 border border-white/10 p-5">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex items-start gap-3">
                   {data?.gsc?.runtime_connected ? <CheckCircle2 size={18} className="mt-0.5 text-emerald-300" /> : <AlertTriangle size={18} className="mt-0.5 text-[#D4AF37]" />}
