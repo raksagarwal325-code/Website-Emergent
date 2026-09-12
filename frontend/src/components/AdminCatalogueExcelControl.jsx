@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Download, FileSpreadsheet, LoaderCircle } from "lucide-react";
+import { Activity, Download, FileSpreadsheet, LoaderCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 import { API } from "../lib/api";
 import { toast } from "sonner";
 
@@ -88,6 +89,15 @@ export default function AdminCatalogueExcelControl() {
   return (
     <div className="fixed left-4 bottom-4 z-[70] w-[280px] sm:left-6 sm:bottom-6">
       <div className="border border-[#D4AF37]/60 bg-[#0d0d0d]/95 p-3 shadow-2xl backdrop-blur">
+        <Link
+          to="/admin/health"
+          data-testid="admin-website-health-link"
+          className="mb-3 flex items-center justify-between border border-white/15 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-white/65 transition hover:border-[#D4AF37]/60 hover:text-[#D4AF37]"
+        >
+          Website Health
+          <Activity size={14} />
+        </Link>
+
         <label htmlFor="admin-catalogue-category" className="mb-2 block text-[10px] uppercase tracking-[0.24em] text-white/45">
           Export category
         </label>

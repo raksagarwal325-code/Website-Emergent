@@ -170,3 +170,9 @@ install_runtime_hardening()
 from catalogue_excel_final import install_catalogue_excel  # noqa: E402
 
 install_catalogue_excel(load_admin)
+
+# Install the read-only Admin Website Health release/source snapshot. The route
+# is auth-protected and exposes only non-secret commit/working-tree metadata.
+from admin_health import install_admin_health  # noqa: E402
+
+install_admin_health(load_admin)
