@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from fastapi import HTTPException, Request
@@ -83,20 +84,28 @@ def get_release_snapshot(repo_root: Path | None = None) -> dict:
     }
 
 
+def _find_server_module():
+    for name in ("server", "backend.server"):
+        module = sys.modules.get(name)
+        if module is not None and hasattr(module, "app") and hasattr(module, "db"):
+            return module
+    for module in tuple(sys.modules.values()):
+        if module is None or not hasattr(module, "app") or not hasattr(module, "db"):
+            continue
+        path = str(getattr(module, "__file__", "") or "")
+        if path.endswith("/server.py") or path.endswith("\\server.py"):
+            return module
+    return None
+
+
 def install_admin_health(load_admin_func) -> None:
     """Install GET /api/admin/health/release on the active FastAPI app."""
-    try:
-        import server as server_module
-    except ImportError:
-        try:
-            from backend import server as server_module
-        except ImportError:
-            return
-
-    app = getattr(server_module, "app", None)
-    db = getattr(server_module, "db", None)
-    if app is None or db is None:
+    server_module = _find_server_module()
+    if server_module is None:
         return
+
+    app = server_module.app
+    db = server_module.db
     if getattr(app.state, "sge_admin_health_installed", False):
         return
 
