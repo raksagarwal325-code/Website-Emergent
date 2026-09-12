@@ -19,6 +19,17 @@ describe("Website Health tab architecture", () => {
     expect(source).toContain('"overview", "Catalogue Overview"');
   });
 
+  test("category overview uses plain-language audit labels", () => {
+    expect(source).toContain("Category Audit Summary");
+    expect(source).toContain("SOP available");
+    expect(source).toContain("Structure correct");
+    expect(source).toContain("Unverified values accepted");
+    expect(source).toContain("Facts still to verify");
+    expect(source).toContain('row.sopCovered > 0 ? `${row.structuralPass} of ${row.sopCovered}` : "—"');
+    expect(source).toContain("Structure correct does not mean product details or images have been verified.");
+    expect(source).not.toContain("Category snapshot");
+  });
+
   test("SOP compliance and findings expose direct product edit actions", () => {
     expect(source).toContain("Edit product");
     expect(source).toContain("tab=products&product=");
