@@ -39,6 +39,8 @@ def test_compatible_workbook_removes_table_parts_but_keeps_filter_and_image():
     payload, metadata = final._build_compatible_workbook(
         products,
         {"https://customer-assets.emergentagent.com/test.jpg": _tiny_png()},
+        {"failures": {}},
+        "Chandelier",
     )
 
     assert metadata["embedded_images"] == 1
@@ -56,6 +58,40 @@ def test_compatible_workbook_removes_table_parts_but_keeps_filter_and_image():
     assert ws.auto_filter.ref
     assert len(ws._images) == 1
     assert ws.tables == {}
+    assert wb["Summary"]["A1"].value == "Samrat Glass Emporium — Chandelier Catalogue Export"
+
+
+def test_failure_sheet_lists_failed_sku_url_and_reason():
+    failed_url = "https://customer-assets.emergentagent.com/fail.jpg"
+    products = [
+        {
+            "id": "p-2",
+            "sku": "SGE-HL-001",
+            "name": "Test Hanging Light",
+            "category": "Hanging Light",
+            "status": "published",
+            "images": [failed_url],
+            "specs": {},
+        }
+    ]
+
+    payload, metadata = final._build_compatible_workbook(
+        products,
+        {},
+        {"failures": {failed_url: "fetch_timeout"}},
+        "Hanging Light",
+    )
+
+    assert metadata["embedded_images"] == 0
+    assert metadata["image_failures"] == 1
+    wb = load_workbook(io.BytesIO(payload))
+    assert "Image Failures" in wb.sheetnames
+    ws = wb["Image Failures"]
+    assert ws["A2"].value == "SGE-HL-001"
+    assert ws["B2"].value == "Test Hanging Light"
+    assert ws["C2"].value == "Hanging Light"
+    assert ws["D2"].value == failed_url
+    assert ws["E2"].value == "fetch_timeout"
 
 
 def test_strip_table_parts_is_idempotent_for_plain_zip_workbook():
