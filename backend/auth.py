@@ -48,10 +48,8 @@ async def exchange_session_id(db, session_id: str) -> dict:
     if not email:
         raise HTTPException(status_code=401, detail="Invalid login response")
     if email not in admin_emails():
-        # 403 — authenticated but not allowlisted.
         raise HTTPException(status_code=403, detail="This Google account is not authorised for this admin area.")
 
-    # Upsert user (own uuid; never expose Mongo _id).
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing:
         user_id = existing["user_id"]
@@ -107,13 +105,10 @@ def clear_session_cookie(response: Response) -> None:
 
 async def load_admin(db, request: Request) -> Optional[dict]:
     """Resolve the current session → admin user, or None if invalid.
-    Enforces expiry and re-checks the ADMIN_EMAILS allowlist on every
-    request so removing an email revokes access instantly.
+    Enforces expiry and re-checks the ADMIN_EMAILS allowlist on every request.
     """
     token = request.cookies.get(_COOKIE_NAME)
     if not token:
-        # Also accept `Authorization: Bearer <token>` as a fallback for
-        # server-to-server or test calls (never exposed to browser JS).
         auth = request.headers.get("Authorization", "")
         if auth.lower().startswith("bearer "):
             token = auth[7:].strip()
@@ -135,14 +130,6 @@ async def load_admin(db, request: Request) -> Optional[dict]:
     return {"user_id": sess["user_id"], "email": email}
 
 
-# --------------------------------------------------------------------------
-# CSRF — with SameSite=None cookies we require any state-changing request to
-# also send an `X-Requested-With: fetch` header. Browsers block cross-origin
-# requests carrying custom headers unless the target sets a matching CORS
-# Access-Control-Allow-Headers, which we tightly restrict to our own origin
-# in server.py. Combined this is a low-overhead CSRF mitigation.
-# --------------------------------------------------------------------------
-
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _CSRF_HEADER = "x-requested-with"
 _CSRF_VALUE = "fetch"
@@ -156,29 +143,24 @@ def require_csrf(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Missing CSRF header")
 
 
-# Install the remaining defence-in-depth controls while server.py is still
-# initialising. The installer is a no-op when auth.py is imported standalone
-# by unit tests, so auth tests remain independent of the API module.
 from security_runtime import install_runtime_hardening  # noqa: E402
 
 install_runtime_hardening()
 
-# Install the final bounded-time, compatibility-safe admin Excel catalogue
-# export. It keeps PR #275's concurrent thumbnail preload, adds the website's
-# real product-image hosts, and avoids the optional Excel table package that
-# older desktop Excel versions may repair on open.
 from catalogue_excel_final import install_catalogue_excel  # noqa: E402
 
 install_catalogue_excel(load_admin)
 
-# Install the read-only Admin Website Health release/source snapshot. The route
-# is auth-protected and exposes only non-secret commit/working-tree metadata.
 from admin_health import install_admin_health  # noqa: E402
 
 install_admin_health(load_admin)
 
-# Install the extended live-site health snapshot. It checks only Samrat Glass's
-# fixed production URLs and returns read-only technical/search/conversion signals.
 from admin_health_ops import install_admin_health_ops  # noqa: E402
 
 install_admin_health_ops(load_admin)
+
+# Install the second Website Health layer: collection/project integrity,
+# route identity and inquiry-demand signals. Read-only and admin-only.
+from admin_health_growth import install_admin_health_growth  # noqa: E402
+
+install_admin_health_growth(load_admin)
