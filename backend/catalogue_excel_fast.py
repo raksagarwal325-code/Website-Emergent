@@ -6,9 +6,9 @@ Cloudflare request timeout and surface as HTTP 524 even though the workbook
 logic itself is valid.
 
 This installer keeps the same download route and workbook format, but preloads
-primary thumbnails concurrently under a strict time budget. Any thumbnail that
-cannot be prepared in time is simply omitted; its image URL remains in the
-workbook and the export still succeeds.
+primary thumbnails concurrently under a bounded time budget. Thumbnail fetches
+are retried once and return failure diagnostics so category exports can report
+which image URLs still could not be embedded.
 """
 from __future__ import annotations
 
@@ -25,10 +25,12 @@ from catalogue_excel import (
     build_catalogue_workbook,
 )
 
-_IMAGE_CONCURRENCY = 24
-_PER_IMAGE_TIMEOUT_SECONDS = 6.0
-_TOTAL_IMAGE_BUDGET_SECONDS = 40.0
+_IMAGE_CONCURRENCY = 16
+_PER_IMAGE_TIMEOUT_SECONDS = 10.0
+_TOTAL_IMAGE_BUDGET_SECONDS = 75.0
 _THUMBNAIL_MAX_SIDE = 96
+_MAX_ATTEMPTS = 2
+_RETRY_DELAY_SECONDS = 0.15
 
 
 def _primary_urls(products: list[dict]) -> list[str]:
@@ -47,26 +49,56 @@ def _primary_urls(products: list[dict]) -> list[str]:
 
 async def _prepare_one_thumbnail(url: str, get_object, semaphore: asyncio.Semaphore):
     async with semaphore:
-        try:
-            raw = await asyncio.wait_for(
-                asyncio.to_thread(_primary_image_bytes, url, get_object),
-                timeout=_PER_IMAGE_TIMEOUT_SECONDS,
-            )
-            if not raw:
-                return url, None
-            thumbnail = await asyncio.wait_for(
-                asyncio.to_thread(_normalise_thumbnail, raw, _THUMBNAIL_MAX_SIDE),
-                timeout=_PER_IMAGE_TIMEOUT_SECONDS,
-            )
-            return url, thumbnail
-        except (asyncio.TimeoutError, Exception):
-            return url, None
+        last_reason = "fetch_or_validation_failed"
+        attempts = 0
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            attempts = attempt
+            try:
+                raw = await asyncio.wait_for(
+                    asyncio.to_thread(_primary_image_bytes, url, get_object),
+                    timeout=_PER_IMAGE_TIMEOUT_SECONDS,
+                )
+                if not raw:
+                    last_reason = "fetch_or_validation_failed"
+                else:
+                    try:
+                        thumbnail = await asyncio.wait_for(
+                            asyncio.to_thread(_normalise_thumbnail, raw, _THUMBNAIL_MAX_SIDE),
+                            timeout=_PER_IMAGE_TIMEOUT_SECONDS,
+                        )
+                    except asyncio.TimeoutError:
+                        thumbnail = None
+                        last_reason = "thumbnail_timeout"
+                    except Exception:
+                        thumbnail = None
+                        last_reason = "thumbnail_processing_failed"
+
+                    if thumbnail:
+                        return url, thumbnail, None, attempts
+                    if last_reason not in {"thumbnail_timeout", "thumbnail_processing_failed"}:
+                        last_reason = "invalid_image"
+            except asyncio.TimeoutError:
+                last_reason = "fetch_timeout"
+            except Exception:
+                last_reason = "fetch_exception"
+
+            if attempt < _MAX_ATTEMPTS:
+                await asyncio.sleep(_RETRY_DELAY_SECONDS)
+
+        return url, None, last_reason, attempts
 
 
 async def _prefetch_thumbnails(products: list[dict], get_object) -> tuple[dict[str, bytes], dict]:
     urls = _primary_urls(products)
     if not urls:
-        return {}, {"requested": 0, "prepared": 0, "timed_out": 0}
+        return {}, {
+            "requested": 0,
+            "prepared": 0,
+            "timed_out": 0,
+            "failed": 0,
+            "retried": 0,
+            "failures": {},
+        }
 
     semaphore = asyncio.Semaphore(_IMAGE_CONCURRENCY)
     tasks = [
@@ -76,21 +108,37 @@ async def _prefetch_thumbnails(products: list[dict], get_object) -> tuple[dict[s
     done, pending = await asyncio.wait(tasks, timeout=_TOTAL_IMAGE_BUDGET_SECONDS)
 
     cache: dict[str, bytes] = {}
+    failures: dict[str, str] = {}
+    retried = 0
+
     for task in done:
         try:
-            url, data = task.result()
+            url, data, reason, attempts = task.result()
         except Exception:
             continue
+        if attempts > 1:
+            retried += 1
         if data:
             cache[url] = data
+        else:
+            failures[url] = reason or "unknown_failure"
 
     for task in pending:
         task.cancel()
 
+    # Pending tasks exceeded the overall export budget. The URL remains in the
+    # workbook and is listed in diagnostics so it can be investigated/retried.
+    for task, url in zip(tasks, urls):
+        if task in pending:
+            failures[url] = "total_budget_timeout"
+
     return cache, {
         "requested": len(urls),
         "prepared": len(cache),
-        "timed_out": len(pending),
+        "timed_out": sum(1 for reason in failures.values() if "timeout" in reason),
+        "failed": len(failures),
+        "retried": retried,
+        "failures": failures,
     }
 
 
@@ -139,6 +187,8 @@ def install_catalogue_excel(load_admin_func) -> None:
                 "X-Catalogue-Thumbnail-Requested": str(preload["requested"]),
                 "X-Catalogue-Thumbnail-Prepared": str(preload["prepared"]),
                 "X-Catalogue-Thumbnail-Timed-Out": str(preload["timed_out"]),
+                "X-Catalogue-Thumbnail-Failed": str(preload["failed"]),
+                "X-Catalogue-Thumbnail-Retried": str(preload["retried"]),
             },
         )
 

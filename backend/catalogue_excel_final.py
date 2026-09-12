@@ -8,7 +8,8 @@ prevents older desktop Excel versions from opening the file in Repair mode.
 
 The route also supports category-wise exports. Filtering before thumbnail
 preparation keeps each export bounded to one product category, which improves
-image-embedding reliability and produces smaller workbooks.
+image-embedding reliability and produces smaller workbooks. Failed image
+preloads are written to an Image Failures worksheet for SKU-level diagnosis.
 """
 from __future__ import annotations
 
@@ -19,6 +20,8 @@ from datetime import datetime, timezone
 from xml.etree import ElementTree as ET
 
 from fastapi import HTTPException, Request
+from openpyxl import load_workbook
+from openpyxl.styles import Font, PatternFill
 from starlette.responses import Response
 
 import catalogue_excel as base
@@ -47,14 +50,7 @@ _CATEGORY_SLUGS = {
 
 
 def _strip_table_parts(payload: bytes) -> bytes:
-    """Remove optional Excel table XML while preserving filters, drawings and data.
-
-    The Products sheet already has a worksheet-level autofilter and styled
-    header row. The extra structured-table package is not required for the
-    export and was the most compatibility-sensitive part when opened in older
-    desktop Excel builds. Removing it leaves a normal filtered worksheet and
-    does not touch embedded image/drawing parts.
-    """
+    """Remove optional Excel table XML while preserving filters, drawings and data."""
     source = io.BytesIO(payload)
     output = io.BytesIO()
 
@@ -99,11 +95,67 @@ def _strip_table_parts(payload: bytes) -> bytes:
     return output.getvalue()
 
 
-def _build_compatible_workbook(products: list[dict], thumbnails: dict[str, bytes]):
+def _add_failure_sheet(
+    payload: bytes,
+    products: list[dict],
+    preload: dict | None,
+    export_label: str | None,
+) -> bytes:
+    failures = dict((preload or {}).get("failures") or {})
+    if not failures and not export_label:
+        return payload
+
+    wb = load_workbook(io.BytesIO(payload))
+    summary = wb["Summary"] if "Summary" in wb.sheetnames else None
+    if summary is not None and export_label:
+        summary["A1"] = f"Samrat Glass Emporium — {export_label} Catalogue Export"
+
+    if failures:
+        if "Image Failures" in wb.sheetnames:
+            del wb["Image Failures"]
+        ws = wb.create_sheet("Image Failures")
+        ws.sheet_view.showGridLines = False
+        headers = ["SKU", "Product Name", "Category", "Primary Image URL", "Failure Reason"]
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.fill = PatternFill("solid", fgColor="171717")
+            cell.font = Font(color="FFFFFF", bold=True)
+
+        for product in products:
+            images = product.get("images") or []
+            primary = str(images[0] or "").strip() if isinstance(images, (list, tuple)) and images else ""
+            reason = failures.get(primary)
+            if not reason:
+                continue
+            ws.append([
+                str(product.get("sku") or ""),
+                str(product.get("name") or ""),
+                str(product.get("category") or ""),
+                primary,
+                reason,
+            ])
+
+        for column, width in {"A": 20, "B": 48, "C": 24, "D": 70, "E": 28}.items():
+            ws.column_dimensions[column].width = width
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = f"A1:E{max(ws.max_row, 1)}"
+
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def _build_compatible_workbook(
+    products: list[dict],
+    thumbnails: dict[str, bytes],
+    preload: dict | None = None,
+    export_label: str | None = None,
+):
     payload, metadata = base.build_catalogue_workbook(
         products,
         image_loader=lambda url: thumbnails.get(url),
     )
+    payload = _add_failure_sheet(payload, products, preload, export_label)
     return _strip_table_parts(payload), metadata
 
 
@@ -137,10 +189,13 @@ def install_catalogue_excel(load_admin_func) -> None:
             products, server_module.get_object
         )
 
+        export_label = selected_category or "Full Product"
         payload, metadata = await asyncio.to_thread(
             _build_compatible_workbook,
             products,
             thumbnails,
+            preload,
+            export_label,
         )
 
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -161,6 +216,8 @@ def install_catalogue_excel(load_admin_func) -> None:
                 "X-Catalogue-Thumbnail-Requested": str(preload["requested"]),
                 "X-Catalogue-Thumbnail-Prepared": str(preload["prepared"]),
                 "X-Catalogue-Thumbnail-Timed-Out": str(preload["timed_out"]),
+                "X-Catalogue-Thumbnail-Failed": str(preload["failed"]),
+                "X-Catalogue-Thumbnail-Retried": str(preload["retried"]),
                 "X-Catalogue-Compatibility": "worksheet-autofilter-no-table-part",
                 "X-Catalogue-Category": selected_category or "all",
             },
