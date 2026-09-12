@@ -1,15 +1,22 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   AlertTriangle,
+  BarChart3,
   CheckCircle2,
+  ExternalLink,
   FileSearch,
   Gauge,
   Image as ImageIcon,
+  Layers3,
   RefreshCw,
   Search,
   ShieldCheck,
+  Wrench,
 } from "lucide-react";
 import { API, api } from "../../lib/api";
+import WebsiteHealthOpsPanels from "./WebsiteHealthOpsPanels";
+import WebsiteHealthGrowthPanels from "./WebsiteHealthGrowthPanels";
 
 const VALID_STATUS = new Set(["published", "draft"]);
 const VALID_PRICE_DISPLAY = new Set(["starting_from", "fixed", "on_request"]);
@@ -59,7 +66,6 @@ const duplicateMap = (products, selector) => {
 };
 
 const validImageUrl = (url) => /^\/api\/files\//i.test(url) || /^https?:\/\//i.test(url);
-
 const productKey = (product) => product?.id || product?.sku || product?.name || "unknown-product";
 
 export function groupFindings(items = []) {
@@ -230,6 +236,7 @@ const severityClasses = {
   info: "border-white/10 bg-white/[0.02] text-white/60",
 };
 
+const actionClass = "inline-flex items-center gap-1.5 border border-[#D4AF37]/45 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-[#D4AF37] hover:bg-[#D4AF37]/10";
 const shortSha = (sha) => (sha ? String(sha).slice(0, 12) : "Unavailable");
 
 function Metric({ label, value, hint }) {
@@ -238,6 +245,16 @@ function Metric({ label, value, hint }) {
       <div className="text-[10px] uppercase tracking-[0.22em] text-white/45">{label}</div>
       <div className="mt-2 font-serif text-3xl">{value}</div>
       {hint && <div className="mt-2 text-xs text-white/45">{hint}</div>}
+    </div>
+  );
+}
+
+function ProductActions({ product }) {
+  if (!product?.id) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      <a href={`/admin?tab=products&product=${encodeURIComponent(product.id)}`} className={actionClass}><Wrench size={12} /> Edit product</a>
+      <a href={`/product/${encodeURIComponent(product.id)}`} className={actionClass}><ExternalLink size={12} /> View product</a>
     </div>
   );
 }
@@ -274,10 +291,30 @@ function ProductFindingGroups({ groups, emptyMessage }) {
                 </div>
               ))}
             </div>
+            <div className="mt-3 border-t border-white/10 pt-3"><ProductActions product={product} /></div>
           </div>
         );
       })}
       {groups.length > 250 && <div className="text-xs text-white/45">Showing first 250 of {groups.length} affected products.</div>}
+    </div>
+  );
+}
+
+function CompletenessRows({ items }) {
+  if (!items.length) {
+    return <div className="border border-emerald-300/20 bg-emerald-400/5 p-6 text-sm text-emerald-100">No completeness gaps found.</div>;
+  }
+  return (
+    <div className="space-y-2">
+      {items.slice(0, 300).map(({ product, score, missing }) => (
+        <div key={productKey(product)} className="grid gap-3 border border-white/10 p-4 xl:grid-cols-[110px_1fr_90px_1.3fr_auto] xl:items-center">
+          <div className="text-xs text-white/60">{product.sku || "No SKU"}</div>
+          <div><div className="text-sm">{product.name || "Unnamed product"}</div><div className="text-[11px] text-white/40">{product.category || "No category"}</div></div>
+          <div className={`font-serif text-2xl ${score >= 90 ? "text-emerald-300" : score >= 75 ? "text-[#D4AF37]" : "text-amber-200"}`}>{score}%</div>
+          <div className="text-xs text-white/45">Missing/review: {missing.join(", ")}</div>
+          <ProductActions product={product} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -302,10 +339,10 @@ export default function WebsiteHealthAdminV2() {
         credentials: "include",
         headers: { "X-Requested-With": "fetch" },
       }).then(async (response) => {
-        if (!response.ok) throw new Error(`Release check failed (${response.status})`);
+        if (!response.ok) throw new Error(`Deployment check failed (${response.status})`);
         return response.json();
       }).catch((error) => {
-        setReleaseError(error?.message || "Release check unavailable");
+        setReleaseError(error?.message || "Deployment check unavailable");
         return null;
       }),
     ]);
@@ -333,8 +370,10 @@ export default function WebsiteHealthAdminV2() {
   };
 
   const filterCompleteness = (items) => items.filter(({ product, missing }) => (
-    !normalizedQuery || [product?.sku, product?.name, product?.category, ...(missing || [])]
-      .some((value) => text(value).toLowerCase().includes(normalizedQuery))
+    missing.length > 0 && (
+      !normalizedQuery || [product?.sku, product?.name, product?.category, ...(missing || [])]
+        .some((value) => text(value).toLowerCase().includes(normalizedQuery))
+    )
   ));
 
   const tabs = [
@@ -342,14 +381,20 @@ export default function WebsiteHealthAdminV2() {
     ["completeness", "Product Completeness", Gauge],
     ["images", "Image Audit", ImageIcon],
     ["seo", "SEO Health", FileSearch],
-    ["release", "Release / Sync", ShieldCheck],
+    ["overview", "Catalogue Overview", BarChart3],
+    ["operations", "Live Site Operations", Activity],
+    ["growth", "Catalogue Growth Controls", Layers3],
+    ["deployment", "Deployment Info", ShieldCheck],
   ];
 
   const publishedAttentionGroups = groupFindings(filterIssues(health.publishedAttention));
-  const draftAttentionGroups = groupFindings(filterIssues(health.draftAttention));
   const imageGroups = groupFindings(filterIssues(health.publishedImageIssues));
   const seoActionableGroups = groupFindings(filterIssues(health.publishedSeoActionable));
   const seoInfoGroups = groupFindings(filterIssues(health.publishedSeoIssues.filter((item) => item.severity === "info")));
+  const incompletePublished = filterCompleteness(health.publishedCompleteness);
+  const incompleteDrafts = filterCompleteness(health.draftCompleteness);
+  const completePublishedCount = health.publishedCompleteness.filter((item) => item.missing.length === 0).length;
+  const searchEnabled = ["attention", "completeness", "images", "seo"].includes(tab);
 
   return (
     <div data-testid="admin-website-health" className="max-w-7xl mx-auto px-6 py-12">
@@ -358,7 +403,7 @@ export default function WebsiteHealthAdminV2() {
           <div className="eyebrow mb-3">Backoffice · Website Health</div>
           <h1 className="font-serif text-4xl">Website Health</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">
-            Read-only operational checks across catalogue completeness, product imagery, SEO readiness and release alignment. Published-product health is kept separate from unfinished drafts.
+            Focused checks for catalogue quality, live-site health, search readiness and growth structure. Each area has its own tab so only the information you choose is shown.
           </p>
         </div>
         <div className="flex gap-2">
@@ -379,13 +424,13 @@ export default function WebsiteHealthAdminV2() {
 
       <div className="mt-8 flex flex-wrap gap-2 border-b border-white/10">
         {tabs.map(([key, label, Icon]) => (
-          <button key={key} onClick={() => setTab(key)} className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-[11px] uppercase tracking-[0.18em] ${tab === key ? "border-[#D4AF37] text-[#D4AF37]" : "border-transparent text-white/50 hover:text-white"}`}>
+          <button key={key} onClick={() => setTab(key)} data-testid={`website-health-tab-${key}`} className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-[11px] uppercase tracking-[0.18em] ${tab === key ? "border-[#D4AF37] text-[#D4AF37]" : "border-transparent text-white/50 hover:text-white"}`}>
             <Icon size={14} /> {label}
           </button>
         ))}
       </div>
 
-      {tab !== "release" && (
+      {searchEnabled && (
         <div className="mt-6 relative max-w-xl">
           <Search size={15} className="absolute left-3 top-3 text-white/35" />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search SKU, product, category or issue" className="w-full border border-white/15 bg-transparent py-2.5 pl-10 pr-4 text-sm outline-none focus:border-[#D4AF37]/70" />
@@ -396,54 +441,32 @@ export default function WebsiteHealthAdminV2() {
         {loading ? (
           <div className="border border-white/10 p-8 text-sm text-white/50">Running health checks…</div>
         ) : tab === "attention" ? (
-          <div className="space-y-10">
-            <section>
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-                <div><div className="eyebrow mb-2">Published catalogue</div><h2 className="font-serif text-2xl">Products needing attention</h2></div>
-                <div className="text-xs text-white/45">{publishedAttentionGroups.length} affected products · {filterIssues(health.publishedAttention).length} findings</div>
-              </div>
-              <ProductFindingGroups groups={publishedAttentionGroups} emptyMessage="No published catalogue findings require attention." />
-            </section>
-
-            {draftAttentionGroups.length > 0 && (
-              <section>
-                <div className="mb-4"><div className="eyebrow mb-2">Drafts</div><h2 className="font-serif text-2xl">Unfinished draft checks</h2><p className="mt-2 text-xs text-white/45">Draft findings are intentionally excluded from the published-site headline metrics.</p></div>
-                <ProductFindingGroups groups={draftAttentionGroups} emptyMessage="No draft findings." />
-              </section>
-            )}
-
-            <section>
-              <h2 className="font-serif text-2xl">Category snapshot</h2>
-              <div className="mt-4 overflow-x-auto border border-white/10">
-                <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="bg-white/5 text-[10px] uppercase tracking-[0.18em] text-white/50"><tr><th className="p-3">Category</th><th className="p-3">Products</th><th className="p-3">Published</th><th className="p-3">Drafts</th><th className="p-3">No image</th><th className="p-3">Avg completeness</th></tr></thead>
-                  <tbody>{health.categories.map((row) => <tr key={row.category} className="border-t border-white/10"><td className="p-3">{row.category}</td><td className="p-3">{row.products}</td><td className="p-3">{row.published}</td><td className="p-3">{row.drafts}</td><td className="p-3">{row.noImage}</td><td className="p-3">{row.averageCompleteness}%</td></tr>)}</tbody>
-                </table>
-              </div>
-            </section>
-          </div>
+          <section>
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+              <div><div className="eyebrow mb-2">Published catalogue</div><h2 className="font-serif text-2xl">Needs Attention</h2><p className="mt-2 text-xs text-white/45">Only published products with actionable catalogue findings are shown here.</p></div>
+              <div className="text-xs text-white/45">{publishedAttentionGroups.length} affected products · {filterIssues(health.publishedAttention).length} findings</div>
+            </div>
+            <ProductFindingGroups groups={publishedAttentionGroups} emptyMessage="No published catalogue findings require attention." />
+          </section>
         ) : tab === "completeness" ? (
           <div className="space-y-10">
             <section>
-              <div className="mb-4"><div className="eyebrow mb-2">Published catalogue</div><h2 className="font-serif text-2xl">Product completeness</h2></div>
-              <div className="space-y-2">
-                {filterCompleteness(health.publishedCompleteness).slice(0, 300).map(({ product, score, missing }) => (
-                  <div key={productKey(product)} className="grid gap-3 border border-white/10 p-4 md:grid-cols-[110px_1fr_100px_1.4fr] md:items-center">
-                    <div className="text-xs text-white/60">{product.sku || "No SKU"}</div>
-                    <div><div className="text-sm">{product.name || "Unnamed product"}</div><div className="text-[11px] text-white/40">{product.category || "No category"}</div></div>
-                    <div className={`font-serif text-2xl ${score >= 90 ? "text-emerald-300" : score >= 75 ? "text-[#D4AF37]" : "text-amber-200"}`}>{score}%</div>
-                    <div className="text-xs text-white/45">{missing.length ? `Missing/review: ${missing.join(", ")}` : "Complete against current Admin checks"}</div>
-                  </div>
-                ))}
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+                <div><div className="eyebrow mb-2">Published catalogue</div><h2 className="font-serif text-2xl">Products with completeness gaps</h2><p className="mt-2 text-xs text-white/45">Complete 100% products are omitted so this tab stays actionable.</p></div>
+                <div className="text-xs text-white/45">{incompletePublished.length} need review · {completePublishedCount} complete</div>
               </div>
+              <CompletenessRows items={incompletePublished} />
             </section>
-            {filterCompleteness(health.draftCompleteness).length > 0 && (
-              <section><div className="mb-4"><div className="eyebrow mb-2">Drafts</div><h2 className="font-serif text-2xl">Draft completeness</h2></div><div className="space-y-2">{filterCompleteness(health.draftCompleteness).slice(0, 200).map(({ product, score, missing }) => <div key={productKey(product)} className="grid gap-3 border border-white/10 p-4 md:grid-cols-[110px_1fr_100px_1.4fr] md:items-center"><div className="text-xs text-white/60">{product.sku || "No SKU"}</div><div><div className="text-sm">{product.name || "Unnamed product"}</div><div className="text-[11px] text-white/40">{product.category || "No category"}</div></div><div className="font-serif text-2xl text-white/60">{score}%</div><div className="text-xs text-white/45">{missing.length ? `Missing/review: ${missing.join(", ")}` : "Complete against current Admin checks"}</div></div>)}</div></section>
+            {incompleteDrafts.length > 0 && (
+              <section>
+                <div className="mb-4"><div className="eyebrow mb-2">Drafts</div><h2 className="font-serif text-2xl">Draft completeness gaps</h2></div>
+                <CompletenessRows items={incompleteDrafts} />
+              </section>
             )}
           </div>
         ) : tab === "images" ? (
           <div className="space-y-4">
-            <div className="text-xs text-white/45">{imageGroups.length} published products affected · {filterIssues(health.publishedImageIssues).length} total findings</div>
+            <div className="flex flex-wrap items-end justify-between gap-2"><div><h2 className="font-serif text-2xl">Image Audit</h2><p className="mt-2 text-xs text-white/45">Each finding links directly to the affected product editor.</p></div><div className="text-xs text-white/45">{imageGroups.length} published products affected · {filterIssues(health.publishedImageIssues).length} findings</div></div>
             <ProductFindingGroups groups={imageGroups} emptyMessage="No structural product-image issues found in published products." />
           </div>
         ) : tab === "seo" ? (
@@ -457,8 +480,26 @@ export default function WebsiteHealthAdminV2() {
             </section>
             {seoInfoGroups.length > 0 && <section><div className="mb-4"><h2 className="font-serif text-2xl">Informational</h2><p className="mt-2 text-xs text-white/45">Useful context that does not count as a published-site SEO warning.</p></div><ProductFindingGroups groups={seoInfoGroups} emptyMessage="No informational SEO notes." /></section>}
           </div>
+        ) : tab === "overview" ? (
+          <section>
+            <div className="mb-4"><div className="eyebrow mb-2">Catalogue overview</div><h2 className="font-serif text-2xl">Category snapshot</h2><p className="mt-2 text-xs text-white/45">Reference data only — it is intentionally kept out of Needs Attention.</p></div>
+            <div className="overflow-x-auto border border-white/10">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead className="bg-white/5 text-[10px] uppercase tracking-[0.18em] text-white/50"><tr><th className="p-3">Category</th><th className="p-3">Products</th><th className="p-3">Published</th><th className="p-3">Drafts</th><th className="p-3">No image</th><th className="p-3">Avg completeness</th></tr></thead>
+                <tbody>{health.categories.map((row) => <tr key={row.category} className="border-t border-white/10"><td className="p-3">{row.category}</td><td className="p-3">{row.products}</td><td className="p-3">{row.published}</td><td className="p-3">{row.drafts}</td><td className="p-3">{row.noImage}</td><td className="p-3">{row.averageCompleteness}%</td></tr>)}</tbody>
+              </table>
+            </div>
+          </section>
+        ) : tab === "operations" ? (
+          <WebsiteHealthOpsPanels />
+        ) : tab === "growth" ? (
+          <WebsiteHealthGrowthPanels />
         ) : (
           <div className="space-y-6">
+            <div className="border border-white/10 p-5 text-sm leading-6 text-white/55">
+              <div className="mb-2 font-serif text-xl text-white">What Deployment Info means</div>
+              This is a read-only technical check showing whether the running site exposes Git/deployment identifiers. It does not publish, sync or change anything. Because the Emergent production runtime does not currently expose enough Git metadata, this page may show “Unavailable”; your approved SHA-pinned GitHub → Emergent sync process remains the authoritative release check.
+            </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <Metric label="API health" value={releaseError ? "Check failed" : "Connected"} hint={releaseError || API} />
               <Metric label="Runtime source" value={release?.runtime || "Unavailable"} hint="Git metadata is only shown when the runtime exposes it." />
@@ -470,14 +511,14 @@ export default function WebsiteHealthAdminV2() {
             <div className={`border p-5 ${release?.aligned === false || release?.git_dirty === true ? "border-amber-300/30 bg-amber-400/5" : "border-white/10"}`}>
               <div className="flex items-start gap-3">
                 {release?.aligned === true && release?.git_dirty === false ? <CheckCircle2 className="mt-0.5 text-emerald-300" size={18} /> : <AlertTriangle className="mt-0.5 text-[#D4AF37]" size={18} />}
-                <div><div className="text-sm">Release interpretation</div><div className="mt-1 text-xs leading-5 text-white/50">{release?.aligned === false ? "The deployment SHA and visible Git HEAD differ. Verify the GitHub → Emergent → production handoff before publishing another release." : release?.git_dirty === true ? "The runtime Git workspace contains local changes. This is normal during SHA-pinned Emergent sync, but verify the exact approved files before publishing." : release?.aligned === true ? "The available runtime/deployment SHA signals agree." : "Exact SHA alignment cannot be inferred from this runtime. Continue using the existing SHA-pinned sync SOP rather than assuming alignment."}</div></div>
+                <div><div className="text-sm">Deployment interpretation</div><div className="mt-1 text-xs leading-5 text-white/50">{release?.aligned === false ? "The deployment SHA and visible Git HEAD differ. Verify the GitHub → Emergent → production handoff before publishing another release." : release?.git_dirty === true ? "The runtime Git workspace contains local changes. This is normal during SHA-pinned Emergent sync, but verify the exact approved files before publishing." : release?.aligned === true ? "The available runtime/deployment SHA signals agree." : "Exact SHA alignment cannot be inferred from this runtime. Continue using the existing SHA-pinned sync SOP rather than assuming alignment."}</div></div>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      <div className="mt-8 text-[11px] text-white/35">Last refreshed: {refreshedAt ? refreshedAt.toLocaleString() : "—"}</div>
+      {!loading && !["operations", "growth"].includes(tab) && <div className="mt-8 text-[11px] text-white/35">Last refreshed: {refreshedAt ? refreshedAt.toLocaleString() : "—"}</div>}
     </div>
   );
 }

@@ -40,7 +40,8 @@ export default function AdminCatalogueExcelControl() {
     const params = new URLSearchParams(window.location.search);
     const requestedTab = params.get("tab");
     const requestedProject = params.get("project");
-    if (!requestedTab && !requestedProject) return undefined;
+    const requestedProduct = params.get("product");
+    if (!requestedTab && !requestedProject && !requestedProduct) return undefined;
 
     let cancelled = false;
     let timer = null;
@@ -81,16 +82,37 @@ export default function AdminCatalogueExcelControl() {
       }
     };
 
+    const focusProduct = () => {
+      if (!requestedProduct) return;
+      let attempts = 0;
+      const reveal = () => {
+        if (cancelled) return;
+        const editButton = document.querySelector(`[data-testid="edit-${requestedProduct}"]`);
+        if (!editButton) {
+          attempts += 1;
+          if (attempts < 40) timer = window.setTimeout(reveal, 100);
+          return;
+        }
+        editButton.click();
+        window.setTimeout(() => {
+          const form = document.querySelector('[data-testid="p-save-btn"]')?.closest("form");
+          form?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 80);
+      };
+      reveal();
+    };
+
     let attempts = 0;
     const openRequestedArea = () => {
       if (cancelled) return;
-      const tab = requestedTab || (requestedProject ? "homepage" : "dashboard");
+      const tab = requestedTab || (requestedProject ? "homepage" : requestedProduct ? "products" : "dashboard");
       if (!clickTab(tab)) {
         attempts += 1;
         if (attempts < 30) timer = window.setTimeout(openRequestedArea, 100);
         return;
       }
       if (requestedProject) window.setTimeout(focusProject, 80);
+      if (requestedProduct) window.setTimeout(focusProduct, 80);
     };
 
     openRequestedArea();
