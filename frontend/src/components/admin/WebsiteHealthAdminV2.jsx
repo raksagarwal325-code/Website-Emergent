@@ -21,6 +21,89 @@ import WebsiteHealthGrowthPanels from "./WebsiteHealthGrowthPanels";
 const VALID_STATUS = new Set(["published", "draft"]);
 const VALID_PRICE_DISPLAY = new Set(["starting_from", "fixed", "on_request"]);
 
+const SHARED_18_FIELDS = [
+  "Material", "Finish", "Height", "Width", "Glass Type", "Glass Colour", "Product Type",
+  "Number of Lights", "Number of Arms", "Suspension Type", "Holder Type", "Bulb Type",
+  "Package Contents", "Suitable For", "Style", "Care Instructions", "Customization", "Collection / Family",
+];
+
+export const SOP_RULES = {
+  "candle stand": {
+    category: "Candle Stand",
+    schema: ["Material", "Finish", "Glass Type", "Product Type", "Number of Candle Holders", "Number of Arms", "Holder Type", "Suitable For", "Style", "Color", "Package Includes", "Care Instructions", "Customization Available", "Candle Type", "Height", "Width"],
+    featureRange: [8, 8],
+    imageCounts: [2],
+    productType: "Candle Stand",
+  },
+  chandelier: {
+    category: "Chandelier",
+    sku: /^SGE-CH-\d{3}$/i,
+    schema: SHARED_18_FIELDS,
+    featureRange: [8, 8],
+    imageCounts: [2],
+    productType: "Chandelier",
+  },
+  "floor lamp": {
+    category: "Floor Lamp",
+    sku: /^SGE-FL-\d{3}$/i,
+    schema: ["Material", "Finish", "Height", "Width", "Glass Type", "Glass Colour", "Product Type", "Number of Lights", "Number of Arms", "Base Type", "Holder Type", "Bulb Type", "Package Contents", "Suitable For", "Style", "Care Instructions", "Customization", "Collection / Family"],
+    featureRange: [8, 8],
+    imageCounts: [2],
+    productType: "Floor Lamp",
+  },
+  "gate light": {
+    category: "Gate Light",
+    sku: /^SGE-GL-\d{3}$/i,
+    schema: ["Material", "Finish", "Height", "Width", "Glass Type", "Glass Colour", "Product Type", "Number of Lights", "Number of Arms", "Shade Type", "Mounting Type", "Holder Type", "Bulb Type", "Weather Suitability", "Package Contents", "Suitable For", "Style", "Care Instructions", "Customization", "Collection / Family"],
+    featureRange: [8, 8],
+    imageCounts: [1, 2],
+    productType: "Gate Light",
+  },
+  "hanging light": {
+    category: "Hanging Light",
+    sku: /^SGE-HL-\d{3}$/i,
+    schema: SHARED_18_FIELDS,
+    featureRange: [8, 8],
+    imageCounts: [2],
+    productType: "Hanging Light",
+  },
+  "table chandelier": {
+    category: "Table Chandelier",
+    sku: /^SGE-TA-\d{3}$/i,
+    schema: SHARED_18_FIELDS.map((field) => field === "Suspension Type" ? "Base Type" : field),
+    featureRange: [8, 8],
+    imageCounts: [2],
+    productType: "Table Chandelier",
+  },
+  "table lamp": {
+    category: "Table Lamp",
+    sku: /^SGE-TL-\d{3}$/i,
+    schema: ["Material", "Finish", "Glass Type", "Product Type", "Number of Arms", "Number of Lights", "Holder Type", "Suitable For", "Style", "Color", "Package Includes", "Care Instructions", "Customization Available", "Shade Type", "Height", "Width"],
+    featureRange: [8, 8],
+    imageCounts: [2],
+    imageCountExceptions: { "SGE-TL-047": [4] },
+    productType: "Table Lamp",
+  },
+  "wall light": {
+    category: "Wall Light",
+    sku: /^SGE-WL-\d{3}$/i,
+    schema: ["Material", "Finish", "Height", "Width", "Glass Type", "Glass Colour", "Product Type", "Number of Lights", "Number of Arms", "Holder Type", "Bulb Type", "Package Contents", "Suitable For", "Style", "Care Instructions", "Customization", "Collection / Family"],
+    featureRange: [6, 8],
+    imageCounts: [1, 2],
+  },
+};
+
+const CATEGORY_ALIASES = {
+  "candle stands": "candle stand",
+  chandeliers: "chandelier",
+  "floor lamps": "floor lamp",
+  "gate lights": "gate light",
+  "hanging lights": "hanging light",
+  "table chandeliers": "table chandelier",
+  "table lamps": "table lamp",
+  "wall lights": "wall light",
+};
+
 const text = (value) => String(value || "").trim();
 const imagesOf = (product) => (Array.isArray(product?.images) ? product.images.map(text).filter(Boolean) : []);
 const specsOf = (product) => (
@@ -29,27 +112,123 @@ const specsOf = (product) => (
     : []
 );
 const tagsOf = (product) => (Array.isArray(product?.tags) ? product.tags.map(text).filter(Boolean) : []);
-const isPublished = (product) => (product?.status || "published") === "published";
+const isPublished = (product) => product?.status === "published";
+const normalizeCategory = (value) => {
+  const key = text(value).toLowerCase();
+  return CATEGORY_ALIASES[key] || key;
+};
+const normalizeField = (value) => text(value).toLowerCase().replace(/\s+/g, " ");
+const wordCount = (value) => text(value).split(/\s+/).filter(Boolean).length;
+const stripHtml = (value) => text(value)
+  .replace(/<\/(p|div|h[1-6]|li)>/gi, "\n")
+  .replace(/<br\s*\/?>/gi, "\n")
+  .replace(/<[^>]+>/g, " ")
+  .replace(/&nbsp;/gi, " ")
+  .replace(/[ \t]+/g, " ");
 
-export function productCompleteness(product) {
-  const images = imagesOf(product);
-  const checks = [
-    [10, Boolean(text(product?.name)), "Product name"],
-    [10, Boolean(text(product?.sku)), "SKU"],
-    [10, Boolean(text(product?.category)), "Category"],
-    [15, images.length >= 1, "Primary image"],
-    [5, images.length >= 2, "Second image / alternate view"],
-    [10, text(product?.short_description).length >= 60, "Useful short description"],
-    [15, text(product?.description).length >= 160, "Detailed description"],
-    [10, specsOf(product).length >= 1, "Confirmed specifications"],
-    [5, tagsOf(product).length >= 1, "Search / catalogue tags"],
-    [5, VALID_PRICE_DISPLAY.has(product?.price_display || "starting_from"), "Price display mode"],
-    [5, VALID_STATUS.has(product?.status || "published"), "Publication status"],
-  ];
+const descriptionShape = (value) => {
+  const raw = text(value);
+  const plain = stripHtml(raw);
+  const keyIndex = plain.toLowerCase().indexOf("key features");
+  const narrative = keyIndex >= 0 ? plain.slice(0, keyIndex) : plain;
+  const features = keyIndex >= 0 ? plain.slice(keyIndex + "key features".length) : "";
+  const htmlParagraphs = (raw.slice(0, Math.max(0, raw.toLowerCase().indexOf("key features"))).match(/<p(?:\s[^>]*)?>[\s\S]*?<\/p>/gi) || []).length;
+  const plainParagraphs = narrative.split(/\n\s*\n+/).map(text).filter(Boolean).length;
+  const htmlBullets = (raw.slice(Math.max(0, raw.toLowerCase().indexOf("key features"))).match(/<li(?:\s[^>]*)?>[\s\S]*?<\/li>/gi) || []).length;
+  const plainBullets = features.split("\n").map(text).filter((line) => /^(?:[•*-]|\d+[.)])\s+/.test(line)).length;
+  return {
+    hasHeading: keyIndex >= 0,
+    paragraphs: htmlParagraphs || plainParagraphs,
+    features: htmlBullets || plainBullets,
+  };
+};
+
+const verificationOf = (product) => product?.sop_verification || product?.catalogue_verification || {};
+const isManuallyVerified = (product) => {
+  const verification = verificationOf(product);
+  return verification?.status === "verified"
+    && Boolean(text(verification?.verified_at))
+    && Boolean(text(verification?.verified_by))
+    && Boolean(text(verification?.source));
+};
+
+export function evaluateSopCompliance(product) {
+  const categoryKey = normalizeCategory(product?.category);
+  const rule = SOP_RULES[categoryKey];
+  const unresolved = categoryKey === "floor chandelier";
+  const issues = [];
+  const add = (issue, severity = "review", detail = "") => issues.push({ issue, severity, detail });
+
+  if (!text(product?.name)) add("Missing product name", "critical");
+  if (!text(product?.sku)) add("Missing SKU", "critical");
+  if (!text(product?.category)) add("Missing category", "critical");
+  if (!Object.prototype.hasOwnProperty.call(product || {}, "status") || !VALID_STATUS.has(product?.status)) add("Publication status is missing or invalid", "critical");
+  if (!Object.prototype.hasOwnProperty.call(product || {}, "price_display") || !VALID_PRICE_DISPLAY.has(product?.price_display)) add("Price display mode is missing or invalid", "critical");
+
+  if (unresolved) {
+    add("Floor Chandelier SOP mapping unresolved", "review", "The supplied document contains Floor Lamp / SGE-FL rules, so it is not applied automatically.");
+  } else if (!rule) {
+    add("No approved SOP mapped to category", "review", text(product?.category) || "Uncategorised");
+  } else {
+    if (text(product?.category) !== rule.category) add("Category does not use the SOP's exact value", "critical", `Expected ${rule.category}`);
+    if (rule.sku && !rule.sku.test(text(product?.sku))) add("SKU does not match category SOP", "critical", `Found ${text(product?.sku) || "blank"}`);
+
+    const actualSpecs = specsOf(product);
+    const actualFields = actualSpecs.map(([field]) => normalizeField(field));
+    const expectedFields = rule.schema.map(normalizeField);
+    const missingFields = rule.schema.filter((field) => !actualFields.includes(normalizeField(field)));
+    const unexpectedFields = actualSpecs.map(([field]) => field).filter((field) => !expectedFields.includes(normalizeField(field)));
+    if (missingFields.length) add(`Missing SOP specifications (${missingFields.length})`, "critical", missingFields.join(", "));
+    if (unexpectedFields.length) add(`Unexpected SOP specifications (${unexpectedFields.length})`, "review", unexpectedFields.join(", "));
+    if (!missingFields.length && !unexpectedFields.length && actualFields.some((field, index) => field !== expectedFields[index])) {
+      add("Specification order does not match SOP", "review", `Expected ${rule.schema.length} fields in the approved order`);
+    }
+    if (actualSpecs.some(([, value]) => /\[[^\]]+\]/.test(text(value)))) add("Specification contains an unresolved template placeholder", "critical");
+    if (actualSpecs.some(([field, value]) => /^(height|width)$/i.test(text(field)) && /^made to order$/i.test(text(value)))) add("Invalid dimension fallback", "critical", "Use To be confirmed before order, not Made to Order");
+    if (rule.productType) {
+      const productType = actualSpecs.find(([field]) => normalizeField(field) === "product type");
+      if (productType && text(productType[1]) !== rule.productType) add("Product Type does not match category SOP", "critical", `Expected ${rule.productType}`);
+    }
+
+    const shortWords = wordCount(product?.short_description);
+    if (shortWords < 20 || shortWords > 35) add("Short description is outside the SOP range", "review", `${shortWords} words; expected 20–35`);
+    const shape = descriptionShape(product?.description);
+    if (shape.paragraphs !== 2) add("Full description does not contain exactly two narrative paragraphs", "review", `${shape.paragraphs} detected`);
+    if (!shape.hasHeading) add("Key Features heading is missing", "review");
+    if (shape.features < rule.featureRange[0] || shape.features > rule.featureRange[1]) {
+      const expected = rule.featureRange[0] === rule.featureRange[1] ? `${rule.featureRange[0]}` : `${rule.featureRange[0]}–${rule.featureRange[1]}`;
+      add("Key Features count does not match SOP", "review", `${shape.features} detected; expected ${expected}`);
+    }
+
+    const sku = text(product?.sku).toUpperCase();
+    const acceptedCounts = rule.imageCountExceptions?.[sku] || rule.imageCounts;
+    const imageCount = imagesOf(product).length;
+    if (!acceptedCounts.includes(imageCount)) add("Image count requires SOP review", imageCount === 0 ? "critical" : "review", `${imageCount} images; accepted ${acceptedCounts.join(" or ")}`);
+  }
+
+  const fallbackFields = specsOf(product)
+    .filter(([, value]) => text(value).toLowerCase() === "to be confirmed before order")
+    .map(([field]) => field);
 
   return {
-    score: checks.reduce((total, [weight, passed]) => total + (passed ? weight : 0), 0),
-    missing: checks.filter(([, passed]) => !passed).map(([, , label]) => label),
+    product,
+    rule,
+    coverage: unresolved ? "unresolved" : rule ? "covered" : "missing",
+    issues,
+    structuralPass: Boolean(rule) && issues.length === 0,
+    manualVerified: Boolean(rule) && isManuallyVerified(product),
+    fallbackFields,
+    approvedImageException: Boolean(rule?.imageCountExceptions?.[text(product?.sku).toUpperCase()]),
+  };
+}
+
+export function productCompleteness(product) {
+  const result = evaluateSopCompliance(product);
+  return {
+    structuralPass: result.structuralPass,
+    missing: result.issues.map((item) => item.issue),
+    coverage: result.coverage,
+    fallbackFields: result.fallbackFields,
   };
 }
 
@@ -96,7 +275,7 @@ export function buildWebsiteHealth(products = []) {
   const attention = [];
   const imageIssues = [];
   const seoIssues = [];
-  const completeness = safeProducts.map((product) => ({ product, ...productCompleteness(product) }));
+  const compliance = safeProducts.map(evaluateSopCompliance);
 
   const push = (bucket, product, severity, issue, detail = "") => {
     bucket.push({
@@ -108,18 +287,14 @@ export function buildWebsiteHealth(products = []) {
     });
   };
 
-  safeProducts.forEach((product) => {
+  safeProducts.forEach((product, index) => {
     const name = text(product.name);
-    const sku = text(product.sku);
-    const category = text(product.category);
     const images = imagesOf(product);
     const primary = images[0] || "";
     const shortDescription = text(product.short_description);
     const description = text(product.description);
 
-    if (!name) push(attention, product, "critical", "Missing product name");
-    if (!sku) push(attention, product, "critical", "Missing SKU");
-    if (!category) push(attention, product, "critical", "Missing category");
+    compliance[index].issues.forEach((item) => push(attention, product, item.severity, item.issue, item.detail));
     if (!primary) {
       push(attention, product, "critical", "Missing primary image");
       push(imageIssues, product, "critical", "Missing primary image");
@@ -136,18 +311,13 @@ export function buildWebsiteHealth(products = []) {
     }
 
     if (shortDescription.length < 60) {
-      push(attention, product, "review", "Short description needs review", `${shortDescription.length} characters`);
       push(seoIssues, product, "review", "Short description is thin", `${shortDescription.length} characters`);
     }
     if (description.length < 160) {
-      push(attention, product, "review", "Description needs review", `${description.length} characters`);
       push(seoIssues, product, "review", "Description is thin", `${description.length} characters`);
     }
     if (name && (name.length < 24 || name.length > 100)) {
       push(seoIssues, product, "review", "Product title length needs review", `${name.length} characters`);
-    }
-    if (specsOf(product).length === 0) {
-      push(attention, product, "review", "No confirmed specifications");
     }
     if (tagsOf(product).length === 0) {
       push(seoIssues, product, "review", "No catalogue/search tags");
@@ -169,20 +339,27 @@ export function buildWebsiteHealth(products = []) {
   }));
 
   const categoryMap = new Map();
-  safeProducts.forEach((product) => {
+  safeProducts.forEach((product, index) => {
     const category = text(product.category) || "Uncategorised";
     const current = categoryMap.get(category) || {
       products: 0,
       published: 0,
       drafts: 0,
       noImage: 0,
-      completenessTotal: 0,
+      sopCovered: 0,
+      structuralPass: 0,
+      confirmationBacklog: 0,
+      verificationPending: 0,
     };
     current.products += 1;
     if (isPublished(product)) current.published += 1;
     else current.drafts += 1;
     if (imagesOf(product).length === 0) current.noImage += 1;
-    current.completenessTotal += productCompleteness(product).score;
+    const result = compliance[index];
+    if (result?.coverage === "covered") current.sopCovered += 1;
+    if (result?.structuralPass) current.structuralPass += 1;
+    if (result?.fallbackFields.length) current.confirmationBacklog += 1;
+    if (result?.coverage === "covered" && !result.manualVerified) current.verificationPending += 1;
     categoryMap.set(category, current);
   });
 
@@ -190,38 +367,44 @@ export function buildWebsiteHealth(products = []) {
     .map(([category, value]) => ({
       category,
       ...value,
-      averageCompleteness: value.products ? Math.round(value.completenessTotal / value.products) : 0,
+      sopStatus: SOP_RULES[normalizeCategory(category)] ? "Mapped" : normalizeCategory(category) === "floor chandelier" ? "Unresolved" : "Not supplied",
     }))
     .sort((a, b) => a.category.localeCompare(b.category));
 
-  const publishedCompleteness = completeness.filter(({ product }) => isPublished(product));
-  const draftCompleteness = completeness.filter(({ product }) => !isPublished(product));
+  const publishedCompliance = compliance.filter(({ product }) => isPublished(product));
+  const draftCompliance = compliance.filter(({ product }) => !isPublished(product));
   const publishedAttention = attention.filter((item) => isPublished(item.product));
   const draftAttention = attention.filter((item) => !isPublished(item.product));
   const publishedImageIssues = imageIssues.filter((item) => isPublished(item.product));
   const publishedSeoIssues = seoIssues.filter((item) => isPublished(item.product));
   const publishedSeoActionable = publishedSeoIssues.filter((item) => item.severity !== "info");
 
-  const publishedAverageCompleteness = publishedCompleteness.length
-    ? Math.round(publishedCompleteness.reduce((sum, item) => sum + item.score, 0) / publishedCompleteness.length)
-    : 0;
+  const coveredPublished = publishedCompliance.filter((item) => item.coverage === "covered");
+  const structurallyCompliantPublished = coveredPublished.filter((item) => item.structuralPass);
+  const sopVerifiedPublished = structurallyCompliantPublished.filter((item) => item.manualVerified && item.fallbackFields.length === 0);
 
   return {
     attention,
     imageIssues,
     seoIssues,
-    completeness: completeness.sort((a, b) => a.score - b.score),
-    publishedCompleteness: publishedCompleteness.sort((a, b) => a.score - b.score),
-    draftCompleteness: draftCompleteness.sort((a, b) => a.score - b.score),
+    compliance,
+    publishedCompliance,
+    draftCompliance,
     publishedAttention,
     draftAttention,
     publishedImageIssues,
     publishedSeoIssues,
     publishedSeoActionable,
     categories,
-    publishedAverageCompleteness,
-    publishedCount: publishedCompleteness.length,
-    draftCount: draftCompleteness.length,
+    publishedCount: publishedCompliance.length,
+    draftCount: draftCompliance.length,
+    sopCoveragePublished: coveredPublished.length,
+    sopUnmappedPublished: publishedCompliance.length - coveredPublished.length,
+    structurallyCompliantPublished: structurallyCompliantPublished.length,
+    sopVerifiedPublished: sopVerifiedPublished.length,
+    manualVerificationPending: coveredPublished.filter((item) => !item.manualVerified).length,
+    confirmationBacklog: coveredPublished.filter((item) => item.fallbackFields.length > 0).length,
+    approvedExceptionCount: publishedCompliance.filter((item) => item.approvedImageException).length,
     productsNeedingAttention: uniqueProductCount(publishedAttention.filter((item) => item.severity !== "info")),
     productsWithImageIssues: uniqueProductCount(publishedImageIssues),
     productsWithSeoIssues: uniqueProductCount(publishedSeoActionable),
@@ -300,18 +483,23 @@ function ProductFindingGroups({ groups, emptyMessage }) {
   );
 }
 
-function CompletenessRows({ items }) {
+function ComplianceRows({ items, emptyMessage = "No SOP compliance gaps found." }) {
   if (!items.length) {
-    return <div className="border border-emerald-300/20 bg-emerald-400/5 p-6 text-sm text-emerald-100">No completeness gaps found.</div>;
+    return <div className="border border-emerald-300/20 bg-emerald-400/5 p-6 text-sm text-emerald-100">{emptyMessage}</div>;
   }
   return (
     <div className="space-y-2">
-      {items.slice(0, 300).map(({ product, score, missing }) => (
-        <div key={productKey(product)} className="grid gap-3 border border-white/10 p-4 xl:grid-cols-[110px_1fr_90px_1.3fr_auto] xl:items-center">
+      {items.slice(0, 300).map(({ product, coverage, structuralPass, manualVerified, fallbackFields, issues }) => (
+        <div key={productKey(product)} className="grid gap-3 border border-white/10 p-4 xl:grid-cols-[110px_1fr_150px_1.4fr_auto] xl:items-center">
           <div className="text-xs text-white/60">{product.sku || "No SKU"}</div>
           <div><div className="text-sm">{product.name || "Unnamed product"}</div><div className="text-[11px] text-white/40">{product.category || "No category"}</div></div>
-          <div className={`font-serif text-2xl ${score >= 90 ? "text-emerald-300" : score >= 75 ? "text-[#D4AF37]" : "text-amber-200"}`}>{score}%</div>
-          <div className="text-xs text-white/45">Missing/review: {missing.join(", ")}</div>
+          <div className={`text-xs uppercase tracking-[0.12em] ${structuralPass ? "text-emerald-300" : coverage === "covered" ? "text-amber-200" : "text-[#D4AF37]"}`}>
+            {coverage !== "covered" ? `SOP ${coverage}` : structuralPass ? "Structure passes" : "Structure needs work"}
+          </div>
+          <div className="text-xs leading-5 text-white/45">
+            {issues.length > 0 ? issues.map((item) => item.issue).join(", ") : manualVerified ? "Recorded evidence verification complete" : "Structure passes; evidence verification is not recorded"}
+            {fallbackFields.length > 0 ? ` · Confirmation needed: ${fallbackFields.join(", ")}` : ""}
+          </div>
           <ProductActions product={product} />
         </div>
       ))}
@@ -369,16 +557,16 @@ export default function WebsiteHealthAdminV2() {
     ].some((value) => text(value).toLowerCase().includes(normalizedQuery)));
   };
 
-  const filterCompleteness = (items) => items.filter(({ product, missing }) => (
-    missing.length > 0 && (
-      !normalizedQuery || [product?.sku, product?.name, product?.category, ...(missing || [])]
+  const filterCompliance = (items, predicate = () => true) => items.filter((item) => (
+    predicate(item) && (
+      !normalizedQuery || [item.product?.sku, item.product?.name, item.product?.category, ...item.issues.map((issue) => issue.issue), ...item.fallbackFields]
         .some((value) => text(value).toLowerCase().includes(normalizedQuery))
     )
   ));
 
   const tabs = [
     ["attention", "Needs Attention", AlertTriangle],
-    ["completeness", "Product Completeness", Gauge],
+    ["completeness", "SOP Compliance", Gauge],
     ["images", "Image Audit", ImageIcon],
     ["seo", "SEO Health", FileSearch],
     ["overview", "Catalogue Overview", BarChart3],
@@ -391,9 +579,9 @@ export default function WebsiteHealthAdminV2() {
   const imageGroups = groupFindings(filterIssues(health.publishedImageIssues));
   const seoActionableGroups = groupFindings(filterIssues(health.publishedSeoActionable));
   const seoInfoGroups = groupFindings(filterIssues(health.publishedSeoIssues.filter((item) => item.severity === "info")));
-  const incompletePublished = filterCompleteness(health.publishedCompleteness);
-  const incompleteDrafts = filterCompleteness(health.draftCompleteness);
-  const completePublishedCount = health.publishedCompleteness.filter((item) => item.missing.length === 0).length;
+  const publishedStructuralGaps = filterCompliance(health.publishedCompliance, (item) => !item.structuralPass);
+  const draftStructuralGaps = filterCompliance(health.draftCompliance, (item) => !item.structuralPass);
+  const publishedVerificationQueue = filterCompliance(health.publishedCompliance, (item) => item.coverage === "covered" && (!item.manualVerified || item.fallbackFields.length > 0));
   const searchEnabled = ["attention", "completeness", "images", "seo"].includes(tab);
 
   return (
@@ -414,12 +602,14 @@ export default function WebsiteHealthAdminV2() {
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
         <Metric label="Products audited" value={products.length} hint={`${health.publishedCount} published · ${health.draftCount} drafts${stats?.products != null ? ` · public stats ${stats.products}` : ""}`} />
-        <Metric label="Published completeness" value={`${health.publishedAverageCompleteness}%`} hint="Average across published products only" />
+        <Metric label="SOP coverage" value={`${health.sopCoveragePublished}/${health.publishedCount}`} hint={`${health.sopUnmappedPublished} published products have no usable SOP mapping`} />
+        <Metric label="Structural SOP pass" value={`${health.structurallyCompliantPublished}/${health.sopCoveragePublished}`} hint="Exact category schema and machine-checkable rules" />
+        <Metric label="SOP-verified records" value={`${health.sopVerifiedPublished}/${health.sopCoveragePublished}`} hint="Requires recorded source/image verification and no confirmation fallback" />
+        <Metric label="Verification pending" value={health.manualVerificationPending} hint="Product facts or image match not evidenced in the record" />
+        <Metric label="Confirmation backlog" value={health.confirmationBacklog} hint={`Products using the approved confirmation fallback · ${health.approvedExceptionCount} recorded SOP exceptions`} />
         <Metric label="Products needing attention" value={health.productsNeedingAttention} hint={`${health.criticalPublishedProducts} published products have critical findings`} />
-        <Metric label="Products with image issues" value={health.productsWithImageIssues} hint={`${health.publishedImageIssues.length} total image findings`} />
-        <Metric label="Products with SEO-content issues" value={health.productsWithSeoIssues} hint={`${health.publishedSeoActionable.length} actionable findings · ${health.seoInformationalCount} informational`} />
       </div>
 
       <div className="mt-8 flex flex-wrap gap-2 border-b border-white/10">
@@ -450,17 +640,27 @@ export default function WebsiteHealthAdminV2() {
           </section>
         ) : tab === "completeness" ? (
           <div className="space-y-10">
+            <div className="border border-[#D4AF37]/25 bg-[#D4AF37]/5 p-5 text-xs leading-5 text-white/60">
+              This audit does not use a rounded completeness percentage. Structural pass means the record matches the mapped category SOP; it does not prove that images, dimensions, materials, light counts or arm counts are factually correct. Those require recorded source verification.
+            </div>
             <section>
               <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-                <div><div className="eyebrow mb-2">Published catalogue</div><h2 className="font-serif text-2xl">Products with completeness gaps</h2><p className="mt-2 text-xs text-white/45">Complete 100% products are omitted so this tab stays actionable.</p></div>
-                <div className="text-xs text-white/45">{incompletePublished.length} need review · {completePublishedCount} complete</div>
+                <div><div className="eyebrow mb-2">Published catalogue</div><h2 className="font-serif text-2xl">Structural SOP gaps</h2><p className="mt-2 text-xs text-white/45">Exact schema, category, SKU, description structure, image count and explicit commercial-state checks.</p></div>
+                <div className="text-xs text-white/45">{publishedStructuralGaps.length} published products need structural review</div>
               </div>
-              <CompletenessRows items={incompletePublished} />
+              <ComplianceRows items={publishedStructuralGaps} />
             </section>
-            {incompleteDrafts.length > 0 && (
+            <section>
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+                <div><div className="eyebrow mb-2">Evidence layer</div><h2 className="font-serif text-2xl">Verification and confirmation queue</h2><p className="mt-2 text-xs text-white/45">Records remain here until product-specific facts and image identity have documented verification.</p></div>
+                <div className="text-xs text-white/45">{publishedVerificationQueue.length} published products pending evidence and/or confirmation</div>
+              </div>
+              <ComplianceRows items={publishedVerificationQueue} emptyMessage="Every mapped published product has recorded evidence verification and no confirmation fallback." />
+            </section>
+            {draftStructuralGaps.length > 0 && (
               <section>
-                <div className="mb-4"><div className="eyebrow mb-2">Drafts</div><h2 className="font-serif text-2xl">Draft completeness gaps</h2></div>
-                <CompletenessRows items={incompleteDrafts} />
+                <div className="mb-4"><div className="eyebrow mb-2">Drafts</div><h2 className="font-serif text-2xl">Draft structural SOP gaps</h2></div>
+                <ComplianceRows items={draftStructuralGaps} />
               </section>
             )}
           </div>
@@ -485,8 +685,8 @@ export default function WebsiteHealthAdminV2() {
             <div className="mb-4"><div className="eyebrow mb-2">Catalogue overview</div><h2 className="font-serif text-2xl">Category snapshot</h2><p className="mt-2 text-xs text-white/45">Reference data only — it is intentionally kept out of Needs Attention.</p></div>
             <div className="overflow-x-auto border border-white/10">
               <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="bg-white/5 text-[10px] uppercase tracking-[0.18em] text-white/50"><tr><th className="p-3">Category</th><th className="p-3">Products</th><th className="p-3">Published</th><th className="p-3">Drafts</th><th className="p-3">No image</th><th className="p-3">Avg completeness</th></tr></thead>
-                <tbody>{health.categories.map((row) => <tr key={row.category} className="border-t border-white/10"><td className="p-3">{row.category}</td><td className="p-3">{row.products}</td><td className="p-3">{row.published}</td><td className="p-3">{row.drafts}</td><td className="p-3">{row.noImage}</td><td className="p-3">{row.averageCompleteness}%</td></tr>)}</tbody>
+                <thead className="bg-white/5 text-[10px] uppercase tracking-[0.18em] text-white/50"><tr><th className="p-3">Category</th><th className="p-3">SOP status</th><th className="p-3">Products</th><th className="p-3">Published</th><th className="p-3">Drafts</th><th className="p-3">Structural pass</th><th className="p-3">Confirmations</th><th className="p-3">Verification pending</th></tr></thead>
+                <tbody>{health.categories.map((row) => <tr key={row.category} className="border-t border-white/10"><td className="p-3">{row.category}</td><td className="p-3">{row.sopStatus}</td><td className="p-3">{row.products}</td><td className="p-3">{row.published}</td><td className="p-3">{row.drafts}</td><td className="p-3">{row.structuralPass}/{row.sopCovered}</td><td className="p-3">{row.confirmationBacklog}</td><td className="p-3">{row.verificationPending}</td></tr>)}</tbody>
               </table>
             </div>
           </section>
