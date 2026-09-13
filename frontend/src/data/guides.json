@@ -11,6 +11,14 @@
       {"heading":"Consider visual weight","body":"Two chandeliers with the same diameter can feel very different. Dense glass, multiple tiers, deep colours and ornate frames appear visually heavier than open frames or clear glass. Choose by both measured size and visual mass."},
       {"heading":"Check the drop before ordering","body":"The final hanging height matters as much as diameter. Confirm ceiling height, the level of furniture or circulation below, and whether the chandelier will be viewed from one floor or multiple levels."}
     ],
+    "workedExample": {
+      "type": "room-size",
+      "title": "Worked shortlisting example: dining room",
+      "scenario": "A 16 × 12 ft dining room has a 6 × 3.5 ft table and a 10 ft ceiling. The table—not the whole room—is the immediate visual anchor.",
+      "steps": ["Record the room, table and ceiling measurements.", "Compare a 28 in diameter chandelier with the 42 in table width: 7 in of table remains visible on each side.", "Check the 24 in fixture body and proposed suspension separately using the hanging-height example below."],
+      "result": "A 28 in piece is a sensible first item to mock up for this example; compare its visual weight with nearby 24 in and 32 in options before choosing.",
+      "confirm": "Confirm actual table position, sightlines, canopy size, total weight, ceiling support and the product's verified dimensions."
+    },
     "links":[{"label":"Explore Chandeliers","path":"/category/chandeliers"},{"label":"See Real Installations","path":"/gallery"},{"label":"Custom Lighting","path":"/custom-lighting-bulk-orders"}]
   },
   {
@@ -39,6 +47,14 @@
       {"heading":"In a stairwell or double-height volume","body":"Judge the fixture from both floors. A chandelier can hang lower within the void when there is no walk-through path directly below, but its scale should remain balanced from the upper level."},
       {"heading":"Measure before installation","body":"Record ceiling height, finished floor level, furniture height and the chandelier's own body height. Final suspension length should be decided from those dimensions, not from chain length alone."}
     ],
+    "workedExample": {
+      "type": "chandelier-height",
+      "title": "Worked example: calculate the suspension",
+      "scenario": "A room has a 120 in finished ceiling, a 30 in dining table and a chandelier body that is 24 in tall. For the site mock-up, the fixture bottom is tested 36 in above the table.",
+      "steps": ["Proposed bottom height: 30 in table + 36 in clearance = 66 in above the finished floor.", "Available distance above the fixture body: 120 in ceiling − 66 in bottom height − 24 in body = 30 in.", "Use 30 in only as the trial canopy-to-body suspension for this example, then assess seated eye contact and scale."],
+      "result": "The arithmetic produces a 30 in trial suspension; it does not establish a universal hanging height.",
+      "confirm": "Confirm the actual fixture connection points, canopy and chain/rod allowance, table position, ceiling support, sightlines and electrician requirements."
+    },
     "links":[{"label":"Browse Chandeliers","path":"/category/chandeliers"},{"label":"Browse Hanging Lights","path":"/category/hanging-lights"},{"label":"View Installations","path":"/gallery"}]
   },
   {
@@ -81,6 +97,14 @@
       {"heading":"Pairs need symmetry","body":"When using two sconces, measure from a shared centreline or furniture element so both lights align precisely."},
       {"heading":"Check projection","body":"In corridors and narrow spaces, wall-light depth matters as much as height. Make sure arms and shades do not intrude into circulation."}
     ],
+    "workedExample": {
+      "type": "wall-light",
+      "title": "Worked example: a symmetrical pair",
+      "scenario": "A 60 in wide mirror is centred over a console. Two sconces are tested with their centres 42 in apart and 64 in above the finished floor; each fixture projects 8 in from the wall.",
+      "steps": ["Mark the mirror centreline, then place each sconce centre 21 in to either side for a 42 in centre-to-centre spacing.", "Make a full-size paper outline at 64 in centre height and view it from standing and seated positions.", "In a 42 in wide passage, an 8 in projection leaves 34 in before the opposite wall; verify whether that clearance is suitable for the site."],
+      "result": "The mock-up tests symmetry, glare and projection together instead of relying on one generic mounting-height number.",
+      "confirm": "Confirm fixture dimensions, shade and bulb glare, local clearance requirements, concealed wiring, wall structure and final mounting points with a qualified electrician."
+    },
     "links":[{"label":"Explore Wall Lights","path":"/category/wall-lights"},{"label":"See Project Gallery","path":"/gallery"},{"label":"Contact Samrat Glass","path":"/contact"}]
   },
   {
