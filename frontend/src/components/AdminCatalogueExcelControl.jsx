@@ -174,39 +174,52 @@ export default function AdminCatalogueExcelControl() {
   };
 
   return (
-    <div className="fixed left-4 bottom-4 z-[70] w-[280px] sm:left-6 sm:bottom-6">
-      <div className="border border-[#D4AF37]/60 bg-[#0d0d0d]/95 p-3 shadow-2xl backdrop-blur">
+    <section
+      data-testid="admin-catalogue-tools"
+      className="w-full border border-[#D4AF37]/30 bg-[#0d0d0d]/55 p-4 sm:p-5"
+      aria-labelledby="admin-catalogue-tools-title"
+    >
+      <div className="mb-4">
+        <div id="admin-catalogue-tools-title" className="eyebrow mb-1">Admin tools</div>
+        <p className="text-xs leading-5 text-white/45">
+          Review Website Health or export the selected product category without leaving the dashboard.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[0.85fr_1fr_1.15fr] lg:items-end">
         <Link
           to="/admin/health"
           data-testid="admin-website-health-link"
-          className="mb-3 flex items-center justify-between border border-white/15 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-white/65 transition hover:border-[#D4AF37]/60 hover:text-[#D4AF37]"
+          className="flex min-h-[42px] items-center justify-between border border-white/15 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-white/65 transition hover:border-[#D4AF37]/60 hover:text-[#D4AF37]"
         >
           Website Health
           <Activity size={14} />
         </Link>
 
-        <label htmlFor="admin-catalogue-category" className="mb-2 block text-[10px] uppercase tracking-[0.24em] text-white/45">
-          Export category
-        </label>
-        <select
-          id="admin-catalogue-category"
-          value={category}
-          onChange={(event) => setCategory(event.target.value)}
-          disabled={downloading}
-          className="mb-3 w-full border border-white/20 bg-[#171717] px-3 py-2 text-xs text-white outline-none focus:border-[#D4AF37] disabled:cursor-wait disabled:opacity-70"
-        >
-          {CATEGORIES.map((item) => (
-            <option key={item.value} value={item.value}>{item.label}</option>
-          ))}
-          <option value="">Full catalogue — all products</option>
-        </select>
+        <div>
+          <label htmlFor="admin-catalogue-category" className="mb-2 block text-[10px] uppercase tracking-[0.24em] text-white/45">
+            Export category
+          </label>
+          <select
+            id="admin-catalogue-category"
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+            disabled={downloading}
+            className="w-full border border-white/20 bg-[#171717] px-3 py-2 text-xs text-white outline-none focus:border-[#D4AF37] disabled:cursor-wait disabled:opacity-70"
+          >
+            {CATEGORIES.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+            <option value="">Full catalogue — all products</option>
+          </select>
+        </div>
 
         <button
           type="button"
           data-testid="admin-download-catalogue-excel"
           onClick={download}
           disabled={downloading}
-          className="group flex w-full items-center gap-3 text-left transition disabled:cursor-wait disabled:opacity-70"
+          className="group flex min-h-[42px] w-full items-center gap-3 border border-white/15 p-2.5 text-left transition hover:border-[#D4AF37]/60 disabled:cursor-wait disabled:opacity-70"
           title="Download the selected product category as Excel with embedded primary images"
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-[#D4AF37] text-black">
@@ -222,6 +235,6 @@ export default function AdminCatalogueExcelControl() {
           </span>
         </button>
       </div>
-    </div>
+    </section>
   );
 }
