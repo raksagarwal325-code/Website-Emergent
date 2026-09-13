@@ -77,8 +77,12 @@ const normalizeFaqAnswer = (answer = "") => String(answer)
     "Bespoke commissions typically take 3–5 weeks depending on the design, size, finish and configuration."
   )
   .replace(
-    "share unboxing photos within 24–48 hours.",
-    "share unboxing photos within 48 hours."
+    "Transit damage is rare, but replacement is guaranteed — share unboxing photos within 24–48 hours.",
+    "For transit damage, share photos of the product and packaging within 48 hours. We will assess the claim and confirm the applicable remedy under our Return & Replacement Policy."
+  )
+  .replace(
+    "Transit damage is rare, but replacement is guaranteed — share unboxing photos within 48 hours.",
+    "For transit damage, share photos of the product and packaging within 48 hours. We will assess the claim and confirm the applicable remedy under our Return & Replacement Policy."
   );
 
 export function normalizeHomepageClaims(homepage) {

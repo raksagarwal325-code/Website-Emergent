@@ -93,7 +93,9 @@ describe("normalizeHomepageClaims", () => {
     expect(result.faq.items[0].a).toContain("dispatch in 7–10 business days");
     expect(result.faq.items[0].a).toContain("transit time then varies by destination");
     expect(result.faq.items[0].a).not.toContain("all happen in-house");
-    expect(result.faq.items[1].a).toContain("within 48 hours");
+    expect(result.faq.items[1].a).toContain("share photos of the product and packaging within 48 hours");
+    expect(result.faq.items[1].a).toContain("applicable remedy under our Return & Replacement Policy");
+    expect(result.faq.items[1].a).not.toContain("replacement is guaranteed");
 
     expect(saved.hero.headline_line2).toBe("turn houses into homes.");
     expect(saved.collage.title).toBe("1000+ Light Options");

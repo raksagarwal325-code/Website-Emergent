@@ -27,6 +27,7 @@ from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E4
 from watermark import apply_watermark  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
+from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
 from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply_owner_facts, conversation_facts, facts_as_notes, find_similar_product, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
 
 # --- Setup ---
@@ -667,12 +668,9 @@ async def list_products(
         pass
     else:
         query["status"] = {"$ne": "draft"}
-    if q:
-        query["$or"] = [
-            {"name": {"$regex": q, "$options": "i"}},
-            {"description": {"$regex": q, "$options": "i"}},
-            {"sku": {"$regex": q, "$options": "i"}},
-        ]
+    resolved_query, suggestion = resolve_catalogue_query(q)
+    if resolved_query:
+        query["$or"] = catalogue_search_filter(resolved_query)
     if category and category != "all":
         query["category"] = category
     if tag:
@@ -707,19 +705,50 @@ async def list_products(
     total_pages = (total + effective_limit - 1) // effective_limit if total else 0
     skip = (page - 1) * effective_limit
 
-    cursor = (
-        db.products.find(query, {"_id": 0})
-        .sort(sort_map.get(sort, sort_map["newest"]))
-        .skip(skip)
-        .limit(effective_limit)
-    )
-    items = await cursor.to_list(effective_limit)
+    if resolved_query and sort == "newest":
+        escaped = re.escape(resolved_query)
+        exact = rf"^{escaped}$"
+        prefix = rf"^{escaped}"
+        token = rf"\b{escaped}\b"
+        # Default search order is relevance-first: exact SKU/name, then a
+        # name prefix/token, followed by tag/spec/description matches.
+        cursor = db.products.aggregate([
+            {"$match": query},
+            {"$addFields": {
+                "_catalogue_search_rank": {
+                    "$switch": {
+                        "branches": [
+                            {"case": {"$regexMatch": {"input": {"$ifNull": ["$sku", ""]}, "regex": exact, "options": "i"}}, "then": 0},
+                            {"case": {"$regexMatch": {"input": {"$ifNull": ["$name", ""]}, "regex": exact, "options": "i"}}, "then": 1},
+                            {"case": {"$regexMatch": {"input": {"$ifNull": ["$name", ""]}, "regex": prefix, "options": "i"}}, "then": 2},
+                            {"case": {"$regexMatch": {"input": {"$ifNull": ["$name", ""]}, "regex": token, "options": "i"}}, "then": 3},
+                        ],
+                        "default": 4,
+                    }
+                }
+            }},
+            {"$sort": {"_catalogue_search_rank": 1, "created_at": -1}},
+            {"$skip": skip},
+            {"$limit": effective_limit},
+            {"$project": {"_id": 0, "_catalogue_search_rank": 0}},
+        ])
+        items = await cursor.to_list(effective_limit)
+    else:
+        cursor = (
+            db.products.find(query, {"_id": 0})
+            .sort(sort_map.get(sort, sort_map["newest"]))
+            .skip(skip)
+            .limit(effective_limit)
+        )
+        items = await cursor.to_list(effective_limit)
     return {
         "items": items,
         "total": total,
         "page": page,
         "limit": effective_limit,
         "total_pages": total_pages,
+        "resolved_query": resolved_query or None,
+        "suggestion": suggestion,
     }
 
 

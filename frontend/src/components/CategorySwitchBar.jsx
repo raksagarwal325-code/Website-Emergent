@@ -25,8 +25,9 @@ export default function CategorySwitchBar({ categories = [], activeSlug = null }
     key: category.slug || category.db_name,
   }))];
 
-  const overviewText = preview?.slug
-    ? CATEGORY_OVERVIEWS[preview.slug] || `Explore the ${preview.label} collection.`
+  const overviewItem = preview || links.find((item) => item.slug === activeSlug) || links[0];
+  const overviewText = overviewItem?.slug
+    ? CATEGORY_OVERVIEWS[overviewItem.slug] || `Explore the ${overviewItem.label} collection.`
     : "Browse the complete Samrat Glass collection across every lighting category.";
 
   const mobileValue = activeSlug || "all";
@@ -99,7 +100,7 @@ export default function CategorySwitchBar({ categories = [], activeSlug = null }
         aria-hidden={!preview}
       >
         <div className="mx-auto max-w-7xl py-4">
-          <div className="text-[9px] uppercase tracking-[0.28em] text-[#E5C453]">{preview?.label || "Collection overview"}</div>
+          <div className="text-[9px] uppercase tracking-[0.28em] text-[#E5C453]">{overviewItem?.label || "Collection overview"}</div>
           <div className="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-white/90">{overviewText}</div>
         </div>
       </div>

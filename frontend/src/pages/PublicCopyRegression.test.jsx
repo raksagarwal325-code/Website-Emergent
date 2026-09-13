@@ -31,4 +31,34 @@ describe("public copy and metadata regression", () => {
     expect(custom).toContain(RESPONSE_COPY);
     expect(architects).toContain(RESPONSE_COPY);
   });
+
+  test("customer pages contain no internal editorial or SEO instructions", () => {
+    const sources = [
+      read("../components/CategoryShowcase.jsx"),
+      read("ChandelierManufacturerIndia.jsx"),
+      read("GalleryProject.jsx"),
+      read("Craft.jsx"),
+      read("../components/ManufacturingProof.jsx"),
+      read("../lib/legalContent.js"),
+    ].join("\n");
+    expect(sources).not.toContain("browsing feels continuous");
+    expect(sources).not.toContain("search engines");
+    expect(sources).not.toContain("deliberately avoids claiming");
+    expect(sources).not.toContain("slogan added for search");
+    expect(sources).not.toContain("this policy should be updated accordingly");
+    expect(sources).not.toContain(">Manufacturing proof<");
+  });
+
+  test("returns copy separates custom-order change of mind from valid claims", () => {
+    const legal = read("../lib/legalContent.js");
+    expect(legal).toContain("Approved custom-made products are not eligible for change-of-mind returns");
+    expect(legal).toContain("transit damage, wrong delivery or qualifying manufacturing defects");
+    expect(legal).not.toContain('"Custom-made products after approval"');
+  });
+
+  test("obsolete Nagpur project slug has an explicit exact redirect", () => {
+    const app = read("../App.js");
+    expect(app).toContain('/gallery/noorvastra-etched-tulip-crystal-chandelier-custom-twelve-light-two-tier-installa');
+    expect(app).toContain('to="/gallery/eight-to-twelve-light-crystal-chandelier-transformation-nagpur-residence" replace');
+  });
 });

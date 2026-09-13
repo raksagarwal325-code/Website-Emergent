@@ -160,7 +160,7 @@ export const LEGAL_PAGES = {
       {
         heading: "Transit Damage",
         text:
-          "If a product is received damaged, the customer should inform us as soon as possible with photos/videos of the package and product.",
+          "For transit damage, share photos of the product and packaging within 48 hours of delivery. We will assess the claim and confirm the applicable remedy under our Return & Replacement Policy.",
       },
     ],
   },
@@ -188,20 +188,24 @@ export const LEGAL_PAGES = {
         bullets: [
           "Minor handmade variations in color, finish, glass texture, or size",
           "Damage caused after delivery or during installation",
-          "Custom-made products after approval",
           "Products damaged due to misuse, mishandling, or incorrect installation",
           "Change of mind after order confirmation",
         ],
       },
       {
+        heading: "Custom-made Products",
+        text:
+          "Approved custom-made products are not eligible for change-of-mind returns. Reports of transit damage, wrong delivery or qualifying manufacturing defects are handled under the claim process below.",
+      },
+      {
         heading: "Damage Reporting",
         text:
-          "Customers should share photos/videos of the damaged product and packaging within 24–48 hours of delivery.",
+          "For transit damage, share photos of the product and packaging within 48 hours of delivery. We will assess the claim and confirm the applicable remedy under this policy.",
       },
       {
         heading: "Resolution",
         text:
-          "Depending on the case, Samrat Glass Emporium may offer replacement part, repair support, replacement product, or another suitable resolution.",
+          "Depending on the accepted claim, Samrat Glass Emporium may offer a replacement part, repair support, a replacement product, or another suitable resolution. Where we approve a replacement for transit damage, Samrat Glass Emporium will bear the shipping charge for that approved replacement.",
       },
       {
         heading: "Spare / Replacement Components",
@@ -247,11 +251,6 @@ export const LEGAL_PAGES = {
         heading: "Failed or Pending Payments",
         text:
           "If payment is pending, failed, or not received, order processing or dispatch may be delayed.",
-      },
-      {
-        heading: "Online Payment Gateway",
-        text:
-          "If Razorpay, UPI checkout, or other online payment gateway is added later, this policy should be updated accordingly.",
       },
     ],
   },

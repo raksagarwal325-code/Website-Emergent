@@ -21,4 +21,6 @@ test("renders every supplied category and marks the active category", () => {
     expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
   });
   expect(screen.getByRole("link", { name: "Wall Lights" })).toHaveAttribute("aria-current", "page");
+  expect(screen.getByText(/Decorative wall sconces/i)).toBeInTheDocument();
+  expect(screen.queryByText(/complete Samrat Glass collection/i)).not.toBeInTheDocument();
 });

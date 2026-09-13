@@ -20,6 +20,8 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
   const [loading, setLoading] = useState(initialProducts.length === 0);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(initialTotal);
+  const [resolvedQuery, setResolvedQuery] = useState("");
+  const [suggestion, setSuggestion] = useState("");
   const [q, setQ] = useState(() => searchParams.get("q") || "");
   const [category, setCategory] = useState(() => lockedCategory || searchParams.get("category") || "all");
   const [sort, setSort] = useState(() => normalizeSort(searchParams.get("sort")));
@@ -115,6 +117,8 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
         setProducts(items);
         setTotal(nextTotal);
         setTotalPages(tp);
+        setResolvedQuery(res?.resolved_query || "");
+        setSuggestion(res?.suggestion || "");
         setLoading(false);
         if (typeof onListingChange === "function") onListingChange({ products: items, total: nextTotal, totalPages: tp, page: currentPage });
         if (currentPage > tp) {
@@ -126,6 +130,8 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
       }).catch(() => {
         if (myKey === requestKeyRef.current) {
           setProducts([]);
+          setResolvedQuery("");
+          setSuggestion("");
           setLoading(false);
         }
       });
@@ -214,8 +220,13 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
       )}
 
       <div ref={gridTopRef} className="scroll-mt-56">
+        {suggestion && !loading && (
+          <div data-testid="catalog-search-suggestion" className="mb-5 border border-[#D4AF37]/25 bg-[#D4AF37]/[0.06] px-4 py-3 text-sm text-white/70">
+            Showing results for <span className="font-medium text-[#D4AF37]">“{resolvedQuery}”</span>. Your search was “{q}”.
+          </div>
+        )}
         <div className="mb-6 flex items-center justify-between text-xs uppercase tracking-widest text-white/50"><span data-testid="results-count">{loading ? "Loading…" : total === 0 ? "0 pieces" : `Showing ${startIdx}–${endIdx} of ${total} piece${total === 1 ? "" : "s"}`}</span>{totalPages > 1 && !loading && <span data-testid="page-indicator" className="text-white/40">Page {currentPage} of {totalPages}</span>}</div>
-        {total === 0 && !loading ? <div className="border border-white/10 py-24 text-center text-white/40"><div className="mb-2 font-serif text-2xl">Nothing matches.</div><div className="text-sm">Try adjusting your filters.</div></div> : <>
+        {total === 0 && !loading ? <div className="border border-white/10 px-6 py-20 text-center text-white/50"><div className="mb-2 font-serif text-2xl text-white/75">Nothing matches.</div><div className="text-sm">Try a product type, colour, style or SKU—or clear the current search and filters.</div><button type="button" data-testid="zero-results-clear" onClick={clearFilters} className="mt-6 border border-[#D4AF37]/60 px-5 py-3 text-xs uppercase tracking-[0.2em] text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black">Clear search &amp; filters</button></div> : <>
           <div className="grid grid-cols-2 gap-3 sm:gap-7 xl:grid-cols-3 2xl:grid-cols-4">{products.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}</div>
           {totalPages > 1 && <nav aria-label="Catalog pagination" data-testid="catalog-pagination" className="mt-14 flex flex-wrap items-center justify-center gap-2 no-print"><button type="button" data-testid="pagination-prev" onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1 || loading} className="inline-flex items-center gap-1 border border-white/15 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/80 hover:border-[#D4AF37] hover:text-[#D4AF37] disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft aria-hidden="true" size={14} /> Previous</button>{pageWindow.map((n, idx) => { const prev = pageWindow[idx - 1]; const showGap = prev !== undefined && n - prev > 1; return <React.Fragment key={n}>{showGap && <span aria-hidden="true" data-testid={`pagination-gap-${prev}-${n}`} className="select-none px-2 text-white/40">…</span>}<button type="button" aria-label={`Page ${n}`} data-testid={`pagination-page-${n}`} onClick={() => goToPage(n)} disabled={loading} aria-current={n === currentPage ? "page" : undefined} className={`min-w-[40px] border px-3 py-2 text-xs uppercase tracking-[0.24em] transition-colors ${n === currentPage ? "border-[#D4AF37] bg-[#D4AF37]/10 text-[#D4AF37]" : "border-white/15 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]"}`}>{n}</button></React.Fragment>; })}<button type="button" data-testid="pagination-next" onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages || loading} className="inline-flex items-center gap-1 border border-white/15 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/80 hover:border-[#D4AF37] hover:text-[#D4AF37] disabled:cursor-not-allowed disabled:opacity-40">Next <ChevronRight aria-hidden="true" size={14} /></button></nav>}
         </>}

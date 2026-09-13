@@ -138,6 +138,61 @@ def test_search_q_matches_name_or_sku():
     assert prod["id"] in ids, f"search '{needle}' didn't return product {prod['id']}"
 
 
+def test_colour_search_is_field_aware_and_does_not_match_incidental_description_text():
+    suffix = uuid.uuid4().hex[:6]
+    red_id = f"TEST_red_{suffix}"
+    incidental_id = f"TEST_incidental_{suffix}"
+    _run_mongo(
+        f'db.products.insertMany(['
+        f'{{id:"{red_id}", name:"Ruby Red Test Light {suffix}", sku:"TEST-RED-{suffix}",'
+        f' category:"Chandelier", status:"published", tags:["red"], specs:{{"Glass Colour":"Red"}}, created_at:"2025-01-01T00:00:00Z"}},'
+        f'{{id:"{incidental_id}", name:"Ivory Test Light {suffix}", sku:"TEST-IVORY-{suffix}",'
+        f' category:"Chandelier", status:"published", tags:["ivory"], specs:{{"Glass Colour":"Ivory"}},'
+        f' description:"A handcrafted fixture prepared for dispatch", created_at:"2026-01-01T00:00:00Z"}}]);'
+    )
+    try:
+        body = requests.get(f"{API}/products", params={"q": "red", "limit": 48}, timeout=30).json()
+        ids = {p["id"] for p in body["items"]}
+        assert red_id in ids
+        assert incidental_id not in ids
+    finally:
+        _run_mongo(f'db.products.deleteMany({{id:{{$in:["{red_id}","{incidental_id}"]}}}});')
+
+
+def test_common_chandelier_typo_is_corrected_and_reported():
+    suffix = uuid.uuid4().hex[:6]
+    product_id = f"TEST_typo_{suffix}"
+    _run_mongo(
+        f'db.products.insertOne({{id:"{product_id}", name:"Chandelier Typo Test {suffix}",'
+        f' sku:"TEST-TYPO-{suffix}", category:"Chandelier", status:"published", created_at:new Date().toISOString()}});'
+    )
+    try:
+        body = requests.get(f"{API}/products", params={"q": "chandlier", "limit": 48}, timeout=30).json()
+        assert body["resolved_query"] == "chandelier"
+        assert body["suggestion"] == "chandelier"
+        assert product_id in {p["id"] for p in body["items"]}
+    finally:
+        _run_mongo(f'db.products.deleteOne({{id:"{product_id}"}});')
+
+
+def test_default_search_ranks_exact_sku_before_description_match():
+    suffix = uuid.uuid4().hex[:6]
+    needle = f"EXACT-{suffix}"
+    exact_id = f"TEST_exact_{suffix}"
+    description_id = f"TEST_desc_{suffix}"
+    _run_mongo(
+        f'db.products.insertMany(['
+        f'{{id:"{exact_id}", name:"Exact SKU Test", sku:"{needle}", category:"Chandelier", status:"published", created_at:"2024-01-01T00:00:00Z"}},'
+        f'{{id:"{description_id}", name:"Description Match", sku:"OTHER-{suffix}", category:"Chandelier", status:"published",'
+        f' description:"Reference {needle}", created_at:"2026-01-01T00:00:00Z"}}]);'
+    )
+    try:
+        body = requests.get(f"{API}/products", params={"q": needle, "limit": 48}, timeout=30).json()
+        assert body["items"][0]["id"] == exact_id
+    finally:
+        _run_mongo(f'db.products.deleteMany({{id:{{$in:["{exact_id}","{description_id}"]}}}});')
+
+
 def test_price_range_filter():
     # Ask for a very tight price band around 0 — every 0-priced product should surface.
     r = requests.get(f"{API}/products", params={"max_price": 0, "limit": 48}, timeout=30).json()

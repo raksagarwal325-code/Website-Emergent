@@ -63,7 +63,7 @@ describe("DoubleHeightChandeliersIndia", () => {
     );
     expect(screen.getByRole("link", { name: /Nagpur · SGE-CH-002/i })).toHaveAttribute(
       "href",
-      "/gallery/noorvastra-etched-tulip-crystal-chandelier-custom-twelve-light-two-tier-installa",
+      "/gallery/eight-to-twelve-light-crystal-chandelier-transformation-nagpur-residence",
     );
     expect(screen.getByRole("link", { name: /Mumbai · SGE-CH-069/i })).toHaveAttribute(
       "href",

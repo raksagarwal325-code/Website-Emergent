@@ -13,6 +13,7 @@ import { waProductLink } from "../lib/whatsapp";
 import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
 import { productPath } from "../lib/productUrl";
 import { productImageAlt } from "../lib/imageSeo";
+import { fallbackSlugFor, getCategoryByDbName } from "../lib/categories";
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -94,6 +95,10 @@ export default function ProductDetail() {
 
   const fav = isFavorite(product.id);
   const images = (product.images || []).map(api.resolveImage);
+  const categoryMeta = getCategoryByDbName(product.category);
+  const categorySlug = categoryMeta?.slug || fallbackSlugFor(product.category);
+  const categoryLabel = categoryMeta?.label || product.category || "Catalogue";
+  const categoryHref = categorySlug ? `/category/${categorySlug}` : "/catalog";
 
   const productUrl =
     typeof window !== "undefined" && window.location
@@ -249,14 +254,23 @@ export default function ProductDetail() {
           <SchemaLD id={`product-${product.id}`} data={productSchema} />
         </>
       )}
-      <button
-        type="button"
-        onClick={handleBack}
-        data-testid="product-back-btn"
-        className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.28em] text-white/60 hover:text-white mb-10 link-underline"
-      >
-        <ArrowLeft size={14} /> Back
-      </button>
+      <div className="mb-10 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <nav aria-label="Breadcrumb" data-testid="product-breadcrumb" className="flex flex-wrap items-center gap-2 text-xs text-white/55">
+          <Link to="/" className="hover:text-[#D4AF37]">Home</Link>
+          <span aria-hidden="true">/</span>
+          <Link to={categoryHref} className="hover:text-[#D4AF37]">{categoryLabel}</Link>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page" className="text-white/85">{product.name}</span>
+        </nav>
+        <button
+          type="button"
+          onClick={handleBack}
+          data-testid="product-back-btn"
+          className="inline-flex items-center gap-2 self-start text-xs uppercase tracking-[0.22em] text-white/55 hover:text-white link-underline"
+        >
+          <ArrowLeft size={14} /> Back
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
         {/* Gallery */}
@@ -761,7 +775,7 @@ function ProductTabs({ product, settings, waLink, active, onSelect, sectionRef }
               <div className="flex items-center gap-3 mb-3"><MapPin size={16} className="text-[#D4AF37]" /><div className="eyebrow">Origin</div></div>
               <div className="text-white text-sm mb-1">Firozabad, Uttar Pradesh</div>
               <p className="text-white/60 text-sm leading-relaxed mt-2">
-                Ships from our workshop. Transit damage? We replace at our cost — just share an unboxing photo within 48 hours.
+                For transit damage, share photos of the product and packaging within 48 hours. We will assess the claim and confirm the applicable remedy under our Return &amp; Replacement Policy.
               </p>
             </div>
           </div>
