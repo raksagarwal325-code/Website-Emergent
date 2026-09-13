@@ -3,8 +3,8 @@ import path from "path";
 
 describe("Admin Website Health exact editor deep links", () => {
   const source = fs.readFileSync(path.join(__dirname, "AdminCatalogueExcelControl.jsx"), "utf8");
-  const adminSource = fs.readFileSync(path.join(__dirname, "../../pages/Admin.jsx"), "utf8");
-  const appSource = fs.readFileSync(path.join(__dirname, "../../App.js"), "utf8");
+  const adminSource = fs.readFileSync(path.join(__dirname, "../pages/Admin.jsx"), "utf8");
+  const appSource = fs.readFileSync(path.join(__dirname, "../App.js"), "utf8");
 
   test("Admin catalogue control resolves project query to the exact project editor", () => {
     expect(source).toContain('params.get("project")');
