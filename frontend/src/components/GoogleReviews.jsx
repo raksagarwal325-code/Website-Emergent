@@ -42,16 +42,21 @@ export default function GoogleReviews({ variant = "full" }) {
   }, []);
 
   const allReviews = useMemo(() => {
-    const google = (data?.reviews || []).map((r) => ({
-      source: "google",
-      author_name: r.author_name || "Google User",
-      profile_photo_url: r.profile_photo_url || "",
-      rating: r.rating || 5,
-      relative_time_description: r.relative_time_description || "",
-      text: r.text || "",
-    }));
+    // Only render reviews that contain actual customer-written text.
+    // Google can return rating-only reviews; rendering those produced an
+    // empty quotation card on the public site, which looked broken.
+    const google = (data?.reviews || [])
+      .filter((r) => (r?.text || "").trim())
+      .map((r) => ({
+        source: "google",
+        author_name: r.author_name || "Google User",
+        profile_photo_url: r.profile_photo_url || "",
+        rating: r.rating || 5,
+        relative_time_description: r.relative_time_description || "",
+        text: (r.text || "").trim(),
+      }));
     const manual = (hp?.manual_reviews?.items || [])
-      .filter((r) => (r?.text || "").trim() || (r?.author_name || "").trim())
+      .filter((r) => (r?.text || "").trim())
       .map((r) => ({
         source: "manual",
         author_name: (r.author_name || "").trim() || "Client",
