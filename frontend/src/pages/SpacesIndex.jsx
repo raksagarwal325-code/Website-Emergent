@@ -32,8 +32,11 @@ export default function SpacesIndex() {
         <div className="eyebrow text-[#D4AF37] mb-4">Lighting by application</div>
         <h1 className="font-serif text-5xl md:text-7xl leading-[0.95]">Shop by Space</h1>
         <p className="text-white/55 mt-6 max-w-3xl text-base md:text-lg leading-relaxed">
-          Start with the room or project you are lighting. These shortcuts use the existing Samrat Glass catalogue search so you can immediately narrow relevant pieces further by category, price and sort order.
+          Start with the room or project you are lighting. Each space page brings together relevant product types and practical planning guidance, while final suitability depends on your room dimensions, ceiling height and installation conditions.
         </p>
+        <Link to="/catalog" data-testid="spaces-full-catalogue" className="mt-7 inline-flex items-center gap-2 border border-[#D4AF37]/60 px-5 py-3 text-xs uppercase tracking-[0.22em] text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black">
+          Browse Full Catalogue <ArrowUpRight size={14} />
+        </Link>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">

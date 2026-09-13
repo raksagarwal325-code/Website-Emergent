@@ -55,7 +55,7 @@ export default function Craft() {
               Real workshop footage and factual process notes from Samrat Glass Emporium in Firozabad — showing the people, tools and handwork behind decorative glass lighting.
             </p>
             <a href="#workshop" className="mt-8 inline-flex items-center gap-2 text-[#D4AF37] text-xs uppercase tracking-[0.24em] hover:text-[#B5952F]">
-              See the workshop proof <ArrowUpRight size={14} />
+              See the workshop process <ArrowUpRight size={14} />
             </a>
           </motion.div>
         </div>

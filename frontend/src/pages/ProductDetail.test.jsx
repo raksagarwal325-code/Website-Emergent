@@ -118,17 +118,26 @@ const renderProduct = () =>
   );
 
 describe("ProductDetail — availability regression (hotfix)", () => {
+  test("renders linked Home, category and product breadcrumb context", async () => {
+    renderProduct();
+    await screen.findByRole("heading", { level: 1, name: inStockFixture.name });
+    const breadcrumb = screen.getByTestId("product-breadcrumb");
+    expect(breadcrumb).toHaveTextContent(`Home/Chandeliers/${inStockFixture.name}`);
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Chandeliers" })).toHaveAttribute("href", "/category/chandeliers");
+  });
+
   test("renders an in-stock product without a ReferenceError and shows no made-to-order note", async () => {
     mockCurrentFixture = inStockFixture;
     renderProduct();
-    await waitFor(() => expect(screen.getByText(inStockFixture.name)).toBeInTheDocument());
+    await screen.findByRole("heading", { level: 1, name: inStockFixture.name });
     expect(screen.queryByTestId("made-to-order-note")).toBeNull();
   });
 
   test("zero stock alone does not show a duplicate preorder message", async () => {
     mockCurrentFixture = zeroStockFixture;
     renderProduct();
-    await waitFor(() => expect(screen.getByText(zeroStockFixture.name)).toBeInTheDocument());
+    await screen.findByRole("heading", { level: 1, name: zeroStockFixture.name });
     expect(screen.queryByTestId("made-to-order-note")).toBeNull();
     expect(screen.getAllByText("Available on request").length).toBeGreaterThan(0);
   });
@@ -136,7 +145,7 @@ describe("ProductDetail — availability regression (hotfix)", () => {
   test("an explicitly flagged preorder still shows the preorder note", async () => {
     mockCurrentFixture = explicitPreorderFixture;
     renderProduct();
-    await waitFor(() => expect(screen.getByText(explicitPreorderFixture.name)).toBeInTheDocument());
+    await screen.findByRole("heading", { level: 1, name: explicitPreorderFixture.name });
     const note = await screen.findByTestId("made-to-order-note");
     expect(note).toBeInTheDocument();
     expect(note.textContent).toMatch(/pre-?order/i);
@@ -146,15 +155,17 @@ describe("ProductDetail — availability regression (hotfix)", () => {
 describe("ProductDetail — ProductTabs decision flow", () => {
   test("Shipping & ordering details activates Shipping & Delivery and scrolls to the tabs", async () => {
     renderProduct();
-    await screen.findByText(inStockFixture.name);
+    await screen.findByRole("heading", { level: 1, name: inStockFixture.name });
     fireEvent.click(screen.getByTestId("buying-confidence-shipping-link"));
     expect(await screen.findByTestId("tab-content-shipping")).toBeInTheDocument();
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(screen.getByTestId("tab-content-shipping")).toHaveTextContent(/share photos of the product and packaging within 48 hours/i);
+    expect(screen.getByTestId("tab-content-shipping")).not.toHaveTextContent(/replace at our cost/i);
   });
 
   test("Description, Specifications, and Inquiry tabs remain selectable", async () => {
     renderProduct();
-    await screen.findByText(inStockFixture.name);
+    await screen.findByRole("heading", { level: 1, name: inStockFixture.name });
     expect(screen.getByTestId("tab-content-description")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("tab-specifications"));
     expect(screen.getByTestId("tab-content-specifications")).toBeInTheDocument();
@@ -166,13 +177,13 @@ describe("ProductDetail — ProductTabs decision flow", () => {
 describe("ProductDetail — zero-review UX", () => {
   test("zero approved reviews does not render Be the first to review", async () => {
     renderProduct();
-    await screen.findByText(inStockFixture.name);
+    await screen.findByRole("heading", { level: 1, name: inStockFixture.name });
     expect(screen.queryByText(/Be the first to review/i)).not.toBeInTheDocument();
   });
 
   test("zero reviews uses an invitation heading and removes the empty rating state", async () => {
     renderProduct();
-    await screen.findByText(inStockFixture.name);
+    await screen.findByRole("heading", { level: 1, name: inStockFixture.name });
     expect(screen.getByTestId("reviews-heading")).toHaveTextContent("Share your experience");
     expect(screen.getByTestId("reviews-supporting")).toHaveTextContent("Purchased this piece? Tell us what you loved about it.");
     expect(screen.queryByText("What clients say")).not.toBeInTheDocument();
@@ -182,7 +193,7 @@ describe("ProductDetail — zero-review UX", () => {
 
   test("zero reviews shows the feedback card and keeps the Write a review CTA", async () => {
     renderProduct();
-    await screen.findByText(inStockFixture.name);
+    await screen.findByRole("heading", { level: 1, name: inStockFixture.name });
     const prompt = screen.getByTestId("reviews-empty-prompt");
     expect(prompt).toHaveTextContent("Your feedback matters");
     expect(prompt).toHaveTextContent("Reviews are moderated before appearing publicly.");
@@ -193,7 +204,7 @@ describe("ProductDetail — zero-review UX", () => {
 
   test("customer can still submit the review form when reviews are zero", async () => {
     renderProduct();
-    await screen.findByText(inStockFixture.name);
+    await screen.findByRole("heading", { level: 1, name: inStockFixture.name });
     fireEvent.change(screen.getByTestId("review-author"), { target: { value: "Test Customer" } });
     fireEvent.change(screen.getByTestId("review-body"), { target: { value: "Beautiful piece and excellent finish." } });
     fireEvent.click(screen.getByTestId("submit-review-btn"));
@@ -206,7 +217,7 @@ describe("ProductDetail — zero-review UX", () => {
       { id: "review-1", author: "Client", title: "Excellent", rating: 5, body: "A wonderful chandelier in our home." },
     ];
     renderProduct();
-    await screen.findByText(inStockFixture.name);
+    await screen.findByRole("heading", { level: 1, name: inStockFixture.name });
     expect(screen.getByTestId("reviews-heading")).toHaveTextContent("What clients say");
     expect(screen.getByTestId("reviews-rating-row")).toHaveTextContent("(1 reviews)");
     expect(screen.getByTestId("review-review-1")).toBeInTheDocument();

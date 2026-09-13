@@ -177,7 +177,7 @@ export default function ChandelierManufacturerIndia() {
             </li>
           ))}
         </ol>
-        <p className="mt-8 text-xs text-white/40">The exact process varies by design. This section deliberately avoids claiming that every stage is identical for every Samrat chandelier.</p>
+        <p className="mt-8 text-xs text-white/40">The exact process and sequence vary according to the selected design, materials and configuration.</p>
       </section>
 
       <section className="mb-20">
@@ -230,7 +230,7 @@ export default function ChandelierManufacturerIndia() {
           <Link to="/about" className="mt-6 inline-flex items-center gap-2 text-[#D4AF37] uppercase text-xs tracking-[0.2em]">Read our story <ArrowRight size={13} /></Link>
         </div>
         <aside className="border-l border-[#D4AF37]/40 pl-7 py-2">
-          <p className="font-serif text-2xl sm:text-3xl leading-snug">“Made in Firozabad since 1981” is not a slogan added for search. It is the foundation of the business.</p>
+          <p className="font-serif text-2xl sm:text-3xl leading-snug">Made in Firozabad since 1981: more than four decades within the city&apos;s decorative-glass tradition.</p>
         </aside>
       </section>
 

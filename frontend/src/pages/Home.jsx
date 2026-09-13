@@ -155,7 +155,7 @@ export default function Home() {
 
       <section className="border-y border-white/10"><div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-white/10">{[
         { icon: Truck, title: "Pan-India Shipping", body: "Insured door delivery across India. Standard pieces typically dispatch in 7–10 business days; transit time varies by destination." },
-        { icon: ShieldCheck, title: "Handcrafted Quality", body: "Each order is inspected before dispatch. For transit damage, share unboxing photos within 48 hours so we can review a replacement." },
+        { icon: ShieldCheck, title: "Transit-damage support", body: "For transit damage, share photos of the product and packaging within 48 hours. We will assess the claim and confirm the applicable remedy under our Return & Replacement Policy." },
         { icon: MessageCircle, title: "WhatsApp Support", body: "Bulk enquiries, custom sizes & installation guidance — we aim to respond within one business day." },
       ].map((f) => <div key={f.title} className="p-8 flex items-start gap-4"><f.icon size={20} strokeWidth={1.4} className="text-[#D4AF37] mt-1" /><div><div className="font-serif text-lg">{f.title}</div><div className="text-sm text-white/60 mt-1">{f.body}</div></div></div>)}</div></section>
 

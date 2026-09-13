@@ -49,5 +49,6 @@ describe("SpacesIndex", () => {
       "href",
       "/custom-lighting-bulk-orders",
     );
+    expect(screen.getByRole("link", { name: /Browse Full Catalogue/i })).toHaveAttribute("href", "/catalog");
   });
 });

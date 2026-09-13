@@ -44,7 +44,7 @@ const installations = [
     sku: "SGE-CH-002",
     title: "Noorvastra Etched-Tulip Crystal Chandelier",
     detail: "Adapted from the original eight-light single-tier format to a custom twelve-light two-tier chandelier for a double-height staircase, completed in 2022.",
-    path: "/gallery/noorvastra-etched-tulip-crystal-chandelier-custom-twelve-light-two-tier-installa",
+    path: "/gallery/eight-to-twelve-light-crystal-chandelier-transformation-nagpur-residence",
   },
   {
     city: "Mumbai",

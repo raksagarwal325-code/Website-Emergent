@@ -125,16 +125,24 @@ export default function Contact() {
             <div className="eyebrow mb-1">Send a message</div>
             <div className="font-serif text-2xl">We usually respond within a few business hours and aim to reply within one business day.</div>
           </div>
-          <input required data-testid="contact-name" placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
-          <input required type="email" data-testid="contact-email-input" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
           <div>
+            <label htmlFor="contact-name" className="block text-[10px] uppercase tracking-[0.24em] text-white/55 mb-2">Full name <span className="text-[#D4AF37]">*</span></label>
+            <input id="contact-name" required autoComplete="name" data-testid="contact-name" placeholder="Your full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
+          </div>
+          <div>
+            <label htmlFor="contact-email" className="block text-[10px] uppercase tracking-[0.24em] text-white/55 mb-2">Email <span className="text-[#D4AF37]">*</span></label>
+            <input id="contact-email" required type="email" autoComplete="email" data-testid="contact-email-input" placeholder="name@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
+          </div>
+          <div>
+            <label htmlFor="contact-phone" className="block text-[10px] uppercase tracking-[0.24em] text-white/55 mb-2">Mobile / WhatsApp number <span className="text-[#D4AF37]">*</span></label>
             <input
+              id="contact-phone"
               required
               type="tel"
               inputMode="tel"
               autoComplete="tel"
               data-testid="contact-phone-input"
-              placeholder="Mobile / WhatsApp Number"
+              placeholder="e.g. +91 98765 43210"
               value={form.phone}
               onChange={(e) => { setForm({ ...form, phone: e.target.value }); if (phoneError) setPhoneError(""); }}
               className={`w-full bg-[#0a0a0a] border ${phoneError ? "border-red-500/70" : "border-white/15"} focus:border-[#D4AF37] outline-none px-4 py-3 text-sm`}
@@ -159,8 +167,14 @@ export default function Contact() {
             </select>
           </div>
 
-          <input data-testid="contact-subject" placeholder="Subject (e.g., custom chandelier for hall)" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
-          <textarea required data-testid="contact-message" placeholder="Tell us about your requirement, ceiling height, or bulk quantity…" rows="7" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm resize-none" />
+          <div>
+            <label htmlFor="contact-subject" className="block text-[10px] uppercase tracking-[0.24em] text-white/55 mb-2">Subject <span className="normal-case tracking-normal text-white/35">(optional)</span></label>
+            <input id="contact-subject" data-testid="contact-subject" placeholder="e.g. Custom chandelier for hall" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
+          </div>
+          <div>
+            <label htmlFor="contact-message" className="block text-[10px] uppercase tracking-[0.24em] text-white/55 mb-2">Your requirement <span className="text-[#D4AF37]">*</span></label>
+            <textarea id="contact-message" required data-testid="contact-message" placeholder="Tell us about the space, ceiling height, preferred piece or bulk quantity…" rows="7" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm resize-none" />
+          </div>
           <button disabled={submitting} data-testid="contact-submit-btn" className="bg-[#D4AF37] text-black px-10 py-4 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F] disabled:opacity-50">
             {submitting ? "Sending…" : "Send message"}
           </button>
