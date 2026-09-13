@@ -1,6 +1,6 @@
 import React from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 
 import { CatalogProvider } from "@/context/CatalogContext";
 import { SettingsProvider } from "@/context/SettingsContext";
@@ -192,6 +192,7 @@ function App() {
                 <Route path="/guides" element={<GuidesIndex />} />
                 <Route path="/guides/:slug" element={<GuidePage />} />
                 <Route path="/gallery" element={<Gallery />} />
+                <Route path="/gallery/noorvastra-etched-tulip-crystal-chandelier-custom-twelve-light-two-tier-installa" element={<Navigate to="/gallery/eight-to-twelve-light-crystal-chandelier-transformation-nagpur-residence" replace />} />
                 <Route path="/gallery/:slug" element={<GalleryProject />} />
                 <Route path="/styled-by" element={<StyledBy />} />
                 <Route path="/product/:id" element={<><ProductDetail /><ProductDimensionPilot /></>} />
