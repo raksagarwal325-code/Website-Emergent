@@ -6,6 +6,7 @@ import { gmailComposeUrl } from "../lib/gmailCompose";
 import { uploadProductImages } from "../lib/uploadProductImages";
 import { toast } from "sonner";
 import AdminHomepage from "../components/AdminHomepage";
+import AdminCatalogueExcelControl from "../components/AdminCatalogueExcelControl";
 import AIProductGenerator from "../components/AIProductGenerator";
 import ProductNameSuggester from "../components/ProductNameSuggester";
 import ProductFullRegenerator from "../components/ProductFullRegenerator";
@@ -93,6 +94,7 @@ export default function Admin() {
               </div>
             ))}
           </div>
+          <AdminCatalogueExcelControl />
           <div className="border border-[#D4AF37]/30 p-6 flex flex-wrap items-center justify-between gap-4" style={{background:"linear-gradient(90deg, rgba(163,99,80,0.14), transparent)"}}>
             <div>
               <div className="eyebrow mb-1">Brand catalogue</div>
