@@ -53,6 +53,16 @@ describe("Website Health tab architecture", () => {
     expect(source).not.toContain("Published completeness");
   });
 
+  test("every actionable finding exposes a controlled SOP recommendation workflow", () => {
+    expect(source).toContain("Recommended rectification");
+    expect(source).toContain("SOP rule");
+    expect(source).toContain("Suggested change");
+    expect(source).toContain("Evidence and confidence");
+    expect(source).toContain("Apply suggested fix");
+    expect(source).toContain("Needs owner confirmation");
+    expect(source).toContain("Review / edit product");
+  });
+
   test("Release / Sync is renamed and explained as read-only Deployment Info", () => {
     expect(source).toContain('"deployment", "Deployment Info"');
     expect(source).toContain("What Deployment Info means");
