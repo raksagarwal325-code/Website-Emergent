@@ -425,13 +425,27 @@ const severityClasses = {
 const actionClass = "inline-flex items-center gap-1.5 border border-[#D4AF37]/45 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-[#D4AF37] hover:bg-[#D4AF37]/10";
 const shortSha = (sha) => (sha ? String(sha).slice(0, 12) : "Unavailable");
 
-function Metric({ label, value, hint }) {
-  return (
-    <div className="border border-white/10 p-5">
+function Metric({ label, value, hint, onClick, destination }) {
+  const content = (
+    <>
       <div className="text-[10px] uppercase tracking-[0.22em] text-white/45">{label}</div>
       <div className="mt-2 font-serif text-3xl">{value}</div>
       {hint && <div className="mt-2 text-xs text-white/45">{hint}</div>}
-    </div>
+    </>
+  );
+
+  if (!onClick) return <div className="border border-white/10 p-5">{content}</div>;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`${label}: open ${destination}`}
+      className="group w-full border border-white/10 p-5 text-left text-white transition-colors hover:border-[#D4AF37]/60 hover:bg-[#D4AF37]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37] focus-visible:ring-offset-2 focus-visible:ring-offset-[#16070d]"
+    >
+      {content}
+      <div className="mt-3 text-[10px] uppercase tracking-[0.16em] text-[#D4AF37]/70 group-hover:text-[#D4AF37]">View details →</div>
+    </button>
   );
 }
 
@@ -586,6 +600,12 @@ export default function WebsiteHealthAdminV2() {
   const draftStructuralGaps = filterCompliance(health.draftCompliance, (item) => !item.structuralPass);
   const publishedVerificationQueue = filterCompliance(health.publishedCompliance, (item) => item.coverage === "covered" && (!item.manualVerified || item.fallbackFields.length > 0));
   const searchEnabled = ["attention", "completeness", "images", "seo"].includes(tab);
+  const openHealthSection = (nextTab, sectionId) => {
+    setTab(nextTab);
+    window.setTimeout(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
 
   return (
     <div data-testid="admin-website-health" className="max-w-7xl mx-auto px-6 py-12">
@@ -606,13 +626,13 @@ export default function WebsiteHealthAdminV2() {
       </div>
 
       <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
-        <Metric label="Products audited" value={products.length} hint={`${health.publishedCount} published · ${health.draftCount} drafts${stats?.products != null ? ` · public stats ${stats.products}` : ""}`} />
-        <Metric label="SOP coverage" value={`${health.sopCoveragePublished}/${health.publishedCount}`} hint={`${health.sopUnmappedPublished} published products have no usable SOP mapping`} />
-        <Metric label="Structural SOP pass" value={`${health.structurallyCompliantPublished}/${health.sopCoveragePublished}`} hint="Exact category schema and machine-checkable rules" />
-        <Metric label="SOP-verified records" value={`${health.sopVerifiedPublished}/${health.sopCoveragePublished}`} hint="Requires recorded source/image verification and no confirmation fallback" />
-        <Metric label="Verification pending" value={health.manualVerificationPending} hint="Product facts or image match not evidenced in the record" />
-        <Metric label="Confirmation backlog" value={health.confirmationBacklog} hint={`Products using the approved confirmation fallback · ${health.approvedExceptionCount} recorded SOP exceptions`} />
-        <Metric label="Products needing attention" value={health.productsNeedingAttention} hint={`${health.criticalPublishedProducts} published products have critical findings`} />
+        <Metric label="Products audited" value={products.length} hint={`${health.publishedCount} published · ${health.draftCount} drafts${stats?.products != null ? ` · public stats ${stats.products}` : ""}`} destination="Catalogue Overview" onClick={() => openHealthSection("overview", "catalogue-overview")} />
+        <Metric label="SOP coverage" value={`${health.sopCoveragePublished}/${health.publishedCount}`} hint={`${health.sopUnmappedPublished} published products have no usable SOP mapping`} destination="Catalogue Overview" onClick={() => openHealthSection("overview", "catalogue-overview")} />
+        <Metric label="Structural SOP pass" value={`${health.structurallyCompliantPublished}/${health.sopCoveragePublished}`} hint="Exact category schema and machine-checkable rules" destination="Structural SOP gaps" onClick={() => openHealthSection("completeness", "structural-sop-gaps")} />
+        <Metric label="SOP-verified records" value={`${health.sopVerifiedPublished}/${health.sopCoveragePublished}`} hint="Requires recorded source/image verification and no confirmation fallback" destination="Verification and confirmation queue" onClick={() => openHealthSection("completeness", "verification-confirmation-queue")} />
+        <Metric label="Verification pending" value={health.manualVerificationPending} hint="Product facts or image match not evidenced in the record" destination="Verification and confirmation queue" onClick={() => openHealthSection("completeness", "verification-confirmation-queue")} />
+        <Metric label="Confirmation backlog" value={health.confirmationBacklog} hint={`Products using the approved confirmation fallback · ${health.approvedExceptionCount} recorded SOP exceptions`} destination="Verification and confirmation queue" onClick={() => openHealthSection("completeness", "verification-confirmation-queue")} />
+        <Metric label="Products needing attention" value={health.productsNeedingAttention} hint={`${health.criticalPublishedProducts} published products have critical findings`} destination="Needs Attention" onClick={() => openHealthSection("attention", "needs-attention")} />
       </div>
 
       <div className="mt-8 flex flex-wrap gap-2 border-b border-white/10">
@@ -634,7 +654,7 @@ export default function WebsiteHealthAdminV2() {
         {loading ? (
           <div className="border border-white/10 p-8 text-sm text-white/50">Running health checks…</div>
         ) : tab === "attention" ? (
-          <section>
+          <section id="needs-attention">
             <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
               <div><div className="eyebrow mb-2">Published catalogue</div><h2 className="font-serif text-2xl">Needs Attention</h2><p className="mt-2 text-xs text-white/45">Only published products with actionable catalogue findings are shown here.</p></div>
               <div className="text-xs text-white/45">{publishedAttentionGroups.length} affected products · {filterIssues(health.publishedAttention).length} findings</div>
@@ -646,14 +666,14 @@ export default function WebsiteHealthAdminV2() {
             <div className="border border-[#D4AF37]/25 bg-[#D4AF37]/5 p-5 text-xs leading-5 text-white/60">
               This audit does not use a rounded completeness percentage. Structural pass means the record matches the mapped category SOP; it does not prove that images, dimensions, materials, light counts or arm counts are factually correct. Those require recorded source verification.
             </div>
-            <section>
+            <section id="structural-sop-gaps">
               <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
                 <div><div className="eyebrow mb-2">Published catalogue</div><h2 className="font-serif text-2xl">Structural SOP gaps</h2><p className="mt-2 text-xs text-white/45">Exact schema, category, SKU, description structure, image count and explicit commercial-state checks.</p></div>
                 <div className="text-xs text-white/45">{publishedStructuralGaps.length} published products need structural review</div>
               </div>
               <ComplianceRows items={publishedStructuralGaps} />
             </section>
-            <section>
+            <section id="verification-confirmation-queue">
               <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
                 <div><div className="eyebrow mb-2">Evidence layer</div><h2 className="font-serif text-2xl">Verification and confirmation queue</h2><p className="mt-2 text-xs text-white/45">Records remain here until product-specific facts and image identity have documented verification.</p></div>
                 <div className="text-xs text-white/45">{publishedVerificationQueue.length} published products pending evidence and/or confirmation</div>
@@ -684,7 +704,7 @@ export default function WebsiteHealthAdminV2() {
             {seoInfoGroups.length > 0 && <section><div className="mb-4"><h2 className="font-serif text-2xl">Informational</h2><p className="mt-2 text-xs text-white/45">Useful context that does not count as a published-site SEO warning.</p></div><ProductFindingGroups groups={seoInfoGroups} emptyMessage="No informational SEO notes." /></section>}
           </div>
         ) : tab === "overview" ? (
-          <section>
+          <section id="catalogue-overview">
             <div className="mb-4">
               <div className="eyebrow mb-2">Catalogue overview</div>
               <h2 className="font-serif text-2xl">Category Audit Summary</h2>
