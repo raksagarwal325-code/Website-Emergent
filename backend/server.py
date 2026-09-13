@@ -2191,22 +2191,31 @@ async def admin_update_media_asset(
 
 @api.post("/admin/media-library/scan")
 async def admin_scan_media_library(
-    limit: int = Query(250, ge=1, le=1000),
+    limit: int = Query(50, ge=1, le=100),
     admin: _AdminUser = Depends(require_admin),
 ):
-    rows = await db.files.find(
-        {"$or": [
-            {"sha256": {"$exists": False}},
-            {"sha256": None},
-            {"width": {"$exists": False}},
-        ]},
-        {"_id": 0},
-    ).limit(limit).to_list(limit)
+    needs_metadata = {"$or": [
+        {"sha256": {"$exists": False}},
+        {"sha256": None},
+        {"width": {"$exists": False}},
+    ]}
+    eligible = {"$and": [
+        needs_metadata,
+        {"media_scan_failed_at": {"$exists": False}},
+    ]}
+    rows = await db.files.find(eligible, {"_id": 0}).limit(limit).to_list(limit)
     scanned = 0
     failed = 0
     for row in rows:
         path = row.get("original_path") or row.get("storage_path")
         if not path:
+            await db.files.update_one(
+                {"id": row.get("id")},
+                {"$set": {
+                    "media_scan_failed_at": now_iso(),
+                    "media_scan_error": "No storage path",
+                }},
+            )
             failed += 1
             continue
         try:
@@ -2216,22 +2225,30 @@ async def admin_scan_media_library(
             )
             await db.files.update_one(
                 {"id": row.get("id")},
-                {"$set": values},
+                {"$set": values, "$unset": {
+                    "media_scan_failed_at": "",
+                    "media_scan_error": "",
+                }},
             )
             scanned += 1
         except Exception as exc:
             logger.warning("media_library.scan_failed file=%s err=%s", row.get("id"), exc)
+            await db.files.update_one(
+                {"id": row.get("id")},
+                {"$set": {
+                    "media_scan_failed_at": now_iso(),
+                    "media_scan_error": str(exc)[:240],
+                }},
+            )
             failed += 1
-    remaining = await db.files.count_documents({
-        "$or": [
-            {"sha256": {"$exists": False}},
-            {"sha256": None},
-            {"width": {"$exists": False}},
-        ]
+    remaining = await db.files.count_documents(eligible)
+    skipped_failed = await db.files.count_documents({
+        "media_scan_failed_at": {"$exists": True}
     })
     return {
         "scanned": scanned,
         "failed": failed,
+        "skipped_failed": skipped_failed,
         "remaining": remaining,
         "total_considered": len(rows),
     }

@@ -36,6 +36,7 @@ export default function MediaLibraryAdmin() {
   const [issueFilter, setIssueFilter] = useState("all");
   const [busyId, setBusyId] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadType, setUploadType] = useState("unclassified");
   const fileInput = useRef(null);
@@ -102,16 +103,36 @@ export default function MediaLibraryAdmin() {
   const scan = async () => {
     if (scanning) return;
     setScanning(true);
+    setScanProgress("Starting…");
+    let scanned = 0;
+    let failed = 0;
+    let remaining = 1;
+    let batches = 0;
     try {
-      const result = await api.adminScanMediaLibrary(500);
+      // Keep every request short enough for Cloudflare. The scan is resumable,
+      // so a transient failure never starts over or launches overlapping work.
+      while (remaining > 0 && batches < 40) {
+        const result = await api.adminScanMediaLibrary(50);
+        scanned += result.scanned || 0;
+        failed += result.failed || 0;
+        remaining = result.remaining || 0;
+        batches += 1;
+        setScanProgress(remaining ? `${scanned} scanned · ${remaining} remaining` : "Finishing…");
+        if (!result.total_considered) break;
+      }
       toast.success(
-        `Scanned ${result.scanned} file${result.scanned === 1 ? "" : "s"}${result.remaining ? ` · ${result.remaining} remaining` : ""}`
+        `Scanned ${scanned} file${scanned === 1 ? "" : "s"}${failed ? ` · ${failed} skipped` : ""}${remaining ? ` · ${remaining} remaining` : ""}`
       );
       await load();
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Metadata scan failed");
+      toast.error(
+        err?.response?.data?.detail ||
+        `Metadata scan paused after ${scanned} files. Click Scan metadata to resume.`
+      );
+      await load();
     } finally {
       setScanning(false);
+      setScanProgress("");
     }
   };
 
@@ -185,7 +206,7 @@ export default function MediaLibraryAdmin() {
             </button>
             <input ref={fileInput} data-testid="media-upload-input" type="file" accept="image/*,video/*" onChange={upload} className="hidden" />
             <button type="button" disabled={scanning} onClick={scan} className="inline-flex min-h-[38px] items-center gap-2 border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.18em] text-white/70 disabled:opacity-50">
-              <RefreshCw className={scanning ? "animate-spin" : ""} size={14} /> {scanning ? "Scanning…" : "Scan metadata"}
+              <RefreshCw className={scanning ? "animate-spin" : ""} size={14} /> {scanning ? (scanProgress || "Scanning…") : "Scan metadata"}
             </button>
           </div>
         </div>
