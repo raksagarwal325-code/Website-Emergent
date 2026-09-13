@@ -2135,7 +2135,12 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
         "height": media_metadata.get("height"),
         "created_at": now_iso(),
     })
-    return {"path": result["path"], "url": f"/api/files/{result['path']}"}
+    public_url = f"/api/files/{result['path']}"
+    return {
+        "path": result["path"],
+        "url": public_url,
+        "asset_id": asset_id_for_url(public_url),
+    }
 
 
 # --- Central admin media library ----------------------------------------------
