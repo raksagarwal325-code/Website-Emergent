@@ -34,8 +34,8 @@ describe("Admin Media Library", () => {
   });
 
   test("scans legacy files in short resumable batches", () => {
-    expect(source).toContain("adminScanMediaLibrary(50)");
-    expect(source).toContain("while (remaining > 0 && batches < 40)");
+    expect(source).toContain("adminScanMediaLibrary(10)");
+    expect(source).toContain("while (remaining > 0 && batches < 200)");
     expect(source).not.toContain("adminScanMediaLibrary(500)");
   });
 

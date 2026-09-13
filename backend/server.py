@@ -2191,7 +2191,7 @@ async def admin_update_media_asset(
 
 @api.post("/admin/media-library/scan")
 async def admin_scan_media_library(
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=25),
     admin: _AdminUser = Depends(require_admin),
 ):
     needs_metadata = {"$or": [
@@ -2219,9 +2219,14 @@ async def admin_scan_media_library(
             failed += 1
             continue
         try:
-            data, content_type = get_object(path)
-            values = inspect_media_bytes(
-                data, content_type or row.get("content_type") or ""
+            # Storage reads and Pillow decoding are blocking operations. Run them
+            # off the FastAPI event loop so the origin can still answer health,
+            # admin and Cloudflare requests while legacy metadata is inspected.
+            data, content_type = await asyncio.to_thread(get_object, path)
+            values = await asyncio.to_thread(
+                inspect_media_bytes,
+                data,
+                content_type or row.get("content_type") or "",
             )
             await db.files.update_one(
                 {"id": row.get("id")},

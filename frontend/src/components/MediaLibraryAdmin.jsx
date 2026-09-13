@@ -111,14 +111,16 @@ export default function MediaLibraryAdmin() {
     try {
       // Keep every request short enough for Cloudflare. The scan is resumable,
       // so a transient failure never starts over or launches overlapping work.
-      while (remaining > 0 && batches < 40) {
-        const result = await api.adminScanMediaLibrary(50);
+      while (remaining > 0 && batches < 200) {
+        const result = await api.adminScanMediaLibrary(10);
         scanned += result.scanned || 0;
         failed += result.failed || 0;
         remaining = result.remaining || 0;
         batches += 1;
         setScanProgress(remaining ? `${scanned} scanned · ${remaining} remaining` : "Finishing…");
         if (!result.total_considered) break;
+        // Briefly yield between batches so normal admin/API requests remain responsive.
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
       toast.success(
         `Scanned ${scanned} file${scanned === 1 ? "" : "s"}${failed ? ` · ${failed} skipped` : ""}${remaining ? ` · ${remaining} remaining` : ""}`
