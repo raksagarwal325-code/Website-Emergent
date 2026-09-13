@@ -1,0 +1,259 @@
+"""Admin media-library aggregation and metadata helpers.
+
+This module is deliberately side-effect free except for byte inspection. It
+does not delete, move, or rewrite media. Existing product and project records
+remain the source of truth for where an asset is used.
+"""
+from __future__ import annotations
+
+import hashlib
+import io
+from collections import defaultdict
+from typing import Iterable
+
+from PIL import Image
+
+MEDIA_USAGE_TYPES = (
+    "unclassified",
+    "white_bulbs_off",
+    "black_bulbs_on",
+    "detail",
+    "installation",
+    "before_after",
+    "video_reel",
+    "original_unedited",
+)
+
+MEDIA_USAGE_LABELS = {
+    "unclassified": "Unclassified",
+    "white_bulbs_off": "White background / bulbs off",
+    "black_bulbs_on": "Black background / bulbs on",
+    "detail": "Detail",
+    "installation": "Installation",
+    "before_after": "Before / after",
+    "video_reel": "Video / Reel",
+    "original_unedited": "Original unedited photograph",
+}
+
+REQUIRED_PRODUCT_SLOTS = ("white_bulbs_off", "black_bulbs_on")
+_VIDEO_EXTENSIONS = (".mp4", ".webm", ".mov", ".m4v")
+
+
+def asset_id_for_url(url: str) -> str:
+    return hashlib.sha256((url or "").strip().encode("utf-8")).hexdigest()[:24]
+
+
+def public_url_for_file(row: dict) -> str:
+    path = (row.get("storage_path") or "").strip()
+    return f"/api/files/{path}" if path else ""
+
+
+def inspect_media_bytes(data: bytes, content_type: str = "") -> dict:
+    """Return durable content metadata without changing the bytes."""
+    result = {
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "width": None,
+        "height": None,
+    }
+    if (content_type or "").lower().startswith("image/"):
+        with Image.open(io.BytesIO(data)) as image:
+            result["width"], result["height"] = image.size
+    return result
+
+
+def _add_reference(refs: dict, url: str, use: dict) -> None:
+    cleaned = (url or "").strip()
+    if not cleaned:
+        return
+    refs.setdefault(cleaned, []).append(use)
+
+
+def collect_references(
+    products: Iterable[dict],
+    settings: dict | None,
+    hero_slides: Iterable[dict],
+    category_images: Iterable[dict],
+) -> dict[str, list[dict]]:
+    refs: dict[str, list[dict]] = {}
+
+    for product in products:
+        for index, url in enumerate(product.get("images") or []):
+            _add_reference(refs, url, {
+                "type": "product",
+                "id": product.get("id"),
+                "name": product.get("name") or "Unnamed product",
+                "sku": product.get("sku") or "",
+                "status": product.get("status") or "",
+                "slot": index + 1,
+            })
+
+    gallery = (((settings or {}).get("homepage_content") or {}).get("gallery") or {})
+    for index, project in enumerate(gallery.get("items") or []):
+        for slot, url in enumerate(project.get("images") or []):
+            _add_reference(refs, url, {
+                "type": "project",
+                "id": str(index),
+                "name": project.get("title") or f"Project {index + 1}",
+                "location": project.get("location") or "",
+                "slot": slot + 1,
+            })
+
+    for slide in hero_slides:
+        _add_reference(refs, slide.get("image_url") or slide.get("url"), {
+            "type": "hero",
+            "id": slide.get("id"),
+            "name": slide.get("alt_text") or "Homepage hero",
+        })
+
+    for item in category_images:
+        _add_reference(refs, item.get("image_url"), {
+            "type": "category",
+            "id": item.get("category"),
+            "name": item.get("category") or "Category image",
+        })
+
+    return refs
+
+
+def build_media_library_report(
+    *,
+    products: list[dict],
+    settings: dict | None,
+    files: list[dict],
+    metadata: list[dict],
+    hero_slides: list[dict] | None = None,
+    category_images: list[dict] | None = None,
+) -> dict:
+    refs = collect_references(
+        products,
+        settings,
+        hero_slides or [],
+        category_images or [],
+    )
+    file_by_url = {
+        public_url_for_file(row): row
+        for row in files
+        if public_url_for_file(row)
+    }
+    metadata_by_id = {row.get("id"): row for row in metadata if row.get("id")}
+
+    # Uploaded but currently unused files must still remain visible.
+    for url in file_by_url:
+        refs.setdefault(url, [])
+
+    assets = []
+    for url, used_by in refs.items():
+        asset_id = asset_id_for_url(url)
+        file_row = file_by_url.get(url)
+        meta = metadata_by_id.get(asset_id) or {}
+        content_type = (file_row or {}).get("content_type") or ""
+        is_video = (
+            (file_row or {}).get("kind") == "video"
+            or content_type.startswith("video/")
+            or url.lower().split("?", 1)[0].endswith(_VIDEO_EXTENSIONS)
+        )
+        usage_type = meta.get("usage_type") or (
+            "video_reel" if is_video else "unclassified"
+        )
+        if usage_type not in MEDIA_USAGE_TYPES:
+            usage_type = "unclassified"
+
+        if file_row:
+            validity = "valid"
+        elif url.startswith("/api/files/"):
+            validity = "invalid"
+        else:
+            validity = "unverified"
+
+        width = (file_row or {}).get("width")
+        height = (file_row or {}).get("height")
+        low_resolution = bool(
+            width and height and (max(width, height) < 1200 or min(width, height) < 800)
+        )
+        assets.append({
+            "id": asset_id,
+            "url": url,
+            "kind": "video" if is_video else "image",
+            "usage_type": usage_type,
+            "usage_label": MEDIA_USAGE_LABELS[usage_type],
+            "width": width,
+            "height": height,
+            "size_bytes": (file_row or {}).get("size"),
+            "content_type": content_type or None,
+            "sha256": (file_row or {}).get("sha256"),
+            "uploaded": bool(file_row),
+            "file_id": (file_row or {}).get("id"),
+            "original_available": bool((file_row or {}).get("original_path")),
+            "validity": validity,
+            "low_resolution": low_resolution,
+            "used_by": used_by,
+            "use_count": len(used_by),
+            "duplicate_url": len(used_by) > 1,
+            "duplicate_content": False,
+            "notes": meta.get("notes") or "",
+        })
+
+    by_hash: dict[str, list[dict]] = defaultdict(list)
+    for asset in assets:
+        if asset.get("sha256"):
+            by_hash[asset["sha256"]].append(asset)
+    for group in by_hash.values():
+        distinct_urls = {asset["url"] for asset in group}
+        if len(distinct_urls) > 1:
+            for asset in group:
+                asset["duplicate_content"] = True
+
+    usage_by_product: dict[str, set[str]] = defaultdict(set)
+    product_map = {p.get("id"): p for p in products if p.get("id")}
+    for asset in assets:
+        for use in asset["used_by"]:
+            if use.get("type") == "product":
+                usage_by_product[use.get("id")].add(asset["usage_type"])
+
+    missing_products = []
+    for product_id, product in product_map.items():
+        present = usage_by_product.get(product_id, set())
+        missing = [slot for slot in REQUIRED_PRODUCT_SLOTS if slot not in present]
+        if missing:
+            missing_products.append({
+                "id": product_id,
+                "name": product.get("name") or "Unnamed product",
+                "sku": product.get("sku") or "",
+                "status": product.get("status") or "",
+                "missing": missing,
+                "missing_labels": [MEDIA_USAGE_LABELS[slot] for slot in missing],
+            })
+
+    assets.sort(key=lambda row: (
+        row["validity"] == "valid",
+        not row["duplicate_content"],
+        not row["duplicate_url"],
+        row["usage_label"],
+        row["url"],
+    ))
+    missing_products.sort(key=lambda row: (row["sku"], row["name"]))
+
+    return {
+        "usage_types": [
+            {"value": key, "label": MEDIA_USAGE_LABELS[key]}
+            for key in MEDIA_USAGE_TYPES
+        ],
+        "required_product_slots": list(REQUIRED_PRODUCT_SLOTS),
+        "summary": {
+            "assets": len(assets),
+            "images": sum(a["kind"] == "image" for a in assets),
+            "videos": sum(a["kind"] == "video" for a in assets),
+            "uploaded": sum(a["uploaded"] for a in assets),
+            "unused": sum(a["use_count"] == 0 for a in assets),
+            "invalid": sum(a["validity"] == "invalid" for a in assets),
+            "unverified_external": sum(a["validity"] == "unverified" for a in assets),
+            "low_resolution": sum(a["low_resolution"] for a in assets),
+            "duplicate_assets": sum(
+                a["duplicate_url"] or a["duplicate_content"] for a in assets
+            ),
+            "unclassified": sum(a["usage_type"] == "unclassified" for a in assets),
+            "products_missing_required_slots": len(missing_products),
+        },
+        "assets": assets,
+        "missing_products": missing_products,
+    }
