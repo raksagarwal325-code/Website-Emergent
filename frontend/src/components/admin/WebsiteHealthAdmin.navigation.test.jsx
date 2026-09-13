@@ -30,6 +30,21 @@ describe("Website Health tab architecture", () => {
     expect(source).not.toContain("Category snapshot");
   });
 
+  test("summary metric cards are keyboard-accessible shortcuts to their detailed sections", () => {
+    expect(source).toContain("function Metric({ label, value, hint, onClick, destination })");
+    expect(source).toContain('type="button"');
+    expect(source).toContain("openHealthSection");
+    expect(source).toContain('destination="Catalogue Overview"');
+    expect(source).toContain('destination="Structural SOP gaps"');
+    expect(source).toContain('destination="Verification and confirmation queue"');
+    expect(source).toContain('destination="Needs Attention"');
+    expect(source).toContain('id="catalogue-overview"');
+    expect(source).toContain('id="structural-sop-gaps"');
+    expect(source).toContain('id="verification-confirmation-queue"');
+    expect(source).toContain('id="needs-attention"');
+    expect(source).toContain("focus-visible:ring-2");
+  });
+
   test("SOP compliance and findings expose direct product edit actions", () => {
     expect(source).toContain("Edit product");
     expect(source).toContain("tab=products&product=");
