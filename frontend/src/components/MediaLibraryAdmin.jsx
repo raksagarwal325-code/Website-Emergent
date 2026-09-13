@@ -82,7 +82,11 @@ export default function MediaLibraryAdmin() {
         ...current,
         assets: current.assets.map((row) => (
           row.id === asset.id
-            ? { ...row, usage_type: usageType, usage_label: current.usage_types.find((((item) =>Denied))) }
+            ? {
+                ...row,
+                usage_type: usageType,
+                usage_label: current.usage_types.find((item) => item.value === usageType)?.label || usageType,
+              }
             : row
         )),
       }));
@@ -118,9 +122,8 @@ export default function MediaLibraryAdmin() {
     setUploading(true);
     try {
       const result = await api.upload(file);
-      const id = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(result.url))
-        .then((buffer) => Array.from(new Uint8Array(buffer)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 24));
-      await api.adminUpdateMediaAsset(id, {
+      if (!result.asset_id) throw new Error("Upload did not return a media asset id");
+      await api.adminUpdateMediaAsset(result.asset_id, {
         url: result.url,
         usage_type: uploadType,
         notes: "",
