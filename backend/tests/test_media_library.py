@@ -143,8 +143,7 @@ class MediaLibraryTests(unittest.TestCase):
         url = "/api/files/app/products/shared.jpg"
         report = build_media_library_report(
             products=[
-                {"id": "p1", "name": "One", "images": [url]},
-                {"id": "p2", "name": "Two", "images": [url]},
+                {"id": "p1", "name": "One", "images": [url, url]},
             ],
             settings={},
             files=[
