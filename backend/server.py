@@ -29,6 +29,7 @@ from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
 from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply_owner_facts, conversation_facts, facts_as_notes, find_similar_product, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
+from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, inspect_media_bytes  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -323,6 +324,27 @@ class ProductCreate(BaseModel):
     fixed_price: bool = False
     price_display: str = "starting_from"
     status: str = "published"
+
+
+class MediaAssetUpdate(BaseModel):
+    url: str
+    usage_type: str
+    notes: str = ""
+
+    @field_validator("usage_type")
+    @classmethod
+    def _valid_usage_type(cls, value):
+        if value not in MEDIA_USAGE_TYPES:
+            raise ValueError("Unknown media usage type")
+        return value
+
+    @field_validator("url")
+    @classmethod
+    def _non_blank_url(cls, value):
+        value = (value or "").strip()
+        if not value:
+            raise ValueError("Media URL is required")
+        return value
 
 
 class Review(BaseModel):
@@ -2094,6 +2116,10 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
         wm_enabled_for_record = bool(wm.get("enabled"))
 
     result = put_object(public_path, public_bytes, file.content_type)
+    try:
+        media_metadata = inspect_media_bytes(data, file.content_type)
+    except Exception:
+        media_metadata = {"sha256": None, "width": None, "height": None}
 
     await db.files.insert_one({
         "id": file_id,
@@ -2104,9 +2130,130 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
         "size": result["size"],
         "watermarked": wm_enabled_for_record,
         "kind": "video" if is_video else "image",
+        "sha256": media_metadata.get("sha256"),
+        "width": media_metadata.get("width"),
+        "height": media_metadata.get("height"),
         "created_at": now_iso(),
     })
-    return {"path": result["path"], "url": f"/api/files/{result['path']}"}
+    public_url = f"/api/files/{result['path']}"
+    return {
+        "path": result["path"],
+        "url": public_url,
+        "asset_id": asset_id_for_url(public_url),
+    }
+
+
+# --- Central admin media library ----------------------------------------------
+@api.get("/admin/media-library")
+async def admin_media_library(admin: _AdminUser = Depends(require_admin)):
+    products = await db.products.find({}, {"_id": 0}).to_list(5000)
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    files = await db.files.find({}, {"_id": 0}).to_list(5000)
+    metadata = await db.media_assets.find({}, {"_id": 0}).to_list(5000)
+    hero_slides = await db.hero_slides.find({}, {"_id": 0}).to_list(500)
+    category_rows = await db.category_featured_images.find(
+        {}, {"_id": 0}
+    ).to_list(100)
+    category_images = [_cat_out(row) for row in category_rows]
+    return build_media_library_report(
+        products=products,
+        settings=settings,
+        files=files,
+        metadata=metadata,
+        hero_slides=[_slide_out(row) for row in hero_slides],
+        category_images=category_images,
+    )
+
+
+@api.patch("/admin/media-library/{asset_id}")
+async def admin_update_media_asset(
+    asset_id: str,
+    payload: MediaAssetUpdate,
+    admin: _AdminUser = Depends(require_admin),
+):
+    expected_id = asset_id_for_url(payload.url)
+    if asset_id != expected_id:
+        raise HTTPException(400, "Asset id does not match URL")
+    await db.media_assets.update_one(
+        {"id": asset_id},
+        {"$set": {
+            "id": asset_id,
+            "url": payload.url,
+            "usage_type": payload.usage_type,
+            "notes": payload.notes.strip(),
+            "updated_at": now_iso(),
+            "updated_by": admin.email,
+        }},
+        upsert=True,
+    )
+    return {"ok": True, "id": asset_id, "usage_type": payload.usage_type}
+
+
+@api.post("/admin/media-library/scan")
+async def admin_scan_media_library(
+    limit: int = Query(250, ge=1, le=1000),
+    admin: _AdminUser = Depends(require_admin),
+):
+    rows = await db.files.find(
+        {"$or": [
+            {"sha256": {"$exists": False}},
+            {"sha256": None},
+            {"width": {"$exists": False}},
+        ]},
+        {"_id": 0},
+    ).limit(limit).to_list(limit)
+    scanned = 0
+    failed = 0
+    for row in rows:
+        path = row.get("original_path") or row.get("storage_path")
+        if not path:
+            failed += 1
+            continue
+        try:
+            data, content_type = get_object(path)
+            values = inspect_media_bytes(
+                data, content_type or row.get("content_type") or ""
+            )
+            await db.files.update_one(
+                {"id": row.get("id")},
+                {"$set": values},
+            )
+            scanned += 1
+        except Exception as exc:
+            logger.warning("media_library.scan_failed file=%s err=%s", row.get("id"), exc)
+            failed += 1
+    remaining = await db.files.count_documents({
+        "$or": [
+            {"sha256": {"$exists": False}},
+            {"sha256": None},
+            {"width": {"$exists": False}},
+        ]
+    })
+    return {
+        "scanned": scanned,
+        "failed": failed,
+        "remaining": remaining,
+        "total_considered": len(rows),
+    }
+
+
+@api.get("/admin/media-library/original/{file_id}")
+async def admin_media_original(
+    file_id: str,
+    admin: _AdminUser = Depends(require_admin),
+):
+    row = await db.files.find_one({"id": file_id}, {"_id": 0})
+    if not row or not row.get("original_path"):
+        raise HTTPException(404, "Original file not found")
+    try:
+        data, content_type = get_object(row["original_path"])
+    except Exception:
+        raise HTTPException(404, "Original file not found")
+    return Response(
+        content=data,
+        media_type=content_type or row.get("content_type") or "application/octet-stream",
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 # --- Instagram cover auto-pull ------------------------------------------------

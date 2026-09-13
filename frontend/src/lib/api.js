@@ -208,6 +208,15 @@ export const api = {
   adminResetCategoryFeatured: (category) =>
     client.delete(`/admin/category-featured-images/${encodeURIComponent(category)}`).then(r => r.data),
 
+  // --- Central media library ---
+  adminMediaLibrary: () => client.get("/admin/media-library").then(r => r.data),
+  adminUpdateMediaAsset: (assetId, data) =>
+    client.patch(`/admin/media-library/${assetId}`, data).then(r => r.data),
+  adminScanMediaLibrary: (limit = 250) =>
+    client.post(`/admin/media-library/scan?limit=${limit}`).then(r => r.data),
+  adminMediaOriginalUrl: (fileId) =>
+    `${API}/admin/media-library/original/${encodeURIComponent(fileId)}`,
+
   upload: (file) => {
     // Client-side guard so users get a friendly message before the network round-trip.
     // Server hard cap: 25MB for images, 100MB for videos.
