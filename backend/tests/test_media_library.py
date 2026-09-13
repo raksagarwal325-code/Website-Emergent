@@ -109,6 +109,36 @@ class MediaLibraryTests(unittest.TestCase):
             ["white_bulbs_off", "black_bulbs_on"],
         )
 
+    def test_internal_routes_are_not_mislabeled_as_external(self):
+        url = "/api/hero-slides/image/app/hero/example.webp"
+        report = build_media_library_report(
+            products=[],
+            settings={},
+            files=[],
+            metadata=[],
+            hero_slides=[{"id": "hero-1", "image_url": url, "alt_text": "Hero"}],
+        )
+        asset = report["assets"][0]
+        self.assertEqual(asset["validity"], "valid")
+        self.assertEqual(report["summary"]["unverified_external"], 0)
+
+    def test_cross_record_reuse_is_not_a_duplicate(self):
+        url = "/api/files/app/products/shared.jpg"
+        report = build_media_library_report(
+            products=[{"id": "p1", "name": "Lamp", "images": [url]}],
+            settings={},
+            files=[{
+                "id": "f1",
+                "storage_path": "app/products/shared.jpg",
+                "content_type": "image/jpeg",
+            }],
+            metadata=[],
+            category_images=[{"category": "Table Lamp", "image_url": url}],
+        )
+        asset = report["assets"][0]
+        self.assertFalse(asset["duplicate_url"])
+        self.assertEqual(asset["use_count"], 2)
+
     def test_same_url_used_more_than_once_is_flagged(self):
         url = "/api/files/app/products/shared.jpg"
         report = build_media_library_report(
