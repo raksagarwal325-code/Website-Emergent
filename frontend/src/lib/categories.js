@@ -106,11 +106,11 @@ export const resolveCategoryBySlug = (slug, dbNames) => {
     h1: dyn.label,
     seoTitle: `${dyn.label} · Samrat Glass Emporium`,
     metaDescription:
-      `Browse handcrafted ${labelLower} at Samrat Glass Emporium — ` +
-      `hand-blown decorative lighting made in Firozabad since 1981.`,
+      `Browse ${labelLower} at Samrat Glass Emporium — decorative lighting ` +
+      `made and assembled in Firozabad, with specifications confirmed per design.`,
     intro:
-      `Explore our collection of ${labelLower} — every piece handcrafted ` +
-      `in Firozabad. Enquire for pricing, dimensions and lead times.`,
+      `Explore our collection of ${labelLower}, made and assembled in Firozabad ` +
+      `with processes varying by design. Enquire for pricing, dimensions and lead times.`,
   };
 };
 
