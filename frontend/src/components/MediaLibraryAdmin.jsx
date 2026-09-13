@@ -19,8 +19,8 @@ const formatBytes = (value) => {
   return `${Math.round(value / 1024)} KB`;
 };
 
-const usageSummary = (usedBy = []) => {
-  if (!usedBy.length) return "Not currently used";
+export const usageSummary = (usedBy = []) => {
+  if (!usedBy.length) return ["Not currently used"];
   return usedBy.map((use) => {
     if (use.type === "product") return `${use.name}${use.sku ? ` · ${use.sku}` : ""} · image ${use.slot}`;
     if (use.type === "project") return `${use.name}${use.location ? ` · ${use.location}` : ""} · image ${use.slot}`;
