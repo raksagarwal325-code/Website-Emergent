@@ -1,4 +1,5 @@
 import fs from "fs";
+import { usageSummary } from "./MediaLibraryAdmin";
 import path from "path";
 
 describe("Admin Media Library", () => {
@@ -23,6 +24,13 @@ describe("Admin Media Library", () => {
     expect(source).toContain("Products missing required lit/unlit pair");
     expect(source).toContain("usageSummary(asset.used_by)");
     expect(source).toContain("Edit product");
+  });
+
+  test("returns a list for unused assets so rendering never calls map on text", () => {
+    expect(usageSummary([])).toEqual(["Not currently used"]);
+    expect(usageSummary([{ type: "category", name: "Chandeliers" }])).toEqual([
+      "Chandeliers · category",
+    ]);
   });
 
   test("uses the stable server asset id after upload", () => {
