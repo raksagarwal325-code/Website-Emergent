@@ -37,6 +37,32 @@ describe("sanitizePublicProduct", () => {
     expect(source.specs.Style).toBe("heritage / classical indian luxury");
   });
 
+  it("hides a trailing SEO keyword bank while preserving the editorial product description", () => {
+    const editorial = "A handcrafted chandelier with diamond-cut glass and an antique brass-tone finish.\n\nKey Features • 24-light decorative composition • Clear glass shades.";
+    const keywordBank = "elephant arm chandelier gajmahal chandelier three tier chandelier diamond cut glass chandelier antique brass chandelier heritage lighting luxury chandelier clear glass shades double height chandelier";
+    const source = {
+      id: "sge-ch-033",
+      description: `${editorial}\n\n${keywordBank}`,
+      short_description: "A sculptural 24-light chandelier for generous interiors.",
+      tags: [keywordBank],
+      specs: {},
+    };
+
+    const result = sanitizePublicProduct(source);
+
+    expect(result.description).toBe(editorial);
+    expect(result.description).not.toContain("elephant arm chandelier");
+    expect(result.short_description).toBe(source.short_description);
+    expect(result.tags).toEqual([]);
+    expect(source.description).toContain(keywordBank);
+  });
+
+  it("does not strip legitimate prose from the final description paragraph", () => {
+    const description = "Hand-cut clear glass creates layered reflections.\n\nDesigned for double-height living rooms, entrance halls, and formal interiors.";
+    const result = sanitizePublicProduct({ id: "product-2", description, tags: [], specs: {} });
+    expect(result.description).toBe(description);
+  });
+
   it("leaves nullish values unchanged", () => {
     expect(sanitizePublicProduct(null)).toBeNull();
     expect(sanitizePublicProduct(undefined)).toBeUndefined();
