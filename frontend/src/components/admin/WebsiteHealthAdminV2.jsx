@@ -250,6 +250,206 @@ const duplicateMap = (products, selector) => {
 const validImageUrl = (url) => /^\/api\/files\//i.test(url) || /^https?:\/\//i.test(url);
 const productKey = (product) => product?.id || product?.sku || product?.name || "unknown-product";
 
+const specValue = (product, field) => specsOf(product)
+  .find(([key]) => normalizeField(key) === normalizeField(field))?.[1] || "";
+
+const patchSpecs = (product, updates = {}, { reorder = false } = {}) => {
+  const entries = specsOf(product);
+  const values = new Map(entries.map(([field, value]) => [normalizeField(field), value]));
+  Object.entries(updates).forEach(([field, value]) => values.set(normalizeField(field), value));
+  const rule = SOP_RULES[normalizeCategory(product?.category)];
+
+  if (reorder && rule) {
+    return Object.fromEntries(rule.schema.map((field) => [field, values.get(normalizeField(field))]));
+  }
+
+  return Object.fromEntries(entries.map(([field, value]) => [
+    field,
+    values.has(normalizeField(field)) ? values.get(normalizeField(field)) : value,
+  ]));
+};
+
+const recommendation = ({ rule, current, proposed, evidence, confidence = "Review required", patch = null }) => ({
+  rule,
+  current,
+  proposed,
+  evidence,
+  confidence,
+  patch,
+  safeToApply: Boolean(patch),
+});
+
+export function buildSopRecommendation(product, finding = {}) {
+  const issue = text(finding.issue);
+  const detail = text(finding.detail);
+  const rule = SOP_RULES[normalizeCategory(product?.category)];
+  const sopEvidence = rule ? `${rule.category} product SOP` : "Website Health validation rule";
+  const ownerRequired = "Owner confirmation required";
+
+  if (issue.startsWith("Missing SOP specifications")) {
+    return recommendation({
+      rule: "Every mapped category must use its exact SOP specification schema and order.",
+      current: detail ? `Missing: ${detail}` : "Required specification fields are absent.",
+      proposed: "Add the missing fields in the approved order. Use only verified product facts; use “To be confirmed before order” only where the SOP permits an unknown value.",
+      evidence: `${sopEvidence} · required field schema`,
+      confidence: ownerRequired,
+    });
+  }
+
+  if (issue.startsWith("Unexpected SOP specifications")) {
+    return recommendation({
+      rule: "Specifications must use only the mapped category schema.",
+      current: detail ? `Unexpected: ${detail}` : "The record contains fields outside the category SOP.",
+      proposed: "Match each field to an approved SOP field. Remove a field only after confirming it does not contain a unique verified product fact.",
+      evidence: `${sopEvidence} · exact field schema`,
+      confidence: ownerRequired,
+    });
+  }
+
+  if (issue === "Specification order does not match SOP" && rule) {
+    return recommendation({
+      rule: "Specification fields must follow the exact approved category order.",
+      current: `Stored fields are out of order. ${detail}`.trim(),
+      proposed: `Reorder the existing values to: ${rule.schema.join(", ")}. No values will be rewritten.`,
+      evidence: `${sopEvidence} · field order`,
+      confidence: "High · safe structural fix",
+      patch: { specs: patchSpecs(product, {}, { reorder: true }) },
+    });
+  }
+
+  if (issue === "Category does not use the SOP's exact value" && rule) {
+    return recommendation({
+      rule: "The stored category must use the SOP's canonical singular value.",
+      current: text(product?.category) || "Blank",
+      proposed: rule.category,
+      evidence: `${sopEvidence} · canonical category`,
+      confidence: "High · safe structural fix",
+      patch: { category: rule.category },
+    });
+  }
+
+  if (issue === "Product Type does not match category SOP" && rule?.productType) {
+    return recommendation({
+      rule: "Product Type must match the verified catalogue category.",
+      current: specValue(product, "Product Type") || "Blank",
+      proposed: rule.productType,
+      evidence: `${sopEvidence} · Product Type rule`,
+      confidence: "High · safe structural fix",
+      patch: { specs: patchSpecs(product, { "Product Type": rule.productType }) },
+    });
+  }
+
+  if (issue === "Invalid dimension fallback") {
+    const updates = Object.fromEntries(specsOf(product)
+      .filter(([field, value]) => /^(height|width)$/i.test(text(field)) && /^made to order$/i.test(text(value)))
+      .map(([field]) => [field, "To be confirmed before order"]));
+    return recommendation({
+      rule: "Unknown Height or Width must use the approved confirmation fallback; “Made to Order” is not a factual dimension.",
+      current: "Made to Order",
+      proposed: "To be confirmed before order",
+      evidence: `${sopEvidence} · dimension fallback rule`,
+      confidence: "High · safe structural fix",
+      patch: { specs: patchSpecs(product, updates) },
+    });
+  }
+
+  if (issue === "Specification contains an unresolved template placeholder") {
+    const updates = Object.fromEntries(specsOf(product)
+      .filter(([, value]) => /\[[^\]]+\]/.test(text(value)))
+      .map(([field]) => [field, "To be confirmed before order"]));
+    return recommendation({
+      rule: "Published specifications cannot contain template placeholders.",
+      current: "One or more specification values contain bracketed placeholder text.",
+      proposed: "Replace unresolved placeholders with the approved confirmation fallback until verified product evidence is recorded.",
+      evidence: `${sopEvidence} · placeholder and unknown-value rules`,
+      confidence: "High · safe non-inventive fix",
+      patch: { specs: patchSpecs(product, updates) },
+    });
+  }
+
+  if (issue === "Duplicate image URL inside product") {
+    return recommendation({
+      rule: "A product must not repeat the same stored image URL.",
+      current: `${imagesOf(product).length} image entries with a repeated URL`,
+      proposed: "Remove only the repeated URL entry; retain the original image and its order.",
+      evidence: "Stored product image list",
+      confidence: "High · safe structural fix",
+      patch: { images: Array.from(new Set(imagesOf(product))) },
+    });
+  }
+
+  if (issue === "Short description is outside the SOP range") {
+    return recommendation({
+      rule: "Short description must be one sentence of 20–35 words.",
+      current: `${text(product?.short_description) || "Blank"}${detail ? ` · ${detail}` : ""}`,
+      proposed: "Rewrite it as one 20–35-word sentence using only facts already verified for this product. Do not add dimensions, materials, holder details or claims.",
+      evidence: `${sopEvidence} · short-description rule`,
+    });
+  }
+
+  if (issue === "Full description does not contain exactly two narrative paragraphs") {
+    return recommendation({
+      rule: "The full description must contain exactly two narrative paragraphs before Key Features.",
+      current: detail || "Narrative paragraph count is incorrect.",
+      proposed: "Restructure the existing verified narrative into exactly two paragraphs without introducing new product facts.",
+      evidence: `${sopEvidence} · description structure`,
+    });
+  }
+
+  if (issue === "Key Features heading is missing" || issue === "Key Features count does not match SOP") {
+    const expected = rule?.featureRange?.[0] === rule?.featureRange?.[1]
+      ? `${rule.featureRange[0]}`
+      : `${rule?.featureRange?.[0] || 6}–${rule?.featureRange?.[1] || 8}`;
+    return recommendation({
+      rule: `Use a Key Features heading followed by ${expected} concise, product-specific features.`,
+      current: detail || issue,
+      proposed: `Keep only verified visible or recorded characteristics and revise the section to ${expected} non-duplicated features.`,
+      evidence: `${sopEvidence} · Key Features rule`,
+    });
+  }
+
+  if (issue === "Image count requires SOP review" || issue === "Only one product image" || issue === "Missing primary image") {
+    const accepted = rule?.imageCountExceptions?.[text(product?.sku).toUpperCase()] || rule?.imageCounts || [];
+    return recommendation({
+      rule: accepted.length ? `This category accepts ${accepted.join(" or ")} verified image(s).` : "Every published product requires a valid primary image.",
+      current: `${imagesOf(product).length} stored image(s)${detail ? ` · ${detail}` : ""}`,
+      proposed: "Add only a verified photograph of this exact product. Preserve the approved lit/dark first and matching unlit/light second order when both are available.",
+      evidence: accepted.length ? `${sopEvidence} · image-count rule` : "Stored image record",
+      confidence: ownerRequired,
+    });
+  }
+
+  const genericRecommendations = {
+    "Missing product name": ["A truthful, distinctive long product name is required.", "Create the name from verified identity and visible details; do not invent a family, material, size or light count."],
+    "Missing SKU": ["Every catalogue product requires a unique category-formatted SKU.", "Assign the next verified unique SKU only after checking the full catalogue for duplicates."],
+    "Missing category": ["Every product needs an owner-verified catalogue category before an SOP can be applied.", "Confirm the category, then rerun Website Health to load the matching SOP."],
+    "SKU does not match category SOP": ["SKU prefix and format must match the confirmed category.", "Confirm whether the category or SKU is wrong; do not generate a replacement SKU automatically."],
+    "Publication status is missing or invalid": ["Status must be Draft or Published.", "Confirm the intended commercial state before saving; use Draft when the product is not ready for public display."],
+    "Price display mode is missing or invalid": ["Price display must be Starting From, Fixed or Price on Request.", "Confirm the intended price mode. Do not invent a price."],
+    "Floor Chandelier SOP mapping unresolved": ["No approved Floor Chandelier schema is currently mapped.", "Upload or approve the Floor Chandelier SOP before structural rectification."],
+    "No approved SOP mapped to category": ["Automated correction requires an approved category SOP.", "Confirm the category and add its approved SOP mapping before applying changes."],
+    "Unsupported primary image URL": ["Primary image URLs must use an approved stored-file path or HTTPS URL.", "Replace the URL with a verified accessible image for this exact product."],
+    "Short description is thin": ["Search copy must still follow the product SOP and contain useful verified detail.", "Expand the short description without exceeding the SOP's 20–35-word, one-sentence rule."],
+    "Description is thin": ["The full description must provide two useful narrative paragraphs and the approved Key Features section.", "Expand only from verified product evidence and owner-confirmed facts."],
+    "Product title length needs review": ["Product titles must be long, specific, unique and truthful.", "Refine the title from verified identity and visible construction; do not invent specifications."],
+    "No catalogue/search tags": ["Tags must be relevant to the product and catalogue search.", "Add only verified category, style, form, glass and use-case terms already supported by the record."],
+    "Duplicate SKU": ["Every SKU must identify exactly one product.", "Review both records and correct only the product with the wrong SKU after owner confirmation."],
+    "Duplicate product name": ["Different products should not share an identical catalogue name.", "Confirm whether this is a true variant or duplicate before changing either name."],
+    "Primary image reused by multiple products": ["A shared primary image is valid only for a confirmed variant or duplicate record.", "Compare the products and retain the shared image only when they intentionally represent the same fixture variant."],
+  };
+  const [genericRule, genericProposed] = genericRecommendations[issue] || [
+    "Resolve the finding without changing any unverified product fact.",
+    detail || "Review the stored record against its approved SOP and source images.",
+  ];
+  return recommendation({
+    rule: genericRule,
+    current: detail || issue,
+    proposed: genericProposed,
+    evidence: sopEvidence,
+    confidence: ownerRequired,
+  });
+}
+
 export function groupFindings(items = []) {
   const grouped = new Map();
   items.forEach((item) => {
@@ -423,6 +623,7 @@ const severityClasses = {
 };
 
 const actionClass = "inline-flex items-center gap-1.5 border border-[#D4AF37]/45 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-[#D4AF37] hover:bg-[#D4AF37]/10";
+const secondaryActionClass = "inline-flex items-center gap-1.5 border border-white/15 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-white/65 hover:border-white/30 hover:text-white";
 const shortSha = (sha) => (sha ? String(sha).slice(0, 12) : "Unavailable");
 
 function Metric({ label, value, hint, onClick, destination }) {
@@ -459,7 +660,38 @@ function ProductActions({ product }) {
   );
 }
 
-function ProductFindingGroups({ groups, emptyMessage }) {
+function RecommendationPanel({ product, finding, onApply, savingId }) {
+  const item = buildSopRecommendation(product, finding);
+  const actionId = `${productKey(product)}:${finding.issue}`;
+  return (
+    <details className="mt-2 border border-white/10 bg-black/10 p-3 text-white/70">
+      <summary className="cursor-pointer text-[10px] uppercase tracking-[0.16em] text-[#D4AF37]">Recommended rectification</summary>
+      <div className="mt-3 grid gap-3 text-[11px] leading-5 md:grid-cols-2">
+        <div><div className="uppercase tracking-[0.14em] text-white/35">SOP rule</div><div className="mt-1">{item.rule}</div></div>
+        <div><div className="uppercase tracking-[0.14em] text-white/35">Current</div><div className="mt-1 break-words">{item.current}</div></div>
+        <div><div className="uppercase tracking-[0.14em] text-white/35">Suggested change</div><div className="mt-1 text-white/85">{item.proposed}</div></div>
+        <div><div className="uppercase tracking-[0.14em] text-white/35">Evidence and confidence</div><div className="mt-1">{item.evidence} · {item.confidence}</div></div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
+        {item.safeToApply ? (
+          <button
+            type="button"
+            onClick={() => onApply(product, finding, item)}
+            disabled={savingId === actionId}
+            className={`${actionClass} disabled:cursor-wait disabled:opacity-50`}
+          >
+            <CheckCircle2 size={12} /> {savingId === actionId ? "Applying…" : "Apply suggested fix"}
+          </button>
+        ) : (
+          <span className="border border-amber-300/25 bg-amber-400/5 px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-amber-100">Needs owner confirmation</span>
+        )}
+        {product?.id && <a href={`/admin?tab=products&product=${encodeURIComponent(product.id)}`} className={secondaryActionClass}><Wrench size={12} /> Review / edit product</a>}
+      </div>
+    </details>
+  );
+}
+
+function ProductFindingGroups({ groups, emptyMessage, onApply, savingId }) {
   if (!groups.length) {
     return <div className="border border-emerald-300/20 bg-emerald-400/5 p-6 text-sm text-emerald-100">{emptyMessage}</div>;
   }
@@ -485,9 +717,12 @@ function ProductFindingGroups({ groups, emptyMessage }) {
             </div>
             <div className="mt-3 border-t border-white/10 pt-3 space-y-2">
               {findings.map((item) => (
-                <div key={item.id} className="grid gap-1 md:grid-cols-[1fr_1.4fr]">
-                  <div className="text-sm">{item.issue}</div>
-                  {item.detail ? <div className="break-all text-[11px] opacity-60">{item.detail}</div> : <div />}
+                <div key={item.id} className="border-b border-white/5 pb-2 last:border-0 last:pb-0">
+                  <div className="grid gap-1 md:grid-cols-[1fr_1.4fr]">
+                    <div className="text-sm">{item.issue}</div>
+                    {item.detail ? <div className="break-all text-[11px] opacity-60">{item.detail}</div> : <div />}
+                  </div>
+                  <RecommendationPanel product={product} finding={item} onApply={onApply} savingId={savingId} />
                 </div>
               ))}
             </div>
@@ -500,24 +735,36 @@ function ProductFindingGroups({ groups, emptyMessage }) {
   );
 }
 
-function ComplianceRows({ items, emptyMessage = "No SOP compliance gaps found." }) {
+function ComplianceRows({ items, onApply, savingId, emptyMessage = "No SOP compliance gaps found." }) {
   if (!items.length) {
     return <div className="border border-emerald-300/20 bg-emerald-400/5 p-6 text-sm text-emerald-100">{emptyMessage}</div>;
   }
   return (
     <div className="space-y-2">
       {items.slice(0, 300).map(({ product, coverage, structuralPass, manualVerified, fallbackFields, issues }) => (
-        <div key={productKey(product)} className="grid gap-3 border border-white/10 p-4 xl:grid-cols-[110px_1fr_150px_1.4fr_auto] xl:items-center">
-          <div className="text-xs text-white/60">{product.sku || "No SKU"}</div>
-          <div><div className="text-sm">{product.name || "Unnamed product"}</div><div className="text-[11px] text-white/40">{product.category || "No category"}</div></div>
-          <div className={`text-xs uppercase tracking-[0.12em] ${structuralPass ? "text-emerald-300" : coverage === "covered" ? "text-amber-200" : "text-[#D4AF37]"}`}>
-            {coverage !== "covered" ? `SOP ${coverage}` : structuralPass ? "Structure passes" : "Structure needs work"}
+        <div key={productKey(product)} className="border border-white/10 p-4">
+          <div className="grid gap-3 xl:grid-cols-[110px_1fr_150px_1.4fr_auto] xl:items-center">
+            <div className="text-xs text-white/60">{product.sku || "No SKU"}</div>
+            <div><div className="text-sm">{product.name || "Unnamed product"}</div><div className="text-[11px] text-white/40">{product.category || "No category"}</div></div>
+            <div className={`text-xs uppercase tracking-[0.12em] ${structuralPass ? "text-emerald-300" : coverage === "covered" ? "text-amber-200" : "text-[#D4AF37]"}`}>
+              {coverage !== "covered" ? `SOP ${coverage}` : structuralPass ? "Structure passes" : "Structure needs work"}
+            </div>
+            <div className="text-xs leading-5 text-white/45">
+              {issues.length > 0 ? issues.map((item) => item.issue).join(", ") : manualVerified ? "Recorded evidence verification complete" : "Structure passes; evidence verification is not recorded"}
+              {fallbackFields.length > 0 ? ` · Confirmation needed: ${fallbackFields.join(", ")}` : ""}
+            </div>
+            <ProductActions product={product} />
           </div>
-          <div className="text-xs leading-5 text-white/45">
-            {issues.length > 0 ? issues.map((item) => item.issue).join(", ") : manualVerified ? "Recorded evidence verification complete" : "Structure passes; evidence verification is not recorded"}
-            {fallbackFields.length > 0 ? ` · Confirmation needed: ${fallbackFields.join(", ")}` : ""}
-          </div>
-          <ProductActions product={product} />
+          {issues.length > 0 && (
+            <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+              {issues.map((item) => <RecommendationPanel key={item.issue} product={product} finding={item} onApply={onApply} savingId={savingId} />)}
+            </div>
+          )}
+          {issues.length === 0 && (!manualVerified || fallbackFields.length > 0) && (
+            <div className="mt-3 border-t border-white/10 pt-3 text-[11px] leading-5 text-amber-100/80">
+              Needs owner confirmation: record the source/image verification and confirm every fallback value before this product can be marked SOP-verified.
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -533,6 +780,8 @@ export default function WebsiteHealthAdminV2() {
   const [tab, setTab] = useState("attention");
   const [query, setQuery] = useState("");
   const [refreshedAt, setRefreshedAt] = useState(null);
+  const [savingRecommendation, setSavingRecommendation] = useState("");
+  const [recommendationMessage, setRecommendationMessage] = useState(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -559,6 +808,25 @@ export default function WebsiteHealthAdminV2() {
   };
 
   useEffect(() => { refresh(); }, []);
+
+  const applyRecommendation = async (product, finding, item) => {
+    if (!product?.id || !item?.safeToApply || !item.patch) return;
+    const actionId = `${productKey(product)}:${finding.issue}`;
+    setSavingRecommendation(actionId);
+    setRecommendationMessage(null);
+    try {
+      const payload = { ...product, ...item.patch };
+      const updated = await api.updateProduct(product.id, payload);
+      setProducts((current) => current.map((entry) => (
+        entry.id === product.id ? (updated || payload) : entry
+      )));
+      setRecommendationMessage({ type: "success", text: `${product.sku || product.name}: suggested fix applied. Website Health has been recalculated.` });
+    } catch (error) {
+      setRecommendationMessage({ type: "error", text: error?.response?.data?.detail || error?.message || "The suggested fix could not be applied." });
+    } finally {
+      setSavingRecommendation("");
+    }
+  };
 
   const health = useMemo(() => buildWebsiteHealth(products), [products]);
   const normalizedQuery = query.trim().toLowerCase();
@@ -650,6 +918,12 @@ export default function WebsiteHealthAdminV2() {
         </div>
       )}
 
+      {recommendationMessage && (
+        <div role="status" className={`mt-4 border p-3 text-xs ${recommendationMessage.type === "success" ? "border-emerald-300/25 bg-emerald-400/5 text-emerald-100" : "border-red-400/30 bg-red-500/5 text-red-200"}`}>
+          {recommendationMessage.text}
+        </div>
+      )}
+
       <div className="mt-6">
         {loading ? (
           <div className="border border-white/10 p-8 text-sm text-white/50">Running health checks…</div>
@@ -659,7 +933,7 @@ export default function WebsiteHealthAdminV2() {
               <div><div className="eyebrow mb-2">Published catalogue</div><h2 className="font-serif text-2xl">Needs Attention</h2><p className="mt-2 text-xs text-white/45">Only published products with actionable catalogue findings are shown here.</p></div>
               <div className="text-xs text-white/45">{publishedAttentionGroups.length} affected products · {filterIssues(health.publishedAttention).length} findings</div>
             </div>
-            <ProductFindingGroups groups={publishedAttentionGroups} emptyMessage="No published catalogue findings require attention." />
+            <ProductFindingGroups groups={publishedAttentionGroups} emptyMessage="No published catalogue findings require attention." onApply={applyRecommendation} savingId={savingRecommendation} />
           </section>
         ) : tab === "completeness" ? (
           <div className="space-y-10">
@@ -671,26 +945,26 @@ export default function WebsiteHealthAdminV2() {
                 <div><div className="eyebrow mb-2">Published catalogue</div><h2 className="font-serif text-2xl">Structural SOP gaps</h2><p className="mt-2 text-xs text-white/45">Exact schema, category, SKU, description structure, image count and explicit commercial-state checks.</p></div>
                 <div className="text-xs text-white/45">{publishedStructuralGaps.length} published products need structural review</div>
               </div>
-              <ComplianceRows items={publishedStructuralGaps} />
+              <ComplianceRows items={publishedStructuralGaps} onApply={applyRecommendation} savingId={savingRecommendation} />
             </section>
             <section id="verification-confirmation-queue">
               <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
                 <div><div className="eyebrow mb-2">Evidence layer</div><h2 className="font-serif text-2xl">Verification and confirmation queue</h2><p className="mt-2 text-xs text-white/45">Records remain here until product-specific facts and image identity have documented verification.</p></div>
                 <div className="text-xs text-white/45">{publishedVerificationQueue.length} published products pending evidence and/or confirmation</div>
               </div>
-              <ComplianceRows items={publishedVerificationQueue} emptyMessage="Every mapped published product has recorded evidence verification and no confirmation fallback." />
+              <ComplianceRows items={publishedVerificationQueue} onApply={applyRecommendation} savingId={savingRecommendation} emptyMessage="Every mapped published product has recorded evidence verification and no confirmation fallback." />
             </section>
             {draftStructuralGaps.length > 0 && (
               <section>
                 <div className="mb-4"><div className="eyebrow mb-2">Drafts</div><h2 className="font-serif text-2xl">Draft structural SOP gaps</h2></div>
-                <ComplianceRows items={draftStructuralGaps} />
+                <ComplianceRows items={draftStructuralGaps} onApply={applyRecommendation} savingId={savingRecommendation} />
               </section>
             )}
           </div>
         ) : tab === "images" ? (
           <div className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-2"><div><h2 className="font-serif text-2xl">Image Audit</h2><p className="mt-2 text-xs text-white/45">Each finding links directly to the affected product editor.</p></div><div className="text-xs text-white/45">{imageGroups.length} published products affected · {filterIssues(health.publishedImageIssues).length} findings</div></div>
-            <ProductFindingGroups groups={imageGroups} emptyMessage="No structural product-image issues found in published products." />
+            <ProductFindingGroups groups={imageGroups} emptyMessage="No structural product-image issues found in published products." onApply={applyRecommendation} savingId={savingRecommendation} />
           </div>
         ) : tab === "seo" ? (
           <div className="space-y-8">
@@ -699,9 +973,9 @@ export default function WebsiteHealthAdminV2() {
             </div>
             <section>
               <div className="mb-4 flex flex-wrap items-end justify-between gap-2"><h2 className="font-serif text-2xl">Actionable SEO-content checks</h2><div className="text-xs text-white/45">{seoActionableGroups.length} affected products · {filterIssues(health.publishedSeoActionable).length} findings</div></div>
-              <ProductFindingGroups groups={seoActionableGroups} emptyMessage="No actionable SEO-content findings found in published products." />
+              <ProductFindingGroups groups={seoActionableGroups} emptyMessage="No actionable SEO-content findings found in published products." onApply={applyRecommendation} savingId={savingRecommendation} />
             </section>
-            {seoInfoGroups.length > 0 && <section><div className="mb-4"><h2 className="font-serif text-2xl">Informational</h2><p className="mt-2 text-xs text-white/45">Useful context that does not count as a published-site SEO warning.</p></div><ProductFindingGroups groups={seoInfoGroups} emptyMessage="No informational SEO notes." /></section>}
+            {seoInfoGroups.length > 0 && <section><div className="mb-4"><h2 className="font-serif text-2xl">Informational</h2><p className="mt-2 text-xs text-white/45">Useful context that does not count as a published-site SEO warning.</p></div><ProductFindingGroups groups={seoInfoGroups} emptyMessage="No informational SEO notes." onApply={applyRecommendation} savingId={savingRecommendation} /></section>}
           </div>
         ) : tab === "overview" ? (
           <section id="catalogue-overview">

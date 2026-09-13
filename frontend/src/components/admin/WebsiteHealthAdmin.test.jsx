@@ -1,4 +1,4 @@
-import { buildWebsiteHealth, evaluateSopCompliance, groupFindings, productCompleteness, SOP_RULES } from "./WebsiteHealthAdmin";
+import { buildSopRecommendation, buildWebsiteHealth, evaluateSopCompliance, groupFindings, productCompleteness, SOP_RULES } from "./WebsiteHealthAdmin";
 
 const descriptionWithFeatures = (count = 8) => `<p>This chandelier has a balanced decorative silhouette, patterned glass surfaces and warm reflected detail suited to an elegant focal point.</p><p>Its layered form brings ambient character to living rooms, dining spaces, entrance halls and considered hospitality interiors.</p><h3>Key Features</h3><ul>${Array.from({ length: count }, (_, index) => `<li>Product-specific visible feature ${index + 1}</li>`).join("")}</ul>`;
 
@@ -39,6 +39,35 @@ test("one specification no longer counts as complete", () => {
   const result = evaluateSopCompliance({ ...healthyProduct, specs: { Material: "Cut glass" } });
   expect(result.structuralPass).toBe(false);
   expect(result.issues.some((item) => item.issue.startsWith("Missing SOP specifications"))).toBe(true);
+});
+
+test("missing factual specifications receive an SOP-based recommendation without an automatic patch", () => {
+  const product = { ...healthyProduct, specs: { Material: "Cut glass" } };
+  const finding = evaluateSopCompliance(product).issues.find((item) => item.issue.startsWith("Missing SOP specifications"));
+  const suggested = buildSopRecommendation(product, finding);
+  expect(suggested.rule).toContain("exact SOP specification schema");
+  expect(suggested.proposed).toContain("verified product facts");
+  expect(suggested.confidence).toBe("Owner confirmation required");
+  expect(suggested.safeToApply).toBe(false);
+});
+
+test("safe dimension fallback recommendation never invents a measurement", () => {
+  const product = { ...healthyProduct, specs: { ...chandelierSpecs, Height: "Made to Order" } };
+  const finding = evaluateSopCompliance(product).issues.find((item) => item.issue === "Invalid dimension fallback");
+  const suggested = buildSopRecommendation(product, finding);
+  expect(suggested.safeToApply).toBe(true);
+  expect(suggested.patch.specs.Height).toBe("To be confirmed before order");
+  expect(suggested.patch.specs.Width).toBe(chandelierSpecs.Width);
+});
+
+test("safe specification-order recommendation preserves all recorded values", () => {
+  const reversedSpecs = Object.fromEntries([...Object.entries(chandelierSpecs)].reverse());
+  const product = { ...healthyProduct, specs: reversedSpecs };
+  const finding = evaluateSopCompliance(product).issues.find((item) => item.issue === "Specification order does not match SOP");
+  const suggested = buildSopRecommendation(product, finding);
+  expect(suggested.safeToApply).toBe(true);
+  expect(Object.keys(suggested.patch.specs)).toEqual(SOP_RULES.chandelier.schema);
+  expect(suggested.patch.specs.Material).toBe(chandelierSpecs.Material);
 });
 
 test("spacing around a slash does not create duplicate missing and unexpected specification findings", () => {
