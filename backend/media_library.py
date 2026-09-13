@@ -162,6 +162,10 @@ def build_media_library_report(
             validity = "valid"
         elif url.startswith("/api/files/"):
             validity = "invalid"
+        elif url.startswith("/"):
+            # Other relative URLs are application-owned routes (for example
+            # hero-slide delivery endpoints), not external media.
+            validity = "valid"
         else:
             validity = "unverified"
 
@@ -188,7 +192,11 @@ def build_media_library_report(
             "low_resolution": low_resolution,
             "used_by": used_by,
             "use_count": len(used_by),
-            "duplicate_url": len(used_by) > 1,
+            # Reuse across a product, category, hero or project is intentional.
+            # Flag only the same URL repeated inside the same owning record.
+            "duplicate_url": len({
+                (use.get("type"), use.get("id")) for use in used_by
+            }) < len(used_by),
             "duplicate_content": False,
             "notes": meta.get("notes") or "",
         })
