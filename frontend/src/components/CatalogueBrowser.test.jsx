@@ -252,3 +252,25 @@ describe("CatalogueBrowser — filter drawer category rendering", () => {
     errorSpy.mockRestore();
   });
 });
+
+describe("CatalogueBrowser — search recovery", () => {
+  test("shows the API's corrected search term for a common typo", async () => {
+    mockListProducts.mockResolvedValue({
+      ...makePage(1, 1, 1, 1),
+      resolved_query: "chandelier",
+      suggestion: "chandelier",
+    });
+    renderBrowser(["/catalog?q=chandlier"]);
+    expect(await screen.findByTestId("catalog-search-suggestion")).toHaveTextContent(/Showing results for “chandelier”/i);
+    expect(screen.getByTestId("catalog-search-suggestion")).toHaveTextContent(/chandlier/i);
+  });
+
+  test("zero-result state offers a visible reset action", async () => {
+    mockListProducts.mockResolvedValue({ items: [], total: 0, page: 1, limit: 24, total_pages: 0 });
+    renderBrowser(["/catalog?q=unknownthing"]);
+    const clear = await screen.findByTestId("zero-results-clear");
+    expect(clear).toHaveTextContent(/Clear search/i);
+    fireEvent.click(clear);
+    await waitFor(() => expect(screen.getByTestId("catalog-search")).toHaveValue(""));
+  });
+});

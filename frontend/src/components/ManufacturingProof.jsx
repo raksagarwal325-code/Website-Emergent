@@ -50,15 +50,15 @@ export default function ManufacturingProof({ craftVideo = {}, proof = {} }) {
       <div className="max-w-6xl mx-auto px-6 py-20 md:py-24">
         <div className="grid lg:grid-cols-[0.8fr_1.2fr] gap-8 lg:gap-14 items-start">
           <div>
-            <div className="eyebrow mb-4 text-[#D4AF37]">Manufacturing proof</div>
+            <div className="eyebrow mb-4 text-[#D4AF37]">Workshop process</div>
             <h2 className="font-serif text-3xl md:text-5xl leading-tight">Inside our Firozabad workshop.</h2>
           </div>
           <div className="space-y-4 text-white/68 leading-relaxed">
             <p>
-              This section documents real workshop activity from Samrat Glass Emporium in Firozabad. The footage shows people, tools and handwork used while preparing, shaping, finishing, cleaning and assembling decorative glass lighting components.
+              Real footage from Samrat Glass Emporium in Firozabad shows people, tools and handwork used while preparing, shaping, finishing, cleaning and assembling decorative glass lighting components.
             </p>
             <p className="text-sm text-white/48">
-              The exact sequence varies by product. We only describe processes that are visible in our own workshop material and do not claim that every fixture passes through identical stages.
+              The materials, techniques and sequence vary according to the individual product and design.
             </p>
           </div>
         </div>
