@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon, RefreshCw, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon, FolderOpen, RefreshCw, AlertTriangle } from "lucide-react";
 import { api } from "../lib/api";
 import { compareBySku } from "../lib/api";
 import { gmailComposeUrl } from "../lib/gmailCompose";
@@ -13,6 +13,7 @@ import ProductFullRegenerator from "../components/ProductFullRegenerator";
 import ProductDraftConversation from "../components/ProductDraftConversation";
 import HeroSliderAdmin from "../components/admin/HeroSliderAdmin";
 import CategoryImagesAdmin from "../components/admin/CategoryImagesAdmin";
+import MediaLibraryAdmin from "../components/MediaLibraryAdmin";
 import { LEGAL_DEFAULT_UPDATED_AT, serializeLegalDefault } from "../lib/legalContent";
 
 const emptyProduct = {
@@ -50,6 +51,7 @@ export default function Admin() {
     { key: "hero-slider", label: "Hero Slider", icon: Images },
     { key: "category-images", label: "Category Images", icon: ImageIcon },
     { key: "products", label: "Products", icon: Package },
+    { key: "media-library", label: "Media Library", icon: FolderOpen },
     { key: "reviews", label: "Reviews", icon: Star, badge: reviewCounts.pending },
     { key: "inquiries", label: "Inquiries", icon: MessageSquare },
     { key: "messages", label: "Messages", icon: Mail },
@@ -109,6 +111,7 @@ export default function Admin() {
       {tab === "homepage" && <AdminHomepage />}
       {tab === "hero-slider" && <HeroSliderAdmin />}
       {tab === "category-images" && <CategoryImagesAdmin />}
+      {tab === "media-library" && <MediaLibraryAdmin />}
 
       {tab === "products" && (
         <ProductsAdmin products={products} categories={categories} refresh={refresh} setEditing={setEditing} editing={editing} />
