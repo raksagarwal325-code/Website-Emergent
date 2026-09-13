@@ -49,6 +49,30 @@ const sanitizePublicSpecs = (specs) => {
   );
 };
 
+// Some legacy descriptions contain a final blank-line-separated SEO keyword
+// bank (for example: "elephant arm chandelier gajmahal chandelier ...").
+// Keep that stored Admin copy intact, but remove the unmistakable keyword-only
+// tail from public responses so customers see editorial description only.
+const sanitizePublicDescription = (value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  const blocks = trimmed.split(/\n\s*\n/).filter(Boolean);
+  if (blocks.length < 2) return trimmed;
+
+  const tail = blocks[blocks.length - 1].trim();
+  const words = tail.split(/\s+/).filter(Boolean);
+  const lightingTerm = /\b(chandelier|light|lighting|lamp|glass|crystal|lantern|sconce|ceiling|wall|floor|table|hanging)\b/i;
+  const looksLikeKeywordBank =
+    tail.length >= 60 &&
+    tail.length <= 600 &&
+    words.length >= 8 &&
+    tail === tail.toLowerCase() &&
+    !/[.!?•:]/.test(tail) &&
+    lightingTerm.test(tail);
+
+  return looksLikeKeywordBank ? blocks.slice(0, -1).join("\n\n").trim() : trimmed;
+};
+
 // Product tags are catalogue/search metadata. They include internal collection
 // tokens and SEO keyword phrases that must remain available to Admin/back-end
 // workflows but must never be rendered as customer-facing product copy.
@@ -59,6 +83,8 @@ export const sanitizePublicProduct = (product) => {
   if (!product || typeof product !== "object") return product;
   return {
     ...product,
+    short_description: sanitizePublicDescription(product.short_description),
+    description: sanitizePublicDescription(product.description),
     tags: [],
     specs: sanitizePublicSpecs(product.specs),
   };
