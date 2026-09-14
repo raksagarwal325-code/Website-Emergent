@@ -15,6 +15,7 @@ import {
   titleCaseCollectionSlug,
 } from "../constants/collections";
 import { getRegisteredCollections, withRegisteredCollections } from "../constants/collectionsRegistry";
+import VariantFamiliesAdmin from "../components/admin/VariantFamiliesAdmin";
 
 const CATEGORY_ORDER = [
   "Chandelier", "Floor Chandelier", "Table Chandelier", "Hanging Light",
@@ -36,6 +37,7 @@ export default function CollectionsAdmin() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [saving, setSaving] = useState(false);
+  const [managerMode, setManagerMode] = useState("collections");
 
   const load = async () => {
     setLoading(true);
@@ -233,6 +235,14 @@ export default function CollectionsAdmin() {
 
   if (loading) return <div className="max-w-7xl mx-auto px-6 py-16 text-white/50">Loading Collection Manager…</div>;
 
+  if (managerMode === "variants") return (
+    <div data-testid="collections-admin" className="max-w-7xl mx-auto px-6 py-12 space-y-8">
+      <div className="flex flex-wrap items-end justify-between gap-4"><div><Link to="/admin" className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-white/50 hover:text-white mb-5"><ArrowLeft size={14} /> Admin dashboard</Link><div className="eyebrow mb-3">Catalogue merchandising</div><h1 className="font-serif text-4xl">Collection Manager</h1></div></div>
+      <div className="flex gap-3 border-b border-white/10"><button onClick={() => setManagerMode("collections")} className="px-5 py-3 text-xs uppercase tracking-[0.2em] text-white/50">Design collections</button><button className="px-5 py-3 text-xs uppercase tracking-[0.2em] text-[#D4AF37] border-b border-[#D4AF37]">Variant families</button></div>
+      <VariantFamiliesAdmin />
+    </div>
+  );
+
   return (
     <div data-testid="collections-admin" className="max-w-7xl mx-auto px-6 py-12 space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -242,7 +252,7 @@ export default function CollectionsAdmin() {
           <h1 className="font-serif text-4xl">Collection Manager</h1>
           <p className="text-white/50 text-sm mt-3 max-w-2xl">Create and manage design collections without changing code. Product cards always use the product's actual catalogue name.</p>
         </div>
-        <button onClick={startNew} className="border border-[#D4AF37]/60 text-[#D4AF37] px-5 py-3 text-xs uppercase tracking-[0.22em] hover:bg-[#D4AF37] hover:text-black">New collection</button>
+        <div className="flex gap-3"><button onClick={() => setManagerMode("variants")} className="border border-white/20 text-white/70 px-5 py-3 text-xs uppercase tracking-[0.18em] hover:border-[#D4AF37]">Variant families</button><button onClick={startNew} className="border border-[#D4AF37]/60 text-[#D4AF37] px-5 py-3 text-xs uppercase tracking-[0.22em] hover:bg-[#D4AF37] hover:text-black">New collection</button></div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

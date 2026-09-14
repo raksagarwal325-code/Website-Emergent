@@ -33,6 +33,7 @@ from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, inspect_media_bytes  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
+from variant_families import family_for_product  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -946,6 +947,31 @@ async def get_product(product_id: str, admin: Optional["_AdminUser"] = Depends(m
         raise HTTPException(404, "Product not found")
     doc["seo_slug"] = product_slug(doc)
     return doc
+
+
+@api.get("/product-variants/{product_id}")
+async def get_product_variants(product_id: str):
+    """Return only owner-reviewed, published alternatives for one product.
+
+    Variant membership is stored separately from Collections in Settings. This
+    endpoint deliberately resolves exact existing product records; it never
+    synthesizes unavailable combinations or exposes drafts.
+    """
+    from public_product_sanitizer import sanitize_public_product
+
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    family = family_for_product(settings, product_id)
+    if not family:
+        return {"family": None, "items": []}
+    rows = await db.products.find(
+        {"id": {"$in": family["product_ids"]}, "status": "published"},
+        {"_id": 0},
+    ).to_list(len(family["product_ids"]))
+    by_id = {row.get("id"): row for row in rows}
+    items = [sanitize_public_product(by_id[item]) for item in family["product_ids"] if item in by_id]
+    if len(items) < 2:
+        return {"family": None, "items": []}
+    return {"family": {"slug": family["slug"], "name": family["name"]}, "items": items}
 
 
 @api.post("/products", response_model=Product)

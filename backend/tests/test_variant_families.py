@@ -1,0 +1,21 @@
+from variant_families import family_for_product, normalize_variant_slug, normalized_variant_families
+
+
+def test_registry_ignores_unreviewed_or_incomplete_rows():
+    settings = {"homepage_content": {"variant_families": [
+        {"name": "Neelpushp", "product_ids": ["p1", "p2", "p2"]},
+        {"name": "Only one", "product_ids": ["p3"]},
+        {"name": "", "product_ids": ["p4", "p5"]},
+    ]}}
+    assert normalized_variant_families(settings) == [
+        {"slug": "neelpushp", "name": "Neelpushp", "product_ids": ["p1", "p2"]}
+    ]
+
+
+def test_family_lookup_resolves_only_explicit_membership():
+    settings = {"homepage_content": {"variant_families": [
+        {"slug": "rajsi-urn", "name": "Rajsi Urn", "product_ids": ["amber", "clear"]},
+    ]}}
+    assert family_for_product(settings, "clear")["name"] == "Rajsi Urn"
+    assert family_for_product(settings, "red") is None
+    assert normalize_variant_slug("Rajsi Urn & Scroll") == "rajsi-urn-and-scroll"
