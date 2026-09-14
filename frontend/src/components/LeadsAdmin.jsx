@@ -367,7 +367,7 @@ export default function LeadsAdmin() {
                   </div>
                   {lead.estimated_value != null && <div className="text-xs text-[#D4AF37] mt-1">Estimated {formatPrice(lead.estimated_value)}</div>}
                 </div>
-                <select value={lead.status} disabled={busyId === lead.id} onChange={(e) => updateLead(lead.id, { status: e.target.value }, `Moved to ${STATUS_LABELS[e.target.value]}`)} className={inputClass}>
+                <select data-testid={`lead-status-${lead.id}`} value={lead.status} disabled={busyId === lead.id} onChange={(e) => updateLead(lead.id, { status: e.target.value }, `Moved to ${STATUS_LABELS[e.target.value]}`)} className={inputClass}>
                   {report.statuses.map((status) => <option key={status} value={status}>{STATUS_LABELS[status] || status}</option>)}
                 </select>
                 <button aria-label="Expand lead" onClick={() => setExpandedId(expanded ? "" : lead.id)} className="border border-white/15 h-11 flex items-center justify-center hover:border-[#D4AF37] hover:text-[#D4AF37]">
