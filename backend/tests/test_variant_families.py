@@ -8,14 +8,18 @@ def test_registry_ignores_unreviewed_or_incomplete_rows():
         {"name": "", "product_ids": ["p4", "p5"]},
     ]}}
     assert normalized_variant_families(settings) == [
-        {"slug": "neelpushp", "name": "Neelpushp", "product_ids": ["p1", "p2"]}
+        {"slug": "neelpushp", "name": "Neelpushp", "product_ids": ["p1", "p2"], "axes": []}
     ]
 
 
 def test_family_lookup_resolves_only_explicit_membership():
     settings = {"homepage_content": {"variant_families": [
-        {"slug": "rajsi-urn", "name": "Rajsi Urn", "product_ids": ["amber", "clear"]},
+        {"slug": "rajsi-urn", "name": "Rajsi Urn", "product_ids": ["amber", "clear"],
+         "axes": ["glass_colour", "metal_finish", "unknown", "glass_colour"]},
     ]}}
-    assert family_for_product(settings, "clear")["name"] == "Rajsi Urn"
+    assert family_for_product(settings, "clear") == {
+        "slug": "rajsi-urn", "name": "Rajsi Urn", "product_ids": ["amber", "clear"],
+        "axes": ["glass_colour", "metal_finish"],
+    }
     assert family_for_product(settings, "red") is None
     assert normalize_variant_slug("Rajsi Urn & Scroll") == "rajsi-urn-and-scroll"

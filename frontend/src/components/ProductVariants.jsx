@@ -38,7 +38,11 @@ export default function ProductVariants({ product }) {
   }, [product?.id]);
 
   const items = data.items || [];
-  const axes = useMemo(() => variantAxes(items), [items]);
+  const axes = useMemo(() => {
+    const detected = variantAxes(items);
+    const approved = Array.isArray(data.family?.axes) ? data.family.axes : [];
+    return approved.length ? detected.filter((axis) => approved.includes(axis.key)) : detected;
+  }, [items, data.family?.axes]);
   const currentIndex = items.findIndex((item) => item.id === product?.id);
   if (!data.family || items.length < 2 || currentIndex < 0) return null;
 

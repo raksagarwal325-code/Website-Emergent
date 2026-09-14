@@ -35,3 +35,13 @@ test("already approved products are excluded from new suggestions", () => {
   const items = [product("1", "Neelpushp Amber Chandelier", "Chandelier"), product("2", "Neelpushp Blue Chandelier", "Chandelier")];
   expect(suggestVariantFamilies(items, [{ product_ids: ["1", "2"] }])).toEqual([]);
 });
+
+test("approved families retain only supported customer-selectable axes", () => {
+  const families = getVariantFamilies({ homepage_content: { variant_families: [{
+    name: "Neelpushp",
+    product_ids: ["1", "2"],
+    axes: ["glass_colour", "mechanism", "unknown", "glass_colour"],
+  }] } });
+
+  expect(families[0].axes).toEqual(["glass_colour", "mechanism"]);
+});

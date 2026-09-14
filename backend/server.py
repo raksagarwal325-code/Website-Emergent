@@ -972,7 +972,7 @@ async def get_product_variants(product_id: str):
     items = [sanitize_public_product(by_id[item]) for item in family["product_ids"] if item in by_id]
     if len(items) < 2:
         return {"family": None, "items": []}
-    return {"family": {"slug": family["slug"], "name": family["name"]}, "items": items}
+    return {"family": {"slug": family["slug"], "name": family["name"], "axes": family.get("axes") or []}, "items": items}
 
 
 @api.get("/collections-index")

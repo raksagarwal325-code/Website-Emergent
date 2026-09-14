@@ -2,6 +2,8 @@
 
 import re
 
+ALLOWED_AXES = {"glass_colour", "metal_finish", "lights", "size", "mechanism", "product_type", "use"}
+
 
 def normalize_variant_slug(value: str) -> str:
     value = str(value or "").lower().replace("&", " and ")
@@ -22,8 +24,11 @@ def normalized_variant_families(settings: dict | None) -> list[dict]:
         product_ids = list(dict.fromkeys(
             str(item).strip() for item in (row.get("product_ids") or []) if str(item).strip()
         ))
+        axes = list(dict.fromkeys(
+            str(item).strip() for item in (row.get("axes") or []) if str(item).strip() in ALLOWED_AXES
+        ))
         if slug and name and len(product_ids) >= 2:
-            families.append({"slug": slug, "name": name, "product_ids": product_ids})
+            families.append({"slug": slug, "name": name, "product_ids": product_ids, "axes": axes})
     return families
 
 

@@ -31,6 +31,9 @@ export function getVariantFamilies(settings) {
       slug: normalizeVariantSlug(row?.slug || row?.name),
       name: String(row?.name || "").trim(),
       product_ids: Array.from(new Set((row?.product_ids || []).map(String).filter(Boolean))),
+      axes: Array.from(new Set((row?.axes || []).map(String).filter((key) =>
+        [...VARIANT_SPEC_AXES.map((axis) => axis.key), "use"].includes(key)
+      ))),
     }))
     .filter((row) => row.slug && row.name && row.product_ids.length >= 2);
 }
