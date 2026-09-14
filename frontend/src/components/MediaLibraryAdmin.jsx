@@ -41,6 +41,10 @@ export default function MediaLibraryAdmin() {
   const [uploading, setUploading] = useState(false);
   const [applyingRecommendations, setApplyingRecommendations] = useState(false);
   const [recommendationPreview, setRecommendationPreview] = useState(false);
+  const [selectedRecommendationTypes, setSelectedRecommendationTypes] = useState([
+    "video_reel",
+    "installation",
+  ]);
   const [uploadType, setUploadType] = useState("unclassified");
   const fileInput = useRef(null);
 
@@ -61,7 +65,7 @@ export default function MediaLibraryAdmin() {
       if (usageFilter !== "all" && asset.usage_type !== usageFilter) return false;
       if (issueFilter === "invalid" && asset.validity !== "invalid") return false;
       if (issueFilter === "duplicate" && !asset.duplicate_url && !asset.duplicate_content) return false;
-      if (issueFilter === "low_resolution" && !asset.low_resolution) return false;
+      if (issueFilter === "low_resolution" && (!asset.low_resolution || asset.use_count === 0)) return false;
       if (issueFilter === "unused" && asset.use_count !== 0) return false;
       if (issueFilter === "unclassified" && asset.usage_type !== "unclassified") return false;
       if (issueFilter === "recommended" && !asset.recommendation) return false;
@@ -83,13 +87,36 @@ export default function MediaLibraryAdmin() {
     () => recommendations.filter((asset) => (asset.recommendation?.confidence || 0) >= 0.90),
     [recommendations]
   );
-  const recommendationCounts = useMemo(() => (
-    highConfidenceRecommendations.reduce((counts, asset) => {
-      const label = asset.recommendation.label;
-      counts[label] = (counts[label] || 0) + 1;
-      return counts;
-    }, {})
-  ), [highConfidenceRecommendations]);
+  const recommendationGroups = useMemo(() => {
+    const grouped = new Map();
+    highConfidenceRecommendations.forEach((asset) => {
+      const key = asset.recommendation.usage_type;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          usageType: key,
+          label: asset.recommendation.label,
+          assets: [],
+        });
+      }
+      grouped.get(key).assets.push(asset);
+    });
+    return Array.from(grouped.values());
+  }, [highConfidenceRecommendations]);
+
+  const selectedRecommendations = useMemo(
+    () => highConfidenceRecommendations.filter((asset) =>
+      selectedRecommendationTypes.includes(asset.recommendation.usage_type)
+    ),
+    [highConfidenceRecommendations, selectedRecommendationTypes]
+  );
+
+  const toggleRecommendationType = (usageType) => {
+    setSelectedRecommendationTypes((current) =>
+      current.includes(usageType)
+        ? current.filter((value) => value !== usageType)
+        : [...current, usageType]
+    );
+  };
 
   const recommendationPayload = (asset) => ({
     id: asset.id,
@@ -223,11 +250,11 @@ export default function MediaLibraryAdmin() {
   const summary = report.summary || {};
   const metricCards = [
     ["Assets", summary.assets || 0],
-    ["Invalid", summary.invalid || 0],
-    ["Duplicates", summary.duplicate_assets || 0],
-    ["Low resolution", summary.low_resolution || 0],
-    ["Unclassified", summary.unclassified || 0],
-    ["Products missing pair", summary.products_missing_required_slots || 0],
+    ["Broken references", summary.invalid || 0],
+    ["Potential duplicate groups", summary.duplicate_groups || 0],
+    ["Low-res images in use", summary.low_resolution_in_use || 0],
+    ["Usage labels assigned", `${summary.classified || 0}/${summary.assets || 0}`],
+    ["Pair checks ready", `${summary.products_pair_assessed || 0}/${summary.products_total || 0}`],
   ];
 
   return (
@@ -267,6 +294,10 @@ export default function MediaLibraryAdmin() {
           </div>
         ))}
       </div>
+      <p className="-mt-5 text-[11px] leading-relaxed text-white/45">
+        Broken references and low-resolution images currently used on the website need attention.
+        Duplicate groups require review. Usage labels and pair checks are workflow progress, not website errors.
+      </p>
 
       {recommendations.length > 0 && (
         <section data-testid="media-recommendations" className="border border-[#D4AF37]/35 bg-[#D4AF37]/[0.035] p-5 md:p-6">
@@ -291,13 +322,50 @@ export default function MediaLibraryAdmin() {
 
           {recommendationPreview && (
             <div data-testid="media-recommendation-preview" className="mt-5 border-t border-white/10 pt-5">
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {Object.entries(recommendationCounts).map(([label, count]) => (
-                  <div key={label} className="border border-white/10 p-3">
-                    <div className="text-[10px] uppercase tracking-[0.14em] text-white/45">{label}</div>
-                    <div className="mt-1 font-serif text-xl">{count}</div>
-                  </div>
-                ))}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {recommendationGroups.map((group) => {
+                  const selected = selectedRecommendationTypes.includes(group.usageType);
+                  const needsBulbReview = ["white_bulbs_off", "black_bulbs_on"].includes(group.usageType);
+                  return (
+                    <label key={group.usageType} className={`cursor-pointer border p-3 ${selected ? "border-[#D4AF37]/60" : "border-white/10"}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-[10px] uppercase tracking-[0.14em] text-white/55">{group.label}</div>
+                          <div className="mt-1 font-serif text-xl">{group.assets.length}</div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleRecommendationType(group.usageType)}
+                          aria-label={`Select ${group.label} recommendations`}
+                          className="mt-1 accent-[#D4AF37]"
+                        />
+                      </div>
+                      <div className="mt-3 flex gap-1.5">
+                        {group.assets.slice(0, 3).map((asset) => (
+                          asset.kind === "image" ? (
+                            <img
+                              key={asset.id}
+                              src={api.resolveImage(asset.url)}
+                              alt=""
+                              loading="lazy"
+                              className="h-12 w-12 border border-white/10 bg-black object-contain"
+                            />
+                          ) : (
+                            <div key={asset.id} className="flex h-12 w-12 items-center justify-center border border-white/10 bg-black">
+                              <FileVideo size={15} className="text-white/50" />
+                            </div>
+                          )
+                        ))}
+                      </div>
+                      {needsBulbReview && (
+                        <div className="mt-2 text-[9px] leading-relaxed text-amber-200/70">
+                          Not selected by default: visually verify bulb state first.
+                        </div>
+                      )}
+                    </label>
+                  );
+                })}
               </div>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                 <p className="max-w-3xl text-[11px] leading-relaxed text-white/45">
@@ -305,12 +373,12 @@ export default function MediaLibraryAdmin() {
                 </p>
                 <button
                   type="button"
-                  disabled={!highConfidenceRecommendations.length || applyingRecommendations}
-                  onClick={() => applyRecommendations(highConfidenceRecommendations)}
+                  disabled={!selectedRecommendations.length || applyingRecommendations}
+                  onClick={() => applyRecommendations(selectedRecommendations)}
                   className="inline-flex items-center gap-2 bg-[#D4AF37] px-5 py-2.5 text-[10px] uppercase tracking-[0.18em] text-black disabled:opacity-40"
                 >
                   {applyingRecommendations && <LoaderCircle className="animate-spin" size={13} />}
-                  Confirm {highConfidenceRecommendations.length} recommendations
+                  Confirm {selectedRecommendations.length} selected
                 </button>
               </div>
             </div>
@@ -402,10 +470,10 @@ export default function MediaLibraryAdmin() {
       <section className="border border-white/10 p-5">
         <details>
           <summary className="cursor-pointer text-xs uppercase tracking-[0.2em] text-[#D4AF37]">
-            Products missing required lit/unlit pair ({report.missing_products.length})
+            Products with verified missing lit/unlit pair ({report.missing_products.length})
           </summary>
           <p className="mt-3 text-xs leading-relaxed text-white/45">
-            A product is complete here only after its assets are explicitly classified as both White background / bulbs off and Black background / bulbs on. The library never guesses from image order.
+            Only fully classified products are assessed. {summary.products_pair_unassessed || 0} products remain not assessed; they are not counted as missing. A verified complete product needs both White background / bulbs off and Black background / bulbs on.
           </p>
           <div className="mt-4 max-h-[480px] divide-y divide-white/5 overflow-y-auto">
             {report.missing_products.map((product) => (
