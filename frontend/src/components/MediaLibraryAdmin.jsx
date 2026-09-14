@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Copy, FileVideo, Image as ImageIcon, LoaderCircle, RefreshCw, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, FileVideo, Image as ImageIcon, LoaderCircle, RefreshCw, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ const ISSUE_FILTERS = [
   ["low_resolution", "Low resolution"],
   ["unused", "Unused"],
   ["unclassified", "Unclassified"],
+  ["recommended", "Has SOP recommendation"],
 ];
 
 const formatBytes = (value) => {
@@ -38,6 +39,8 @@ export default function MediaLibraryAdmin() {
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [applyingRecommendations, setApplyingRecommendations] = useState(false);
+  const [recommendationPreview, setRecommendationPreview] = useState(false);
   const [uploadType, setUploadType] = useState("unclassified");
   const fileInput = useRef(null);
 
@@ -61,6 +64,7 @@ export default function MediaLibraryAdmin() {
       if (issueFilter === "low_resolution" && !asset.low_resolution) return false;
       if (issueFilter === "unused" && asset.use_count !== 0) return false;
       if (issueFilter === "unclassified" && asset.usage_type !== "unclassified") return false;
+      if (issueFilter === "recommended" && !asset.recommendation) return false;
       if (!needle) return true;
       const haystack = [
         asset.url,
@@ -70,6 +74,47 @@ export default function MediaLibraryAdmin() {
       return haystack.includes(needle);
     });
   }, [report, query, usageFilter, issueFilter]);
+
+  const recommendations = useMemo(
+    () => (report?.assets || []).filter((asset) => asset.recommendation),
+    [report]
+  );
+  const highConfidenceRecommendations = useMemo(
+    () => recommendations.filter((asset) => (asset.recommendation?.confidence || 0) >= 0.90),
+    [recommendations]
+  );
+  const recommendationCounts = useMemo(() => (
+    highConfidenceRecommendations.reduce((counts, asset) => {
+      const label = asset.recommendation.label;
+      counts[label] = (counts[label] || 0) + 1;
+      return counts;
+    }, {})
+  ), [highConfidenceRecommendations]);
+
+  const recommendationPayload = (asset) => ({
+    id: asset.id,
+    url: asset.url,
+    usage_type: asset.recommendation.usage_type,
+    confidence: asset.recommendation.confidence,
+    reason: asset.recommendation.reason,
+  });
+
+  const applyRecommendations = async (selectedAssets) => {
+    if (!selectedAssets.length || applyingRecommendations) return;
+    setApplyingRecommendations(true);
+    try {
+      const result = await api.adminApplyMediaRecommendations(
+        selectedAssets.map(recommendationPayload)
+      );
+      toast.success(`Approved ${result.approved} SOP recommendation${result.approved === 1 ? "" : "s"}`);
+      setRecommendationPreview(false);
+      await load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Recommendations could not be applied");
+    } finally {
+      setApplyingRecommendations(false);
+    }
+  };
 
   const updateUsage = async (asset, usageType) => {
     setBusyId(asset.id);
@@ -223,6 +268,56 @@ export default function MediaLibraryAdmin() {
         ))}
       </div>
 
+      {recommendations.length > 0 && (
+        <section data-testid="media-recommendations" className="border border-[#D4AF37]/35 bg-[#D4AF37]/[0.035] p-5 md:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-[#D4AF37]">
+                <CheckCircle2 size={17} />
+                <h3 className="text-xs uppercase tracking-[0.2em]">SOP recommendations</h3>
+              </div>
+              <p className="mt-2 max-w-3xl text-xs leading-relaxed text-white/50">
+                {recommendations.length} assets have evidence-based suggestions. Only {highConfidenceRecommendations.length} high-confidence recommendations are included in bulk approval. Nothing changes until you preview and confirm.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRecommendationPreview((open) => !open)}
+              className="border border-[#D4AF37]/60 px-4 py-2 text-[10px] uppercase tracking-[0.18em] text-[#D4AF37]"
+            >
+              {recommendationPreview ? "Close preview" : "Preview recommendations"}
+            </button>
+          </div>
+
+          {recommendationPreview && (
+            <div data-testid="media-recommendation-preview" className="mt-5 border-t border-white/10 pt-5">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {Object.entries(recommendationCounts).map(([label, count]) => (
+                  <div key={label} className="border border-white/10 p-3">
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-white/45">{label}</div>
+                    <div className="mt-1 font-serif text-xl">{count}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="max-w-3xl text-[11px] leading-relaxed text-white/45">
+                  Approval stores classification metadata only. It does not replace, delete, reorder or detach any product or project image. White/black recommendations should still be visually reviewed because background analysis cannot independently verify bulb state.
+                </p>
+                <button
+                  type="button"
+                  disabled={!highConfidenceRecommendations.length || applyingRecommendations}
+                  onClick={() => applyRecommendations(highConfidenceRecommendations)}
+                  className="inline-flex items-center gap-2 bg-[#D4AF37] px-5 py-2.5 text-[10px] uppercase tracking-[0.18em] text-black disabled:opacity-40"
+                >
+                  {applyingRecommendations && <LoaderCircle className="animate-spin" size={13} />}
+                  Confirm {highConfidenceRecommendations.length} recommendations
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="space-y-4">
         <div className="flex flex-wrap gap-3">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search URL, SKU, product or project…" className="min-w-[240px] flex-1 border border-white/15 bg-[#0a0a0a] px-4 py-2.5 text-sm outline-none focus:border-[#D4AF37]" />
@@ -266,6 +361,25 @@ export default function MediaLibraryAdmin() {
                 <select disabled={busyId === asset.id} value={asset.usage_type} onChange={(event) => updateUsage(asset, event.target.value)} className="w-full border border-white/15 bg-[#111] px-3 py-2 text-xs disabled:opacity-50">
                   {report.usage_types.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
+
+                {asset.recommendation && (
+                  <div className="border border-[#D4AF37]/25 bg-black/20 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[10px] uppercase tracking-[0.16em] text-[#D4AF37]">
+                        Recommended: {asset.recommendation.label} · {Math.round(asset.recommendation.confidence * 100)}%
+                      </div>
+                      <button
+                        type="button"
+                        disabled={applyingRecommendations}
+                        onClick={() => applyRecommendations([asset])}
+                        className="text-[9px] uppercase tracking-[0.16em] text-white/65 hover:text-[#D4AF37]"
+                      >
+                        Review & apply
+                      </button>
+                    </div>
+                    <p className="mt-1.5 text-[10px] leading-relaxed text-white/40">{asset.recommendation.reason}</p>
+                  </div>
+                )}
 
                 <div className="space-y-1">
                   {usageSummary(asset.used_by).map((label, index) => <div key={`${label}-${index}`} className="truncate text-[11px] text-white/55">{label}</div>)}

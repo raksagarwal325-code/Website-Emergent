@@ -212,6 +212,8 @@ export const api = {
   adminMediaLibrary: () => client.get("/admin/media-library").then(r => r.data),
   adminUpdateMediaAsset: (assetId, data) =>
     client.patch(`/admin/media-library/${assetId}`, data).then(r => r.data),
+  adminApplyMediaRecommendations: (items) =>
+    client.post("/admin/media-library/recommendations/apply", { items }).then(r => r.data),
   adminScanMediaLibrary: (limit = 250) =>
     client.post(`/admin/media-library/scan?limit=${limit}`).then(r => r.data),
   adminMediaOriginalUrl: (fileId) =>

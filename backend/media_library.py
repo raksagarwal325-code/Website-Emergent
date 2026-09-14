@@ -54,10 +54,34 @@ def inspect_media_bytes(data: bytes, content_type: str = "") -> dict:
         "sha256": hashlib.sha256(data).hexdigest(),
         "width": None,
         "height": None,
+        "background_tone": None,
+        "background_luminance": None,
     }
     if (content_type or "").lower().startswith("image/"):
         with Image.open(io.BytesIO(data)) as image:
             result["width"], result["height"] = image.size
+            sample = image.convert("RGB")
+            sample.thumbnail((80, 80))
+            width, height = sample.size
+            border = []
+            edge = max(1, min(width, height) // 10)
+            for y in range(height):
+                for x in range(width):
+                    if x < edge or x >= width - edge or y < edge or y >= height - edge:
+                        red, green, blue = sample.getpixel((x, y))
+                        border.append(0.2126 * red + 0.7152 * green + 0.0722 * blue)
+            if border:
+                average = sum(border) / len(border)
+                bright_fraction = sum(value >= 225 for value in border) / len(border)
+                dark_fraction = sum(value <= 35 for value in border) / len(border)
+                if average >= 215 and bright_fraction >= 0.70:
+                    tone = "white"
+                elif average <= 45 and dark_fraction >= 0.70:
+                    tone = "black"
+                else:
+                    tone = "mixed"
+                result["background_tone"] = tone
+                result["background_luminance"] = round(average, 1)
     return result
 
 
@@ -113,6 +137,58 @@ def collect_references(
         })
 
     return refs
+
+
+def _usage_recommendation(
+    *, url: str, kind: str, background_tone: str | None, used_by: list[dict]
+) -> dict | None:
+    """Return a conservative SOP recommendation; never guess unsupported types."""
+    kinds = {use.get("type") for use in used_by}
+    lower_url = url.lower()
+
+    if kind == "video" or "/ig_covers/" in lower_url:
+        return {
+            "usage_type": "video_reel",
+            "label": MEDIA_USAGE_LABELS["video_reel"],
+            "confidence": 0.98 if kind == "video" else 0.90,
+            "reason": (
+                "The asset is a video."
+                if kind == "video"
+                else "The stored path identifies an Instagram/Reel cover."
+            ),
+        }
+
+    if "project" in kinds:
+        return {
+            "usage_type": "installation",
+            "label": MEDIA_USAGE_LABELS["installation"],
+            "confidence": 0.98,
+            "reason": "The asset is used in the verified Project Gallery.",
+        }
+
+    if "product" in kinds and background_tone == "white":
+        return {
+            "usage_type": "white_bulbs_off",
+            "label": MEDIA_USAGE_LABELS["white_bulbs_off"],
+            "confidence": 0.92,
+            "reason": (
+                "The image border is predominantly white. Per the product-photo "
+                "SOP, confirm that its bulbs are off before approval."
+            ),
+        }
+
+    if "product" in kinds and background_tone == "black":
+        return {
+            "usage_type": "black_bulbs_on",
+            "label": MEDIA_USAGE_LABELS["black_bulbs_on"],
+            "confidence": 0.92,
+            "reason": (
+                "The image border is predominantly black. Per the product-photo "
+                "SOP, confirm that its bulbs are on before approval."
+            ),
+        }
+
+    return None
 
 
 def build_media_library_report(
@@ -174,6 +250,15 @@ def build_media_library_report(
         low_resolution = bool(
             width and height and (max(width, height) < 1200 or min(width, height) < 800)
         )
+        recommendation = None
+        if usage_type == "unclassified":
+            recommendation = _usage_recommendation(
+                url=url,
+                kind="video" if is_video else "image",
+                background_tone=(file_row or {}).get("background_tone"),
+                used_by=used_by,
+            )
+
         assets.append({
             "id": asset_id,
             "url": url,
@@ -182,6 +267,9 @@ def build_media_library_report(
             "usage_label": MEDIA_USAGE_LABELS[usage_type],
             "width": width,
             "height": height,
+            "background_tone": (file_row or {}).get("background_tone"),
+            "background_luminance": (file_row or {}).get("background_luminance"),
+            "recommendation": recommendation,
             "size_bytes": (file_row or {}).get("size"),
             "content_type": content_type or None,
             "sha256": (file_row or {}).get("sha256"),
@@ -260,6 +348,11 @@ def build_media_library_report(
                 a["duplicate_url"] or a["duplicate_content"] for a in assets
             ),
             "unclassified": sum(a["usage_type"] == "unclassified" for a in assets),
+            "recommendations": sum(bool(a.get("recommendation")) for a in assets),
+            "high_confidence_recommendations": sum(
+                (a.get("recommendation") or {}).get("confidence", 0) >= 0.90
+                for a in assets
+            ),
             "products_missing_required_slots": len(missing_products),
         },
         "assets": assets,

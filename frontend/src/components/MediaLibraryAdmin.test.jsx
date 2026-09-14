@@ -39,6 +39,14 @@ describe("Admin Media Library", () => {
     expect(source).not.toContain("adminScanMediaLibrary(500)");
   });
 
+  test("previews and explicitly confirms SOP recommendations", () => {
+    expect(source).toContain("SOP recommendations");
+    expect(source).toContain("Preview recommendations");
+    expect(source).toContain("Confirm {highConfidenceRecommendations.length} recommendations");
+    expect(source).toContain("adminApplyMediaRecommendations");
+    expect(source).toContain("background analysis cannot independently verify bulb state");
+  });
+
   test("uses the stable server asset id after upload", () => {
     expect(source).toContain("result.asset_id");
     expect(source).not.toContain("crypto.subtle");
