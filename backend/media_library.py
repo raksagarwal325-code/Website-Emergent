@@ -10,6 +10,7 @@ import hashlib
 import io
 from collections import defaultdict
 from typing import Iterable
+from urllib.parse import urlsplit
 
 from PIL import Image
 
@@ -39,8 +40,19 @@ REQUIRED_PRODUCT_SLOTS = ("white_bulbs_off", "black_bulbs_on")
 _VIDEO_EXTENSIONS = (".mp4", ".webm", ".mov", ".m4v")
 
 
+def canonical_media_url(url: str) -> str:
+    """Collapse absolute and relative URLs for files owned by this application."""
+    cleaned = (url or "").strip()
+    if not cleaned:
+        return ""
+    parsed = urlsplit(cleaned)
+    if parsed.scheme in {"http", "https"} and parsed.path.startswith("/api/files/"):
+        return parsed.path
+    return cleaned
+
+
 def asset_id_for_url(url: str) -> str:
-    return hashlib.sha256((url or "").strip().encode("utf-8")).hexdigest()[:24]
+    return hashlib.sha256(canonical_media_url(url).encode("utf-8")).hexdigest()[:24]
 
 
 def public_url_for_file(row: dict) -> str:
@@ -86,7 +98,7 @@ def inspect_media_bytes(data: bytes, content_type: str = "") -> dict:
 
 
 def _add_reference(refs: dict, url: str, use: dict) -> None:
-    cleaned = (url or "").strip()
+    cleaned = canonical_media_url(url)
     if not cleaned:
         return
     refs.setdefault(cleaned, []).append(use)
@@ -212,6 +224,11 @@ def build_media_library_report(
         if public_url_for_file(row)
     }
     metadata_by_id = {row.get("id"): row for row in metadata if row.get("id")}
+    metadata_by_url = {
+        canonical_media_url(row.get("url")): row
+        for row in metadata
+        if canonical_media_url(row.get("url"))
+    }
 
     # Uploaded but currently unused files must still remain visible.
     for url in file_by_url:
@@ -221,7 +238,7 @@ def build_media_library_report(
     for url, used_by in refs.items():
         asset_id = asset_id_for_url(url)
         file_row = file_by_url.get(url)
-        meta = metadata_by_id.get(asset_id) or {}
+        meta = metadata_by_id.get(asset_id) or metadata_by_url.get(url) or {}
         content_type = (file_row or {}).get("content_type") or ""
         is_video = (
             (file_row or {}).get("kind") == "video"
