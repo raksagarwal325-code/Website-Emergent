@@ -68,7 +68,7 @@ test("loads a WhatsApp lead and exposes contact actions", async () => {
 test("updates the six-stage pipeline status", async () => {
   render(<LeadsAdmin />);
   await screen.findByText("Rita Sen");
-  fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "qualified" } });
+  fireEvent.change(screen.getByTestId("lead-status-manual:1"), { target: { value: "qualified" } });
   await waitFor(() => expect(mockApi.adminUpdateLead).toHaveBeenCalledWith("manual:1", { status: "qualified" }));
 });
 
