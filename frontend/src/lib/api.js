@@ -167,6 +167,12 @@ export const api = {
   createContact: (data) => client.post("/contact", data).then(r => r.data),
   listContact: () => client.get("/contact").then(r => r.data),
 
+  // --- Unified Leads CRM ---
+  adminLeads: () => client.get("/admin/leads").then(r => r.data),
+  adminCreateLead: (data) => client.post("/admin/leads", data).then(r => r.data),
+  adminUpdateLead: (id, data) => client.patch(`/admin/leads/${encodeURIComponent(id)}`, data).then(r => r.data),
+  adminAddLeadNote: (id, note) => client.post(`/admin/leads/${encodeURIComponent(id)}/notes`, { note }).then(r => r.data),
+
   getSettings: () => client.get("/settings").then(r => r.data),
   // Admin-only: returns the full Settings model including secrets like
   // google_maps_api_key. Public `/settings` deliberately omits those.
