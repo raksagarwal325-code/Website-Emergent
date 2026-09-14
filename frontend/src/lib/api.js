@@ -158,6 +158,13 @@ export const api = {
   restoreProductVersion: (id, versionId, reason = "") => client.post(
     `/admin/products/${id}/versions/${versionId}/restore`, { reason },
   ).then(r => r.data),
+  previewBulkProductUpdate: (ids, changes) => client.post(
+    "/admin/products/bulk/preview", { ids, changes },
+  ).then(r => r.data),
+  applyBulkProductUpdate: (ids, changes, previewToken, reason = "") => client.post(
+    "/admin/products/bulk/apply",
+    { ids, changes, preview_token: previewToken, reason },
+  ).then(r => r.data),
   categories: () => client.get("/products/categories").then(r => r.data),
 
   listReviews: (product_id) => client.get(`/reviews`, { params: { product_id } }).then(r => r.data),

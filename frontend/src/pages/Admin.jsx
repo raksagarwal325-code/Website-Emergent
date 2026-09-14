@@ -15,6 +15,7 @@ import HeroSliderAdmin from "../components/admin/HeroSliderAdmin";
 import CategoryImagesAdmin from "../components/admin/CategoryImagesAdmin";
 import MediaLibraryAdmin from "../components/MediaLibraryAdmin";
 import ProductVersionHistory from "../components/ProductVersionHistory";
+import BulkCatalogueManager from "../components/BulkCatalogueManager";
 import { LEGAL_DEFAULT_UPDATED_AT, serializeLegalDefault } from "../lib/legalContent";
 
 const emptyProduct = {
@@ -149,6 +150,7 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
   const [sortMode, setSortMode] = useState("sku_asc");
   const [changeReason, setChangeReason] = useState("");
   const [changeSource, setChangeSource] = useState("admin");
+  const [selectedProductIds, setSelectedProductIds] = useState(new Set());
 
   // Baseline categories always shown in the filter/dropdown, even if the
   // catalogue hasn't been fully populated yet. Merge with categories the
@@ -204,6 +206,22 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
     }
     return sorted;
   }, [products, catFilter, statusFilter, search, sortMode]);
+
+  useEffect(() => {
+    const available = new Set(products.map((product) => product.id));
+    setSelectedProductIds((current) => new Set(
+      Array.from(current).filter((id) => available.has(id)),
+    ));
+  }, [products]);
+
+  const toggleProductSelection = (id) => {
+    setSelectedProductIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   // Category → SKU prefix used across the catalogue. Falls back to the
   // uppercase first two letters of the category name for anything we
@@ -316,6 +334,17 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
         <AIProductGenerator
           onDone={refresh}
           setEditingProduct={(draft) => { setEditing(draft); refresh(); }}
+        />
+      )}
+
+      {!editing && (
+        <BulkCatalogueManager
+          selectedIds={selectedProductIds}
+          visibleProducts={visibleProducts}
+          categories={CATEGORY_OPTIONS}
+          onSelectVisible={() => setSelectedProductIds(new Set(visibleProducts.map((product) => product.id)))}
+          onClear={() => setSelectedProductIds(new Set())}
+          onApplied={refresh}
         />
       )}
 
@@ -717,7 +746,8 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
         </div>
 
         {/* Column header row (visible only on wider screens). */}
-        <div className="hidden md:grid grid-cols-[56px_1fr_140px_120px_60px] items-center gap-3 px-3 py-2 text-[9px] uppercase tracking-[0.24em] text-white/40 border-b border-white/10">
+        <div className="hidden md:grid grid-cols-[28px_56px_1fr_140px_120px_60px] items-center gap-3 px-3 py-2 text-[9px] uppercase tracking-[0.24em] text-white/40 border-b border-white/10">
+          <div>Select</div>
           <div></div>
           <div>Name</div>
           <div>Category</div>
@@ -733,7 +763,15 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
 
         {visibleProducts.map((p) => (
           <div key={p.id} data-testid={`admin-product-${p.id}`}
-            className={`grid grid-cols-[56px_1fr_60px] md:grid-cols-[56px_1fr_140px_120px_60px] items-center gap-3 border p-3 ${p.status === "draft" ? "border-[#D4AF37]/50 bg-[#D4AF37]/[0.04]" : "border-white/10"}`}>
+            className={`grid grid-cols-[28px_56px_1fr_60px] md:grid-cols-[28px_56px_1fr_140px_120px_60px] items-center gap-3 border p-3 ${selectedProductIds.has(p.id) ? "border-[#D4AF37] bg-[#D4AF37]/[0.06]" : p.status === "draft" ? "border-[#D4AF37]/50 bg-[#D4AF37]/[0.04]" : "border-white/10"}`}>
+            <input
+              type="checkbox"
+              checked={selectedProductIds.has(p.id)}
+              onChange={() => toggleProductSelection(p.id)}
+              aria-label={`Select ${p.name}`}
+              data-testid={`select-product-${p.id}`}
+              className="accent-[#D4AF37]"
+            />
             <div className="w-14 h-14 bg-[#0a0a0a] overflow-hidden flex-shrink-0">
               {p.images?.[0] && <img src={api.resolveImage(p.images[0])} alt="" className="w-full h-full object-cover" />}
             </div>
