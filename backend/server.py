@@ -3726,10 +3726,6 @@ async def shutdown():
     client.close()
 
 
-# Unified CRM layer; legacy enquiry/contact routes and collections stay intact.
-from lead_manager import install_lead_manager  # noqa: E402
-install_lead_manager(api, db, require_admin)
-
 app.include_router(api)
 
 app.add_middleware(
