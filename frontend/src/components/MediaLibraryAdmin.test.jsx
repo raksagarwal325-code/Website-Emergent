@@ -18,10 +18,10 @@ describe("Admin Media Library", () => {
   });
 
   test("shows the requested operational findings and usage links", () => {
-    expect(source).toContain("Invalid");
-    expect(source).toContain("Duplicates");
-    expect(source).toContain("Low resolution");
-    expect(source).toContain("Products missing required lit/unlit pair");
+    expect(source).toContain("Broken references");
+    expect(source).toContain("Potential duplicate groups");
+    expect(source).toContain("Low-res images in use");
+    expect(source).toContain("Products with verified missing lit/unlit pair");
     expect(source).toContain("usageSummary(asset.used_by)");
     expect(source).toContain("Edit product");
   });
@@ -42,7 +42,10 @@ describe("Admin Media Library", () => {
   test("previews and explicitly confirms SOP recommendations", () => {
     expect(source).toContain("SOP recommendations");
     expect(source).toContain("Preview recommendations");
-    expect(source).toContain("Confirm {highConfidenceRecommendations.length} recommendations");
+    expect(source).toContain("Confirm {selectedRecommendations.length} selected");
+    expect(source).toContain('"video_reel"');
+    expect(source).toContain('"installation"');
+    expect(source).toContain("Not selected by default: visually verify bulb state first.");
     expect(source).toContain("adminApplyMediaRecommendations");
     expect(source).toContain("background analysis cannot independently verify bulb state");
   });
