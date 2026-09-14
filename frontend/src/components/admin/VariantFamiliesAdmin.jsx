@@ -21,6 +21,7 @@ export default function VariantFamiliesAdmin() {
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [reviewingSuggestion, setReviewingSuggestion] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -53,8 +54,17 @@ export default function VariantFamiliesAdmin() {
   const categories = useMemo(() => Array.from(new Set(products.map((p) => p.category).filter(Boolean))).sort(), [products]);
   const visibleProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return products.filter((product) => (!category || product.category === category) && (!q || `${product.name} ${product.sku}`.toLowerCase().includes(q)));
-  }, [products, search, category]);
+    return products
+      .filter((product) => (!category || product.category === category) && (!q || `${product.name} ${product.sku}`.toLowerCase().includes(q)))
+      .sort((a, b) => {
+        const selectedOrder = Number(selectedIds.has(b.id)) - Number(selectedIds.has(a.id));
+        if (selectedOrder) return selectedOrder;
+        const imageOrder = Number(Boolean(b.images?.[0])) - Number(Boolean(a.images?.[0]));
+        if (imageOrder) return imageOrder;
+        const statusOrder = Number(b.status === "published") - Number(a.status === "published");
+        return statusOrder || String(a.sku || "").localeCompare(String(b.sku || ""));
+      });
+  }, [products, search, category, selectedIds]);
   const selectedProducts = useMemo(() => products.filter((product) => selectedIds.has(product.id)), [products, selectedIds]);
   const axes = useMemo(() => variantAxes(selectedProducts), [selectedProducts]);
 
@@ -62,6 +72,7 @@ export default function VariantFamiliesAdmin() {
     setSelectedSlug("");
     setName("");
     setSelectedIds(new Set());
+    setReviewingSuggestion("");
   };
   const reviewSuggestion = (suggestion) => {
     setSelectedSlug("");
@@ -69,6 +80,7 @@ export default function VariantFamiliesAdmin() {
     setSelectedIds(new Set(suggestion.products.map((product) => product.id)));
     setSearch("");
     setCategory("");
+    setReviewingSuggestion(suggestion.slug);
   };
   const toggle = (id) => setSelectedIds((current) => {
     const next = new Set(current);
@@ -96,6 +108,7 @@ export default function VariantFamiliesAdmin() {
       setSettings(nextSettings);
       setFamilies(next);
       setSelectedSlug(slug);
+      setReviewingSuggestion("");
       toast.success(`Variant family saved · ${selectedIds.size} products linked`);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Variant family save failed");
@@ -147,23 +160,25 @@ export default function VariantFamiliesAdmin() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-7">
         <aside className="lg:col-span-3 border border-white/10 p-5 space-y-3 h-fit">
           <div className="text-xs uppercase tracking-[0.22em] text-white/40">Approved families</div>
-          {families.map((family) => <button key={family.slug} onClick={() => setSelectedSlug(family.slug)} className={`w-full text-left border px-4 py-3 ${selectedSlug === family.slug ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/10 text-white/65"}`}><span className="block text-sm">{family.name}</span><span className="block text-[10px] mt-1 text-white/35">{family.product_ids.length} products</span></button>)}
+          {families.map((family) => <button key={family.slug} onClick={() => { setReviewingSuggestion(""); setSelectedSlug(family.slug); }} className={`w-full text-left border px-4 py-3 ${selectedSlug === family.slug ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/10 text-white/65"}`}><span className="block text-sm">{family.name}</span><span className="block text-[10px] mt-1 text-white/35">{family.product_ids.length} products</span></button>)}
           {!families.length && <div className="text-sm text-white/35">No approved variant families yet.</div>}
         </aside>
 
         <div className="lg:col-span-9 space-y-5">
           <div className="border border-white/10 p-5">
+            {reviewingSuggestion && <div className="mb-5 border border-[#D4AF37]/50 p-4 flex flex-wrap items-center justify-between gap-4"><div className="text-sm text-white/65"><strong className="block text-[#D4AF37] font-normal mb-1">Reviewing a private variant suggestion</strong>Confirm that every selected product is the same underlying design. Nothing becomes public until you approve it.</div><button disabled={saving || selectedIds.size < 2} onClick={save} className="shrink-0 bg-[#D4AF37] text-black px-6 py-3 text-xs uppercase tracking-[0.18em] disabled:opacity-50">{saving ? "Saving…" : "Approve reviewed family"}</button></div>}
             <label className="block"><span className="text-xs uppercase tracking-[0.2em] text-white/50">Family name</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Use the shared product/family name" className="mt-2 w-full bg-[#090909] border border-white/20 px-4 py-3" /></label>
             <div className="mt-4 text-sm text-white/55">{selectedIds.size} exact products selected</div>
             {axes.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{axes.map((axis) => <span key={axis.key} className="border border-[#D4AF37]/30 px-3 py-1 text-[10px] uppercase tracking-[0.15em] text-[#D4AF37]">Differs by {axis.label}</span>)}</div>}
+            {selectedProducts.length > 0 && <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">{selectedProducts.slice(0, 4).map((product) => <div key={product.id} className="min-w-0"><div className="aspect-square bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{product.images?.[0] ? <img src={api.resolveImage(product.images[0])} alt={product.name} loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <span className="text-[9px] uppercase tracking-wider text-white/25">No image</span>}</div><div className="text-[10px] text-[#D4AF37] truncate mt-2">{product.sku}</div><div className="text-[10px] text-white/45 truncate">{product.name}</div></div>)}</div>}
           </div>
 
           <div className="border border-white/10 p-5 space-y-4">
             <div className="flex flex-col md:flex-row gap-3"><div className="relative flex-1"><Search size={15} className="absolute left-3 top-3.5 text-white/35" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or SKU" className="w-full bg-[#090909] border border-white/20 pl-10 pr-4 py-3" /></div><select value={category} onChange={(event) => setCategory(event.target.value)} className="bg-[#090909] border border-white/20 px-4 py-3"><option value="">All categories</option>{categories.map((item) => <option key={item}>{item}</option>)}</select></div>
-            <div className="max-h-[60vh] overflow-auto divide-y divide-white/10">{visibleProducts.map((product) => { const selected = selectedIds.has(product.id); return <button key={product.id} onClick={() => toggle(product.id)} className="w-full text-left py-3 grid grid-cols-[30px_1fr] gap-3 items-center"><span className={`w-6 h-6 border flex items-center justify-center ${selected ? "bg-[#D4AF37] border-[#D4AF37] text-black" : "border-white/20"}`}>{selected && <Check size={14} />}</span><span><span className="block font-serif text-base">{product.name}</span><span className="block text-[10px] uppercase tracking-[0.15em] text-white/40">{product.sku} · {product.category}</span></span></button>; })}</div>
+            <div className="max-h-[60vh] overflow-auto divide-y divide-white/10">{visibleProducts.map((product) => { const selected = selectedIds.has(product.id); const image = product.images?.[0] ? api.resolveImage(product.images[0]) : ""; return <button key={product.id} data-testid={`variant-product-${product.sku}`} onClick={() => toggle(product.id)} className="w-full text-left py-3 grid grid-cols-[30px_56px_1fr] gap-3 items-center"><span className={`w-6 h-6 border flex items-center justify-center ${selected ? "bg-[#D4AF37] border-[#D4AF37] text-black" : "border-white/20"}`}>{selected && <Check size={14} />}</span><span className="w-14 h-14 bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{image ? <img src={image} alt="" loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <span className="text-[8px] uppercase tracking-wider text-white/25">No image</span>}</span><span className="min-w-0"><span className="block text-[10px] uppercase tracking-[0.15em] text-[#D4AF37]">{product.sku}</span><span className="block font-serif text-base truncate mt-1">{product.name}</span><span className="block text-[10px] uppercase tracking-[0.15em] text-white/40">{product.category} · {product.status === "published" ? "Published" : "Draft / Needs review"}</span></span></button>; })}</div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5"><div className="text-xs text-white/40">Saving links products only; it never merges, renames or deletes them.</div><div className="flex gap-3">{selectedSlug && <button disabled={saving} onClick={remove} className="border border-red-400/40 text-red-300 px-5 py-3 text-xs uppercase tracking-[0.18em]"><Trash2 size={14} className="inline mr-2" />Delete family</button>}<button disabled={saving} onClick={save} className="bg-[#D4AF37] text-black px-7 py-3 text-xs uppercase tracking-[0.2em] disabled:opacity-50">{saving ? "Saving…" : "Save reviewed family"}</button></div></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5"><div className="text-xs text-white/40">Saving links products only; it never merges, renames or deletes them.</div><div className="flex gap-3">{selectedSlug && <button disabled={saving} onClick={remove} className="border border-red-400/40 text-red-300 px-5 py-3 text-xs uppercase tracking-[0.18em]"><Trash2 size={14} className="inline mr-2" />Delete family</button>}<button disabled={saving || selectedIds.size < 2} onClick={save} className="bg-[#D4AF37] text-black px-7 py-3 text-xs uppercase tracking-[0.2em] disabled:opacity-50">{saving ? "Saving…" : reviewingSuggestion ? "Approve reviewed family" : "Save family"}</button></div></div>
         </div>
       </div>
     </div>

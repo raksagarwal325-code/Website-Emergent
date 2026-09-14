@@ -32,3 +32,15 @@ test("suggests repeated visual groups but skips drafts, imageless products and l
   expect(suggestions[0]).toMatchObject({ slug: "mayurcrest", name: "Mayurcrest" });
   expect(suggestions[0].products.map((item) => item.sku)).toEqual(["SGE-CH-001", "SGE-CH-002"]);
 });
+
+test("returns a saved collection tag as a private suggestion even with one product", () => {
+  const suggestions = suggestCollections([
+    product("010", "Afsana Crystal Table Lamp", {
+      tags: ["collection:afsana", "collection-label:afsana:Afsana"],
+    }),
+  ], [{ slug: "gulzar", name: "Gulzar" }]);
+
+  expect(suggestions).toHaveLength(1);
+  expect(suggestions[0]).toMatchObject({ slug: "afsana", name: "Afsana", source: "saved tag" });
+  expect(suggestions[0].products[0].sku).toBe("SGE-CH-010");
+});

@@ -26,3 +26,18 @@ def test_ignores_unregistered_orphan_tags_on_public_index():
     products = [{"sku": "X-1", "category": "Lamp", "images": ["/x.jpg"], "tags": ["collection:private-draft"]}]
 
     assert build_collection_index(settings, products) == []
+
+
+def test_unversioned_multi_collection_registry_exposes_only_verified_gulzar():
+    settings = {"homepage_content": {"collections": [
+        {"slug": "gulzar", "name": "Gulzar"},
+        {"slug": "rajsri", "name": "Rajsri"},
+    ]}}
+    products = [
+        {"sku": "SGE-CH-054", "category": "Chandelier", "images": ["/gulzar.jpg"], "tags": ["collection:gulzar"]},
+        {"sku": "SGE-TL-057", "category": "Table Lamp", "images": ["/rajsri.jpg"], "tags": ["collection:rajsri"]},
+    ]
+
+    result = build_collection_index(settings, products)
+
+    assert [item["slug"] for item in result] == ["gulzar"]

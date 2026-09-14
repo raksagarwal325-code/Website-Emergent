@@ -9,12 +9,17 @@ import {
   collectionLabelTag,
   collectionMembershipTag,
   getCollectionFromProducts,
-  getExplicitCollectionSlugs,
   isCollectionControlTag,
   normalizeCollectionSlug,
   titleCaseCollectionSlug,
 } from "../constants/collections";
-import { getRegisteredCollections, withRegisteredCollections } from "../constants/collectionsRegistry";
+import {
+  COLLECTIONS_REGISTRY_VERSION,
+  COLLECTIONS_REGISTRY_VERSION_KEY,
+  getRegisteredCollections,
+  normalizeCollectionRegistry,
+  withRegisteredCollections,
+} from "../constants/collectionsRegistry";
 import { suggestCollections } from "../constants/collectionSuggestions";
 import VariantFamiliesAdmin from "../components/admin/VariantFamiliesAdmin";
 
@@ -52,49 +57,29 @@ export default function CollectionsAdmin() {
         api.listAllProducts({ include_drafts: 1, limit: 5000, raw: true }),
         api.adminGetSettings(),
       ]);
-      const raw = currentSettings?.homepage_content?.collections;
+      const homepage = currentSettings?.homepage_content || {};
+      const raw = homepage.collections;
       let registry = getRegisteredCollections(currentSettings) || [];
-      const registeredSlugs = new Set(registry.map((item) => item.slug));
-      const discoveredSlugs = getExplicitCollectionSlugs(items);
-      const recovered = discoveredSlugs
-        .filter((slug) => !registeredSlugs.has(slug))
-        .map((slug) => ({
-          slug,
-          name: getCollectionFromProducts(items, slug)?.name || titleCaseCollectionSlug(slug),
-        }));
+      let effectiveSettings = currentSettings;
 
-      // One-time migration: preserve existing legacy/tag-discovered collections
-      // by registering them. After this, tags alone can never create a collection.
+      // v2 repairs the earlier migration that made every historical tag live.
+      // Tags are preserved and appear below as private suggestions instead.
       if (!Array.isArray(raw)) {
-        const slugs = Array.from(new Set([
-          ...Object.keys(LEGACY_COLLECTIONS),
-          ...getExplicitCollectionSlugs(items),
-        ])).sort();
-        registry = slugs.map((slug) => ({
-          slug,
-          name: getCollectionFromProducts(items, slug)?.name || titleCaseCollectionSlug(slug),
-        }));
-        currentSettings.homepage_content = {
-          ...(currentSettings.homepage_content || {}),
-          collections: registry,
-        };
-        await api.updateSettings(currentSettings);
-        toast.success("Existing collections registered");
-      } else if (recovered.length > 0) {
-        // Older versions could save membership tags without registering the
-        // collection in Settings. Recover those records non-destructively.
-        registry = uniqueRegistry([...registry, ...recovered])
-          .sort((a, b) => a.name.localeCompare(b.name));
-        currentSettings.homepage_content = {
-          ...(currentSettings.homepage_content || {}),
-          collections: registry,
-        };
-        await api.updateSettings(currentSettings);
-        toast.success(`${recovered.length} saved ${recovered.length === 1 ? "collection" : "collections"} recovered`);
+        registry = Object.values(LEGACY_COLLECTIONS).map(({ slug, name }) => ({ slug, name }));
+      }
+      const registryVersion = Number(homepage[COLLECTIONS_REGISTRY_VERSION_KEY] || 0);
+      if (registryVersion < COLLECTIONS_REGISTRY_VERSION) {
+        const previousCount = normalizeCollectionRegistry(raw).length;
+        effectiveSettings = withRegisteredCollections(currentSettings, registry);
+        await api.updateSettings(effectiveSettings);
+        const returnedToReview = Math.max(0, previousCount - registry.length);
+        toast.success(returnedToReview
+          ? `${returnedToReview} unverified collections returned to private suggestions`
+          : "Collection review safeguards enabled");
       }
 
       setProducts(items);
-      setSettings(currentSettings);
+      setSettings(effectiveSettings);
       setCollections(registry);
       setSelectedSlug((current) => current || registry[0]?.slug || "");
     } catch (err) {

@@ -27,10 +27,16 @@ def _tags(product):
 
 def build_collection_index(settings: dict | None, products: list[dict]) -> list[dict]:
     """Build compact cards without exposing product tags or unpublished data."""
-    raw = ((settings or {}).get("homepage_content") or {}).get("collections")
+    homepage = ((settings or {}).get("homepage_content") or {})
+    raw = homepage.get("collections")
     registry = raw if isinstance(raw, list) else [
         {"slug": slug, "name": data["name"]} for slug, data in LEGACY_MEMBERS.items()
     ]
+    # A previous migration registered every historical product tag as public.
+    # Until the reviewed v2 registry is stored, only the established Gulzar
+    # collection is safe to expose. A single legacy row remains compatible.
+    if int(homepage.get("collections_registry_version") or 0) < 2 and len(registry) > 1:
+        registry = [row for row in registry if isinstance(row, dict) and _slug(row.get("slug")) == "gulzar"]
     output = []
     seen = set()
     for registered in registry:
