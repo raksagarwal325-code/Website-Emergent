@@ -1,4 +1,8 @@
-import { normalizeCollectionSlug } from "./collections";
+import {
+  normalizeCollectionSlug,
+  productCollectionSlugs,
+  titleCaseCollectionSlug,
+} from "./collections";
 
 const COLLECTION_SPEC_KEYS = [
   "Collection / Family",
@@ -46,16 +50,30 @@ export function suggestCollections(products = [], registeredCollections = []) {
 
   products.forEach((product) => {
     if (!product?.id || !product?.sku || product.status !== "published" || !product.images?.[0]) return;
-    const name = collectionSuggestionName(product);
-    const slug = normalizeCollectionSlug(name);
-    if (!slug || registered.has(slug)) return;
-    const rows = groups.get(slug) || { slug, name, products: [] };
-    rows.products.push(product);
-    groups.set(slug, rows);
+    const taggedSlugs = productCollectionSlugs(product).filter((slug) => !registered.has(slug));
+    const candidates = taggedSlugs.length
+      ? taggedSlugs.map((slug) => {
+        const prefix = `collection-label:${slug}:`;
+        const encoded = (product.tags || []).find((tag) => String(tag).startsWith(prefix))?.slice(prefix.length);
+        let name = titleCaseCollectionSlug(slug);
+        if (encoded) {
+          try { name = decodeURIComponent(encoded) || name; } catch { /* keep the slug label */ }
+        }
+        return { slug, name, source: "saved tag" };
+      })
+      : [{ name: collectionSuggestionName(product), source: "name" }];
+
+    candidates.forEach((candidate) => {
+      const slug = normalizeCollectionSlug(candidate.slug || candidate.name);
+      if (!slug || registered.has(slug)) return;
+      const rows = groups.get(slug) || { slug, name: candidate.name, source: candidate.source, products: [] };
+      if (!rows.products.some((item) => item.id === product.id)) rows.products.push(product);
+      groups.set(slug, rows);
+    });
   });
 
   return Array.from(groups.values())
-    .filter((group) => group.products.length >= 2)
+    .filter((group) => group.source === "saved tag" || group.products.length >= 2)
     .map((group) => ({
       ...group,
       products: group.products.sort((a, b) => String(a.sku).localeCompare(String(b.sku))),

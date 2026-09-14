@@ -30,17 +30,27 @@ beforeEach(() => {
   ]));
   mockApi.adminGetSettings.mockImplementation(() => Promise.resolve({
     id: "settings",
-    homepage_content: { collections: [{ slug: "gulzar", name: "Gulzar" }] },
+    homepage_content: {
+      collections: [{ slug: "gulzar", name: "Gulzar" }],
+      collections_registry_version: 2,
+    },
   }));
   mockApi.updateSettings.mockImplementation((value) => Promise.resolve(value));
   mockApi.updateProduct.mockImplementation((id, value) => Promise.resolve(value));
   mockApi.resolveImage.mockImplementation((value) => `https://example.com${value}`);
 });
 
-test("recovers tag-saved collections and loads raw product metadata", async () => {
+test("returns accidentally registered collections to private suggestions", async () => {
+  mockApi.adminGetSettings.mockResolvedValue({
+    id: "settings",
+    homepage_content: { collections: [
+      { slug: "gulzar", name: "Gulzar" },
+      { slug: "rajsri", name: "Rajsri" },
+    ] },
+  });
   render(<MemoryRouter><CollectionsAdmin /></MemoryRouter>);
 
-  expect(await screen.findByRole("button", { name: "Rajsri" })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Gulzar" })).toBeInTheDocument();
   expect(mockApi.listAllProducts).toHaveBeenCalledWith({
     include_drafts: 1,
     limit: 5000,
@@ -49,13 +59,16 @@ test("recovers tag-saved collections and loads raw product metadata", async () =
   await waitFor(() => expect(mockApi.updateSettings).toHaveBeenCalledWith(
     expect.objectContaining({
       homepage_content: expect.objectContaining({
-        collections: expect.arrayContaining([
-          { slug: "gulzar", name: "Gulzar" },
-          { slug: "rajsri", name: "Rajsri" },
-        ]),
+        collections: [{ slug: "gulzar", name: "Gulzar" }],
+        collections_registry_version: 2,
       }),
     }),
   ));
+
+  fireEvent.click(screen.getByRole("button", { name: /Suggested collections/i }));
+  const suggestion = await screen.findByTestId("collection-suggestion-rajsri");
+  expect(within(suggestion).getByText("SGE-TL-057")).toBeInTheDocument();
+  expect(within(suggestion).getByText(/1 product.*Not live/i)).toBeInTheDocument();
 });
 
 test("shows product thumbnail, prominent SKU and publication state", async () => {
