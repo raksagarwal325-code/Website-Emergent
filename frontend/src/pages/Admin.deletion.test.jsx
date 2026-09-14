@@ -30,6 +30,14 @@ jest.mock("../components/LeadsAdmin", () => () => <div data-testid="unified-lead
 
 const Admin = require("./Admin").default;
 
+beforeEach(() => {
+  mockApi.listAllProducts.mockImplementation(() => Promise.resolve([]));
+  mockApi.adminGetSettings.mockImplementation(() => Promise.resolve({}));
+  mockApi.stats.mockImplementation(() => Promise.resolve({ products: 3, inquiries: 2, contact_messages: 4, reviews: 1 }));
+  mockApi.categories.mockImplementation(() => Promise.resolve([]));
+  mockApi.adminReviewCounts.mockImplementation(() => Promise.resolve({ pending: 0, approved: 0, rejected: 0 }));
+});
+
 test("merges Inquiries and Messages navigation into one Leads workspace", async () => {
   render(<MemoryRouter><Admin /></MemoryRouter>);
   await waitFor(() => expect(mockApi.stats).toHaveBeenCalled());
