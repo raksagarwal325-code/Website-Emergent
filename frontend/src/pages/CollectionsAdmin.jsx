@@ -43,11 +43,22 @@ export default function CollectionsAdmin() {
     setLoading(true);
     try {
       const [items, currentSettings] = await Promise.all([
-        api.listAllProducts({ include_drafts: 1, limit: 5000 }),
+        // Collection membership lives in internal product tags. Admin must use
+        // the raw records; the public product sanitizer intentionally removes
+        // those tags.
+        api.listAllProducts({ include_drafts: 1, limit: 5000, raw: true }),
         api.adminGetSettings(),
       ]);
       const raw = currentSettings?.homepage_content?.collections;
-      let registry = getRegisteredCollections(currentSettings);
+      let registry = getRegisteredCollections(currentSettings) || [];
+      const registeredSlugs = new Set(registry.map((item) => item.slug));
+      const discoveredSlugs = getExplicitCollectionSlugs(items);
+      const recovered = discoveredSlugs
+        .filter((slug) => !registeredSlugs.has(slug))
+        .map((slug) => ({
+          slug,
+          name: getCollectionFromProducts(items, slug)?.name || titleCaseCollectionSlug(slug),
+        }));
 
       // One-time migration: preserve existing legacy/tag-discovered collections
       // by registering them. After this, tags alone can never create a collection.
@@ -66,6 +77,17 @@ export default function CollectionsAdmin() {
         };
         await api.updateSettings(currentSettings);
         toast.success("Existing collections registered");
+      } else if (recovered.length > 0) {
+        // Older versions could save membership tags without registering the
+        // collection in Settings. Recover those records non-destructively.
+        registry = uniqueRegistry([...registry, ...recovered])
+          .sort((a, b) => a.name.localeCompare(b.name));
+        currentSettings.homepage_content = {
+          ...(currentSettings.homepage_content || {}),
+          collections: registry,
+        };
+        await api.updateSettings(currentSettings);
+        toast.success(`${recovered.length} saved ${recovered.length === 1 ? "collection" : "collections"} recovered`);
       }
 
       setProducts(items);
@@ -279,7 +301,8 @@ export default function CollectionsAdmin() {
             <div className="max-h-[65vh] overflow-auto divide-y divide-white/10">
               {visibleProducts.map((product) => {
                 const selected = selectedSkus.has(product.sku);
-                return <div key={product.id} className="py-4 grid grid-cols-[36px_1fr] md:grid-cols-[36px_1fr_110px] gap-3 items-center"><button onClick={() => toggleSku(product.sku)} className={`w-7 h-7 border flex items-center justify-center ${selected ? "border-[#D4AF37] bg-[#D4AF37] text-black" : "border-white/20"}`}>{selected ? <Check size={15} /> : null}</button><div className="min-w-0"><div className="font-serif text-lg truncate">{product.name}</div><div className="text-[10px] uppercase tracking-[0.18em] text-white/40">{product.sku} · {product.category}</div></div>{selected ? <button title="Prefer in 5-card preview" onClick={() => toggleFeatured(product.sku)} className={`inline-flex items-center justify-center gap-1 text-[10px] uppercase tracking-[0.14em] ${featuredSkus.has(product.sku) ? "text-[#D4AF37]" : "text-white/35"}`}><Star size={14} fill={featuredSkus.has(product.sku) ? "currentColor" : "none"} /> Featured</button> : <div />}</div>;
+                const image = product.images?.[0] ? api.resolveImage(product.images[0]) : "";
+                return <div key={product.id} data-testid={`collection-product-${product.sku}`} className="py-4 grid grid-cols-[36px_64px_1fr] md:grid-cols-[36px_72px_1fr_110px] gap-3 items-center"><button aria-label={`${selected ? "Remove" : "Add"} ${product.sku}`} onClick={() => toggleSku(product.sku)} className={`w-7 h-7 border flex items-center justify-center ${selected ? "border-[#D4AF37] bg-[#D4AF37] text-black" : "border-white/20"}`}>{selected ? <Check size={15} /> : null}</button><div className="h-16 md:h-[72px] bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">{image ? <img src={image} alt="" className="w-full h-full object-contain" /> : <span className="text-[9px] uppercase tracking-wider text-white/25">No image</span>}</div><div className="min-w-0"><div className="text-xs uppercase tracking-[0.18em] text-[#D4AF37] font-medium">{product.sku}</div><div className="font-serif text-lg truncate mt-1">{product.name}</div><div className="text-[10px] uppercase tracking-[0.16em] text-white/40 mt-1">{product.category} · {product.status === "published" ? "Published" : "Draft / Needs review"}</div></div>{selected ? <button title="Prefer in 5-card preview" onClick={() => toggleFeatured(product.sku)} className={`col-start-3 md:col-start-auto inline-flex items-center justify-start md:justify-center gap-1 text-[10px] uppercase tracking-[0.14em] ${featuredSkus.has(product.sku) ? "text-[#D4AF37]" : "text-white/35"}`}><Star size={14} fill={featuredSkus.has(product.sku) ? "currentColor" : "none"} /> Featured</button> : <div />}</div>;
               })}
             </div>
           </div>
