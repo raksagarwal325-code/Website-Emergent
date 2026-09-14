@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const mockApi = {
@@ -69,4 +69,32 @@ test("shows product thumbnail, prominent SKU and publication state", async () =>
     "src",
     "https://example.com/api/files/rajsri.png",
   );
+});
+
+test("keeps suggested collections private while showing images and SKUs for review", async () => {
+  mockApi.listAllProducts.mockResolvedValue([
+    {
+      id: "amber", sku: "SGE-CH-101", name: "Mayurcrest Amber Chandelier",
+      category: "Chandelier", status: "published", images: ["/amber.jpg"], tags: [],
+    },
+    {
+      id: "clear", sku: "SGE-CH-102", name: "Mayurcrest Clear Chandelier",
+      category: "Chandelier", status: "published", images: ["/clear.jpg"], tags: [],
+    },
+  ]);
+
+  render(<MemoryRouter><CollectionsAdmin /></MemoryRouter>);
+
+  fireEvent.click(await screen.findByRole("button", { name: /Suggested collections/i }));
+  const suggestion = await screen.findByTestId("collection-suggestion-mayurcrest");
+  expect(within(suggestion).getByText("SGE-CH-101")).toBeInTheDocument();
+  expect(within(suggestion).getByText("SGE-CH-102")).toBeInTheDocument();
+  expect(within(suggestion).getAllByRole("img")).toHaveLength(2);
+  expect(mockApi.updateSettings).not.toHaveBeenCalled();
+
+  fireEvent.click(within(suggestion).getByRole("button", { name: "Review" }));
+  expect(await screen.findByRole("button", { name: "Approve & publish collection" })).toBeInTheDocument();
+  expect(screen.getByDisplayValue("Mayurcrest")).toBeInTheDocument();
+  expect(screen.getByText(/Reviewing a private suggestion/)).toBeInTheDocument();
+  expect(mockApi.updateSettings).not.toHaveBeenCalled();
 });

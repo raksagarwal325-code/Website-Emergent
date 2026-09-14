@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Check, Search, Star, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Search, Sparkles, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import {
@@ -15,6 +15,7 @@ import {
   titleCaseCollectionSlug,
 } from "../constants/collections";
 import { getRegisteredCollections, withRegisteredCollections } from "../constants/collectionsRegistry";
+import { suggestCollections } from "../constants/collectionSuggestions";
 import VariantFamiliesAdmin from "../components/admin/VariantFamiliesAdmin";
 
 const CATEGORY_ORDER = [
@@ -38,6 +39,8 @@ export default function CollectionsAdmin() {
   const [category, setCategory] = useState("");
   const [saving, setSaving] = useState(false);
   const [managerMode, setManagerMode] = useState("collections");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [reviewingSuggestion, setReviewingSuggestion] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -105,7 +108,7 @@ export default function CollectionsAdmin() {
 
   useEffect(() => {
     if (!selectedSlug || products.length === 0) {
-      if (!selectedSlug) {
+      if (!selectedSlug && !reviewingSuggestion) {
         setLabel("");
         setDraftSlug("");
         setSelectedSkus(new Set());
@@ -119,7 +122,7 @@ export default function CollectionsAdmin() {
     setLabel(registered?.name || collection?.name || titleCaseCollectionSlug(selectedSlug));
     setSelectedSkus(new Set(collection?.memberSkus || []));
     setFeaturedSkus(new Set(collection?.featuredSkus || []));
-  }, [selectedSlug, products, collections]);
+  }, [selectedSlug, products, collections, reviewingSuggestion]);
 
   const categories = useMemo(() => {
     const found = Array.from(new Set(products.map((p) => p.category).filter(Boolean)));
@@ -135,8 +138,20 @@ export default function CollectionsAdmin() {
       if (category && p.category !== category) return false;
       if (!q) return true;
       return (p.sku || "").toLowerCase().includes(q) || (p.name || "").toLowerCase().includes(q);
+    }).sort((a, b) => {
+      const selectedOrder = Number(selectedSkus.has(b.sku)) - Number(selectedSkus.has(a.sku));
+      if (selectedOrder) return selectedOrder;
+      const imageOrder = Number(Boolean(b.images?.[0])) - Number(Boolean(a.images?.[0]));
+      if (imageOrder) return imageOrder;
+      const statusOrder = Number(b.status === "published") - Number(a.status === "published");
+      return statusOrder || String(a.sku || "").localeCompare(String(b.sku || ""));
     });
-  }, [products, search, category]);
+  }, [products, search, category, selectedSkus]);
+
+  const suggestions = useMemo(
+    () => suggestCollections(products, collections),
+    [products, collections],
+  );
 
   const toggleSku = (sku) => setSelectedSkus((current) => {
     const next = new Set(current);
@@ -156,6 +171,19 @@ export default function CollectionsAdmin() {
     setLabel("");
     setSelectedSkus(new Set());
     setFeaturedSkus(new Set());
+    setReviewingSuggestion("");
+  };
+
+  const reviewSuggestion = (suggestion) => {
+    setSelectedSlug("");
+    setLabel(suggestion.name);
+    setDraftSlug(suggestion.slug);
+    setSelectedSkus(new Set(suggestion.products.map((product) => product.sku)));
+    setFeaturedSkus(new Set(suggestion.products.slice(0, 5).map((product) => product.sku)));
+    setReviewingSuggestion(suggestion.slug);
+    setSearch("");
+    setCategory("");
+    setShowSuggestions(false);
   };
 
   const save = async () => {
@@ -205,6 +233,7 @@ export default function CollectionsAdmin() {
       setSettings(nextSettings);
       setCollections(nextCollections);
       setSelectedSlug(slug);
+      setReviewingSuggestion("");
       await load();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Collection save failed");
@@ -281,12 +310,27 @@ export default function CollectionsAdmin() {
         <aside className="lg:col-span-3 border border-white/10 p-5 space-y-3 h-fit">
           <div className="text-xs uppercase tracking-[0.24em] text-white/40 mb-4">Collections</div>
           {collections.map((item) => (
-            <button key={item.slug} onClick={() => setSelectedSlug(item.slug)} className={`w-full text-left px-4 py-3 border text-sm ${selectedSlug === item.slug ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/10 text-white/70"}`}>{item.name}</button>
+            <button key={item.slug} onClick={() => { setReviewingSuggestion(""); setSelectedSlug(item.slug); }} className={`w-full text-left px-4 py-3 border text-sm ${selectedSlug === item.slug ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/10 text-white/70"}`}>{item.name}</button>
           ))}
           {collections.length === 0 && <div className="text-sm text-white/35">No collections yet.</div>}
         </aside>
 
         <div className="lg:col-span-9 space-y-6">
+          <section className="border border-[#D4AF37]/35 bg-[#D4AF37]/[0.03]" data-testid="suggested-collections">
+            <button onClick={() => setShowSuggestions((current) => !current)} className="w-full p-5 flex items-center justify-between gap-4 text-left">
+              <span><span className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-[#D4AF37]"><Sparkles size={15} />Suggested collections</span><span className="block text-sm text-white/50 mt-2">{suggestions.length} likely groups found. Suggestions remain private until you review and approve them.</span></span>
+              <ChevronDown size={18} className={`shrink-0 transition-transform ${showSuggestions ? "rotate-180" : ""}`} />
+            </button>
+            {showSuggestions && <div className="border-t border-white/10 p-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {suggestions.map((suggestion) => <article key={suggestion.slug} data-testid={`collection-suggestion-${suggestion.slug}`} className="border border-white/10 p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3"><div><div className="font-serif text-xl">{suggestion.name}</div><div className="text-[10px] uppercase tracking-[0.16em] text-white/40 mt-1">{suggestion.products.length} products · Not live</div></div><button onClick={() => reviewSuggestion(suggestion)} className="border border-[#D4AF37]/60 text-[#D4AF37] px-3 py-2 text-[10px] uppercase tracking-[0.16em] hover:bg-[#D4AF37] hover:text-black">Review</button></div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{suggestion.products.slice(0, 4).map((product) => <div key={product.id} className="min-w-0"><div className="aspect-square bg-black/40 border border-white/10 overflow-hidden"><img src={api.resolveImage(product.images[0])} alt={product.name} className="w-full h-full object-contain" /></div><div className="text-[10px] text-[#D4AF37] truncate mt-2">{product.sku}</div><div className="text-[10px] text-white/45 truncate">{product.name}</div><div className="text-[9px] text-white/30 truncate">{product.category}</div></div>)}</div>
+              </article>)}
+              {suggestions.length === 0 && <div className="xl:col-span-2 text-sm text-white/45 py-3">No safe suggestions found. Only repeated names among published products with images are suggested.</div>}
+            </div>}
+          </section>
+
+          {reviewingSuggestion && <div className="border border-[#D4AF37]/50 px-5 py-4 text-sm text-white/65"><strong className="text-[#D4AF37] font-normal">Reviewing a private suggestion.</strong> Check the images, SKUs and selected products below. It will become visible to customers only after you approve it.</div>}
           <div className="border border-white/10 p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
             <label className="space-y-2"><span className="text-xs uppercase tracking-[0.2em] text-white/50">Collection name</span><input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Rajsri" className="w-full bg-transparent border border-white/20 px-4 py-3" /></label>
             <label className="space-y-2"><span className="text-xs uppercase tracking-[0.2em] text-white/50">Slug</span><input value={draftSlug} onChange={(e) => setDraftSlug(normalizeCollectionSlug(e.target.value))} placeholder="e.g. rajsri" className="w-full bg-transparent border border-white/20 px-4 py-3" /></label>
@@ -311,7 +355,7 @@ export default function CollectionsAdmin() {
             <div className="text-xs text-white/40">Collection existence is controlled here. Membership uses existing product tags; deleting a collection never deletes products.</div>
             <div className="flex gap-3">
               {selectedSlug && <button disabled={saving} onClick={deleteCollection} className="border border-red-400/40 text-red-300 px-5 py-3 uppercase text-xs tracking-[0.18em] disabled:opacity-50"><Trash2 size={14} className="inline mr-2" />Delete collection</button>}
-              <button disabled={saving} onClick={save} className="bg-[#D4AF37] text-black px-7 py-3 uppercase text-xs tracking-[0.22em] disabled:opacity-50">{saving ? "Saving…" : selectedSlug ? "Save collection" : "Create collection"}</button>
+              <button disabled={saving} onClick={save} className="bg-[#D4AF37] text-black px-7 py-3 uppercase text-xs tracking-[0.22em] disabled:opacity-50">{saving ? "Saving…" : reviewingSuggestion ? "Approve & publish collection" : selectedSlug ? "Save collection" : "Create collection"}</button>
             </div>
           </div>
         </div>
