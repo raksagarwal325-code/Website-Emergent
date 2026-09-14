@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import UpdateOne
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from starlette.middleware.cors import CORSMiddleware
 
@@ -345,6 +346,35 @@ class MediaAssetUpdate(BaseModel):
         if not value:
             raise ValueError("Media URL is required")
         return value
+
+
+class MediaRecommendationApproval(BaseModel):
+    id: str
+    url: str
+    usage_type: str
+    confidence: float = 0
+    reason: str = ""
+
+    @field_validator("usage_type")
+    @classmethod
+    def _valid_usage_type(cls, value):
+        if value not in MEDIA_USAGE_TYPES or value == "unclassified":
+            raise ValueError("Unknown recommendation usage type")
+        return value
+
+    @field_validator("url")
+    @classmethod
+    def _non_blank_url(cls, value):
+        value = (value or "").strip()
+        if not value:
+            raise ValueError("Media URL is required")
+        return value
+
+
+class MediaRecommendationBulkApply(BaseModel):
+    items: List[MediaRecommendationApproval] = Field(
+        min_length=1, max_length=2500
+    )
 
 
 class Review(BaseModel):
@@ -2119,7 +2149,13 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
     try:
         media_metadata = inspect_media_bytes(data, file.content_type)
     except Exception:
-        media_metadata = {"sha256": None, "width": None, "height": None}
+        media_metadata = {
+            "sha256": None,
+            "width": None,
+            "height": None,
+            "background_tone": None,
+            "background_luminance": None,
+        }
 
     await db.files.insert_one({
         "id": file_id,
@@ -2189,6 +2225,39 @@ async def admin_update_media_asset(
     return {"ok": True, "id": asset_id, "usage_type": payload.usage_type}
 
 
+@api.post("/admin/media-library/recommendations/apply")
+async def admin_apply_media_recommendations(
+    payload: MediaRecommendationBulkApply,
+    admin: _AdminUser = Depends(require_admin),
+):
+    operations = []
+    approved_at = now_iso()
+    for item in payload.items:
+        if item.id != asset_id_for_url(item.url):
+            raise HTTPException(400, "One or more asset ids do not match their URLs")
+        operations.append(UpdateOne(
+            {"id": item.id},
+            {"$set": {
+                "id": item.id,
+                "url": item.url,
+                "usage_type": item.usage_type,
+                "notes": item.reason.strip(),
+                "recommendation_confidence": item.confidence,
+                "approved_from_recommendation": True,
+                "updated_at": approved_at,
+                "updated_by": admin.email,
+            }},
+            upsert=True,
+        ))
+    result = await db.media_assets.bulk_write(operations, ordered=False)
+    return {
+        "ok": True,
+        "approved": len(operations),
+        "matched": result.matched_count,
+        "upserted": result.upserted_count,
+    }
+
+
 @api.post("/admin/media-library/scan")
 async def admin_scan_media_library(
     limit: int = Query(10, ge=1, le=25),
@@ -2198,6 +2267,10 @@ async def admin_scan_media_library(
         {"sha256": {"$exists": False}},
         {"sha256": None},
         {"width": {"$exists": False}},
+        {"$and": [
+            {"kind": {"$ne": "video"}},
+            {"background_tone": {"$exists": False}},
+        ]},
     ]}
     eligible = {"$and": [
         needs_metadata,
