@@ -94,6 +94,10 @@ class MediaLibraryTests(unittest.TestCase):
         assets = {row["url"]: row for row in report["assets"]}
 
         self.assertEqual(report["summary"]["assets"], 5)
+        self.assertEqual(report["summary"]["duplicate_groups"], 1)
+        self.assertEqual(report["summary"]["products_total"], 2)
+        self.assertEqual(report["summary"]["products_pair_assessed"], 1)
+        self.assertEqual(report["summary"]["products_pair_unassessed"], 1)
         self.assertEqual(assets[white_url]["validity"], "valid")
         self.assertTrue(assets[white_url]["original_available"])
         self.assertTrue(assets[white_url]["duplicate_content"])
@@ -104,10 +108,22 @@ class MediaLibraryTests(unittest.TestCase):
 
         missing = {row["id"]: row["missing"] for row in report["missing_products"]}
         self.assertNotIn("p1", missing)
-        self.assertEqual(
-            missing["p2"],
-            ["white_bulbs_off", "black_bulbs_on"],
+        self.assertNotIn("p2", missing)
+
+    def test_low_resolution_summary_only_counts_assets_in_use(self):
+        used_url = "/api/files/app/products/used-small.jpg"
+        unused_url = "/api/files/app/products/unused-small.jpg"
+        report = build_media_library_report(
+            products=[{"id": "p1", "name": "Lamp", "images": [used_url]}],
+            settings={},
+            files=[
+                {"id": "used", "storage_path": "app/products/used-small.jpg", "width": 600, "height": 600},
+                {"id": "unused", "storage_path": "app/products/unused-small.jpg", "width": 600, "height": 600},
+            ],
+            metadata=[],
         )
+        self.assertEqual(report["summary"]["low_resolution"], 2)
+        self.assertEqual(report["summary"]["low_resolution_in_use"], 1)
 
     def test_internal_routes_are_not_mislabeled_as_external(self):
         url = "/api/hero-slides/image/app/hero/example.webp"
