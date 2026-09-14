@@ -14,6 +14,7 @@ import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle 
 import { productPath } from "../lib/productUrl";
 import { productImageAlt } from "../lib/imageSeo";
 import { fallbackSlugFor, getCategoryByDbName } from "../lib/categories";
+import ProductVariants from "../components/ProductVariants";
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -366,6 +367,8 @@ export default function ProductDetail() {
           </div>
 
           <p className="text-white/70 leading-relaxed">{product.short_description}</p>
+
+          <ProductVariants product={product} />
 
           <div className="flex flex-wrap gap-3">
             <button

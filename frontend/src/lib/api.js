@@ -145,6 +145,10 @@ export const api = {
     return collected;
   },
   getProduct: (id) => client.get(`/products/${id}`).then(r => sanitizePublicProduct(r.data)),
+  getProductVariants: (id) => client.get(`/product-variants/${encodeURIComponent(id)}`).then(r => ({
+    ...r.data,
+    items: (r.data?.items || []).map(sanitizePublicProduct),
+  })),
   createProduct: (data) => client.post("/products", data).then(r => r.data),
   updateProduct: (id, data, { reason = "", source = "admin" } = {}) => client.put(
     `/products/${id}`,
