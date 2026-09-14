@@ -146,8 +146,18 @@ export const api = {
   },
   getProduct: (id) => client.get(`/products/${id}`).then(r => sanitizePublicProduct(r.data)),
   createProduct: (data) => client.post("/products", data).then(r => r.data),
-  updateProduct: (id, data) => client.put(`/products/${id}`, data).then(r => r.data),
+  updateProduct: (id, data, { reason = "", source = "admin" } = {}) => client.put(
+    `/products/${id}`,
+    data,
+    { params: { change_reason: reason || "Product edited in Admin", change_source: source } },
+  ).then(r => r.data),
   deleteProduct: (id) => client.delete(`/products/${id}`).then(r => r.data),
+  listProductVersions: (id, limit = 50) => client.get(
+    `/admin/products/${id}/versions`, { params: { limit } },
+  ).then(r => r.data),
+  restoreProductVersion: (id, versionId, reason = "") => client.post(
+    `/admin/products/${id}/versions/${versionId}/restore`, { reason },
+  ).then(r => r.data),
   categories: () => client.get("/products/categories").then(r => r.data),
 
   listReviews: (product_id) => client.get(`/reviews`, { params: { product_id } }).then(r => r.data),

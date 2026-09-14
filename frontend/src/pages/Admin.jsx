@@ -14,6 +14,7 @@ import ProductDraftConversation from "../components/ProductDraftConversation";
 import HeroSliderAdmin from "../components/admin/HeroSliderAdmin";
 import CategoryImagesAdmin from "../components/admin/CategoryImagesAdmin";
 import MediaLibraryAdmin from "../components/MediaLibraryAdmin";
+import ProductVersionHistory from "../components/ProductVersionHistory";
 import { LEGAL_DEFAULT_UPDATED_AT, serializeLegalDefault } from "../lib/legalContent";
 
 const emptyProduct = {
@@ -146,6 +147,8 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
   const [search, setSearch] = useState("");
   // Sort order for the list. Default = SKU low→high per owner's request.
   const [sortMode, setSortMode] = useState("sku_asc");
+  const [changeReason, setChangeReason] = useState("");
+  const [changeSource, setChangeSource] = useState("admin");
 
   // Baseline categories always shown in the filter/dropdown, even if the
   // catalogue hasn't been fully populated yet. Merge with categories the
@@ -238,6 +241,8 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
   }, [products, form.category]);
 
   useEffect(() => {
+    setChangeReason("");
+    setChangeSource("admin");
     if (!editing) { setForm(emptyProduct); return; }
     // Backfill price_display from legacy fixed_price when older products don't have it set.
     const price_display =
@@ -264,7 +269,7 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
         fixed_price: form.price_display === "fixed", // legacy sync
         status: form.status || "published",
       };
-      if (editing) await api.updateProduct(editing.id, payload);
+      if (editing) await api.updateProduct(editing.id, payload, { reason: changeReason, source: changeSource });
       else await api.createProduct(payload);
       toast.success(editing ? "Product updated" : "Product created");
       setEditing(null);
@@ -325,24 +330,42 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
         {editing && (
           <ProductDraftConversation
             product={form}
-            onApply={(revised) => setForm((current) => ({
-              ...current,
-              ...revised,
-              id: current.id,
-              sku: current.sku,
-              images: current.images,
-              status: "draft",
-              badge: "Needs Review",
-              price: 0,
-              price_display: "on_request",
-              fixed_price: false,
-            }))}
+            onApply={(revised) => {
+              setChangeReason("AI-assisted product regeneration");
+              setChangeSource("ai");
+              setForm((current) => ({
+                ...current,
+                ...revised,
+                id: current.id,
+                sku: current.sku,
+                images: current.images,
+                status: "draft",
+                badge: "Needs Review",
+                price: 0,
+                price_display: "on_request",
+                fixed_price: false,
+              }));
+            }}
+          />
+        )}
+        {editing && (
+          <ProductVersionHistory
+            product={editing}
+            onRestored={(restored) => {
+              setEditing(restored);
+              setForm({ ...emptyProduct, ...restored });
+              refresh();
+            }}
           />
         )}
         {/* Full-details regenerate + diff — separate from name-only tool. */}
         <ProductFullRegenerator
           form={form}
           onMerge={(patch, { setDraft }) => {
+            if (editing) {
+              setChangeReason("AI-assisted full product regeneration");
+              setChangeSource("ai");
+            }
             const next = { ...patch };
             // AI returns tags as a comma-separated string; the form stores an array.
             if (typeof next.tags === "string") {
@@ -360,8 +383,18 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
           <input required data-testid="p-name" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm" />
           <ProductNameSuggester
             form={form}
-            onApply={(name) => setForm((f) => ({ ...f, name }))}
+            onApply={(name) => {
+              if (editing) {
+                setChangeReason("AI-assisted product name update");
+                setChangeSource("ai");
+              }
+              setForm((f) => ({ ...f, name }));
+            }}
             onFieldsMerge={(patch, { setDraft }) => {
+              if (editing) {
+                setChangeReason("AI-assisted product naming and copy update");
+                setChangeSource("ai");
+              }
               const next = { ...patch };
               if (typeof next.tags === "string") {
                 next.tags = next.tags.split(",").map((t) => t.trim()).filter(Boolean);
@@ -568,6 +601,24 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
         </div>
 
         <SpecsEditor value={form.specs || {}} onChange={(specs) => setForm({ ...form, specs })} />
+
+        {editing && (
+          <div>
+            <label className="block text-[10px] uppercase tracking-[0.2em] text-white/50 mb-1" htmlFor="p-change-reason">
+              Reason for change
+            </label>
+            <input
+              id="p-change-reason"
+              data-testid="p-change-reason"
+              value={changeReason}
+              onChange={(e) => { setChangeReason(e.target.value); setChangeSource("admin"); }}
+              placeholder="Optional — e.g. corrected light count"
+              maxLength={500}
+              className="w-full bg-[#0a0a0a] border border-white/15 px-3 py-2 text-sm"
+            />
+            <p className="text-[10px] text-white/40 mt-1">A restore point is created automatically when anything changes.</p>
+          </div>
+        )}
 
         <div>
           <div className="eyebrow mb-2">Images</div>
@@ -1984,4 +2035,3 @@ function SpecsEditor({ value, onChange }) {
     </div>
   );
 }
-

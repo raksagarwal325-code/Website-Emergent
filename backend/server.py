@@ -31,6 +31,7 @@ from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  #
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
 from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply_owner_facts, conversation_facts, facts_as_notes, find_similar_product, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, inspect_media_bytes  # noqa: E402
+from product_history import editable_product_snapshot, product_changes  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -325,6 +326,69 @@ class ProductCreate(BaseModel):
     fixed_price: bool = False
     price_display: str = "starting_from"
     status: str = "published"
+
+
+class ProductRestoreRequest(BaseModel):
+    reason: str = ""
+
+
+async def _next_product_version(product_id: str) -> int:
+    latest = await db.product_versions.find_one(
+        {"product_id": product_id},
+        {"_id": 0, "version": 1},
+        sort=[("version", -1)],
+    )
+    return int((latest or {}).get("version") or 0) + 1
+
+
+async def _record_product_version(
+    product: dict,
+    admin: "_AdminUser",
+    *,
+    action: str,
+    reason: str,
+    previous: Optional[dict] = None,
+    restored_from: Optional[int] = None,
+) -> dict:
+    snapshot = editable_product_snapshot(product)
+    changes = product_changes(previous or product, product) if previous else {}
+    doc = {
+        "id": str(uuid.uuid4()),
+        "product_id": product["id"],
+        "product_name": product.get("name", ""),
+        "sku": product.get("sku", ""),
+        "version": await _next_product_version(product["id"]),
+        "action": action,
+        "reason": (reason or "Product edited in Admin").strip()[:500],
+        "changed_fields": list(changes.keys()),
+        # Store changes as rows rather than using field paths as Mongo keys;
+        # specification paths can contain dots (for example specs.Lights).
+        "changes": [
+            {"field": field, "old": values["old"], "new": values["new"]}
+            for field, values in changes.items()
+        ],
+        "snapshot": snapshot,
+        "edited_by": admin.email,
+        "edited_by_user_id": admin.user_id,
+        "created_at": now_iso(),
+    }
+    if restored_from is not None:
+        doc["restored_from"] = restored_from
+    await db.product_versions.insert_one(doc)
+    return doc
+
+
+async def _ensure_product_history_baseline(product: dict, admin: "_AdminUser") -> None:
+    existing = await db.product_versions.find_one(
+        {"product_id": product["id"]}, {"_id": 0, "id": 1}
+    )
+    if not existing:
+        await _record_product_version(
+            product,
+            admin,
+            action="baseline",
+            reason="Automatic restore point before the first tracked edit",
+        )
 
 
 class MediaAssetUpdate(BaseModel):
@@ -844,19 +908,94 @@ async def get_product(product_id: str, admin: Optional["_AdminUser"] = Depends(m
 async def create_product(payload: ProductCreate, admin: _AdminUser = Depends(require_admin)):
     product = Product(**payload.model_dump())
     await db.products.insert_one(product.model_dump())
+    await _record_product_version(
+        product.model_dump(), admin, action="created", reason="Product created"
+    )
     return product
 
 
 @api.put("/products/{product_id}", response_model=Product)
-async def update_product(product_id: str, payload: ProductCreate, admin: _AdminUser = Depends(require_admin)):
+async def update_product(
+    product_id: str,
+    payload: ProductCreate,
+    change_reason: str = Query("Product edited in Admin", max_length=500),
+    change_source: str = Query("admin", max_length=80),
+    admin: _AdminUser = Depends(require_admin),
+):
     existing = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not existing:
         raise HTTPException(404, "Product not found")
+    await _ensure_product_history_baseline(existing, admin)
     data = payload.model_dump()
     data["updated_at"] = now_iso()
     await db.products.update_one({"id": product_id}, {"$set": data})
     updated = await db.products.find_one({"id": product_id}, {"_id": 0})
+    changes = product_changes(existing, updated)
+    if changes:
+        source_label = {
+            "ai": "AI-assisted edit",
+            "bulk_import": "Bulk catalogue import",
+            "admin": "Admin edit",
+        }.get(change_source, change_source.replace("_", " ").title())
+        reason = change_reason.strip() or source_label
+        await _record_product_version(
+            updated, admin, action=change_source, reason=reason, previous=existing
+        )
     return updated
+
+
+@api.get("/admin/products/{product_id}/versions")
+async def list_product_versions(
+    product_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    admin: _AdminUser = Depends(require_admin),
+):
+    if not await db.products.find_one({"id": product_id}, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Product not found")
+    return await db.product_versions.find(
+        {"product_id": product_id}, {"_id": 0, "snapshot": 0}
+    ).sort("version", -1).to_list(limit)
+
+
+@api.post("/admin/products/{product_id}/versions/{version_id}/restore", response_model=Product)
+async def restore_product_version(
+    product_id: str,
+    version_id: str,
+    payload: ProductRestoreRequest,
+    admin: _AdminUser = Depends(require_admin),
+):
+    current = await db.products.find_one({"id": product_id}, {"_id": 0})
+    if not current:
+        raise HTTPException(404, "Product not found")
+    target = await db.product_versions.find_one(
+        {"id": version_id, "product_id": product_id}, {"_id": 0}
+    )
+    if not target:
+        raise HTTPException(404, "Product version not found")
+    try:
+        restored_data = ProductCreate(**target.get("snapshot", {})).model_dump()
+    except Exception:
+        logger.exception(
+            "restore_product_version.invalid_snapshot product_id=%s version_id=%s",
+            product_id,
+            version_id,
+        )
+        raise HTTPException(409, "This restore point is invalid")
+
+    await _ensure_product_history_baseline(current, admin)
+    restored_data["updated_at"] = now_iso()
+    await db.products.update_one({"id": product_id}, {"$set": restored_data})
+    restored = await db.products.find_one({"id": product_id}, {"_id": 0})
+    reason = payload.reason.strip() or f"Restored version {target['version']}"
+    await _record_product_version(
+        restored,
+        admin,
+        action="restore",
+        reason=reason,
+        previous=current,
+        restored_from=target["version"],
+    )
+    return restored
 
 
 @api.delete("/products/{product_id}")
@@ -865,6 +1004,7 @@ async def delete_product(product_id: str, admin: _AdminUser = Depends(require_ad
     if res.deleted_count == 0:
         raise HTTPException(404, "Product not found")
     await db.reviews.delete_many({"product_id": product_id})
+    await db.product_versions.delete_many({"product_id": product_id})
     # ALSO sweep any gallery-project references to this product id so the
     # admin "N linked" counter never shows a phantom count after a
     # catalogue delete. Failure of this sweep must not abort the delete
