@@ -32,6 +32,7 @@ from catalogue_search import catalogue_search_filter, resolve_catalogue_query  #
 from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply_owner_facts, conversation_facts, facts_as_notes, find_similar_product, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, inspect_media_bytes  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
+from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -330,6 +331,49 @@ class ProductCreate(BaseModel):
 
 class ProductRestoreRequest(BaseModel):
     reason: str = ""
+
+
+class ProductBulkChanges(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    category: Optional[str] = Field(None, min_length=1, max_length=100)
+    status: Optional[Literal["draft", "published"]] = None
+    featured: Optional[bool] = None
+    price_display: Optional[Literal["starting_from", "fixed", "on_request"]] = None
+    badge: Optional[str] = Field(None, max_length=100)
+
+    @field_validator("category")
+    @classmethod
+    def _valid_bulk_category(cls, value):
+        value = value.strip() if isinstance(value, str) else value
+        if value == "":
+            raise ValueError("Category cannot be blank")
+        return value
+
+    @field_validator("badge")
+    @classmethod
+    def _strip_bulk_badge(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class ProductBulkPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ids: List[str] = Field(min_length=1, max_length=1000)
+    changes: ProductBulkChanges
+
+    @field_validator("ids")
+    @classmethod
+    def _unique_product_ids(cls, value):
+        cleaned = [str(item).strip() for item in value if str(item).strip()]
+        if not cleaned:
+            raise ValueError("Select at least one product")
+        if len(cleaned) != len(set(cleaned)):
+            raise ValueError("Duplicate product ids are not allowed")
+        return cleaned
+
+
+class ProductBulkApplyRequest(ProductBulkPreviewRequest):
+    preview_token: str = Field(min_length=64, max_length=64)
+    reason: str = Field(default="Bulk catalogue update", max_length=500)
 
 
 async def _next_product_version(product_id: str) -> int:
@@ -912,6 +956,86 @@ async def create_product(payload: ProductCreate, admin: _AdminUser = Depends(req
         product.model_dump(), admin, action="created", reason="Product created"
     )
     return product
+
+
+async def _prepare_bulk_product_update(payload: ProductBulkPreviewRequest) -> dict:
+    requested_changes = payload.changes.model_dump(exclude_none=True)
+    if not requested_changes:
+        raise HTTPException(422, "Choose at least one field to change")
+
+    documents = await db.products.find(
+        {"id": {"$in": payload.ids}}, {"_id": 0}
+    ).to_list(len(payload.ids))
+    by_id = {product["id"]: product for product in documents}
+    missing = [product_id for product_id in payload.ids if product_id not in by_id]
+    if missing:
+        raise HTTPException(404, f"{len(missing)} selected product(s) no longer exist")
+
+    ordered = [by_id[product_id] for product_id in payload.ids]
+    plan = build_bulk_change_plan(ordered, requested_changes)
+    changed = [row for row in plan if row["changes"]]
+    return {
+        "selected_count": len(plan),
+        "change_count": len(changed),
+        "unchanged_count": len(plan) - len(changed),
+        "preview_token": bulk_preview_token(plan),
+        "items": [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "sku": row["sku"],
+                "changes": row["changes"],
+            }
+            for row in changed
+        ],
+        "_plan": plan,
+        "_products": by_id,
+    }
+
+
+@api.post("/admin/products/bulk/preview")
+async def preview_bulk_product_update(
+    payload: ProductBulkPreviewRequest,
+    admin: _AdminUser = Depends(require_admin),
+):
+    prepared = await _prepare_bulk_product_update(payload)
+    return {key: value for key, value in prepared.items() if not key.startswith("_")}
+
+
+@api.post("/admin/products/bulk/apply")
+async def apply_bulk_product_update(
+    payload: ProductBulkApplyRequest,
+    admin: _AdminUser = Depends(require_admin),
+):
+    prepared = await _prepare_bulk_product_update(payload)
+    if prepared["preview_token"] != payload.preview_token:
+        raise HTTPException(
+            409,
+            "Catalogue data changed after preview. Generate a fresh preview before applying.",
+        )
+    if not prepared["change_count"]:
+        raise HTTPException(422, "The selected products already have these values")
+
+    reason = payload.reason.strip() or "Bulk catalogue update"
+    changed_ids = []
+    for row in prepared["_plan"]:
+        if not row["patch"]:
+            continue
+        existing = prepared["_products"][row["id"]]
+        await _ensure_product_history_baseline(existing, admin)
+        update = {**row["patch"], "updated_at": now_iso()}
+        await db.products.update_one({"id": row["id"]}, {"$set": update})
+        updated = await db.products.find_one({"id": row["id"]}, {"_id": 0})
+        await _record_product_version(
+            updated,
+            admin,
+            action="bulk_edit",
+            reason=reason,
+            previous=existing,
+        )
+        changed_ids.append(row["id"])
+
+    return {"ok": True, "updated_count": len(changed_ids), "ids": changed_ids}
 
 
 @api.put("/products/{product_id}", response_model=Product)
