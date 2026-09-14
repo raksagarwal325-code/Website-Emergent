@@ -28,7 +28,9 @@ export default function ProductVariants({ product }) {
   useEffect(() => {
     let active = true;
     setData({ family: null, items: [] });
-    if (!product?.id) return () => { active = false; };
+    if (!product?.id || typeof api.getProductVariants !== "function") {
+      return () => { active = false; };
+    }
     api.getProductVariants(product.id)
       .then((result) => { if (active) setData(result); })
       .catch(() => { if (active) setData({ family: null, items: [] }); });
