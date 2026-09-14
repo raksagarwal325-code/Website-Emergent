@@ -14,6 +14,7 @@ import ProductDraftConversation from "../components/ProductDraftConversation";
 import HeroSliderAdmin from "../components/admin/HeroSliderAdmin";
 import CategoryImagesAdmin from "../components/admin/CategoryImagesAdmin";
 import MediaLibraryAdmin from "../components/MediaLibraryAdmin";
+import LeadsAdmin from "../components/LeadsAdmin";
 import { LEGAL_DEFAULT_UPDATED_AT, serializeLegalDefault } from "../lib/legalContent";
 
 const emptyProduct = {
@@ -53,8 +54,7 @@ export default function Admin() {
     { key: "products", label: "Products", icon: Package },
     { key: "media-library", label: "Media Library", icon: FolderOpen },
     { key: "reviews", label: "Reviews", icon: Star, badge: reviewCounts.pending },
-    { key: "inquiries", label: "Inquiries", icon: MessageSquare },
-    { key: "messages", label: "Messages", icon: Mail },
+    { key: "leads", label: "Leads", icon: MessageSquare },
     { key: "settings", label: "Settings", icon: SettingsIcon },
   ];
 
@@ -89,7 +89,7 @@ export default function Admin() {
       {tab === "dashboard" && stats && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[["Products", stats.products],["Inquiries", stats.inquiries],["Messages", stats.contact_messages],["Reviews", stats.reviews]].map(([label, val]) => (
+            {[["Products", stats.products],["Website Leads", (stats.inquiries || 0) + (stats.contact_messages || 0)],["Reviews", stats.reviews]].map(([label, val]) => (
               <div key={label} className="border border-white/10 p-8">
                 <div className="eyebrow mb-3">{label}</div>
                 <div className="font-serif text-4xl">{val}</div>
@@ -117,11 +117,9 @@ export default function Admin() {
         <ProductsAdmin products={products} categories={categories} refresh={refresh} setEditing={setEditing} editing={editing} />
       )}
 
-      {tab === "inquiries" && <InquiriesAdmin />}
+      {tab === "leads" && <LeadsAdmin />}
 
       {tab === "reviews" && <ReviewsAdmin products={products} refresh={refresh} />}
-
-      {tab === "messages" && <MessagesAdmin />}
 
       {tab === "settings" && settings && (
         <div className="space-y-8">
