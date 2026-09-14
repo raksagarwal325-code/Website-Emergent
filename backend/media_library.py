@@ -293,21 +293,40 @@ def build_media_library_report(
     for asset in assets:
         if asset.get("sha256"):
             by_hash[asset["sha256"]].append(asset)
+    duplicate_content_groups = 0
     for group in by_hash.values():
         distinct_urls = {asset["url"] for asset in group}
         if len(distinct_urls) > 1:
+            duplicate_content_groups += 1
             for asset in group:
                 asset["duplicate_content"] = True
 
+    # A repeated URL inside one owner is one potential duplicate group.
+    duplicate_url_groups = sum(asset["duplicate_url"] for asset in assets)
+
     usage_by_product: dict[str, set[str]] = defaultdict(set)
+    product_asset_types: dict[str, list[str]] = defaultdict(list)
     product_map = {p.get("id"): p for p in products if p.get("id")}
     for asset in assets:
         for use in asset["used_by"]:
             if use.get("type") == "product":
-                usage_by_product[use.get("id")].add(asset["usage_type"])
+                product_id = use.get("id")
+                usage_by_product[product_id].add(asset["usage_type"])
+                product_asset_types[product_id].append(asset["usage_type"])
+
+    # Pair findings are only reliable after every image attached to that product
+    # has an explicit usage classification. Until then the status is "not assessed",
+    # not "missing".
+    assessed_product_ids = {
+        product_id
+        for product_id, usage_types in product_asset_types.items()
+        if usage_types and all(value != "unclassified" for value in usage_types)
+    }
 
     missing_products = []
     for product_id, product in product_map.items():
+        if product_id not in assessed_product_ids:
+            continue
         present = usage_by_product.get(product_id, set())
         missing = [slot for slot in REQUIRED_PRODUCT_SLOTS if slot not in present]
         if missing:
@@ -344,15 +363,23 @@ def build_media_library_report(
             "invalid": sum(a["validity"] == "invalid" for a in assets),
             "unverified_external": sum(a["validity"] == "unverified" for a in assets),
             "low_resolution": sum(a["low_resolution"] for a in assets),
+            "low_resolution_in_use": sum(
+                a["low_resolution"] and a["use_count"] > 0 for a in assets
+            ),
             "duplicate_assets": sum(
                 a["duplicate_url"] or a["duplicate_content"] for a in assets
             ),
+            "duplicate_groups": duplicate_content_groups + duplicate_url_groups,
             "unclassified": sum(a["usage_type"] == "unclassified" for a in assets),
+            "classified": sum(a["usage_type"] != "unclassified" for a in assets),
             "recommendations": sum(bool(a.get("recommendation")) for a in assets),
             "high_confidence_recommendations": sum(
                 (a.get("recommendation") or {}).get("confidence", 0) >= 0.90
                 for a in assets
             ),
+            "products_total": len(product_map),
+            "products_pair_assessed": len(assessed_product_ids),
+            "products_pair_unassessed": len(product_map) - len(assessed_product_ids),
             "products_missing_required_slots": len(missing_products),
         },
         "assets": assets,
