@@ -68,7 +68,7 @@ test("returns accidentally registered collections to private suggestions", async
   fireEvent.click(screen.getByRole("button", { name: /Suggested collections/i }));
   const suggestion = await screen.findByTestId("collection-suggestion-rajsri");
   expect(within(suggestion).getByText("SGE-TL-057")).toBeInTheDocument();
-  expect(within(suggestion).getByText(/1 product.*Not live/i)).toBeInTheDocument();
+  expect(suggestion).toHaveTextContent(/1 products · Not live/i);
 });
 
 test("shows product thumbnail, prominent SKU and publication state", async () => {
