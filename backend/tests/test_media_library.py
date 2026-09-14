@@ -159,6 +159,61 @@ class MediaLibraryTests(unittest.TestCase):
         self.assertTrue(asset["duplicate_url"])
         self.assertEqual(asset["use_count"], 2)
 
+    def test_product_background_and_project_usage_create_conservative_recommendations(self):
+        product_url = "/api/files/app/products/white.jpg"
+        project_url = "/api/files/app/projects/install.jpg"
+        report = build_media_library_report(
+            products=[{"id": "p1", "name": "Lamp", "images": [product_url]}],
+            settings={"homepage_content": {"gallery": {"items": [{
+                "title": "Residence",
+                "images": [project_url],
+            }]}}},
+            files=[
+                {
+                    "id": "white",
+                    "storage_path": "app/products/white.jpg",
+                    "content_type": "image/jpeg",
+                    "background_tone": "white",
+                },
+                {
+                    "id": "project",
+                    "storage_path": "app/projects/install.jpg",
+                    "content_type": "image/jpeg",
+                    "background_tone": "mixed",
+                },
+            ],
+            metadata=[],
+        )
+        assets = {asset["url"]: asset for asset in report["assets"]}
+        self.assertEqual(
+            assets[product_url]["recommendation"]["usage_type"],
+            "white_bulbs_off",
+        )
+        self.assertIn(
+            "confirm that its bulbs are off",
+            assets[product_url]["recommendation"]["reason"],
+        )
+        self.assertEqual(
+            assets[project_url]["recommendation"]["usage_type"],
+            "installation",
+        )
+        self.assertEqual(report["summary"]["high_confidence_recommendations"], 2)
+
+    def test_mixed_product_background_is_not_guessed(self):
+        url = "/api/files/app/products/mixed.jpg"
+        report = build_media_library_report(
+            products=[{"id": "p1", "name": "Lamp", "images": [url]}],
+            settings={},
+            files=[{
+                "id": "mixed",
+                "storage_path": "app/products/mixed.jpg",
+                "content_type": "image/jpeg",
+                "background_tone": "mixed",
+            }],
+            metadata=[],
+        )
+        self.assertIsNone(report["assets"][0]["recommendation"])
+
     def test_image_inspection_returns_hash_and_resolution(self):
         buffer = io.BytesIO()
         Image.new("RGB", (1600, 900), color=(20, 30, 40)).save(buffer, "JPEG")
@@ -169,6 +224,8 @@ class MediaLibraryTests(unittest.TestCase):
         self.assertEqual(metadata["width"], 1600)
         self.assertEqual(metadata["height"], 900)
         self.assertEqual(metadata["sha256"], hashlib.sha256(data).hexdigest())
+        self.assertEqual(metadata["background_tone"], "black")
+        self.assertLess(metadata["background_luminance"], 45)
 
 
 if __name__ == "__main__":
