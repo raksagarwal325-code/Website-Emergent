@@ -4,7 +4,12 @@ import unittest
 
 from PIL import Image
 
-from media_library import asset_id_for_url, build_media_library_report, inspect_media_bytes
+from media_library import (
+    asset_id_for_url,
+    build_media_library_report,
+    canonical_media_url,
+    inspect_media_bytes,
+)
 
 
 class MediaLibraryTests(unittest.TestCase):
@@ -109,6 +114,36 @@ class MediaLibraryTests(unittest.TestCase):
         missing = {row["id"]: row["missing"] for row in report["missing_products"]}
         self.assertNotIn("p1", missing)
         self.assertNotIn("p2", missing)
+
+    def test_absolute_internal_file_url_matches_stored_file(self):
+        relative_url = "/api/files/lumiere-catalog/products/example.jpg"
+        absolute_url = f"https://samratglass.com{relative_url}"
+        report = build_media_library_report(
+            products=[{"id": "p1", "name": "Lamp", "images": [absolute_url]}],
+            settings={},
+            files=[{
+                "id": "file-1",
+                "storage_path": "lumiere-catalog/products/example.jpg",
+                "content_type": "image/jpeg",
+                "width": 1600,
+                "height": 1200,
+            }],
+            metadata=[{
+                "id": "legacy-absolute-id",
+                "url": absolute_url,
+                "usage_type": "detail",
+            }],
+        )
+        self.assertEqual(canonical_media_url(absolute_url), relative_url)
+        self.assertEqual(asset_id_for_url(absolute_url), asset_id_for_url(relative_url))
+        self.assertEqual(report["summary"]["assets"], 1)
+        self.assertEqual(report["summary"]["unverified_external"], 0)
+        self.assertEqual(report["summary"]["classified"], 1)
+        asset = report["assets"][0]
+        self.assertEqual(asset["url"], relative_url)
+        self.assertEqual(asset["validity"], "valid")
+        self.assertEqual(asset["use_count"], 1)
+        self.assertEqual(asset["usage_type"], "detail")
 
     def test_low_resolution_summary_only_counts_assets_in_use(self):
         used_url = "/api/files/app/products/used-small.jpg"
