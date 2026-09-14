@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const mockApi = {
@@ -61,9 +61,10 @@ test("recovers tag-saved collections and loads raw product metadata", async () =
 test("shows product thumbnail, prominent SKU and publication state", async () => {
   render(<MemoryRouter><CollectionsAdmin /></MemoryRouter>);
 
-  expect(await screen.findByText("SGE-TL-057")).toBeInTheDocument();
-  expect(screen.getByText("Rajsri Lattice-Cut Crystal Table Lamp")).toBeInTheDocument();
-  expect(screen.getByText("Table Lamp · Published")).toBeInTheDocument();
+  const row = await screen.findByTestId("collection-product-SGE-TL-057");
+  expect(within(row).getByText("SGE-TL-057")).toBeInTheDocument();
+  expect(row).toHaveTextContent("Rajsri Lattice-Cut Crystal Table Lamp");
+  expect(row).toHaveTextContent(/Table Lamp.*Published/);
   expect(document.querySelector('img[src="https://example.com/api/files/rajsri.png"]')).toHaveAttribute(
     "src",
     "https://example.com/api/files/rajsri.png",

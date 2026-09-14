@@ -29,7 +29,8 @@ test("renders collection summaries from the single-purpose index endpoint", asyn
   render(<MemoryRouter><CollectionsIndex /></MemoryRouter>);
 
   expect(await screen.findByRole("heading", { name: "Rajsri" })).toBeInTheDocument();
-  expect(screen.getByText("5 pieces")).toBeInTheDocument();
-  expect(screen.getByText("Cover · SGE-TL-057")).toBeInTheDocument();
+  const card = screen.getByTestId("collection-card-rajsri");
+  expect(card).toHaveTextContent("5 pieces");
+  expect(card).toHaveTextContent(/Cover.*SGE-TL-057/);
   expect(mockApi.getCollectionsIndex).toHaveBeenCalledTimes(1);
 });
