@@ -45,6 +45,7 @@ test("requires a preview and shows exact old and new values", async () => {
   fireEvent.change(screen.getByTestId("bulk-status"), { target: { value: "draft" } });
   fireEvent.click(screen.getByTestId("bulk-preview"));
   await waitFor(() => expect(mockApi.previewBulkProductUpdate).toHaveBeenCalledWith(["p1"], { status: "draft" }));
+  await screen.findByTestId("bulk-preview-panel");
   expect(screen.getByText("Rajsi Chandelier")).toBeInTheDocument();
   expect(screen.getByText("published")).toBeInTheDocument();
   expect(screen.getByText("draft")).toBeInTheDocument();
