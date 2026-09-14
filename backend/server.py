@@ -34,6 +34,7 @@ from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_libra
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 from variant_families import family_for_product  # noqa: E402
+from collection_index import build_collection_index  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -972,6 +973,17 @@ async def get_product_variants(product_id: str):
     if len(items) < 2:
         return {"family": None, "items": []}
     return {"family": {"slug": family["slug"], "name": family["name"]}, "items": items}
+
+
+@api.get("/collections-index")
+async def get_collections_index():
+    """Return every registered collection card in one fast database read."""
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    products = await db.products.find(
+        {"status": "published"},
+        {"_id": 0, "id": 1, "sku": 1, "name": 1, "category": 1, "images": 1, "tags": 1},
+    ).to_list(10000)
+    return {"items": build_collection_index(settings, products)}
 
 
 @api.post("/products", response_model=Product)
