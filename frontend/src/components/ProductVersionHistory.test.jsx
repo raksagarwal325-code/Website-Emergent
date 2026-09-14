@@ -1,6 +1,5 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import ProductVersionHistory from "./ProductVersionHistory";
 
 const mockApi = {
   listProductVersions: jest.fn(),
@@ -9,6 +8,8 @@ const mockApi = {
 
 jest.mock("../lib/api", () => ({ api: mockApi }));
 jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+
+const ProductVersionHistory = require("./ProductVersionHistory").default;
 
 const product = { id: "p1", name: "Rajsi Chandelier" };
 const versions = [
