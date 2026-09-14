@@ -24,10 +24,11 @@ test("suggests repeated visual groups but skips drafts, imageless products and l
     product("004", "Mayurcrest No Image", { images: [] }),
     product("005", "Gulzar Table Lamp"),
     product("006", "Gulzar Floor Lamp"),
+    product("007", "Diamond Cut Chandelier"),
+    product("008", "Diamond Lattice Table Lamp"),
   ], [{ slug: "gulzar", name: "Gulzar" }]);
 
   expect(suggestions).toHaveLength(1);
   expect(suggestions[0]).toMatchObject({ slug: "mayurcrest", name: "Mayurcrest" });
   expect(suggestions[0].products.map((item) => item.sku)).toEqual(["SGE-CH-001", "SGE-CH-002"]);
 });
-

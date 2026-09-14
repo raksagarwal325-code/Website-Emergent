@@ -9,9 +9,13 @@ const COLLECTION_SPEC_KEYS = [
 ];
 
 const GENERIC_LEADING_WORDS = new Set([
-  "antique", "artisan", "classic", "contemporary", "crystal", "decorative",
-  "designer", "glass", "handcrafted", "heritage", "luxury", "modern",
-  "premium", "traditional", "vintage",
+  "amber", "antique", "artisan", "bell", "black", "blue", "bowl", "brass",
+  "bronze", "classic", "clear", "cobalt", "contemporary", "crystal", "cut",
+  "decorative", "diamond", "designer", "dome", "emerald", "etched", "floral",
+  "fluted", "glass", "gold", "golden", "green", "handcrafted", "heritage",
+  "ivory", "lattice", "luxury", "modern", "multicolour", "ornate", "pendant",
+  "pink", "premium", "red", "rose", "ruby", "silver", "smoky", "traditional",
+  "tulip", "urn", "vintage", "white",
 ]);
 
 const meaningful = (value) => {
@@ -58,4 +62,3 @@ export function suggestCollections(products = [], registeredCollections = []) {
     }))
     .sort((a, b) => b.products.length - a.products.length || a.name.localeCompare(b.name));
 }
-
