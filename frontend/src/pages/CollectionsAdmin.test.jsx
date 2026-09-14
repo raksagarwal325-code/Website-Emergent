@@ -89,7 +89,9 @@ test("keeps suggested collections private while showing images and SKUs for revi
   const suggestion = await screen.findByTestId("collection-suggestion-mayurcrest");
   expect(within(suggestion).getByText("SGE-CH-101")).toBeInTheDocument();
   expect(within(suggestion).getByText("SGE-CH-102")).toBeInTheDocument();
-  expect(within(suggestion).getAllByRole("img")).toHaveLength(2);
+  const previewImages = within(suggestion).getAllByRole("img");
+  expect(previewImages).toHaveLength(2);
+  expect(previewImages[0]).toHaveAttribute("loading", "lazy");
   expect(mockApi.updateSettings).not.toHaveBeenCalled();
 
   fireEvent.click(within(suggestion).getByRole("button", { name: "Review" }));
