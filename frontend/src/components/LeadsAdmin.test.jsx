@@ -1,7 +1,5 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import LeadsAdmin from "./LeadsAdmin";
-
 const mockApi = {
   adminLeads: jest.fn(),
   adminCreateLead: jest.fn(),
@@ -16,6 +14,8 @@ jest.mock("../lib/api", () => ({
 }));
 jest.mock("../lib/gmailCompose", () => ({ gmailComposeUrl: () => "https://mail.google.com/" }));
 jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+
+const LeadsAdmin = require("./LeadsAdmin").default;
 
 const lead = (overrides = {}) => ({
   id: "manual:1",
