@@ -25,8 +25,7 @@ def _tags(product):
     return product.get("tags") if isinstance(product.get("tags"), list) else []
 
 
-def build_collection_index(settings: dict | None, products: list[dict]) -> list[dict]:
-    """Build compact cards without exposing product tags or unpublished data."""
+def _registered_collections(settings: dict | None) -> list[dict]:
     homepage = ((settings or {}).get("homepage_content") or {})
     raw = homepage.get("collections")
     registry = raw if isinstance(raw, list) else [
@@ -37,6 +36,44 @@ def build_collection_index(settings: dict | None, products: list[dict]) -> list[
     # collection is safe to expose. A single legacy row remains compatible.
     if int(homepage.get("collections_registry_version") or 0) < 2 and len(registry) > 1:
         registry = [row for row in registry if isinstance(row, dict) and _slug(row.get("slug")) == "gulzar"]
+    return registry
+
+
+def _collection_members(products: list[dict], slug: str) -> list[dict]:
+    token = f"collection:{slug}"
+    members = [product for product in products if token in _tags(product)]
+    if not members and slug in LEGACY_MEMBERS:
+        allowed = LEGACY_MEMBERS[slug]["skus"]
+        members = [product for product in products if product.get("sku") in allowed]
+    return members
+
+
+def build_collection_detail(settings: dict | None, products: list[dict], requested_slug: str) -> dict | None:
+    """Resolve one public collection from the reviewed registry and its exact members."""
+    wanted = _slug(requested_slug)
+    registered = next((
+        row for row in _registered_collections(settings)
+        if isinstance(row, dict) and _slug(row.get("slug")) == wanted
+    ), None)
+    if not registered:
+        return None
+    name = str(registered.get("name") or "").strip()
+    members = _collection_members(products, wanted)
+    if not wanted or not name or not members:
+        return None
+    return {
+        "slug": wanted,
+        "name": name,
+        "title": f"The {name} Collection",
+        "eyebrow": "A coordinated lighting family",
+        "description": f"Explore the {name} family across coordinated lighting forms, categories and variants designed to work together throughout an interior.",
+        "items": members,
+    }
+
+
+def build_collection_index(settings: dict | None, products: list[dict]) -> list[dict]:
+    """Build compact cards without exposing product tags or unpublished data."""
+    registry = _registered_collections(settings)
     output = []
     seen = set()
     for registered in registry:
@@ -45,11 +82,7 @@ def build_collection_index(settings: dict | None, products: list[dict]) -> list[
         if not slug or not name or slug in seen:
             continue
         seen.add(slug)
-        token = f"collection:{slug}"
-        members = [product for product in products if token in _tags(product)]
-        if not members and slug in LEGACY_MEMBERS:
-            allowed = LEGACY_MEMBERS[slug]["skus"]
-            members = [product for product in products if product.get("sku") in allowed]
+        members = _collection_members(products, slug)
         if not members:
             continue
         featured_token = f"collection-featured:{slug}"
