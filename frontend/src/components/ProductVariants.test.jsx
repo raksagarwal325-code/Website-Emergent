@@ -54,3 +54,29 @@ test("separates same-category choices from matching pieces in other categories",
   expect(matching).toHaveAttribute("href", expect.stringContaining("sge-wl-093"));
   expect(screen.queryByText("Form / use")).not.toBeInTheDocument();
 });
+
+test("prefers a matching piece with the same glass colour even when saved colour labels differ", async () => {
+  const chandelier = {
+    id: "ch-green", sku: "SGE-CH-129", name: "Meher Emerald Green Chandelier",
+    category: "Chandelier", specs: { "Glass Colour": "Emerald Green and Gold" },
+  };
+  const wallBlue = {
+    id: "wl-blue", sku: "SGE-WL-065", name: "Meher Cobalt Blue Wall Light",
+    category: "Wall Light", images: ["/wl-blue.jpg"], specs: {},
+  };
+  const wallGreen = {
+    id: "wl-green", sku: "SGE-WL-068", name: "Meher Emerald Green Wall Light",
+    category: "Wall Light", images: ["/wl-green.jpg"], specs: {},
+  };
+  mockApi.getProductVariants.mockResolvedValue({
+    family: { slug: "meher", name: "Meher Diamond Cut Tulip", axes: ["glass_colour", "product_type"] },
+    items: [chandelier, wallBlue, wallGreen],
+  });
+
+  render(<MemoryRouter><ProductVariants product={chandelier} /></MemoryRouter>);
+
+  const matching = await screen.findByTestId("matching-piece-wall-light");
+  expect(matching).toHaveTextContent("SGE-WL-068");
+  expect(matching).toHaveAttribute("href", expect.stringContaining("sge-wl-068"));
+  expect(matching.querySelector("img")).toHaveAttribute("src", "/wl-green.jpg");
+});
