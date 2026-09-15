@@ -32,5 +32,6 @@ test("renders collection summaries from the single-purpose index endpoint", asyn
   const card = screen.getByTestId("collection-card-rajsri");
   expect(card).toHaveTextContent("5 pieces");
   expect(card).toHaveTextContent(/Cover.*SGE-TL-057/);
+  expect(screen.getByTestId("collections-grid")).toHaveClass("grid-cols-1", "md:grid-cols-2", "xl:grid-cols-3");
   expect(mockApi.getCollectionsIndex).toHaveBeenCalledTimes(1);
 });
