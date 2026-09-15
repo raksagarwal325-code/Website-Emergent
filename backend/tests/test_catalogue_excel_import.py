@@ -1,13 +1,16 @@
 import io
 
 import pytest
+from fastapi import HTTPException
 from openpyxl import load_workbook
 
 from catalogue_excel import build_catalogue_workbook
 from catalogue_excel_import import (
     CatalogueImportError,
     build_import_plan,
+    history_admin,
     parse_catalogue_workbook,
+    selected_import_plan,
 )
 
 
@@ -141,3 +144,43 @@ def test_preview_token_changes_when_admin_value_changes_after_preview():
     second = build_import_plan(rows, products)
 
     assert first["preview_token"] != second["preview_token"]
+
+
+def test_auth_mapping_is_normalized_for_product_history_helpers():
+    admin = history_admin({"user_id": "user-1", "email": "owner@example.com"})
+
+    assert admin.user_id == "user-1"
+    assert admin.email == "owner@example.com"
+
+
+def test_selected_import_plan_applies_only_reviewed_fields():
+    products = _products()
+    payload = _edit(
+        _export(products),
+        [
+            ("SGE-HL-001", "Spec: Glass Colour", "Emerald Green"),
+            ("SGE-HL-001", "Spec: Glass Cut / Design", "Dragon Crest"),
+        ],
+    )
+    plan = build_import_plan(parse_catalogue_workbook(payload), products)
+
+    selected = selected_import_plan(plan, '[{"id":"p-1","fields":["Spec: Glass Colour"]}]')
+
+    assert selected[0]["changes"] == [{
+        "field": "Spec: Glass Colour",
+        "old": "Clear",
+        "new": "Emerald Green",
+    }]
+    assert selected[0]["specs"] == {
+        "Glass Colour": "Emerald Green",
+        "Glass Cut / Design": "Classic",
+    }
+
+
+def test_selected_import_plan_rejects_unpreviewed_fields():
+    products = _products()
+    payload = _edit(_export(products), [("SGE-HL-001", "Spec: Glass Colour", "Emerald Green")])
+    plan = build_import_plan(parse_catalogue_workbook(payload), products)
+
+    with pytest.raises(HTTPException, match="not present in the current preview"):
+        selected_import_plan(plan, '[{"id":"p-1","fields":["Spec: Price"]}]')
