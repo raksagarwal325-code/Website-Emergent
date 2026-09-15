@@ -4,8 +4,7 @@ import { ArrowLeft, ArrowUpRight, MessageCircle } from "lucide-react";
 import ProductCard from "../components/ProductCard";
 import SEO from "../components/SEO";
 import { api } from "../lib/api";
-import { filterCollectionProducts, getCollectionFromProducts, groupCollectionProducts } from "../constants/collections";
-import { getRegisteredCollections } from "../constants/collectionsRegistry";
+import { groupCollectionProducts } from "../constants/collections";
 
 const CATEGORY_ORDER = ["Chandelier", "Floor Chandelier", "Table Chandelier", "Hanging Light", "Wall Light", "Floor Lamp", "Table Lamp", "Candle Stand"];
 
@@ -17,11 +16,9 @@ export default function CollectionPage() {
   useEffect(() => {
     let active = true;
     setLoading(true); setCollection(null); setProducts([]);
-    Promise.all([api.listAllProducts({ limit: 48 }), api.getSettings()]).then(([items, settings]) => {
+    api.getCollection(slug).then((nextCollection) => {
       if (!active) return;
-      const registry = getRegisteredCollections(settings);
-      const nextCollection = getCollectionFromProducts(items, slug, registry);
-      setCollection(nextCollection); setProducts(filterCollectionProducts(items, nextCollection));
+      setCollection(nextCollection); setProducts(nextCollection?.items || []);
     }).catch(() => { if (active) { setCollection(null); setProducts([]); } }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [slug]);
