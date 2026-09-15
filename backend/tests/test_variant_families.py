@@ -15,11 +15,11 @@ def test_registry_ignores_unreviewed_or_incomplete_rows():
 def test_family_lookup_resolves_only_explicit_membership():
     settings = {"homepage_content": {"variant_families": [
         {"slug": "rajsi-urn", "name": "Rajsi Urn", "product_ids": ["amber", "clear"],
-         "axes": ["glass_colour", "metal_finish", "unknown", "glass_colour"]},
+         "axes": ["glass_colour", "glass_cut", "metal_finish", "unknown", "glass_colour"]},
     ]}}
     assert family_for_product(settings, "clear") == {
         "slug": "rajsi-urn", "name": "Rajsi Urn", "product_ids": ["amber", "clear"],
-        "axes": ["glass_colour", "metal_finish"],
+        "axes": ["glass_colour", "glass_cut", "metal_finish"],
     }
     assert family_for_product(settings, "red") is None
     assert normalize_variant_slug("Rajsi Urn & Scroll") == "rajsi-urn-and-scroll"

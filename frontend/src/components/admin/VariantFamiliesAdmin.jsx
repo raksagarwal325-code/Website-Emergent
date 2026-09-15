@@ -182,7 +182,7 @@ export default function VariantFamiliesAdmin() {
     <div data-testid="variant-families-admin" className="space-y-7">
       <div className="border border-[#D4AF37]/35 bg-[#D4AF37]/[0.03] p-6">
         <div className="flex flex-wrap items-start justify-between gap-5">
-          <div className="max-w-3xl"><div className="eyebrow text-[#D4AF37] mb-2">Same design · exact alternatives</div><h2 className="font-serif text-3xl">Variant Families</h2><p className="text-sm text-white/55 mt-3 leading-relaxed">Link only products that are the same underlying design. Colour, finish, size, light count, mechanism and form can differ. Suggestions use existing names, but nothing appears publicly until you review and save it.</p></div>
+          <div className="max-w-3xl"><div className="eyebrow text-[#D4AF37] mb-2">Same design · exact alternatives</div><h2 className="font-serif text-3xl">Variant Families</h2><p className="text-sm text-white/55 mt-3 leading-relaxed">Link only products that are the same underlying design. Colour, glass cut, finish, size, light count, mechanism and form can differ. Suggestions use existing names, but nothing appears publicly until you review and save it.</p></div>
           <button onClick={startNew} className="border border-[#D4AF37]/60 px-5 py-3 text-xs uppercase tracking-[0.2em] text-[#D4AF37]">New family</button>
         </div>
       </div>

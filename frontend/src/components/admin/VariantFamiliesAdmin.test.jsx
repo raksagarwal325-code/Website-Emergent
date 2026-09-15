@@ -35,6 +35,7 @@ test("review shows variant images and a visible private approval action", async 
   await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
   expect(screen.getAllByRole("button", { name: "Approve reviewed family" }).length).toBeGreaterThan(0);
   expect(screen.getByRole("button", { name: "Differs by Glass colour" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: /Differs by Glass cut \/ design/ })).toHaveAttribute("aria-pressed", "false");
   fireEvent.click(screen.getByRole("button", { name: /Differs by Metal finish/ }));
   expect(mockApi.updateSettings).not.toHaveBeenCalled();
 

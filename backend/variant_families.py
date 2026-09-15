@@ -2,7 +2,7 @@
 
 import re
 
-ALLOWED_AXES = {"glass_colour", "metal_finish", "lights", "size", "mechanism", "product_type", "use"}
+ALLOWED_AXES = {"glass_colour", "glass_cut", "metal_finish", "lights", "size", "mechanism", "product_type", "use"}
 
 
 def normalize_variant_slug(value: str) -> str:
