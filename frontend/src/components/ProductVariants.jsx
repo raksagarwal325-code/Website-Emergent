@@ -9,6 +9,30 @@ function normalized(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+const GLASS_COLOUR_PATTERNS = [
+  ["emerald-green", /\bemerald(?:\s+green)?\b/],
+  ["ruby-red", /\bruby(?:\s+red)?\b/],
+  ["cobalt-blue", /\bcobalt(?:\s+blue)?\b/],
+  ["blush-pink", /\bblush(?:\s+pink)?\b/],
+  ["crystal-clear", /\b(?:crystal\s+)?clear\b/],
+  ["smoky", /\bsmok(?:e|y)\b/],
+  ["multicolour", /\bmulti(?:colour|color)\b/],
+  ["amber", /\bamber\b/],
+  ["green", /\bgreen\b/],
+  ["blue", /\bblue\b/],
+  ["red", /\bred\b/],
+  ["pink", /\bpink\b/],
+  ["white", /\bwhite\b/],
+  ["yellow", /\byellow\b/],
+];
+
+function glassColourKey(product) {
+  const specs = product?.specs || {};
+  const savedColour = specs["Glass Colour"] || specs["Glass Color"] || specs.Colour || specs.Color || "";
+  const searchable = normalized(`${savedColour} ${product?.name || ""}`).replace(/[^a-z0-9]+/g, " ");
+  return GLASS_COLOUR_PATTERNS.find(([, pattern]) => pattern.test(searchable))?.[0] || "";
+}
+
 function closestProduct(items, axes, currentIndex, axisIndex, wantedValue) {
   const candidates = items.map((item, index) => ({ item, index }))
     .filter(({ index }) => normalized(axes[axisIndex].values[index]) === normalized(wantedValue));
@@ -26,10 +50,11 @@ function closestCategoryProduct(items, axes, currentIndex, wantedCategory) {
   const candidates = items.map((item, index) => ({ item, index }))
     .filter(({ item }) => normalized(item.category) === normalized(wantedCategory));
   if (!candidates.length) return null;
+  const currentColour = glassColourKey(items[currentIndex]);
   return candidates.sort((a, b) => {
-    const score = ({ index }) => axes.reduce((total, axis) => (
+    const score = ({ item, index }) => axes.reduce((total, axis) => (
       total + (normalized(axis.values[index]) === normalized(axis.values[currentIndex]) ? 1 : 0)
-    ), 0);
+    ), currentColour && glassColourKey(item) === currentColour ? 100 : 0);
     return score(b) - score(a);
   })[0].item;
 }
