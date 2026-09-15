@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Activity, Download, FileSpreadsheet, LoaderCircle } from "lucide-react";
+import { Activity, Check, Download, FileSpreadsheet, LoaderCircle, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { API, api } from "../lib/api";
 import { buildProjectSlugs } from "../lib/slug";
@@ -32,9 +32,14 @@ const filenameFromDisposition = (header, category) => {
   return match ? decodeURIComponent(match[1].replace(/^\"|\"$/g, "").trim()) : fallbackFilename(category);
 };
 
-export default function AdminCatalogueExcelControl() {
+export default function AdminCatalogueExcelControl({ onImported }) {
   const [downloading, setDownloading] = useState(false);
   const [category, setCategory] = useState("Chandelier");
+  const [importFile, setImportFile] = useState(null);
+  const [importReason, setImportReason] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -173,6 +178,84 @@ export default function AdminCatalogueExcelControl() {
     }
   };
 
+  const importRequest = async (path, fields = {}) => {
+    const form = new FormData();
+    form.append("file", importFile);
+    Object.entries(fields).forEach(([key, value]) => form.append(key, value));
+    const response = await fetch(`${API}${path}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "X-Requested-With": "fetch" },
+      body: form,
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch (_) {
+      // Preserve the status-based fallback for non-JSON proxy failures.
+    }
+    if (!response.ok) throw new Error(payload?.detail || `Excel import failed (${response.status})`);
+    return payload;
+  };
+
+  const chooseImportFile = (event) => {
+    const file = event.target.files?.[0] || null;
+    setPreview(null);
+    if (file && !file.name.toLowerCase().endsWith(".xlsx")) {
+      setImportFile(null);
+      event.target.value = "";
+      toast.error("Choose an .xlsx catalogue file");
+      return;
+    }
+    if (file && file.size > 50 * 1024 * 1024) {
+      setImportFile(null);
+      event.target.value = "";
+      toast.error("The Excel file must be 50 MB or smaller");
+      return;
+    }
+    setImportFile(file);
+  };
+
+  const previewImport = async () => {
+    if (!importFile || previewing || applying) return;
+    setPreviewing(true);
+    setPreview(null);
+    try {
+      const result = await importRequest("/admin/catalogue/import/preview");
+      setPreview(result);
+      if (result.errors?.length) toast.error("The workbook has errors that must be corrected");
+      else if (!result.changed_field_count) toast.success("No specification changes found");
+      else toast.success(`${result.changed_field_count} specification changes ready to review`);
+    } catch (error) {
+      toast.error(error?.message || "Excel preview failed");
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  const applyImport = async () => {
+    if (!importFile || !preview?.can_apply || !importReason.trim() || applying) return;
+    setApplying(true);
+    try {
+      const result = await importRequest("/admin/catalogue/import/apply", {
+        preview_token: preview.preview_token,
+        reason: importReason.trim(),
+      });
+      await onImported?.();
+      toast.success(`${result.updated_count} products updated · ${result.changed_field_count} specification changes`);
+      setImportFile(null);
+      setImportReason("");
+      setPreview(null);
+      const input = document.getElementById("admin-catalogue-import-file");
+      if (input) input.value = "";
+    } catch (error) {
+      toast.error(error?.message || "Excel import failed");
+      setPreview(null);
+    } finally {
+      setApplying(false);
+    }
+  };
+
   return (
     <section
       data-testid="admin-catalogue-tools"
@@ -182,7 +265,7 @@ export default function AdminCatalogueExcelControl() {
       <div className="mb-4">
         <div id="admin-catalogue-tools-title" className="eyebrow mb-1">Admin tools</div>
         <p className="text-xs leading-5 text-white/45">
-          Review Website Health or export the selected product category without leaving the dashboard.
+          Review Website Health, export catalogue data, or preview corrected specifications before applying them.
         </p>
       </div>
 
@@ -234,6 +317,116 @@ export default function AdminCatalogueExcelControl() {
             <span className="mt-0.5 block text-[10px] text-white/45">Selected category · specs · tags · images</span>
           </span>
         </button>
+      </div>
+
+      <div className="mt-5 border-t border-white/10 pt-5" data-testid="admin-catalogue-import">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.24em] text-[#D4AF37]">Import corrected specifications</div>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-white/45">
+              Upload an Excel file downloaded here. Products are matched by SKU and Product ID. Only non-empty Spec: cells can change; names, prices, images, categories and publishing status are protected.
+            </p>
+          </div>
+          <span className="mt-2 text-[10px] uppercase tracking-[0.16em] text-white/35 sm:mt-0">Preview required before applying</span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1.15fr_1fr_auto] lg:items-end">
+          <div>
+            <label htmlFor="admin-catalogue-import-file" className="mb-2 block text-[10px] uppercase tracking-[0.2em] text-white/45">Corrected Excel file</label>
+            <input
+              id="admin-catalogue-import-file"
+              data-testid="admin-catalogue-import-file"
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={chooseImportFile}
+              disabled={previewing || applying}
+              className="block w-full border border-white/20 bg-[#171717] px-3 py-2 text-xs text-white file:mr-3 file:border-0 file:bg-[#D4AF37] file:px-3 file:py-1.5 file:text-[10px] file:uppercase file:tracking-[0.16em] file:text-black disabled:opacity-60"
+            />
+          </div>
+          <div>
+            <label htmlFor="admin-catalogue-import-reason" className="mb-2 block text-[10px] uppercase tracking-[0.2em] text-white/45">Reason for change</label>
+            <input
+              id="admin-catalogue-import-reason"
+              data-testid="admin-catalogue-import-reason"
+              value={importReason}
+              onChange={(event) => setImportReason(event.target.value)}
+              maxLength={500}
+              placeholder="For example: Correct verified Kandil specifications"
+              disabled={applying}
+              className="min-h-[42px] w-full border border-white/20 bg-[#171717] px-3 py-2 text-xs text-white outline-none placeholder:text-white/25 focus:border-[#D4AF37] disabled:opacity-60"
+            />
+          </div>
+          <button
+            type="button"
+            data-testid="admin-preview-catalogue-import"
+            onClick={previewImport}
+            disabled={!importFile || previewing || applying}
+            className="flex min-h-[42px] items-center justify-center gap-2 border border-[#D4AF37]/70 px-5 text-[10px] uppercase tracking-[0.2em] text-[#D4AF37] transition hover:bg-[#D4AF37] hover:text-black disabled:cursor-not-allowed disabled:border-white/10 disabled:text-white/25"
+          >
+            {previewing ? <LoaderCircle size={15} className="animate-spin" /> : <Upload size={15} />}
+            {previewing ? "Checking…" : "Preview import"}
+          </button>
+        </div>
+
+        {preview && (
+          <div className="mt-4 border border-[#D4AF37]/30 bg-black/20 p-4" data-testid="admin-catalogue-import-preview">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm text-white">
+                  {preview.changed_product_count} products · {preview.changed_field_count} specification changes
+                </div>
+                <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/35">
+                  {preview.matched_count} SKUs matched · {preview.unchanged_count} unchanged
+                </div>
+              </div>
+              <button
+                type="button"
+                data-testid="admin-apply-catalogue-import"
+                onClick={applyImport}
+                disabled={!preview.can_apply || !importReason.trim() || applying}
+                className="flex min-h-[42px] items-center gap-2 bg-[#D4AF37] px-5 text-[10px] uppercase tracking-[0.2em] text-black transition hover:bg-[#B5952F] disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+              >
+                {applying ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />}
+                {applying ? "Applying…" : "Apply specification updates"}
+              </button>
+            </div>
+
+            {preview.errors?.length > 0 && (
+              <div className="mt-4 border border-red-400/30 bg-red-950/20 p-3" role="alert">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-red-300">Correct these workbook errors</div>
+                <ul className="mt-2 space-y-1 text-xs text-red-100/80">
+                  {preview.errors.map((error, index) => (
+                    <li key={`${error.row}-${error.sku}-${index}`}>Row {error.row}{error.sku ? ` · ${error.sku}` : ""}: {error.message}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {preview.items?.length > 0 && (
+              <div className="mt-4 max-h-80 overflow-y-auto border border-white/10" data-testid="admin-catalogue-import-changes">
+                {preview.items.map((item) => (
+                  <div key={item.id} className="border-b border-white/10 p-3 last:border-b-0">
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      <span className="text-xs font-medium text-[#D4AF37]">{item.sku}</span>
+                      <span className="text-xs text-white/70">{item.name}</span>
+                      <span className="text-[10px] text-white/30">Excel row {item.row}</span>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {item.changes.map((change) => (
+                        <div key={change.field} className="grid grid-cols-1 gap-1 text-[11px] sm:grid-cols-[180px_1fr_24px_1fr] sm:items-center">
+                          <span className="text-white/45">{change.field}</span>
+                          <span className="break-words text-red-200/70">{change.old || "(blank)"}</span>
+                          <span className="hidden text-center text-white/25 sm:block">→</span>
+                          <span className="break-words text-emerald-200/85">{change.new}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );

@@ -24,7 +24,7 @@ describe("Admin Website Health exact editor deep links", () => {
   test("Admin tools stay in the dashboard flow instead of covering dashboard content", () => {
     expect(source).toContain('data-testid="admin-catalogue-tools"');
     expect(source).not.toContain('className="fixed left-4 bottom-4');
-    expect(adminSource).toContain("<AdminCatalogueExcelControl />");
+    expect(adminSource).toContain("<AdminCatalogueExcelControl onImported={refresh} />");
     expect(appSource).not.toContain("<><Admin /><AdminCatalogueExcelControl /></>");
   });
 
