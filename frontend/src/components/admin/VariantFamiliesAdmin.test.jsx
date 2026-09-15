@@ -72,10 +72,10 @@ test("can select or clear every filtered product in one action", async () => {
   fireEvent.click(screen.getByRole("button", { name: /Select all shown/ }));
   expect(screen.getByTestId("variant-product-SGE-CH-101")).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByTestId("variant-product-SGE-CH-102")).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByText("2 exact products selected")).toBeInTheDocument();
+  expect(screen.getByTestId("variant-selected-count")).toHaveTextContent("2 exact products selected");
 
   fireEvent.click(screen.getByRole("button", { name: "Clear shown" }));
   expect(screen.getByTestId("variant-product-SGE-CH-101")).toHaveAttribute("aria-pressed", "false");
   expect(screen.getByTestId("variant-product-SGE-CH-102")).toHaveAttribute("aria-pressed", "false");
-  expect(screen.getByText("0 exact products selected")).toBeInTheDocument();
+  expect(screen.getByTestId("variant-selected-count")).toHaveTextContent("0 exact products selected");
 });
