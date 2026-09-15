@@ -38,7 +38,7 @@ test("review shows variant images and a visible private approval action", async 
   fireEvent.click(screen.getByRole("button", { name: /Differs by Metal finish/ }));
   expect(mockApi.updateSettings).not.toHaveBeenCalled();
 
-  const rows = screen.getAllByTestId(/^variant-product-/);
+  const rows = screen.getAllByTestId(/^variant-product-SGE-/);
   expect(rows[0]).toHaveAttribute("data-testid", "variant-product-SGE-CH-101");
   expect(rows[1]).toHaveAttribute("data-testid", "variant-product-SGE-CH-102");
   expect(within(rows[0]).getByText("SGE-CH-101")).toBeInTheDocument();
@@ -46,7 +46,7 @@ test("review shows variant images and a visible private approval action", async 
 
   const orderBeforeSelection = rows.map((row) => row.dataset.testid);
   fireEvent.click(rows[0]);
-  expect(screen.getAllByTestId(/^variant-product-/).map((row) => row.dataset.testid)).toEqual(orderBeforeSelection);
+  expect(screen.getAllByTestId(/^variant-product-SGE-/).map((row) => row.dataset.testid)).toEqual(orderBeforeSelection);
   fireEvent.click(rows[0]);
 
   fireEvent.click(screen.getAllByRole("button", { name: "Approve reviewed family" })[0]);
@@ -68,7 +68,7 @@ test("can select or clear every filtered product in one action", async () => {
   fireEvent.click(screen.getByRole("button", { name: "New family" }));
   fireEvent.change(screen.getByPlaceholderText("Search name or SKU"), { target: { value: "Neelpushp" } });
 
-  expect(screen.getAllByTestId(/^variant-product-/)).toHaveLength(2);
+  expect(screen.getAllByTestId(/^variant-product-SGE-/)).toHaveLength(2);
   fireEvent.click(screen.getByRole("button", { name: "Select all shown (2)" }));
   expect(screen.getByTestId("variant-product-SGE-CH-101")).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByTestId("variant-product-SGE-CH-102")).toHaveAttribute("aria-pressed", "true");
