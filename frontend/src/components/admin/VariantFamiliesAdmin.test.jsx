@@ -24,7 +24,7 @@ beforeEach(() => {
   mockApi.resolveImage.mockImplementation((value) => `https://example.com${value}`);
 });
 
-test("review shows selected variants first with images and a visible private approval action", async () => {
+test("review shows variant images and a visible private approval action", async () => {
   const scrollIntoView = jest.fn();
   window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
   render(<VariantFamiliesAdmin />);
@@ -44,6 +44,11 @@ test("review shows selected variants first with images and a visible private app
   expect(within(rows[0]).getByText("SGE-CH-101")).toBeInTheDocument();
   expect(document.querySelector('img[src="https://example.com/amber.jpg"]')).toHaveAttribute("loading", "lazy");
 
+  const orderBeforeSelection = rows.map((row) => row.dataset.testid);
+  fireEvent.click(rows[0]);
+  expect(screen.getAllByTestId(/^variant-product-/).map((row) => row.dataset.testid)).toEqual(orderBeforeSelection);
+  fireEvent.click(rows[0]);
+
   fireEvent.click(screen.getAllByRole("button", { name: "Approve reviewed family" })[0]);
   await waitFor(() => expect(mockApi.updateSettings).toHaveBeenCalledWith(expect.objectContaining({
     homepage_content: expect.objectContaining({
@@ -54,4 +59,23 @@ test("review shows selected variants first with images and a visible private app
       })],
     }),
   })));
+});
+
+test("can select or clear every filtered product in one action", async () => {
+  render(<VariantFamiliesAdmin />);
+  await screen.findByText("Variant Families");
+
+  fireEvent.click(screen.getByRole("button", { name: "New family" }));
+  fireEvent.change(screen.getByPlaceholderText("Search name or SKU"), { target: { value: "Neelpushp" } });
+
+  expect(screen.getAllByTestId(/^variant-product-/)).toHaveLength(2);
+  fireEvent.click(screen.getByRole("button", { name: "Select all shown (2)" }));
+  expect(screen.getByTestId("variant-product-SGE-CH-101")).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByTestId("variant-product-SGE-CH-102")).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByText("2 exact products selected")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Clear shown" }));
+  expect(screen.getByTestId("variant-product-SGE-CH-101")).toHaveAttribute("aria-pressed", "false");
+  expect(screen.getByTestId("variant-product-SGE-CH-102")).toHaveAttribute("aria-pressed", "false");
+  expect(screen.getByText("0 exact products selected")).toBeInTheDocument();
 });
