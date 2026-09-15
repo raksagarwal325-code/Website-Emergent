@@ -1,11 +1,16 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 const mockApi = { getProductVariants: jest.fn(), resolveImage: jest.fn((value) => value) };
 jest.mock("../lib/api", () => ({ api: mockApi }));
 
 const ProductVariants = require("./ProductVariants").default;
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}</div>;
+}
 
 test("customer selector shows only the differences approved by the administrator", async () => {
   const amber = {
@@ -21,11 +26,13 @@ test("customer selector shows only the differences approved by the administrator
     items: [amber, clear],
   });
 
-  render(<MemoryRouter><ProductVariants product={amber} /></MemoryRouter>);
+  render(<MemoryRouter><ProductVariants product={amber} /><LocationProbe /></MemoryRouter>);
 
-  expect(await screen.findByText("Glass colour")).toBeInTheDocument();
+  const glassColour = await screen.findByLabelText("Glass colour");
+  expect(glassColour).toHaveValue("Amber");
   expect(screen.queryByText("Metal finish")).not.toBeInTheDocument();
-  expect(screen.getByText("Clear").closest("a")).toHaveAttribute("href");
+  fireEvent.change(glassColour, { target: { value: "Clear" } });
+  expect(screen.getByTestId("location")).toHaveTextContent("sge-ch-102");
 });
 
 test("separates same-category choices from matching pieces in other categories", async () => {
@@ -47,18 +54,14 @@ test("separates same-category choices from matching pieces in other categories",
     items: [chandelier, wallRed, wallBlue],
   });
 
-  render(<MemoryRouter><ProductVariants product={chandelier} /></MemoryRouter>);
+  render(<MemoryRouter><ProductVariants product={chandelier} /><LocationProbe /></MemoryRouter>);
 
-  const matching = await screen.findByTestId("matching-piece-wall-light");
-  expect(matching).toHaveTextContent("Wall Light");
-  expect(matching).toHaveTextContent("SGE-WL-093");
-  expect(matching).toHaveTextContent("Bagh-e-Noor Cobalt Wall Light");
-  expect(matching).toHaveTextContent("Glass · Cobalt Blue");
-  expect(matching).toHaveTextContent("Lights · 2");
-  expect(matching).toHaveTextContent("Size · 24 × 12 in");
-  expect(matching).toHaveTextContent("Finish · Antique Brass");
-  expect(matching).toHaveTextContent("View matching Wall Light");
-  expect(matching).toHaveAttribute("href", expect.stringContaining("sge-wl-093"));
+  const productType = await screen.findByLabelText("Product type");
+  expect(productType).toHaveValue("Chandelier");
+  expect(screen.getByRole("option", { name: "Wall Light" })).toBeInTheDocument();
+  expect(screen.getByTestId("selected-configuration")).toHaveTextContent("SGE-CH-094");
+  fireEvent.change(productType, { target: { value: "Wall Light" } });
+  expect(screen.getByTestId("location")).toHaveTextContent("sge-wl-093");
   expect(screen.queryByText("Form / use")).not.toBeInTheDocument();
 });
 
@@ -80,11 +83,11 @@ test("prefers a matching piece with the same glass colour even when saved colour
     items: [chandelier, wallBlue, wallGreen],
   });
 
-  render(<MemoryRouter><ProductVariants product={chandelier} /></MemoryRouter>);
+  render(<MemoryRouter><ProductVariants product={chandelier} /><LocationProbe /></MemoryRouter>);
 
-  const matching = await screen.findByTestId("matching-piece-wall-light");
-  expect(matching).toHaveTextContent("SGE-WL-068");
-  expect(matching).toHaveAttribute("href", expect.stringContaining("sge-wl-068"));
+  const productType = await screen.findByLabelText("Product type");
+  fireEvent.change(productType, { target: { value: "Wall Light" } });
+  expect(screen.getByTestId("location")).toHaveTextContent("sge-wl-068");
 });
 
 test("shows administrator-approved lights and size as linked choices within a product type", async () => {
@@ -101,10 +104,15 @@ test("shows administrator-approved lights and size as linked choices within a pr
     items: [fourLight, sixLight],
   });
 
-  render(<MemoryRouter><ProductVariants product={fourLight} /></MemoryRouter>);
+  render(<MemoryRouter><ProductVariants product={fourLight} /><LocationProbe /></MemoryRouter>);
 
-  expect(await screen.findByText("Lights")).toBeInTheDocument();
-  expect(screen.getByText("6").closest("a")).toHaveAttribute("href", expect.stringContaining("sge-ch-130"));
-  expect(screen.getByText("Size")).toBeInTheDocument();
-  expect(screen.getByText("36 × 30 in").closest("a")).toHaveAttribute("href", expect.stringContaining("sge-ch-130"));
+  const lights = await screen.findByLabelText("Lights");
+  expect(lights).toHaveValue("4");
+  fireEvent.change(lights, { target: { value: "6" } });
+  expect(screen.getByTestId("location")).toHaveTextContent("sge-ch-130");
+
+  const size = screen.getByLabelText("Size");
+  expect(size).toHaveValue("30 × 24 in");
+  fireEvent.change(size, { target: { value: "36 × 30 in" } });
+  expect(screen.getByTestId("location")).toHaveTextContent("sge-ch-130");
 });
