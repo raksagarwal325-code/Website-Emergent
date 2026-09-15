@@ -21,10 +21,12 @@ import { render, screen, waitFor, fireEvent, act } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom";
 
 const mockListProducts = jest.fn();
+const mockGetVariantFamilyIndex = jest.fn();
 jest.mock("../lib/api", () => ({
   __esModule: true,
   api: {
     listProducts: (...args) => mockListProducts(...args),
+    getVariantFamilyIndex: (...args) => mockGetVariantFamilyIndex(...args),
     resolveImage: (u) => u || "",
   },
   formatProductPrice: (p) => `₹${p?.price || 0}`,
@@ -32,8 +34,8 @@ jest.mock("../lib/api", () => ({
 
 jest.mock("./ProductCard", () => ({
   __esModule: true,
-  default: ({ product }) => (
-    <div data-testid={`product-card-${product.id}`}>{product.name}</div>
+  default: ({ product, matchingFamily }) => (
+    <div data-testid={`product-card-${product.id}`}>{product.name}{matchingFamily?.categories?.join(", ")}</div>
   ),
 }));
 
@@ -67,10 +69,21 @@ const makePage = (page, totalPages, total, count = 24) => ({
 
 beforeEach(() => {
   mockListProducts.mockReset();
+  mockGetVariantFamilyIndex.mockReset();
+  mockGetVariantFamilyIndex.mockResolvedValue({});
   mockListProducts.mockImplementation((params = {}) => {
     const p = params.page || 1;
     return Promise.resolve(makePage(p, 3, 72, 24));
   });
+});
+
+test("passes approved matching product types to catalogue cards", async () => {
+  mockGetVariantFamilyIndex.mockResolvedValue({
+    "p1-0": { family: "Bagh-e-Noor", categories: ["Wall Light"] },
+  });
+  renderBrowser();
+
+  expect(await screen.findByTestId("product-card-p1-0")).toHaveTextContent("Wall Light");
 });
 
 const renderBrowser = (initialEntries = ["/catalog"], extraProps = {}) =>
