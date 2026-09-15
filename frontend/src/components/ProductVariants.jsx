@@ -33,6 +33,36 @@ function glassColourKey(product) {
   return GLASS_COLOUR_PATTERNS.find(([, pattern]) => pattern.test(searchable))?.[0] || "";
 }
 
+function meaningfulSpec(value) {
+  const text = String(value ?? "").trim();
+  return /^(?:|n\/?a|unknown|none|null|-|—)$/i.test(text) ? "" : text;
+}
+
+function firstSpec(product, keys) {
+  for (const key of keys) {
+    const value = meaningfulSpec(product?.specs?.[key]);
+    if (value) return value;
+  }
+  return "";
+}
+
+function matchingPieceDetails(product) {
+  const glassColour = firstSpec(product, ["Glass Colour", "Glass Color", "Colour", "Color"]);
+  const lights = firstSpec(product, ["Number of Lights", "Lights", "Light Count"]);
+  const directSize = firstSpec(product, ["Dimensions", "Size"]);
+  const height = firstSpec(product, ["Height"]);
+  const width = firstSpec(product, ["Width"]);
+  const diameter = firstSpec(product, ["Diameter"]);
+  const size = directSize || [height && `H ${height}`, width && `W ${width}`, diameter && `Dia ${diameter}`].filter(Boolean).join(" · ");
+  const finish = firstSpec(product, ["Metal Finish", "Finish"]);
+  return [
+    glassColour && { label: "Glass", value: glassColour },
+    lights && { label: "Lights", value: lights },
+    size && { label: "Size", value: size },
+    finish && { label: "Finish", value: finish },
+  ].filter(Boolean);
+}
+
 function closestProduct(items, axes, currentIndex, axisIndex, wantedValue) {
   const candidates = items.map((item, index) => ({ item, index }))
     .filter(({ index }) => normalized(axes[axisIndex].values[index]) === normalized(wantedValue));
@@ -121,10 +151,21 @@ export default function ProductVariants({ product }) {
               const target = closestCategoryProduct(items, allAxes.filter((axis) => axis.key !== "use" && axis.key !== "product_type"), currentIndex, category);
               if (!target) return null;
               const image = target.images?.[0] ? api.resolveImage(target.images[0]) : "";
-              return <Link key={category} to={productPath(target)} data-testid={`matching-piece-${normalized(category).replace(/[^a-z0-9]+/g, "-")}`} className="group grid grid-cols-[64px_1fr_auto] items-center gap-3 border border-white/15 hover:border-[#D4AF37] p-3 transition-colors">
-                <span className="w-16 h-16 bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{image ? <img src={image} alt="" loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <Layers3 size={18} className="text-white/20" />}</span>
-                <span className="min-w-0"><span className="block text-[10px] uppercase tracking-[0.18em] text-[#D4AF37]">{category}</span><span className="block text-xs text-white/70 truncate mt-1">{target.name}</span><span className="block text-[10px] text-white/35 mt-1">{target.sku}</span></span>
-                <ArrowUpRight size={14} className="text-white/45 group-hover:text-[#D4AF37]" />
+              const details = matchingPieceDetails(target);
+              return <Link key={category} to={productPath(target)} data-testid={`matching-piece-${normalized(category).replace(/[^a-z0-9]+/g, "-")}`} className="group block border border-white/15 hover:border-[#D4AF37] p-3.5 transition-colors">
+                <span className="grid grid-cols-[88px_1fr] sm:grid-cols-[104px_1fr] gap-4 items-start">
+                  <span className="w-[88px] h-[104px] sm:w-[104px] sm:h-[124px] bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{image ? <img src={image} alt={`${target.name} — ${target.sku}`} loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <Layers3 size={22} className="text-white/20" />}</span>
+                  <span className="min-w-0 self-stretch flex flex-col">
+                    <span className="block text-[10px] uppercase tracking-[0.18em] text-[#D4AF37]">Matching {category}</span>
+                    <span className="block font-serif text-base leading-snug text-white mt-1.5">{target.name}</span>
+                    <span className="block text-[10px] uppercase tracking-[0.14em] text-white/40 mt-1.5">{target.sku}</span>
+                    {details.length > 0 && <span className="flex flex-wrap gap-1.5 mt-3">{details.map((detail) => <span key={detail.label} className="border border-white/10 bg-black/20 px-2 py-1 text-[9px] leading-tight text-white/60"><span className="text-white/35">{detail.label}</span> · {detail.value}</span>)}</span>}
+                  </span>
+                </span>
+                <span className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-[10px] uppercase tracking-[0.18em] text-[#D4AF37]">
+                  View matching {category}
+                  <ArrowUpRight size={14} className="transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                </span>
               </Link>;
             })}
           </div>
