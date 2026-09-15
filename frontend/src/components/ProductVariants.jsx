@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { ArrowUpRight, Check, Layers3 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Check, ChevronDown, Layers3 } from "lucide-react";
 import { api } from "../lib/api";
 import { productPath } from "../lib/productUrl";
 import { variantAxes } from "../constants/variantFamilies";
@@ -60,7 +60,7 @@ function matchingPieceDetails(product) {
     lights && { label: "Lights", value: lights },
     size && { label: "Size", value: size },
     finish && { label: "Finish", value: finish },
-  ].filter(Boolean);
+  ].filter((detail) => detail && detail.value.length <= 40);
 }
 
 function closestProduct(items, axes, currentIndex, axisIndex, wantedValue) {
@@ -90,6 +90,7 @@ function closestCategoryProduct(items, axes, currentIndex, wantedCategory) {
 }
 
 export default function ProductVariants({ product }) {
+  const navigate = useNavigate();
   const [data, setData] = useState({ family: null, items: [] });
 
   useEffect(() => {
@@ -130,6 +131,15 @@ export default function ProductVariants({ product }) {
   const matchingCategories = permitsMatchingTypes
     ? categories.filter((category) => normalized(category) !== normalized(product.category))
     : [];
+  const currentItem = items[currentIndex];
+  const currentImage = currentItem.images?.[0] ? api.resolveImage(currentItem.images[0]) : "";
+  const currentDetails = matchingPieceDetails(currentItem);
+  const matchingAxes = allAxes.filter((axis) => axis.key !== "use" && axis.key !== "product_type");
+  const selectClassName = "w-full appearance-none border border-white/20 bg-[#070b0a] px-3 py-3 pr-10 text-sm text-white outline-none transition-colors hover:border-[#D4AF37]/70 focus:border-[#D4AF37]";
+
+  const openProduct = (target) => {
+    if (target?.id && target.id !== product.id) navigate(productPath(target));
+  };
 
   return (
     <section data-testid="product-variants" className="border border-[#D4AF37]/35 bg-[#D4AF37]/[0.035] p-5 md:p-6">
@@ -142,69 +152,55 @@ export default function ProductVariants({ product }) {
         </div>
       </div>
 
-      {matchingCategories.length > 0 && (
-        <div id="matching-pieces" data-testid="matching-pieces" className="mt-5 border-t border-white/10 pt-5 scroll-mt-40">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-[#D4AF37]">Matching pieces</div>
-          <p className="text-xs text-white/45 mt-1">The same approved design is also available in these product types.</p>
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {matchingCategories.map((category) => {
-              const target = closestCategoryProduct(items, allAxes.filter((axis) => axis.key !== "use" && axis.key !== "product_type"), currentIndex, category);
-              if (!target) return null;
-              const image = target.images?.[0] ? api.resolveImage(target.images[0]) : "";
-              const details = matchingPieceDetails(target);
-              return <Link key={category} to={productPath(target)} data-testid={`matching-piece-${normalized(category).replace(/[^a-z0-9]+/g, "-")}`} className="group block border border-white/15 hover:border-[#D4AF37] p-3.5 transition-colors">
-                <span className="grid grid-cols-[88px_1fr] sm:grid-cols-[104px_1fr] gap-4 items-start">
-                  <span className="w-[88px] h-[104px] sm:w-[104px] sm:h-[124px] bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{image ? <img src={image} alt={`${target.name} — ${target.sku}`} loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <Layers3 size={22} className="text-white/20" />}</span>
-                  <span className="min-w-0 self-stretch flex flex-col">
-                    <span className="block text-[10px] uppercase tracking-[0.18em] text-[#D4AF37]">Matching {category}</span>
-                    <span className="block font-serif text-base leading-snug text-white mt-1.5">{target.name}</span>
-                    <span className="block text-[10px] uppercase tracking-[0.14em] text-white/40 mt-1.5">{target.sku}</span>
-                    {details.length > 0 && <span className="flex flex-wrap gap-1.5 mt-3">{details.map((detail) => <span key={detail.label} className="border border-white/10 bg-black/20 px-2 py-1 text-[9px] leading-tight text-white/60"><span className="text-white/35">{detail.label}</span> · {detail.value}</span>)}</span>}
+      {(matchingCategories.length > 0 || sameCategoryAxes.length > 0) && (
+        <div id={matchingCategories.length > 0 ? "matching-pieces" : undefined} data-testid="configuration-dropdowns" className="mt-5 border-t border-white/10 pt-5 scroll-mt-40">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {matchingCategories.length > 0 && (
+              <label className="block">
+                <span className="block text-[10px] uppercase tracking-[0.2em] text-white/45 mb-2">Product type</span>
+                <span className="relative block">
+                  <select aria-label="Product type" value={product.category} onChange={(event) => openProduct(closestCategoryProduct(items, matchingAxes, currentIndex, event.target.value))} className={selectClassName}>
+                    {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+                  </select>
+                  <ChevronDown size={15} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
+                </span>
+              </label>
+            )}
+            {sameCategoryAxes.map((axis, axisIndex) => {
+              const values = Array.from(new Map(axis.values.filter(Boolean).map((value) => [normalized(value), value])).values());
+              const selectedValue = axis.values[sameCategoryCurrentIndex] || "";
+              return (
+                <label key={axis.key} className="block">
+                  <span className="block text-[10px] uppercase tracking-[0.2em] text-white/45 mb-2">{axis.label}</span>
+                  <span className="relative block">
+                    <select aria-label={axis.label} value={selectedValue} onChange={(event) => openProduct(closestProduct(sameCategoryItems, sameCategoryAxes, sameCategoryCurrentIndex, axisIndex, event.target.value))} className={selectClassName}>
+                      {values.map((value) => <option key={value} value={value}>{value}</option>)}
+                    </select>
+                    <ChevronDown size={15} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
                   </span>
-                </span>
-                <span className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-[10px] uppercase tracking-[0.18em] text-[#D4AF37]">
-                  View matching {category}
-                  <ArrowUpRight size={14} className="transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-                </span>
-              </Link>;
+                </label>
+              );
             })}
+          </div>
+
+          <div className="mt-4 grid grid-cols-[72px_1fr] gap-3 border border-white/10 bg-black/15 p-3" data-testid="selected-configuration">
+            <span className="w-[72px] h-[84px] bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{currentImage ? <img src={currentImage} alt="" loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <Layers3 size={20} className="text-white/20" />}</span>
+            <span className="min-w-0 self-center">
+              <span className="flex items-center gap-1.5 text-[9px] uppercase tracking-[0.18em] text-[#D4AF37]"><Check size={11} /> Selected configuration</span>
+              <span className="block font-serif text-sm leading-snug text-white mt-1.5">{currentItem.name}</span>
+              <span className="block text-[9px] uppercase tracking-[0.14em] text-white/40 mt-1">{currentItem.sku}</span>
+              {currentDetails.length > 0 && <span className="flex flex-wrap gap-x-3 gap-y-1 mt-2">{currentDetails.map((detail) => <span key={detail.label} className="text-[9px] text-white/55"><span className="text-white/30">{detail.label}</span> · {detail.value}</span>)}</span>}
+            </span>
           </div>
         </div>
       )}
 
-      {sameCategoryAxes.length > 0 ? (
-        <div className="mt-5 space-y-4">
-          {sameCategoryAxes.map((axis, axisIndex) => {
-            const values = Array.from(new Map(axis.values.filter(Boolean).map((value) => [normalized(value), value])).values());
-            return (
-              <div key={axis.key}>
-                <div className="text-[10px] uppercase tracking-[0.2em] text-white/45 mb-2">{axis.label}</div>
-                <div className="flex flex-wrap gap-2">
-                  {values.map((value) => {
-                    const selected = normalized(axis.values[sameCategoryCurrentIndex]) === normalized(value);
-                    const target = closestProduct(sameCategoryItems, sameCategoryAxes, sameCategoryCurrentIndex, axisIndex, value);
-                    if (!target) return null;
-                    return selected ? (
-                      <span key={value} data-testid={`variant-${axis.key}-selected`} className="inline-flex items-center gap-1.5 border border-[#D4AF37] bg-[#D4AF37] text-black px-3 py-2 text-xs">
-                        <Check size={12} /> {value}
-                      </span>
-                    ) : (
-                      <Link key={value} to={productPath(target)} data-testid={`variant-${axis.key}-${normalized(value).replace(/[^a-z0-9]+/g, "-")}`} className="border border-white/20 hover:border-[#D4AF37] px-3 py-2 text-xs text-white/75 hover:text-white transition-colors">
-                        {value}
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : sameCategoryItems.length > 1 ? (
+      {matchingCategories.length === 0 && sameCategoryAxes.length === 0 && sameCategoryItems.length > 1 ? (
         <div className="mt-5 flex flex-wrap gap-2">
           {sameCategoryItems.map((item) => item.id === product.id ? (
             <span key={item.id} className="border border-[#D4AF37] bg-[#D4AF37] text-black px-3 py-2 text-xs">{item.sku}</span>
           ) : (
-            <Link key={item.id} to={productPath(item)} className="border border-white/20 hover:border-[#D4AF37] px-3 py-2 text-xs">{item.sku}</Link>
+            <button key={item.id} type="button" onClick={() => openProduct(item)} className="border border-white/20 hover:border-[#D4AF37] px-3 py-2 text-xs">{item.sku}</button>
           ))}
         </div>
       ) : null}
