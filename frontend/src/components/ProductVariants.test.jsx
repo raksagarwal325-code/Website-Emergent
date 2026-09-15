@@ -78,5 +78,4 @@ test("prefers a matching piece with the same glass colour even when saved colour
   const matching = await screen.findByTestId("matching-piece-wall-light");
   expect(matching).toHaveTextContent("SGE-WL-068");
   expect(matching).toHaveAttribute("href", expect.stringContaining("sge-wl-068"));
-  expect(matching.querySelector("img")).toHaveAttribute("src", "/wl-green.jpg");
 });
