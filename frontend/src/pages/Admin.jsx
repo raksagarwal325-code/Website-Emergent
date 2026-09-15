@@ -1968,7 +1968,8 @@ function WatermarkAdmin({ settings, onSave }) {
 }
 
 const PRESET_SPEC_KEYS = [
-  "Material", "Finish", "Size", "Height", "Width", "Diameter",
+  "Material", "Finish", "Glass Colour", "Glass Cut / Design", "Number of Lights",
+  "Size", "Height", "Width", "Diameter",
   "Holder Type", "Bulb Type", "Wattage", "Color", "Weight",
   "Package Contents", "Care Instructions", "Warranty",
 ];
