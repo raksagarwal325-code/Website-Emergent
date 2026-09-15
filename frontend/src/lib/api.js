@@ -149,6 +149,7 @@ export const api = {
     ...r.data,
     items: (r.data?.items || []).map(sanitizePublicProduct),
   })),
+  getVariantFamilyIndex: () => client.get("/variant-family-index").then(r => r.data?.items || {}),
   createProduct: (data) => client.post("/products", data).then(r => r.data),
   updateProduct: (id, data, { reason = "", source = "admin" } = {}) => client.put(
     `/products/${id}`,
@@ -190,6 +191,10 @@ export const api = {
 
   getSettings: () => client.get("/settings").then(r => r.data),
   getCollectionsIndex: () => client.get("/collections-index").then(r => r.data?.items || []),
+  getCollection: (slug) => client.get(`/collections/${encodeURIComponent(slug)}`).then(r => ({
+    ...r.data,
+    items: (r.data?.items || []).map(sanitizePublicProduct),
+  })),
   // Admin-only: returns the full Settings model including secrets like
   // google_maps_api_key. Public `/settings` deliberately omits those.
   adminGetSettings: () => client.get("/admin/settings").then(r => r.data),
