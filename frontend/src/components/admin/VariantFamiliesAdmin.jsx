@@ -23,6 +23,7 @@ export default function VariantFamiliesAdmin() {
   const [selectedSlug, setSelectedSlug] = useState("");
   const [name, setName] = useState("");
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [pinnedIds, setPinnedIds] = useState(new Set());
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,7 @@ export default function VariantFamiliesAdmin() {
     if (!family) return;
     setName(family.name);
     setSelectedIds(new Set(family.product_ids));
+    setPinnedIds(new Set(family.product_ids));
     const familyProducts = products.filter((product) => family.product_ids.includes(product.id));
     const detected = variantAxes(familyProducts).map((axis) => axis.key);
     setSelectedAxes(new Set(family.axes?.length ? family.axes : detected));
@@ -69,14 +71,14 @@ export default function VariantFamiliesAdmin() {
     return products
       .filter((product) => (!category || product.category === category) && (!q || `${product.name} ${product.sku}`.toLowerCase().includes(q)))
       .sort((a, b) => {
-        const selectedOrder = Number(selectedIds.has(b.id)) - Number(selectedIds.has(a.id));
-        if (selectedOrder) return selectedOrder;
+        const pinnedOrder = Number(pinnedIds.has(b.id)) - Number(pinnedIds.has(a.id));
+        if (pinnedOrder) return pinnedOrder;
         const imageOrder = Number(Boolean(b.images?.[0])) - Number(Boolean(a.images?.[0]));
         if (imageOrder) return imageOrder;
         const statusOrder = Number(b.status === "published") - Number(a.status === "published");
         return statusOrder || String(a.sku || "").localeCompare(String(b.sku || ""));
       });
-  }, [products, search, category, selectedIds]);
+  }, [products, search, category, pinnedIds]);
   const selectedProducts = useMemo(() => products.filter((product) => selectedIds.has(product.id)), [products, selectedIds]);
   const axes = useMemo(() => variantAxes(selectedProducts), [selectedProducts]);
 
@@ -84,13 +86,16 @@ export default function VariantFamiliesAdmin() {
     setSelectedSlug("");
     setName("");
     setSelectedIds(new Set());
+    setPinnedIds(new Set());
     setReviewingSuggestion("");
     setSelectedAxes(new Set());
   };
   const reviewSuggestion = (suggestion) => {
     setSelectedSlug("");
     setName(suggestion.name);
-    setSelectedIds(new Set(suggestion.products.map((product) => product.id)));
+    const suggestionIds = new Set(suggestion.products.map((product) => product.id));
+    setSelectedIds(suggestionIds);
+    setPinnedIds(suggestionIds);
     setSearch("");
     setCategory("");
     setReviewingSuggestion(suggestion.slug);
@@ -103,6 +108,16 @@ export default function VariantFamiliesAdmin() {
   const toggle = (id) => setSelectedIds((current) => {
     const next = new Set(current);
     if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const selectVisibleProducts = () => setSelectedIds((current) => {
+    const next = new Set(current);
+    visibleProducts.forEach((product) => next.add(product.id));
+    return next;
+  });
+  const clearVisibleProducts = () => setSelectedIds((current) => {
+    const next = new Set(current);
+    visibleProducts.forEach((product) => next.delete(product.id));
     return next;
   });
   const toggleAxis = (key) => setSelectedAxes((current) => {
@@ -199,7 +214,14 @@ export default function VariantFamiliesAdmin() {
 
           <div className="border border-white/10 p-5 space-y-4">
             <div className="flex flex-col md:flex-row gap-3"><div className="relative flex-1"><Search size={15} className="absolute left-3 top-3.5 text-white/35" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or SKU" className="w-full bg-[#090909] border border-white/20 pl-10 pr-4 py-3" /></div><select value={category} onChange={(event) => setCategory(event.target.value)} className="bg-[#090909] border border-white/20 px-4 py-3"><option value="">All categories</option>{categories.map((item) => <option key={item}>{item}</option>)}</select></div>
-            <div className="max-h-[60vh] overflow-auto divide-y divide-white/10">{visibleProducts.map((product) => { const selected = selectedIds.has(product.id); const image = product.images?.[0] ? api.resolveImage(product.images[0]) : ""; return <button key={product.id} data-testid={`variant-product-${product.sku}`} onClick={() => toggle(product.id)} className="w-full text-left py-3 grid grid-cols-[30px_56px_1fr] gap-3 items-center"><span className={`w-6 h-6 border flex items-center justify-center ${selected ? "bg-[#D4AF37] border-[#D4AF37] text-black" : "border-white/20"}`}>{selected && <Check size={14} />}</span><span className="w-14 h-14 bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{image ? <img src={image} alt="" loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <span className="text-[8px] uppercase tracking-wider text-white/25">No image</span>}</span><span className="min-w-0"><span className="block text-[10px] uppercase tracking-[0.15em] text-[#D4AF37]">{product.sku}</span><span className="block font-serif text-base truncate mt-1">{product.name}</span><span className="block text-[10px] uppercase tracking-[0.15em] text-white/40">{product.category} · {product.status === "published" ? "Published" : "Draft / Needs review"}</span></span></button>; })}</div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-y border-white/10 py-3">
+              <div className="text-xs text-white/45">{visibleProducts.length} products shown · selections stay in place</div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={selectVisibleProducts} disabled={!visibleProducts.length || visibleProducts.every((product) => selectedIds.has(product.id))} className="border border-[#D4AF37]/50 px-4 py-2 text-[10px] uppercase tracking-[0.16em] text-[#D4AF37] disabled:opacity-35">Select all shown ({visibleProducts.length})</button>
+                <button type="button" onClick={clearVisibleProducts} disabled={!visibleProducts.some((product) => selectedIds.has(product.id))} className="border border-white/20 px-4 py-2 text-[10px] uppercase tracking-[0.16em] text-white/55 disabled:opacity-35">Clear shown</button>
+              </div>
+            </div>
+            <div data-testid="variant-product-list" className="max-h-[60vh] overflow-auto divide-y divide-white/10">{visibleProducts.map((product) => { const selected = selectedIds.has(product.id); const image = product.images?.[0] ? api.resolveImage(product.images[0]) : ""; return <button key={product.id} type="button" aria-pressed={selected} data-testid={`variant-product-${product.sku}`} onClick={() => toggle(product.id)} className="w-full text-left py-3 grid grid-cols-[30px_56px_1fr] gap-3 items-center"><span className={`w-6 h-6 border flex items-center justify-center ${selected ? "bg-[#D4AF37] border-[#D4AF37] text-black" : "border-white/20"}`}>{selected && <Check size={14} />}</span><span className="w-14 h-14 bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{image ? <img src={image} alt="" loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <span className="text-[8px] uppercase tracking-wider text-white/25">No image</span>}</span><span className="min-w-0"><span className="block text-[10px] uppercase tracking-[0.15em] text-[#D4AF37]">{product.sku}</span><span className="block font-serif text-base truncate mt-1">{product.name}</span><span className="block text-[10px] uppercase tracking-[0.15em] text-white/40">{product.category} · {product.status === "published" ? "Published" : "Draft / Needs review"}</span></span></button>; })}</div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5"><div className="text-xs text-white/40">Saving links products only; it never merges, renames or deletes them.</div><div className="flex gap-3">{selectedSlug && <button disabled={saving} onClick={remove} className="border border-red-400/40 text-red-300 px-5 py-3 text-xs uppercase tracking-[0.18em]"><Trash2 size={14} className="inline mr-2" />Delete family</button>}<button disabled={saving || selectedIds.size < 2 || selectedAxes.size < 1} onClick={save} className="bg-[#D4AF37] text-black px-7 py-3 text-xs uppercase tracking-[0.2em] disabled:opacity-50">{saving ? "Saving…" : reviewingSuggestion ? "Approve reviewed family" : "Save family"}</button></div></div>
