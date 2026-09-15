@@ -33,8 +33,8 @@ from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, inspect_media_bytes  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
-from variant_families import family_for_product  # noqa: E402
-from collection_index import build_collection_index  # noqa: E402
+from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
+from collection_index import build_collection_detail, build_collection_index  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -975,6 +975,28 @@ async def get_product_variants(product_id: str):
     return {"family": {"slug": family["slug"], "name": family["name"], "axes": family.get("axes") or []}, "items": items}
 
 
+@api.get("/variant-family-index")
+async def get_variant_family_index():
+    """Return compact matching-piece hints for catalogue cards.
+
+    Only owner-approved families and published products are considered. The
+    index contains no private product specifications or draft identifiers.
+    """
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    families = normalized_variant_families(settings)
+    product_ids = list(dict.fromkeys(
+        product_id for family in families for product_id in family["product_ids"]
+    ))
+    if not product_ids:
+        return {"items": {}}
+    rows = await db.products.find(
+        {"id": {"$in": product_ids}, "status": "published"},
+        {"_id": 0, "id": 1, "category": 1},
+    ).to_list(len(product_ids))
+    published_rows = [{**row, "status": "published"} for row in rows]
+    return {"items": build_variant_family_index(settings, published_rows)}
+
+
 @api.get("/collections-index")
 async def get_collections_index():
     """Return every registered collection card in one fast database read."""
@@ -984,6 +1006,24 @@ async def get_collections_index():
         {"_id": 0, "id": 1, "sku": 1, "name": 1, "category": 1, "images": 1, "tags": 1},
     ).to_list(10000)
     return {"items": build_collection_index(settings, products)}
+
+
+@api.get("/collections/{slug}")
+async def get_collection_detail(slug: str):
+    """Return one reviewed collection and all of its published members."""
+    from public_product_sanitizer import sanitize_public_product
+
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    products = await db.products.find(
+        {"status": "published"}, {"_id": 0}
+    ).to_list(10000)
+    collection = build_collection_detail(settings, products, slug)
+    if not collection:
+        raise HTTPException(404, "Collection not found")
+    return {
+        **collection,
+        "items": [sanitize_public_product(product) for product in collection["items"]],
+    }
 
 
 @api.post("/products", response_model=Product)
