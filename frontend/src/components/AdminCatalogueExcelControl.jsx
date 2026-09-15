@@ -38,8 +38,40 @@ export default function AdminCatalogueExcelControl({ onImported }) {
   const [importFile, setImportFile] = useState(null);
   const [importReason, setImportReason] = useState("");
   const [preview, setPreview] = useState(null);
+  const [selectedChanges, setSelectedChanges] = useState(new Set());
   const [previewing, setPreviewing] = useState(false);
   const [applying, setApplying] = useState(false);
+
+  const changeKey = (productId, field) => `${productId}::${field}`;
+  const availableChanges = (preview?.items || []).flatMap((item) =>
+    item.changes.map((change) => ({ item, change, key: changeKey(item.id, change.field) }))
+  );
+  const selectedCount = availableChanges.filter(({ key }) => selectedChanges.has(key)).length;
+  const allSelected = availableChanges.length > 0 && selectedCount === availableChanges.length;
+
+  const toggleAllChanges = () => {
+    setSelectedChanges(allSelected ? new Set() : new Set(availableChanges.map(({ key }) => key)));
+  };
+
+  const toggleProductChanges = (item) => {
+    const keys = item.changes.map((change) => changeKey(item.id, change.field));
+    const productSelected = keys.every((key) => selectedChanges.has(key));
+    setSelectedChanges((current) => {
+      const next = new Set(current);
+      keys.forEach((key) => productSelected ? next.delete(key) : next.add(key));
+      return next;
+    });
+  };
+
+  const toggleChange = (productId, field) => {
+    const key = changeKey(productId, field);
+    setSelectedChanges((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -201,6 +233,7 @@ export default function AdminCatalogueExcelControl({ onImported }) {
   const chooseImportFile = (event) => {
     const file = event.target.files?.[0] || null;
     setPreview(null);
+    setSelectedChanges(new Set());
     if (file && !file.name.toLowerCase().endsWith(".xlsx")) {
       setImportFile(null);
       event.target.value = "";
@@ -223,6 +256,11 @@ export default function AdminCatalogueExcelControl({ onImported }) {
     try {
       const result = await importRequest("/admin/catalogue/import/preview");
       setPreview(result);
+      setSelectedChanges(new Set(
+        (result.items || []).flatMap((item) =>
+          item.changes.map((change) => changeKey(item.id, change.field))
+        )
+      ));
       if (result.errors?.length) toast.error("The workbook has errors that must be corrected");
       else if (!result.changed_field_count) toast.success("No specification changes found");
       else toast.success(`${result.changed_field_count} specification changes ready to review`);
@@ -234,23 +272,30 @@ export default function AdminCatalogueExcelControl({ onImported }) {
   };
 
   const applyImport = async () => {
-    if (!importFile || !preview?.can_apply || !importReason.trim() || applying) return;
+    if (!importFile || !preview?.can_apply || !importReason.trim() || !selectedCount || applying) return;
+    const selection = (preview.items || []).map((item) => ({
+      id: item.id,
+      fields: item.changes
+        .filter((change) => selectedChanges.has(changeKey(item.id, change.field)))
+        .map((change) => change.field),
+    })).filter((item) => item.fields.length > 0);
     setApplying(true);
     try {
       const result = await importRequest("/admin/catalogue/import/apply", {
         preview_token: preview.preview_token,
         reason: importReason.trim(),
+        selected_changes: JSON.stringify(selection),
       });
       await onImported?.();
       toast.success(`${result.updated_count} products updated · ${result.changed_field_count} specification changes`);
       setImportFile(null);
       setImportReason("");
       setPreview(null);
+      setSelectedChanges(new Set());
       const input = document.getElementById("admin-catalogue-import-file");
       if (input) input.value = "";
     } catch (error) {
       toast.error(error?.message || "Excel import failed");
-      setPreview(null);
     } finally {
       setApplying(false);
     }
@@ -378,12 +423,28 @@ export default function AdminCatalogueExcelControl({ onImported }) {
                 <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/35">
                   {preview.matched_count} SKUs matched · {preview.unchanged_count} unchanged
                 </div>
+                {preview.can_apply && (
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <span data-testid="admin-catalogue-import-selected-count" className="text-xs text-[#D4AF37]">
+                      {selectedCount} of {preview.changed_field_count} changes selected
+                    </span>
+                    <button
+                      type="button"
+                      data-testid="admin-toggle-all-catalogue-import"
+                      onClick={toggleAllChanges}
+                      disabled={applying}
+                      className="text-[10px] uppercase tracking-[0.16em] text-white/55 underline decoration-white/25 underline-offset-4 hover:text-white disabled:opacity-40"
+                    >
+                      {allSelected ? "Unselect all" : "Select all"}
+                    </button>
+                  </div>
+                )}
               </div>
               <button
                 type="button"
                 data-testid="admin-apply-catalogue-import"
                 onClick={applyImport}
-                disabled={!preview.can_apply || !importReason.trim() || applying}
+                disabled={!preview.can_apply || !importReason.trim() || !selectedCount || applying}
                 className="flex min-h-[42px] items-center gap-2 bg-[#D4AF37] px-5 text-[10px] uppercase tracking-[0.2em] text-black transition hover:bg-[#B5952F] disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
               >
                 {applying ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />}
@@ -406,19 +467,35 @@ export default function AdminCatalogueExcelControl({ onImported }) {
               <div className="mt-4 max-h-80 overflow-y-auto border border-white/10" data-testid="admin-catalogue-import-changes">
                 {preview.items.map((item) => (
                   <div key={item.id} className="border-b border-white/10 p-3 last:border-b-0">
-                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    <label className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select all changes for ${item.sku}`}
+                        checked={item.changes.every((change) => selectedChanges.has(changeKey(item.id, change.field)))}
+                        onChange={() => toggleProductChanges(item)}
+                        disabled={applying}
+                        className="h-4 w-4 accent-[#D4AF37]"
+                      />
                       <span className="text-xs font-medium text-[#D4AF37]">{item.sku}</span>
                       <span className="text-xs text-white/70">{item.name}</span>
                       <span className="text-[10px] text-white/30">Excel row {item.row}</span>
-                    </div>
+                    </label>
                     <div className="mt-2 space-y-1">
                       {item.changes.map((change) => (
-                        <div key={change.field} className="grid grid-cols-1 gap-1 text-[11px] sm:grid-cols-[180px_1fr_24px_1fr] sm:items-center">
+                        <label key={change.field} className="grid cursor-pointer grid-cols-[18px_1fr] gap-2 text-[11px] sm:grid-cols-[18px_180px_1fr_24px_1fr] sm:items-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${change.field} for ${item.sku}`}
+                            checked={selectedChanges.has(changeKey(item.id, change.field))}
+                            onChange={() => toggleChange(item.id, change.field)}
+                            disabled={applying}
+                            className="h-3.5 w-3.5 accent-[#D4AF37]"
+                          />
                           <span className="text-white/45">{change.field}</span>
-                          <span className="break-words text-red-200/70">{change.old || "(blank)"}</span>
+                          <span className="col-start-2 break-words text-red-200/70 sm:col-start-auto">{change.old || "(blank)"}</span>
                           <span className="hidden text-center text-white/25 sm:block">→</span>
-                          <span className="break-words text-emerald-200/85">{change.new}</span>
-                        </div>
+                          <span className="col-start-2 break-words text-emerald-200/85 sm:col-start-auto">{change.new}</span>
+                        </label>
                       ))}
                     </div>
                   </div>

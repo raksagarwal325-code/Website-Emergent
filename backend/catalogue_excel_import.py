@@ -39,6 +39,12 @@ class ImportRow:
     specs: dict[str, str]
 
 
+@dataclass(frozen=True)
+class HistoryAdmin:
+    user_id: str
+    email: str
+
+
 def _cell_text(value: Any) -> str:
     if value is None:
         return ""
@@ -255,6 +261,75 @@ def _public_preview(plan: dict) -> dict:
     }
 
 
+def history_admin(admin: Any) -> HistoryAdmin:
+    """Normalize auth.load_admin's mapping for server history helpers."""
+    if isinstance(admin, dict):
+        user_id = _cell_text(admin.get("user_id"))
+        email = _cell_text(admin.get("email"))
+    else:
+        user_id = _cell_text(getattr(admin, "user_id", ""))
+        email = _cell_text(getattr(admin, "email", ""))
+    if not user_id or not email:
+        raise HTTPException(403, "The administrator session is missing audit identity details.")
+    return HistoryAdmin(user_id=user_id, email=email)
+
+
+def selected_import_plan(plan: dict, raw_selection: str) -> list[dict]:
+    """Return only explicitly selected, already-previewed specification changes."""
+    try:
+        requested = json.loads(raw_selection)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(422, "The selected Excel changes are invalid. Generate a fresh preview.") from exc
+    if not isinstance(requested, list) or len(requested) > MAX_ROWS:
+        raise HTTPException(422, "The selected Excel changes are invalid. Generate a fresh preview.")
+
+    plan_by_id = {item["id"]: item for item in plan["items"]}
+    selected_by_id: dict[str, set[str]] = {}
+    for entry in requested:
+        if not isinstance(entry, dict):
+            raise HTTPException(422, "The selected Excel changes are invalid. Generate a fresh preview.")
+        product_id = _cell_text(entry.get("id"))
+        fields = entry.get("fields")
+        if product_id not in plan_by_id or not isinstance(fields, list):
+            raise HTTPException(422, "A selected product is not present in the current preview.")
+        allowed = {change["field"] for change in plan_by_id[product_id]["changes"]}
+        clean_fields = {_cell_text(field) for field in fields if _cell_text(field)}
+        if not clean_fields.issubset(allowed):
+            raise HTTPException(422, "A selected specification is not present in the current preview.")
+        selected_by_id.setdefault(product_id, set()).update(clean_fields)
+
+    selected_items = []
+    for item in plan["items"]:
+        selected_fields = selected_by_id.get(item["id"], set())
+        changes = [change for change in item["changes"] if change["field"] in selected_fields]
+        if not changes:
+            continue
+        specs = dict(item["before_specs"])
+        for change in changes:
+            key = change["field"].split("Spec:", 1)[1].strip()
+            specs[key] = change["new"]
+        selected_items.append({**item, "changes": changes, "specs": specs})
+    if not selected_items:
+        raise HTTPException(422, "Select at least one specification change to apply.")
+    return selected_items
+
+
+async def rollback_import(server_module, updated_items: list[dict], version_ids: list[str]) -> None:
+    """Best-effort compensation if an unexpected write fails mid-import."""
+    for record in reversed(updated_items):
+        update = {"$set": {"specs": record["before_specs"]}}
+        if record["had_updated_at"]:
+            update["$set"]["updated_at"] = record["before_updated_at"]
+        else:
+            update["$unset"] = {"updated_at": ""}
+        await server_module.db.products.update_one(
+            {"id": record["id"], "specs": record["applied_specs"], "updated_at": record["applied_at"]},
+            update,
+        )
+    if version_ids:
+        await server_module.db.product_versions.delete_many({"id": {"$in": version_ids}})
+
+
 def install_catalogue_excel_import(load_admin_func, require_csrf_func) -> None:
     """Install guarded preview/apply endpoints on the active FastAPI app."""
     from catalogue_excel import _find_server_module
@@ -287,6 +362,7 @@ def install_catalogue_excel_import(load_admin_func, require_csrf_func) -> None:
         file: UploadFile = File(...),
         preview_token: str = Form(...),
         reason: str = Form(...),
+        selected_changes: str = Form(...),
     ):
         admin = await require_admin_upload(request)
         clean_reason = str(reason or "").strip()
@@ -302,39 +378,69 @@ def install_catalogue_excel_import(load_admin_func, require_csrf_func) -> None:
         if plan["preview_token"] != str(preview_token or ""):
             raise HTTPException(409, "Catalogue data changed after preview. Generate a fresh preview before applying.")
 
-        changed_ids = []
-        for item in plan["items"]:
+        selected_items = selected_import_plan(plan, selected_changes)
+        audit_admin = history_admin(admin)
+        prepared = []
+        for item in selected_items:
             existing = await server_module.db.products.find_one({"id": item["id"]}, {"_id": 0})
             if not existing:
                 raise HTTPException(409, "A product changed after preview. Generate a fresh preview.")
             existing_specs = existing.get("specs") if isinstance(existing.get("specs"), dict) else {}
             if existing_specs != item["before_specs"]:
                 raise HTTPException(409, "A product changed after preview. Generate a fresh preview.")
-            await server_module._ensure_product_history_baseline(existing, admin)
-            guard = {"id": item["id"]}
-            if "specs" in existing:
-                guard["specs"] = item["before_specs"]
-            else:
-                guard["specs"] = {"$exists": False}
-            result = await server_module.db.products.update_one(
-                guard,
-                {"$set": {"specs": item["specs"], "updated_at": server_module.now_iso()}},
-            )
-            if result.modified_count != 1:
-                raise HTTPException(409, "A product changed while applying the import. Review Product History before retrying.")
-            updated = await server_module.db.products.find_one({"id": item["id"]}, {"_id": 0})
-            await server_module._record_product_version(
-                updated,
-                admin,
-                action="excel_import",
-                reason=clean_reason,
-                previous=existing,
-            )
-            changed_ids.append(item["id"])
+            prepared.append((item, existing))
+
+        changed_ids = []
+        updated_items = []
+        version_ids = []
+        try:
+            # Create every baseline before the first catalogue mutation.
+            for _, existing in prepared:
+                await server_module._ensure_product_history_baseline(existing, audit_admin)
+            for item, existing in prepared:
+                guard = {"id": item["id"]}
+                if "specs" in existing:
+                    guard["specs"] = item["before_specs"]
+                else:
+                    guard["specs"] = {"$exists": False}
+                applied_at = server_module.now_iso()
+                result = await server_module.db.products.update_one(
+                    guard,
+                    {"$set": {"specs": item["specs"], "updated_at": applied_at}},
+                )
+                if result.modified_count != 1:
+                    raise HTTPException(409, "A product changed while applying the import. Generate a fresh preview.")
+                updated_items.append({
+                    "id": item["id"],
+                    "before_specs": item["before_specs"],
+                    "applied_specs": item["specs"],
+                    "applied_at": applied_at,
+                    "had_updated_at": "updated_at" in existing,
+                    "before_updated_at": existing.get("updated_at"),
+                })
+                updated = await server_module.db.products.find_one({"id": item["id"]}, {"_id": 0})
+                version = await server_module._record_product_version(
+                    updated,
+                    audit_admin,
+                    action="excel_import",
+                    reason=clean_reason,
+                    previous=existing,
+                )
+                version_ids.append(version["id"])
+                changed_ids.append(item["id"])
+        except Exception as exc:
+            try:
+                await rollback_import(server_module, updated_items, version_ids)
+            except Exception:
+                server_module.logger.exception("Excel import rollback failed")
+            if isinstance(exc, HTTPException):
+                raise
+            server_module.logger.exception("Excel catalogue import failed")
+            raise HTTPException(500, "The import could not be applied. Any completed product writes were rolled back.") from exc
         return {
             "ok": True,
             "updated_count": len(changed_ids),
-            "changed_field_count": plan["changed_field_count"],
+            "changed_field_count": sum(len(item["changes"]) for item in selected_items),
             "ids": changed_ids,
         }
 
