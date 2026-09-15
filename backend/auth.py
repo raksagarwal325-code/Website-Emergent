@@ -151,6 +151,10 @@ from catalogue_excel_final import install_catalogue_excel  # noqa: E402
 
 install_catalogue_excel(load_admin)
 
+from catalogue_excel_import import install_catalogue_excel_import  # noqa: E402
+
+install_catalogue_excel_import(load_admin, require_csrf)
+
 from admin_health import install_admin_health  # noqa: E402
 
 install_admin_health(load_admin)

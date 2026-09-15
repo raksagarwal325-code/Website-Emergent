@@ -98,7 +98,7 @@ export default function Admin() {
               </div>
             ))}
           </div>
-          <AdminCatalogueExcelControl />
+          <AdminCatalogueExcelControl onImported={refresh} />
           <div className="border border-[#D4AF37]/30 p-6 flex flex-wrap items-center justify-between gap-4" style={{background:"linear-gradient(90deg, rgba(163,99,80,0.14), transparent)"}}>
             <div>
               <div className="eyebrow mb-1">Brand catalogue</div>
