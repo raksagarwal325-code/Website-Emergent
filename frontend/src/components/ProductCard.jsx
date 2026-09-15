@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Heart, ShoppingBag, ArrowUpRight, Sparkles, Sun, Moon, Eye } from "lucide-react";
+import { Heart, ShoppingBag, ArrowUpRight, Sparkles, Sun, Moon, Eye, Layers3 } from "lucide-react";
 import { useCatalog } from "../context/CatalogContext";
 import { useSettings } from "../context/SettingsContext";
 import { api, formatProductPrice } from "../lib/api";
@@ -34,7 +34,7 @@ function ProductPlaceholder({ name }) {
   );
 }
 
-export default function ProductCard({ product, index = 0 }) {
+export default function ProductCard({ product, index = 0, matchingFamily = null }) {
   const { toggleFavorite, isFavorite, addToCart } = useCatalog();
   const { hp } = useSettings();
   const navigate = useNavigate();
@@ -139,6 +139,12 @@ export default function ProductCard({ product, index = 0 }) {
   };
 
   const badge = (product.badge || "").trim();
+  const matchingCategories = Array.isArray(matchingFamily?.categories) ? matchingFamily.categories : [];
+  const matchingLabel = matchingCategories.length === 1
+    ? `Matching ${matchingCategories[0]} available`
+    : matchingCategories.length > 1
+      ? `${matchingCategories.length} matching product types`
+      : "";
 
   const card = (
     <div
@@ -178,6 +184,7 @@ export default function ProductCard({ product, index = 0 }) {
       <div className="flex flex-col flex-1 p-3 sm:p-5">
         <div className="eyebrow truncate mb-1.5 sm:mb-2 text-[9px] sm:text-[10px]">{product.category}</div>
         <Link to={productPath(product)} className="font-serif text-[15px] sm:text-lg leading-snug text-white hover:text-[#D4AF37] transition-colors min-h-[3.9rem] sm:min-h-[3.5rem] break-words line-clamp-3 sm:line-clamp-none">{product.name}</Link>
+        {matchingLabel && <Link to={`${productPath(product)}#matching-pieces`} data-testid={`matching-family-link-${product.id}`} className="mt-2 inline-flex items-center gap-1.5 text-[9px] uppercase tracking-[0.15em] text-[#D4AF37] hover:text-white transition-colors"><Layers3 size={11} /> {matchingLabel}</Link>}
         <div className="flex items-baseline justify-between pt-2 sm:pt-3 min-h-[2rem] sm:min-h-[2.1rem]">
           <div className="flex items-baseline gap-1.5 sm:gap-2 min-w-0">{(() => {
             const p = formatProductPrice(product);

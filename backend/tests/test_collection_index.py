@@ -1,4 +1,4 @@
-from collection_index import build_collection_index
+from collection_index import build_collection_detail, build_collection_index
 
 
 def test_builds_registered_collection_card_without_exposing_members():
@@ -41,3 +41,31 @@ def test_unversioned_multi_collection_registry_exposes_only_verified_gulzar():
     result = build_collection_index(settings, products)
 
     assert [item["slug"] for item in result] == ["gulzar"]
+
+
+def test_builds_registered_collection_detail_with_exact_members():
+    settings = {"homepage_content": {
+        "collections_registry_version": 2,
+        "collections": [{"slug": "meher", "name": "Meher"}],
+    }}
+    products = [
+        {"id": "ch", "sku": "SGE-CH-129", "category": "Chandelier", "tags": ["collection:meher"]},
+        {"id": "wl", "sku": "SGE-WL-101", "category": "Wall Light", "tags": ["collection:meher"]},
+        {"id": "other", "sku": "OTHER", "category": "Lamp", "tags": []},
+    ]
+
+    result = build_collection_detail(settings, products, "Meher")
+
+    assert result["slug"] == "meher"
+    assert result["title"] == "The Meher Collection"
+    assert [item["id"] for item in result["items"]] == ["ch", "wl"]
+
+
+def test_collection_detail_rejects_unregistered_tag():
+    settings = {"homepage_content": {
+        "collections_registry_version": 2,
+        "collections": [{"slug": "gulzar", "name": "Gulzar"}],
+    }}
+    products = [{"id": "x", "tags": ["collection:meher"]}]
+
+    assert build_collection_detail(settings, products, "meher") is None

@@ -38,3 +38,26 @@ def family_for_product(settings: dict | None, product_id: str) -> dict | None:
         if target in family["product_ids"]:
             return family
     return None
+
+
+def build_variant_family_index(settings: dict | None, products: list[dict]) -> dict:
+    """Map published family members to the other product types they coordinate with."""
+    category_by_id = {
+        row.get("id"): row.get("category")
+        for row in products
+        if row.get("id") and row.get("category") and row.get("status") == "published"
+    }
+    output = {}
+    for family in normalized_variant_families(settings):
+        if not ({"use", "product_type"} & set(family.get("axes") or [])):
+            continue
+        available = [product_id for product_id in family["product_ids"] if product_id in category_by_id]
+        categories = sorted({category_by_id[product_id] for product_id in available})
+        if len(categories) < 2:
+            continue
+        for product_id in available:
+            current = category_by_id[product_id]
+            matching = [category for category in categories if category != current]
+            if matching:
+                output[product_id] = {"family": family["name"], "categories": matching}
+    return output
