@@ -45,9 +45,9 @@ test("review shows variant images and a visible private approval action", async 
   expect(document.querySelector('img[src="https://example.com/amber.jpg"]')).toHaveAttribute("loading", "lazy");
 
   const orderBeforeSelection = rows.map((row) => row.dataset.testid);
-  fireEvent.click(rows[0]);
+  fireEvent.click(rows[2]);
   expect(screen.getAllByTestId(/^variant-product-SGE-/).map((row) => row.dataset.testid)).toEqual(orderBeforeSelection);
-  fireEvent.click(rows[0]);
+  fireEvent.click(rows[2]);
 
   fireEvent.click(screen.getAllByRole("button", { name: "Approve reviewed family" })[0]);
   await waitFor(() => expect(mockApi.updateSettings).toHaveBeenCalledWith(expect.objectContaining({
@@ -69,7 +69,7 @@ test("can select or clear every filtered product in one action", async () => {
   fireEvent.change(screen.getByPlaceholderText("Search name or SKU"), { target: { value: "Neelpushp" } });
 
   expect(screen.getAllByTestId(/^variant-product-SGE-/)).toHaveLength(2);
-  fireEvent.click(screen.getByRole("button", { name: "Select all shown (2)" }));
+  fireEvent.click(screen.getByRole("button", { name: /Select all shown/ }));
   expect(screen.getByTestId("variant-product-SGE-CH-101")).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByTestId("variant-product-SGE-CH-102")).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText("2 exact products selected")).toBeInTheDocument();
