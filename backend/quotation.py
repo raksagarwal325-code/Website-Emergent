@@ -51,6 +51,13 @@ def quote_money(value: float) -> float:
     return round(float(value or 0) + 1e-10, 2)
 
 
+def format_quotation_number(year: int, sequence: int) -> str:
+    """Format the owner-facing yearly quotation sequence."""
+    if sequence < 1:
+        raise ValueError("Quotation sequence must be positive")
+    return f"SGE-{int(year):04d}-{int(sequence):04d}"
+
+
 def build_quotation(
     inquiry_id: str,
     payload: QuotationCreate,
@@ -58,9 +65,12 @@ def build_quotation(
     *,
     created_at: Optional[datetime] = None,
     quote_id: Optional[str] = None,
+    quote_number: Optional[str] = None,
     product_images: Optional[dict[str, str]] = None,
+    branding: Optional[dict[str, str]] = None,
 ) -> dict:
     product_images = product_images or {}
+    branding = branding or {}
     items = []
     subtotal = 0.0
     for raw in payload.items:
@@ -86,7 +96,7 @@ def build_quotation(
     identifier = quote_id or str(uuid.uuid4())
     return {
         "id": identifier,
-        "quote_number": f"SGE-Q-{created:%Y%m%d}-{identifier[:6].upper()}",
+        "quote_number": quote_number or f"SGE-Q-{created:%Y%m%d}-{identifier[:6].upper()}",
         "inquiry_id": inquiry_id,
         "customer_name": payload.customer_name.strip(),
         "customer_email": str(payload.customer_email) if payload.customer_email else None,
@@ -105,6 +115,8 @@ def build_quotation(
         "valid_until": (created.date() + timedelta(days=payload.validity_days)).isoformat(),
         "terms": payload.terms,
         "notes": payload.notes,
+        "signature_url": branding.get("signature_url") or None,
+        "stamp_url": branding.get("stamp_url") or None,
         "status": "draft",
         "created_by": admin_email,
         "created_at": created.isoformat(),

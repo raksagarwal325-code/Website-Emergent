@@ -32,7 +32,7 @@ test("prints discount and freight only when they have a value", () => {
 test("renders the complete commercial quotation as a single A4 page", async () => {
   const logo = fs.readFileSync(path.join(process.cwd(), "public/logo.jpeg")).toString("base64");
   const { doc, filename } = await createQuotationPdf({
-    quote_number: "SGE-Q-20260916-23EC13",
+    quote_number: "SGE-2026-0041",
     created_at: "2026-09-16T10:10:00+05:30",
     customer_name: "Kiishor A Lalwani",
     customer_phone: "+919820700130",
@@ -50,12 +50,16 @@ test("renders the complete commercial quotation as a single A4 page", async () =
     valid_until: "2026-10-01",
     terms: "",
     notes: "",
+    signature_url: "/api/files/signature.png",
+    stamp_url: "/api/files/stamp.png",
   }, {
     logoDataUrl: `data:image/jpeg;base64,${logo}`,
     productImageDataUrls: Object.fromEntries(items.map((item) => [item.image, `data:image/jpeg;base64,${logo}`])),
+    signatureDataUrl: `data:image/jpeg;base64,${logo}`,
+    stampDataUrl: `data:image/jpeg;base64,${logo}`,
   });
 
-  expect(filename).toBe("SGE-Q-20260916-23EC13.pdf");
+  expect(filename).toBe("SGE-2026-0041.pdf");
   expect(doc.getNumberOfPages()).toBe(1);
   const output = Buffer.from(doc.output("arraybuffer"));
   expect(output.length).toBeGreaterThan(20000);

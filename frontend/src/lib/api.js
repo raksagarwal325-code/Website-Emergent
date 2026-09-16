@@ -205,6 +205,18 @@ export const api = {
   // google_maps_api_key. Public `/settings` deliberately omits those.
   adminGetSettings: () => client.get("/admin/settings").then(r => r.data),
   updateSettings: (data) => client.put("/settings", data).then(r => r.data),
+  adminUploadQuotationBrandAsset: (kind, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return client.post(
+      `/admin/quotation-branding/${encodeURIComponent(kind)}`,
+      fd,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    ).then(r => r.data);
+  },
+  adminClearQuotationBrandAsset: (kind) => client.delete(
+    `/admin/quotation-branding/${encodeURIComponent(kind)}`,
+  ).then(r => r.data),
 
   // --- Hero slider ---
   getHeroSlideshow: () => client.get("/hero-slides").then(r => r.data),

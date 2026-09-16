@@ -42,7 +42,7 @@ const inquiry = {
 
 const savedQuote = {
   id: "quote-1",
-  quote_number: "SGE-Q-20260916-ABCDEF",
+  quote_number: "SGE-2026-0001",
   inquiry_id: inquiry.id,
   customer_name: inquiry.customer_name,
   customer_email: inquiry.customer_email,
@@ -94,14 +94,14 @@ test("prefills the inquiry and saves edited quotation values", async () => {
     customer_gstin: "09ADCFS9258D1ZS",
     items: [expect.objectContaining({ quantity: 2, unit_price: 6500, sku: "SGE-WL-089" })],
   }));
-  expect(await screen.findByText("SGE-Q-20260916-ABCDEF")).toBeInTheDocument();
+  expect(await screen.findByText("SGE-2026-0001")).toBeInTheDocument();
 });
 
 test("downloads a branded PDF from the saved quotation snapshot", async () => {
   mockApi.listInquiryQuotations.mockResolvedValue([savedQuote]);
   render(<InquiryQuotationBuilder inquiry={inquiry} onClose={jest.fn()} />);
-  const historyNumber = await screen.findByText("SGE-Q-20260916-ABCDEF");
+  const historyNumber = await screen.findByText("SGE-2026-0001");
   const historyCard = historyNumber.closest("div.border");
   fireEvent.click(historyCard.querySelector("button"));
-  await waitFor(() => expect(mockPdfSave).toHaveBeenCalledWith("SGE-Q-20260916-ABCDEF.pdf"));
+  await waitFor(() => expect(mockPdfSave).toHaveBeenCalledWith("SGE-2026-0001.pdf"));
 });
