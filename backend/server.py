@@ -703,6 +703,7 @@ class Settings(BaseModel):
         "position": "center",
         "adaptive_tone": True,
     })
+    quotation_business: dict = Field(default_factory=dict)
     quotation_branding: dict = Field(default_factory=lambda: {
         "signature_url": "",
         "stamp_url": "",
@@ -776,6 +777,7 @@ class SettingsUpdate(BaseModel):
     business_hours: Optional[str] = None
     google_maps_url: Optional[str] = None
     watermark: Optional[dict] = None
+    quotation_business: Optional[dict[str, str]] = None
     quotation_branding: Optional[dict] = None
 
 
@@ -1596,7 +1598,16 @@ async def update_inquiry_status(inquiry_id: str, status: str = Query(...), admin
 
 @api.get("/admin/inquiries/{inquiry_id}/quotations")
 async def list_inquiry_quotations(inquiry_id: str, admin: _AdminUser = Depends(require_admin)):
-    if not await db.inquiries.find_one({"id": inquiry_id}, {"_id": 1}):
+    return await _list_quotations(inquiry_id)
+
+
+@api.get("/admin/quotations")
+async def list_standalone_quotations(admin: _AdminUser = Depends(require_admin)):
+    return await _list_quotations(None)
+
+
+async def _list_quotations(inquiry_id):
+    if inquiry_id is not None and not await db.inquiries.find_one({"id": inquiry_id}, {"_id": 1}):
         raise HTTPException(404, "Inquiry not found")
     quotations = await db.quotations.find(
         {"inquiry_id": inquiry_id}, {"_id": 0}
@@ -1625,7 +1636,7 @@ async def list_inquiry_quotations(inquiry_id: str, admin: _AdminUser = Depends(r
             if not item.get("image"):
                 item["image"] = image_by_product_id.get(item.get("product_id"))
     settings = await db.settings.find_one(
-        {"id": "settings"}, {"_id": 0, "quotation_branding": 1}
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1, "quotation_business": 1}
     ) or {}
     branding = settings.get("quotation_branding") or {}
     for quotation in quotations:
@@ -1658,7 +1669,16 @@ async def create_inquiry_quotation(
     payload: QuotationCreate,
     admin: _AdminUser = Depends(require_admin),
 ):
-    if not await db.inquiries.find_one({"id": inquiry_id}, {"_id": 1}):
+    return await _create_quotation(inquiry_id, payload, admin)
+
+
+@api.post("/admin/quotations")
+async def create_standalone_quotation(payload: QuotationCreate, admin: _AdminUser = Depends(require_admin)):
+    return await _create_quotation(None, payload, admin)
+
+
+async def _create_quotation(inquiry_id, payload, admin):
+    if inquiry_id is not None and not await db.inquiries.find_one({"id": inquiry_id}, {"_id": 1}):
         raise HTTPException(404, "Inquiry not found")
     product_ids = [item.product_id for item in payload.items if item.product_id]
     image_by_product_id = {}
@@ -1675,7 +1695,7 @@ async def create_inquiry_quotation(
     created_at = datetime.now(timezone.utc)
     quote_number = await _next_quotation_number(created_at)
     settings = await db.settings.find_one(
-        {"id": "settings"}, {"_id": 0, "quotation_branding": 1}
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1, "quotation_business": 1}
     ) or {}
     quotation = build_quotation(
         inquiry_id,
@@ -1685,16 +1705,18 @@ async def create_inquiry_quotation(
         quote_number=quote_number,
         product_images=image_by_product_id,
         branding=settings.get("quotation_branding") or {},
+        business=settings.get("quotation_business") or {},
     )
     await db.quotations.insert_one(dict(quotation))
-    await db.inquiries.update_one(
-        {"id": inquiry_id},
-        {"$set": {
-            "status": "in_progress",
-            "latest_quotation_id": quotation["id"],
-            "latest_quotation_number": quotation["quote_number"],
-        }},
-    )
+    if inquiry_id is not None:
+        await db.inquiries.update_one(
+            {"id": inquiry_id},
+            {"$set": {
+                "status": "in_progress",
+                "latest_quotation_id": quotation["id"],
+                "latest_quotation_number": quotation["quote_number"],
+            }},
+        )
     return quotation
 
 
@@ -2681,7 +2703,7 @@ async def admin_upload_quotation_branding(
         upsert=True,
     )
     settings = await db.settings.find_one(
-        {"id": "settings"}, {"_id": 0, "quotation_branding": 1}
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1, "quotation_business": 1}
     ) or {}
     return settings.get("quotation_branding") or {}
 
@@ -2696,7 +2718,7 @@ async def admin_clear_quotation_branding(
         {"id": "settings"}, {"$set": {field: ""}}, upsert=True
     )
     settings = await db.settings.find_one(
-        {"id": "settings"}, {"_id": 0, "quotation_branding": 1}
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1, "quotation_business": 1}
     ) or {}
     return settings.get("quotation_branding") or {}
 

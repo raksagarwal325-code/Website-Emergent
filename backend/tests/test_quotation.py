@@ -83,3 +83,40 @@ def test_quote_requires_at_least_one_valid_item():
 def test_blank_optional_email_is_allowed():
     result = build_quotation("inq-1", payload(customer_email=""), "owner@samratglass.com")
     assert result["customer_email"] is None
+
+
+def test_standalone_quote_snapshots_editable_business_details():
+    details = {"accountNumber": "001234567890", "bank": "Edited Bank"}
+    result = build_quotation(None, payload(), "owner@example.com", business=details)
+    details["accountNumber"] = "changed later"
+    assert result["inquiry_id"] is None
+    assert result["business"]["accountNumber"] == "001234567890"
+    assert result["business"]["bank"] == "Edited Bank"
+    assert build_quotation(None, payload(), "owner@example.com")["business"]["accountNumber"] == "097405000031"
+
+
+def test_standalone_create_uses_shared_sequence_and_does_not_mutate_inquiries():
+    import ast
+    import asyncio
+    from pathlib import Path
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    source = ast.parse((Path(__file__).resolve().parents[1] / "server.py").read_text())
+    node = next(n for n in source.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "_create_quotation")
+    db = SimpleNamespace(
+        settings=SimpleNamespace(find_one=AsyncMock(return_value={"quotation_business": {"accountNumber": "001234"}})),
+        quotations=SimpleNamespace(insert_one=AsyncMock()),
+        inquiries=SimpleNamespace(find_one=AsyncMock(), update_one=AsyncMock()),
+    )
+    sequence = AsyncMock(return_value="SGE-2026-0042")
+    namespace = {"db": db, "datetime": datetime, "timezone": timezone,
+                 "_next_quotation_number": sequence, "build_quotation": build_quotation, "HTTPException": HTTPException}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "server.py", "exec"), namespace)
+    data = payload(items=[{"name": "Custom shade", "quantity": 1, "unit_price": 500}], discount=0)
+    result = asyncio.run(namespace["_create_quotation"](None, data, SimpleNamespace(email="owner@example.com")))
+    assert result["quote_number"] == "SGE-2026-0042"
+    assert result["business"]["accountNumber"] == "001234"
+    db.quotations.insert_one.assert_awaited_once()
+    db.inquiries.find_one.assert_not_awaited()
+    db.inquiries.update_one.assert_not_awaited()

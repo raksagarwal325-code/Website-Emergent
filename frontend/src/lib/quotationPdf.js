@@ -164,6 +164,7 @@ export const quotationSummaryRows = (quote) => {
 };
 
 export const createQuotationPdf = async (quote, options = {}) => {
+  const company = { ...COMPANY, ...(quote.business || {}) };
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -239,10 +240,10 @@ export const createQuotationPdf = async (quote, options = {}) => {
     }
     const titleX = logoData ? inner + 26 : inner + 3;
     setText(15, "bold", [255, 255, 255], "times");
-    doc.text("Samrat Glass Emporium", titleX, 20.5);
+    doc.text(company.name, titleX, 20.5);
     setText(6.2, "normal", [226, 216, 207]);
-    doc.text(COMPANY.address, titleX, 26);
-    doc.text(`GSTIN ${COMPANY.gstin}   |   WhatsApp ${COMPANY.whatsapp}`, titleX, 30.5);
+    doc.text(company.address, titleX, 26);
+    doc.text(`GSTIN ${company.gstin}   |   WhatsApp ${company.whatsapp}`, titleX, 30.5);
     setText(6.1, "bold", GOLD);
     doc.text("HANDCRAFTED IN FIROZABAD  |  SINCE 1981", titleX, 35);
 
@@ -258,13 +259,13 @@ export const createQuotationPdf = async (quote, options = {}) => {
   const drawContinuationHeader = () => {
     fillRect(margin, margin, pageWidth - margin * 2, 18, NIGHT);
     setText(10.5, "bold", [255, 255, 255], "times");
-    doc.text("Samrat Glass Emporium", inner + 2, 20);
+    doc.text(company.name, inner + 2, 20);
     setText(7, "bold", GOLD);
     doc.text(`${quote.quote_number}  |  Continued`, pageWidth - inner - 2, 20, { align: "right" });
   };
   const pageFooter = () => {
     setText(5.5, "normal", MUTED);
-    doc.text(`${COMPANY.email}  |  ${COMPANY.whatsapp}  |  samratglass.com`, pageWidth / 2, pageHeight - 5, { align: "center" });
+    doc.text(`${company.email}  |  ${company.whatsapp}  |  samratglass.com`, pageWidth / 2, pageHeight - 5, { align: "center" });
   };
 
   drawPageBase();
@@ -374,10 +375,10 @@ export const createQuotationPdf = async (quote, options = {}) => {
   setText(6.4, "bold", MAROON);
   doc.text("BANK DETAILS", bankX, footerTop + 6);
   const bankRows = [
-    ["Account", COMPANY.name],
-    ["Bank", `${COMPANY.bank}, ${COMPANY.branch} - ${COMPANY.accountType}`],
-    ["A/C No.", COMPANY.accountNumber],
-    ["IFSC", COMPANY.ifsc],
+    ["Account", company.name],
+    ["Bank", `${company.bank}, ${company.branch} - ${company.accountType}`],
+    ["A/C No.", company.accountNumber],
+    ["IFSC", company.ifsc],
   ];
   let bankY = footerTop + 12;
   bankRows.forEach(([label, value]) => {
@@ -406,7 +407,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
   addFreeContainedImage(signatureData, signX + 19, footerTop + 13, signWidth - 22, 12);
   line(signX + 5, footerTop + 29, signX + signWidth - 5, footerTop + 29, MAROON, 0.25);
   setText(7, "bold", INK, "times");
-  doc.text(COMPANY.signatory, signCenter, footerTop + 35, { align: "center" });
+  doc.text(company.signatory, signCenter, footerTop + 35, { align: "center" });
   setText(5.6, "normal", MUTED);
   doc.text("Authorised Signatory", signCenter, footerTop + 39.5, { align: "center" });
 

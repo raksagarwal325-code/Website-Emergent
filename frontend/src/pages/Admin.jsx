@@ -27,6 +27,7 @@ const emptyProduct = {
 
 export default function Admin() {
   const [tab, setTab] = useState("dashboard");
+  const [standaloneQuoteOpen, setStandaloneQuoteOpen] = useState(false);
   const [products, setProducts] = useState([]);
   const [settings, setSettings] = useState(null);
   const [stats, setStats] = useState(null);
@@ -57,6 +58,7 @@ export default function Admin() {
     { key: "products", label: "Products", icon: Package },
     { key: "media-library", label: "Media Library", icon: FolderOpen },
     { key: "reviews", label: "Reviews", icon: Star, badge: reviewCounts.pending },
+    { key: "quotations", label: "Quotations", icon: MessageSquare },
     { key: "inquiries", label: "Inquiries", icon: MessageSquare },
     { key: "messages", label: "Messages", icon: Mail },
     { key: "settings", label: "Settings", icon: SettingsIcon },
@@ -122,6 +124,13 @@ export default function Admin() {
       )}
 
       {tab === "inquiries" && <InquiriesAdmin />}
+      {tab === "quotations" && <section className="space-y-5">
+        <h2 className="font-serif text-3xl">Quotations</h2>
+        <p className="text-white/60">Create a quotation for any customer using catalogue products or custom items. Earlier standalone quotations are available in the builder.</p>
+        <button type="button" onClick={() => setStandaloneQuoteOpen(true)} className="bg-[#D4AF37] px-5 py-3 text-black">New quotation / saved quotations</button>
+        <QuotationBrandingAdmin settings={settings} onSave={refresh} />
+        {standaloneQuoteOpen && <InquiryQuotationBuilder onClose={() => setStandaloneQuoteOpen(false)} />}
+      </section>}
 
       {tab === "reviews" && <ReviewsAdmin products={products} refresh={refresh} />}
 
