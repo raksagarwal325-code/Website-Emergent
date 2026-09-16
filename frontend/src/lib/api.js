@@ -185,6 +185,12 @@ export const api = {
   createInquiry: (data) => client.post("/inquiries", data).then(r => r.data),
   listInquiries: () => client.get("/inquiries").then(r => r.data),
   updateInquiryStatus: (id, status) => client.patch(`/inquiries/${id}`, null, { params: { status } }).then(r => r.data),
+  listInquiryQuotations: (id) => client.get(
+    `/admin/inquiries/${encodeURIComponent(id)}/quotations`,
+  ).then(r => r.data),
+  createInquiryQuotation: (id, data) => client.post(
+    `/admin/inquiries/${encodeURIComponent(id)}/quotations`, data,
+  ).then(r => r.data),
 
   createContact: (data) => client.post("/contact", data).then(r => r.data),
   listContact: () => client.get("/contact").then(r => r.data),

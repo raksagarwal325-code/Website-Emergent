@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { GripVertical, Trash2, Upload, Eye, EyeOff, Save, Plus } from "lucide-react";
-import { api, authHeaders } from "../../lib/api";
+import { api } from "../../lib/api";
 import { toast } from "sonner";
 
 export default function HeroSliderAdmin() {
