@@ -1,10 +1,21 @@
 import jsPDF from "jspdf";
 import COMPANY from "../constants/quotationBusiness.json";
 
+const NIGHT = [14, 5, 16];
+const WINE = [58, 20, 28];
 const MAROON = [112, 18, 35];
-const CREAM = [255, 250, 232];
-const PALE_CREAM = [255, 246, 220];
-const INK = [66, 35, 35];
+const GOLD = [212, 175, 55];
+const IVORY = [250, 247, 239];
+const CREAM = [245, 239, 231];
+const INK = [34, 27, 27];
+const MUTED = [109, 91, 86];
+const LINE = [214, 197, 169];
+const FONT_URLS = {
+  outfitRegular: "https://fonts.gstatic.com/s/outfit/v15/QGYyz_MVcBeNP4NjuGObqx1XmO1I4TC1C4E.ttf",
+  outfitBold: "https://fonts.gstatic.com/s/outfit/v15/QGYyz_MVcBeNP4NjuGObqx1XmO1I4e6yC4E.ttf",
+  playfairRegular: "https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKdFvUDQ.ttf",
+  playfairBold: "https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKebukDQ.ttf",
+};
 
 const DEFAULT_TERMS = [
   "Prices are inclusive/exclusive of GST as mentioned above.",
@@ -20,6 +31,8 @@ export const quoteMoney = (value) => Number(value || 0).toLocaleString("en-IN", 
 });
 
 let logoDataPromise;
+let fontDataPromise;
+const rawImagePromises = new Map();
 const productImagePromises = new Map();
 const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -28,30 +41,98 @@ const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
   reader.readAsDataURL(blob);
 });
 
-const loadLogoData = async () => {
+const arrayBufferToBase64 = (buffer) => {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+};
+
+const loadFontData = async () => {
   if (process.env.NODE_ENV === "test") return null;
-  if (!logoDataPromise) {
-    logoDataPromise = fetch("/logo.jpeg")
+  if (!fontDataPromise) {
+    fontDataPromise = Promise.all(Object.values(FONT_URLS).map((url) => fetch(url)
       .then((response) => {
-        if (!response.ok) throw new Error("Quotation logo could not be loaded");
-        return response.blob();
+        if (!response.ok) throw new Error("Quotation font could not be loaded");
+        return response.arrayBuffer();
       })
-      .then(blobToDataUrl)
+      .then(arrayBufferToBase64)))
+      .then(([outfitRegular, outfitBold, playfairRegular, playfairBold]) => ({
+        outfitRegular, outfitBold, playfairRegular, playfairBold,
+      }))
       .catch(() => null);
   }
+  return fontDataPromise;
+};
+
+const registerQuotationFonts = (doc, fontData) => {
+  if (!fontData) return false;
+  try {
+    doc.addFileToVFS("Outfit-Regular.ttf", fontData.outfitRegular);
+    doc.addFileToVFS("Outfit-SemiBold.ttf", fontData.outfitBold);
+    doc.addFileToVFS("PlayfairDisplay-Regular.ttf", fontData.playfairRegular);
+    doc.addFileToVFS("PlayfairDisplay-SemiBold.ttf", fontData.playfairBold);
+    doc.addFont("Outfit-Regular.ttf", "outfit", "normal");
+    doc.addFont("Outfit-SemiBold.ttf", "outfit", "bold");
+    doc.addFont("PlayfairDisplay-Regular.ttf", "playfair", "normal");
+    doc.addFont("PlayfairDisplay-Regular.ttf", "playfair", "italic");
+    doc.addFont("PlayfairDisplay-SemiBold.ttf", "playfair", "bold");
+    doc.addFont("PlayfairDisplay-SemiBold.ttf", "playfair", "bolditalic");
+    return true;
+  } catch (_) {
+    return false;
+  }
+};
+
+const compressProductImage = (dataUrl) => {
+  if (!dataUrl || process.env.NODE_ENV === "test" || typeof document === "undefined") return Promise.resolve(dataUrl);
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const scale = Math.min(1, 360 / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const context = canvas.getContext("2d");
+        context.fillStyle = "#000000";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.76));
+      } catch (_) { resolve(dataUrl); }
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+  });
+};
+
+const fetchImageData = (url) => fetch(url)
+  .then((response) => {
+    if (!response.ok) throw new Error("Quotation image could not be loaded");
+    return response.blob();
+  })
+  .then(blobToDataUrl)
+  .catch(() => null);
+
+const loadLogoData = async () => {
+  if (process.env.NODE_ENV === "test") return null;
+  if (!logoDataPromise) logoDataPromise = fetchImageData("/logo.jpeg");
   return logoDataPromise;
+};
+
+const loadRawImageData = async (url) => {
+  if (!url || process.env.NODE_ENV === "test") return null;
+  if (!rawImagePromises.has(url)) rawImagePromises.set(url, fetchImageData(url));
+  return rawImagePromises.get(url);
 };
 
 const loadProductImageData = async (url) => {
   if (!url || process.env.NODE_ENV === "test") return null;
   if (!productImagePromises.has(url)) {
-    productImagePromises.set(url, fetch(url)
-      .then((response) => {
-        if (!response.ok) throw new Error("Quotation product image could not be loaded");
-        return response.blob();
-      })
-      .then(blobToDataUrl)
-      .catch(() => null));
+    productImagePromises.set(url, fetchImageData(url).then(compressProductImage));
   }
   return productImagePromises.get(url);
 };
@@ -76,243 +157,260 @@ export const quotationSummaryRows = (quote) => {
 };
 
 export const createQuotationPdf = async (quote, options = {}) => {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 8;
-  const inner = 10;
+  const margin = 9;
+  const inner = 11;
   const usable = pageWidth - inner * 2;
+  const fontData = options.fontData || await loadFontData();
+  const fontsRegistered = registerQuotationFonts(doc, fontData);
+  const bodyFamily = fontsRegistered ? "outfit" : "helvetica";
+  const displayFamily = fontsRegistered ? "playfair" : "times";
   const logoData = options.logoDataUrl === undefined ? await loadLogoData() : options.logoDataUrl;
-  const productImageData = await Promise.all(quote.items.map(async (item) => {
+  const productImageData = await Promise.all(quote.items.map((item) => {
     if (options.productImageDataUrls && Object.prototype.hasOwnProperty.call(options.productImageDataUrls, item.image)) {
       return options.productImageDataUrls[item.image];
     }
     return loadProductImageData(item.image);
   }));
   const [signatureData, stampData] = await Promise.all([
-    options.signatureDataUrl === undefined ? loadProductImageData(quote.signature_url) : options.signatureDataUrl,
-    options.stampDataUrl === undefined ? loadProductImageData(quote.stamp_url) : options.stampDataUrl,
+    options.signatureDataUrl === undefined ? loadRawImageData(quote.signature_url) : options.signatureDataUrl,
+    options.stampDataUrl === undefined ? loadRawImageData(quote.stamp_url) : options.stampDataUrl,
   ]);
 
-  const setText = (size = 8, style = "normal", colour = INK, family = "helvetica") => {
-    doc.setFont(family, style);
+  const setText = (size = 8, style = "normal", colour = INK, family = bodyFamily) => {
+    const resolvedFamily = family === "times" ? displayFamily : family === "helvetica" ? bodyFamily : family;
+    doc.setFont(resolvedFamily, style);
     doc.setFontSize(size);
     doc.setTextColor(...colour);
   };
-  const borderedBox = (x, y, width, height, fill = null, radius = 1.5) => {
-    doc.setDrawColor(...MAROON);
-    doc.setLineWidth(0.25);
-    if (fill) {
-      doc.setFillColor(...fill);
-      doc.roundedRect(x, y, width, height, radius, radius, "FD");
-    } else {
-      doc.roundedRect(x, y, width, height, radius, radius, "S");
-    }
+  const line = (x1, y1, x2, y2, colour = LINE, width = 0.2) => {
+    doc.setDrawColor(...colour);
+    doc.setLineWidth(width);
+    doc.line(x1, y1, x2, y2);
   };
-  const addPageFrame = () => {
-    doc.setFillColor(...CREAM);
-    doc.rect(0, 0, pageWidth, pageHeight, "F");
-    doc.setDrawColor(...MAROON);
-    doc.setLineWidth(0.8);
+  const fillRect = (x, y, width, height, colour, radius = 0) => {
+    doc.setFillColor(...colour);
+    if (radius) doc.roundedRect(x, y, width, height, radius, radius, "F");
+    else doc.rect(x, y, width, height, "F");
+  };
+  const drawPageBase = () => {
+    fillRect(0, 0, pageWidth, pageHeight, IVORY);
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.35);
     doc.rect(margin, margin, pageWidth - margin * 2, pageHeight - margin * 2);
-    doc.setLineWidth(0.2);
-    doc.rect(margin + 2, margin + 2, pageWidth - (margin + 2) * 2, pageHeight - (margin + 2) * 2);
   };
-  const sectionTitle = (text, x, y) => {
-    setText(8.5, "bold", MAROON, "times");
-    doc.text(text, x, y);
+  const addContainedImage = (data, x, y, width, height) => {
+    fillRect(x, y, width, height, NIGHT, 0.8);
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.18);
+    doc.roundedRect(x, y, width, height, 0.8, 0.8, "S");
+    if (!data) return;
+    try {
+      const properties = doc.getImageProperties(data);
+      const scale = Math.min((width - 1) / properties.width, (height - 1) / properties.height);
+      const imageWidth = properties.width * scale;
+      const imageHeight = properties.height * scale;
+      doc.addImage(data, imageFormat(data), x + (width - imageWidth) / 2, y + (height - imageHeight) / 2, imageWidth, imageHeight, undefined, "FAST");
+    } catch (_) { /* retain the framed placeholder */ }
   };
-  const labelledLine = (label, value, x, y, labelWidth = 24) => {
-    setText(6.5, "bold");
-    doc.text(label, x, y);
-    setText(6.5);
-    doc.text(String(value || ""), x + labelWidth, y);
+  const addFreeContainedImage = (data, x, y, width, height) => {
+    if (!data) return;
+    try {
+      const properties = doc.getImageProperties(data);
+      const scale = Math.min(width / properties.width, height / properties.height);
+      const imageWidth = properties.width * scale;
+      const imageHeight = properties.height * scale;
+      doc.addImage(data, imageFormat(data), x + (width - imageWidth) / 2, y + (height - imageHeight) / 2, imageWidth, imageHeight, undefined, "FAST");
+    } catch (_) { /* typed authorisation remains */ }
+  };
+  const drawFullHeader = () => {
+    fillRect(margin, margin, pageWidth - margin * 2, 34, NIGHT);
+    if (logoData) {
+      try { doc.addImage(logoData, imageFormat(logoData), inner + 2, 14, 20, 20, undefined, "FAST"); } catch (_) { /* text brand remains */ }
+    }
+    const titleX = logoData ? inner + 26 : inner + 3;
+    setText(15, "bold", [255, 255, 255], "times");
+    doc.text("Samrat Glass Emporium", titleX, 20.5);
+    setText(6.2, "normal", [226, 216, 207]);
+    doc.text(COMPANY.address, titleX, 26);
+    doc.text(`GSTIN ${COMPANY.gstin}   |   WhatsApp ${COMPANY.whatsapp}`, titleX, 30.5);
+    setText(6.1, "bold", GOLD);
+    doc.text("HANDCRAFTED IN FIROZABAD  |  SINCE 1981", titleX, 35);
+
+    const right = pageWidth - inner - 2;
+    setText(14, "bold", [255, 255, 255], "times");
+    doc.text("Quotation", right, 19.5, { align: "right" });
+    setText(7.2, "bold", GOLD);
+    doc.text(quote.quote_number, right, 25, { align: "right" });
+    setText(6.2, "normal", [226, 216, 207]);
+    doc.text(`Issued ${dateText(quote.created_at)}`, right, 30, { align: "right" });
+    if (quote.valid_until) doc.text(`Valid until ${dateText(quote.valid_until)}`, right, 34.5, { align: "right" });
+  };
+  const drawContinuationHeader = () => {
+    fillRect(margin, margin, pageWidth - margin * 2, 18, NIGHT);
+    setText(10.5, "bold", [255, 255, 255], "times");
+    doc.text("Samrat Glass Emporium", inner + 2, 20);
+    setText(7, "bold", GOLD);
+    doc.text(`${quote.quote_number}  |  Continued`, pageWidth - inner - 2, 20, { align: "right" });
+  };
+  const pageFooter = () => {
+    setText(5.5, "normal", MUTED);
+    doc.text(`${COMPANY.email}  |  ${COMPANY.whatsapp}  |  samratglass.com`, pageWidth / 2, pageHeight - 5, { align: "center" });
   };
 
-  addPageFrame();
+  drawPageBase();
+  drawFullHeader();
 
-  // Header
-  if (logoData) {
-    try { doc.addImage(logoData, "JPEG", inner + 3, 14, 27, 27); } catch (_) { /* text header remains */ }
-  }
-  const titleX = logoData ? inner + 34 : inner + 3;
-  setText(15, "bold", MAROON, "times");
-  doc.text(COMPANY.name, titleX, 21);
-  setText(6.5);
-  doc.text(COMPANY.address, titleX, 27);
-  doc.text(`GSTIN: ${COMPANY.gstin}`, titleX, 32);
-  doc.text(`WhatsApp: ${COMPANY.whatsapp}  |  ${COMPANY.email}`, titleX, 37);
-  setText(5.8, "bold", MAROON);
-  doc.text("HANDCRAFTED IN FIROZABAD  |  SINCE 1981", titleX, 41);
+  const detailTop = 47;
+  const detailHeight = 27;
+  fillRect(inner, detailTop, usable, detailHeight, CREAM, 1.5);
+  const splitX = inner + usable * 0.56;
+  line(splitX, detailTop + 4, splitX, detailTop + detailHeight - 4, LINE, 0.25);
+  setText(6.2, "bold", MAROON);
+  doc.text("PREPARED FOR", inner + 4, detailTop + 5.5);
+  doc.text("DELIVERY DETAILS", splitX + 4, detailTop + 5.5);
+  setText(9.5, "bold", INK, "times");
+  doc.text(quote.customer_name, inner + 4, detailTop + 11);
+  const customerMeta = [quote.customer_phone, quote.customer_email, quote.customer_gstin ? `GSTIN ${quote.customer_gstin}` : ""].filter(Boolean).join("  |  ");
+  setText(5.8, "normal", MUTED);
+  doc.text(doc.splitTextToSize(customerMeta, usable * 0.53).slice(0, 2), inner + 4, detailTop + 15, { lineHeightFactor: 1.1 });
+  setText(6, "normal", INK);
+  doc.text(doc.splitTextToSize(quote.billing_address || "Address not provided", usable * 0.53).slice(0, 3), inner + 4, detailTop + 19.5, { lineHeightFactor: 1.08 });
+  doc.text(doc.splitTextToSize(quote.shipping_address || "Same as billing address", usable * 0.39).slice(0, 5), splitX + 4, detailTop + 11, { lineHeightFactor: 1.15 });
 
-  setText(13, "bold", MAROON, "times");
-  doc.text("QUOTATION", pageWidth - inner - 3, 20, { align: "right" });
-  setText(7);
-  doc.text(quote.quote_number, pageWidth - inner - 3, 27, { align: "right" });
-  doc.text(dateText(quote.created_at), pageWidth - inner - 3, 33, { align: "right" });
-  if (quote.valid_until) {
-    setText(6.2);
-    doc.text(`Valid until ${dateText(quote.valid_until)}`, pageWidth - inner - 3, 38, { align: "right" });
-  }
-
-  // Billing and shipping details
-  const boxGap = 2;
-  const detailWidth = (usable - boxGap) / 2;
-  const detailTop = 45;
-  const detailHeight = 36;
-  borderedBox(inner, detailTop, detailWidth, detailHeight, PALE_CREAM);
-  borderedBox(inner + detailWidth + boxGap, detailTop, detailWidth, detailHeight, PALE_CREAM);
-  sectionTitle("BILLING DETAILS", inner + 3, detailTop + 6);
-  sectionTitle("SHIPPING DETAILS", inner + detailWidth + boxGap + 3, detailTop + 6);
-
-  const billingLines = [
-    quote.customer_name,
-    ...(doc.splitTextToSize(quote.billing_address || "Address not provided", detailWidth - 7)),
-    quote.customer_phone ? `Phone: ${quote.customer_phone}` : "",
-    quote.customer_email || "",
-    quote.customer_gstin ? `GSTIN: ${quote.customer_gstin}` : "",
-  ].filter(Boolean).slice(0, 7);
-  setText(6.7);
-  doc.text(billingLines, inner + 3, detailTop + 12, { lineHeightFactor: 1.25 });
-  const shippingText = quote.shipping_address || "Same as Billing Address";
-  doc.text(doc.splitTextToSize(shippingText, detailWidth - 7).slice(0, 6), inner + detailWidth + boxGap + 3, detailTop + 12, { lineHeightFactor: 1.25 });
-
-  // Product table
   let y = detailTop + detailHeight + 4;
-  const cols = { serial: inner + 5, image: inner + 12, item: inner + 27, qty: 132, rate: 165, amount: pageWidth - inner - 3 };
+  const cols = { serial: inner + 5, image: inner + 12, item: inner + 28, qty: 137, rate: 166, amount: pageWidth - inner - 3 };
   const drawTableHeader = () => {
-    doc.setFillColor(...MAROON);
-    doc.rect(inner, y, usable, 10, "F");
-    setText(7, "bold", [255, 255, 255]);
-    doc.text("S. No.", cols.serial, y + 6, { align: "center" });
-    doc.text("Product", cols.image, y + 6);
-    doc.text("Particulars", cols.item, y + 6);
-    doc.text("Qty", cols.qty, y + 6, { align: "right" });
-    doc.text("Rate (INR)", cols.rate, y + 6, { align: "right" });
-    doc.text("Amount (INR)", cols.amount, y + 6, { align: "right" });
-    y += 10;
+    fillRect(inner, y, usable, 8.5, WINE);
+    setText(6.6, "bold", [255, 255, 255]);
+    doc.text("No.", cols.serial, y + 5.5, { align: "center" });
+    doc.text("Product", cols.image, y + 5.5);
+    doc.text("Particulars", cols.item, y + 5.5);
+    doc.text("Qty", cols.qty, y + 5.5, { align: "right" });
+    doc.text("Rate (INR)", cols.rate, y + 5.5, { align: "right" });
+    doc.text("Amount (INR)", cols.amount, y + 5.5, { align: "right" });
+    y += 8.5;
+  };
+  const startContinuationPage = (withTableHeader = true) => {
+    pageFooter();
+    doc.addPage();
+    drawPageBase();
+    drawContinuationHeader();
+    y = 32;
+    if (withTableHeader) drawTableHeader();
   };
   drawTableHeader();
 
   quote.items.forEach((item, index) => {
-    const nameLines = doc.splitTextToSize(item.name, 68);
-    const rowHeight = Math.max(14, nameLines.length * 3.2 + (item.sku ? 5 : 2));
-    if (y + rowHeight > 196) {
-      doc.addPage();
-      addPageFrame();
-      y = 18;
-      drawTableHeader();
-    }
-    setText(7);
-    doc.text(String(index + 1), cols.serial, y + 6, { align: "center" });
-    if (productImageData[index]) {
-      doc.setDrawColor(204, 173, 145);
-      doc.setFillColor(255, 255, 255);
-      doc.roundedRect(cols.image, y + 1.5, 11, 11, 0.8, 0.8, "FD");
-      try {
-        doc.addImage(productImageData[index], imageFormat(productImageData[index]), cols.image + 0.5, y + 2, 10, 10, undefined, "FAST");
-      } catch (_) { /* keep the quotation usable if one catalogue image is unsupported */ }
-    }
-    setText(7.2, "bold");
-    doc.text(nameLines, cols.item, y + 5, { lineHeightFactor: 1.05 });
+    const nameLines = doc.splitTextToSize(item.name, 68).slice(0, 3);
+    const rowHeight = Math.max(13.5, nameLines.length * 3.1 + (item.sku ? 5 : 2));
+    if (y + rowHeight > 225) startContinuationPage();
+    setText(6.8, "normal", MUTED);
+    doc.text(String(index + 1), cols.serial, y + 6.8, { align: "center" });
+    addContainedImage(productImageData[index], cols.image, y + 1.3, 10.5, 10.5);
+    setText(7.1, "bold", INK, "times");
+    doc.text(nameLines, cols.item, y + 4.8, { lineHeightFactor: 1.03 });
     if (item.sku) {
-      setText(6, "normal", [116, 90, 84]);
-      doc.text(`SKU ${item.sku}`, cols.item, y + 5 + nameLines.length * 3.2);
+      setText(5.5, "normal", MUTED);
+      doc.text(`SKU ${item.sku}`, cols.item, y + 5 + nameLines.length * 3.1);
     }
-    setText(7);
-    doc.text(String(item.quantity), cols.qty, y + 6, { align: "right" });
-    doc.text(quoteMoney(item.unit_price), cols.rate, y + 6, { align: "right" });
-    setText(7, "bold");
-    doc.text(quoteMoney(item.line_total), cols.amount, y + 6, { align: "right" });
+    setText(7, "normal", INK);
+    doc.text(String(item.quantity), cols.qty, y + 6.8, { align: "right" });
+    doc.text(quoteMoney(item.unit_price), cols.rate, y + 6.8, { align: "right" });
+    setText(7, "bold", INK);
+    doc.text(quoteMoney(item.line_total), cols.amount, y + 6.8, { align: "right" });
     y += rowHeight;
-    doc.setDrawColor(204, 173, 145);
-    doc.setLineWidth(0.15);
-    doc.line(inner, y, inner + usable, y);
+    line(inner, y, inner + usable, y, LINE, 0.16);
   });
 
-  // Totals
-  y += 3;
-  const totalsX = 111;
-  const totalsWidth = pageWidth - inner - totalsX;
   const summaryRows = quotationSummaryRows(quote);
-  const totalsHeight = summaryRows.length * 8 + 10;
-  borderedBox(totalsX, y, totalsWidth, totalsHeight, PALE_CREAM, 0.5);
-  const totalLine = (label, value, rowY, bold = false) => {
-    setText(7.2, bold ? "bold" : "normal");
-    doc.text(label, totalsX + 3, rowY);
-    doc.text(value, totalsX + totalsWidth - 3, rowY, { align: "right" });
-  };
-  let totalY = y + 6;
+  const totalsHeight = summaryRows.length * 6.2 + 9;
+  const footerHeight = 45;
+  const closingHeight = quote.notes ? 17 : 11;
+  if (y + 4 + totalsHeight + 4 + footerHeight + closingHeight > pageHeight - 11) startContinuationPage(false);
+
+  y += 4;
+  const totalsX = 112;
+  const totalsWidth = pageWidth - inner - totalsX;
+  fillRect(totalsX, y, totalsWidth, totalsHeight, CREAM, 1);
+  doc.setDrawColor(...LINE);
+  doc.setLineWidth(0.2);
+  doc.roundedRect(totalsX, y, totalsWidth, totalsHeight, 1, 1, "S");
+  let totalY = y + 5.2;
   summaryRows.forEach((row) => {
-    totalLine(row.label, quoteMoney(row.value), totalY, row.bold);
-    totalY += 8;
+    setText(6.7, row.bold ? "bold" : "normal", row.bold ? INK : MUTED);
+    doc.text(row.label, totalsX + 4, totalY);
+    doc.text(quoteMoney(row.value), totalsX + totalsWidth - 4, totalY, { align: "right" });
+    totalY += 6.2;
   });
-  const payableY = y + totalsHeight - 10;
-  doc.setFillColor(...MAROON);
-  doc.rect(totalsX, payableY, totalsWidth, 10, "F");
-  setText(8, "bold", [255, 255, 255]);
-  doc.text("Payable Amount", totalsX + 3, payableY + 6.5);
-  doc.text(`INR ${quoteMoney(quote.total)}`, totalsX + totalsWidth - 3, payableY + 6.5, { align: "right" });
+  const payableY = y + totalsHeight - 9;
+  fillRect(totalsX, payableY, totalsWidth, 9, WINE);
+  setText(7.2, "bold", [255, 255, 255]);
+  doc.text("Quotation Total", totalsX + 4, payableY + 5.8);
+  setText(8.2, "bold", GOLD, "times");
+  doc.text(`INR ${quoteMoney(quote.total)}`, totalsX + totalsWidth - 4, payableY + 5.8, { align: "right" });
 
-  // Bank, terms and signatory panels
-  let footerTop = Math.max(y + totalsHeight + 5, 214);
-  if (footerTop + 55 > pageHeight - 20) {
-    doc.addPage();
-    addPageFrame();
-    footerTop = 20;
-  }
-  const footerGap = 2;
-  const footerWidth = (usable - footerGap * 2) / 3;
-  borderedBox(inner, footerTop, footerWidth, 52, PALE_CREAM);
-  borderedBox(inner + footerWidth + footerGap, footerTop, footerWidth, 52, PALE_CREAM);
-  borderedBox(inner + (footerWidth + footerGap) * 2, footerTop, footerWidth, 52, PALE_CREAM);
+  const footerTop = y + totalsHeight + 4;
+  fillRect(inner, footerTop, usable, footerHeight, CREAM, 1.5);
+  const footerGap = 3;
+  const bankWidth = 57;
+  const termsWidth = 68;
+  const signWidth = usable - bankWidth - termsWidth - footerGap * 2;
+  const bankX = inner + 4;
+  const termsX = inner + bankWidth + footerGap + 4;
+  const signX = inner + bankWidth + termsWidth + footerGap * 2;
+  line(inner + bankWidth + footerGap / 2, footerTop + 5, inner + bankWidth + footerGap / 2, footerTop + footerHeight - 5, LINE, 0.25);
+  line(signX - footerGap / 2, footerTop + 5, signX - footerGap / 2, footerTop + footerHeight - 5, LINE, 0.25);
 
-  sectionTitle("BANK DETAILS", inner + 3, footerTop + 7);
-  labelledLine("Account Name", COMPANY.name, inner + 3, footerTop + 14, 24);
-  labelledLine("Bank Name", COMPANY.bank, inner + 3, footerTop + 20, 24);
-  labelledLine("Branch", COMPANY.branch, inner + 3, footerTop + 26, 24);
-  labelledLine("Account Type", COMPANY.accountType, inner + 3, footerTop + 32, 24);
-  labelledLine("Account Number", COMPANY.accountNumber, inner + 3, footerTop + 38, 24);
-  labelledLine("IFSC Code", COMPANY.ifsc, inner + 3, footerTop + 44, 24);
+  setText(6.4, "bold", MAROON);
+  doc.text("BANK DETAILS", bankX, footerTop + 6);
+  const bankRows = [
+    ["Account", COMPANY.name],
+    ["Bank", `${COMPANY.bank}, ${COMPANY.branch} - ${COMPANY.accountType}`],
+    ["A/C No.", COMPANY.accountNumber],
+    ["IFSC", COMPANY.ifsc],
+  ];
+  let bankY = footerTop + 12;
+  bankRows.forEach(([label, value]) => {
+    setText(5.4, "bold", MUTED);
+    doc.text(label, bankX, bankY);
+    setText(5.7, "normal", INK);
+    doc.text(doc.splitTextToSize(value, bankWidth - 19).slice(0, 2), bankX + 14, bankY, { lineHeightFactor: 1.05 });
+    bankY += 6.5;
+  });
 
-  const termsX = inner + footerWidth + footerGap + 3;
-  sectionTitle("TERMS & CONDITIONS", termsX, footerTop + 7);
+  setText(6.4, "bold", MAROON);
+  doc.text("TERMS & CONDITIONS", termsX, footerTop + 6);
   const terms = quote.terms ? quote.terms.split(/\n+/).filter(Boolean) : DEFAULT_TERMS;
-  setText(5.7);
-  let termsY = footerTop + 13;
+  setText(5.15, "normal", INK);
+  let termsY = footerTop + 11.5;
   terms.slice(0, 5).forEach((term) => {
-    const lines = doc.splitTextToSize(`- ${term}`, footerWidth - 6);
-    doc.text(lines, termsX, termsY, { lineHeightFactor: 1.08 });
-    termsY += lines.length * 2.8 + 1.5;
+    const lines = doc.splitTextToSize(`- ${term}`, termsWidth - 8);
+    doc.text(lines, termsX, termsY, { lineHeightFactor: 1.02 });
+    termsY += lines.length * 2.5 + 1.2;
   });
 
-  const signX = inner + (footerWidth + footerGap) * 2;
-  sectionTitle("FOR - SAMRAT GLASS EMPORIUM", signX + 3, footerTop + 7);
-  setText(6.5);
-  doc.text("For Samrat Glass Emporium", signX + footerWidth / 2, footerTop + 13, { align: "center" });
-  if (stampData) {
-    try {
-      doc.addImage(stampData, imageFormat(stampData), signX + 4, footerTop + 16, 18, 18, undefined, "FAST");
-    } catch (_) { /* keep typed authorisation when an uploaded image is unsupported */ }
-  }
-  if (signatureData) {
-    try {
-      doc.addImage(signatureData, imageFormat(signatureData), signX + 25, footerTop + 22, 29, 10, undefined, "FAST");
-    } catch (_) { /* keep typed authorisation when an uploaded image is unsupported */ }
-  }
-  doc.setDrawColor(...MAROON);
-  doc.line(signX + 8, footerTop + 37, signX + footerWidth - 8, footerTop + 37);
-  setText(7, "bold");
-  doc.text(COMPANY.signatory, signX + footerWidth / 2, footerTop + 43, { align: "center" });
-  setText(6);
-  doc.text("Authorised Signatory", signX + footerWidth / 2, footerTop + 48, { align: "center" });
+  const signCenter = signX + signWidth / 2;
+  setText(6.4, "bold", MAROON);
+  doc.text("AUTHORISED BY", signX + 3, footerTop + 6);
+  addFreeContainedImage(stampData, signX + 3, footerTop + 11, 16, 16);
+  addFreeContainedImage(signatureData, signX + 19, footerTop + 13, signWidth - 22, 12);
+  line(signX + 5, footerTop + 29, signX + signWidth - 5, footerTop + 29, MAROON, 0.25);
+  setText(7, "bold", INK, "times");
+  doc.text(COMPANY.signatory, signCenter, footerTop + 35, { align: "center" });
+  setText(5.6, "normal", MUTED);
+  doc.text("Authorised Signatory", signCenter, footerTop + 39.5, { align: "center" });
 
-  setText(11, "bold", MAROON, "times");
-  doc.text("THANK YOU FOR YOUR BUSINESS!", pageWidth / 2, footerTop + 62, { align: "center" });
+  const closingY = footerTop + footerHeight + 6;
+  setText(9.5, "italic", MAROON, "times");
+  doc.text("Crafted in Firozabad. Made for your space.", pageWidth / 2, closingY, { align: "center" });
   if (quote.notes) {
-    setText(6.5);
-    doc.text(doc.splitTextToSize(`Notes: ${quote.notes}`, usable - 10).slice(0, 2), pageWidth / 2, footerTop + 69, { align: "center" });
+    setText(5.8, "normal", MUTED);
+    doc.text(doc.splitTextToSize(`Notes: ${quote.notes}`, usable - 15).slice(0, 2), pageWidth / 2, closingY + 5, { align: "center" });
   }
+  pageFooter();
 
   return { doc, filename: `${quote.quote_number}.pdf` };
 };
