@@ -20,6 +20,14 @@ export const quoteMoney = (value) => Number(value || 0).toLocaleString("en-IN", 
 });
 
 let logoDataPromise;
+const productImagePromises = new Map();
+const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = reject;
+  reader.readAsDataURL(blob);
+});
+
 const loadLogoData = async () => {
   if (process.env.NODE_ENV === "test") return null;
   if (!logoDataPromise) {
@@ -28,18 +36,44 @@ const loadLogoData = async () => {
         if (!response.ok) throw new Error("Quotation logo could not be loaded");
         return response.blob();
       })
-      .then((blob) => new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      }))
+      .then(blobToDataUrl)
       .catch(() => null);
   }
   return logoDataPromise;
 };
 
+const loadProductImageData = async (url) => {
+  if (!url || process.env.NODE_ENV === "test") return null;
+  if (!productImagePromises.has(url)) {
+    productImagePromises.set(url, fetch(url)
+      .then((response) => {
+        if (!response.ok) throw new Error("Quotation product image could not be loaded");
+        return response.blob();
+      })
+      .then(blobToDataUrl)
+      .catch(() => null));
+  }
+  return productImagePromises.get(url);
+};
+
+const imageFormat = (dataUrl) => {
+  const match = String(dataUrl || "").match(/^data:image\/(png|jpe?g|webp)/i);
+  if (!match) return "JPEG";
+  return match[1].toLowerCase() === "png" ? "PNG"
+    : match[1].toLowerCase() === "webp" ? "WEBP" : "JPEG";
+};
+
 const dateText = (value) => new Date(value).toLocaleDateString("en-IN");
+
+export const quotationSummaryRows = (quote) => {
+  const rows = [{ label: "Taxable Amount", value: quote.subtotal - quote.discount + quote.shipping, bold: true }];
+  if (Number(quote.discount) > 0) rows.push({ label: "Discount", value: quote.discount });
+  if (Number(quote.shipping) > 0) rows.push({ label: "Freight / Other Charges", value: quote.shipping });
+  if (Number(quote.tax_rate) > 0 && Number(quote.tax_amount) > 0) {
+    rows.push({ label: `Taxes (${quoteMoney(quote.tax_rate)}%)`, value: quote.tax_amount });
+  }
+  return rows;
+};
 
 export const createQuotationPdf = async (quote, options = {}) => {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -49,6 +83,12 @@ export const createQuotationPdf = async (quote, options = {}) => {
   const inner = 10;
   const usable = pageWidth - inner * 2;
   const logoData = options.logoDataUrl === undefined ? await loadLogoData() : options.logoDataUrl;
+  const productImageData = await Promise.all(quote.items.map(async (item) => {
+    if (options.productImageDataUrls && Object.prototype.hasOwnProperty.call(options.productImageDataUrls, item.image)) {
+      return options.productImageDataUrls[item.image];
+    }
+    return loadProductImageData(item.image);
+  }));
 
   const setText = (size = 8, style = "normal", colour = INK, family = "helvetica") => {
     doc.setFont(family, style);
@@ -98,12 +138,18 @@ export const createQuotationPdf = async (quote, options = {}) => {
   doc.text(COMPANY.address, titleX, 27);
   doc.text(`GSTIN: ${COMPANY.gstin}`, titleX, 32);
   doc.text(`WhatsApp: ${COMPANY.whatsapp}  |  ${COMPANY.email}`, titleX, 37);
+  setText(5.8, "bold", MAROON);
+  doc.text("HANDCRAFTED IN FIROZABAD  |  SINCE 1981", titleX, 41);
 
   setText(13, "bold", MAROON, "times");
   doc.text("QUOTATION", pageWidth - inner - 3, 20, { align: "right" });
   setText(7);
   doc.text(quote.quote_number, pageWidth - inner - 3, 27, { align: "right" });
   doc.text(dateText(quote.created_at), pageWidth - inner - 3, 33, { align: "right" });
+  if (quote.valid_until) {
+    setText(6.2);
+    doc.text(`Valid until ${dateText(quote.valid_until)}`, pageWidth - inner - 3, 38, { align: "right" });
+  }
 
   // Billing and shipping details
   const boxGap = 2;
@@ -129,36 +175,40 @@ export const createQuotationPdf = async (quote, options = {}) => {
 
   // Product table
   let y = detailTop + detailHeight + 4;
-  const cols = { serial: inner + 5, item: inner + 16, qty: 132, rate: 165, amount: pageWidth - inner - 3 };
-  doc.setFillColor(...MAROON);
-  doc.rect(inner, y, usable, 10, "F");
-  setText(7, "bold", [255, 255, 255]);
-  doc.text("S. No.", cols.serial, y + 6, { align: "center" });
-  doc.text("Particulars", cols.item, y + 6);
-  doc.text("Qty", cols.qty, y + 6, { align: "right" });
-  doc.text("Rate (INR)", cols.rate, y + 6, { align: "right" });
-  doc.text("Amount (INR)", cols.amount, y + 6, { align: "right" });
-  y += 10;
+  const cols = { serial: inner + 5, image: inner + 12, item: inner + 27, qty: 132, rate: 165, amount: pageWidth - inner - 3 };
+  const drawTableHeader = () => {
+    doc.setFillColor(...MAROON);
+    doc.rect(inner, y, usable, 10, "F");
+    setText(7, "bold", [255, 255, 255]);
+    doc.text("S. No.", cols.serial, y + 6, { align: "center" });
+    doc.text("Product", cols.image, y + 6);
+    doc.text("Particulars", cols.item, y + 6);
+    doc.text("Qty", cols.qty, y + 6, { align: "right" });
+    doc.text("Rate (INR)", cols.rate, y + 6, { align: "right" });
+    doc.text("Amount (INR)", cols.amount, y + 6, { align: "right" });
+    y += 10;
+  };
+  drawTableHeader();
 
   quote.items.forEach((item, index) => {
-    const nameLines = doc.splitTextToSize(item.name, 85);
-    const rowHeight = Math.max(10, nameLines.length * 3.2 + (item.sku ? 5 : 2));
+    const nameLines = doc.splitTextToSize(item.name, 68);
+    const rowHeight = Math.max(14, nameLines.length * 3.2 + (item.sku ? 5 : 2));
     if (y + rowHeight > 196) {
       doc.addPage();
       addPageFrame();
       y = 18;
-      doc.setFillColor(...MAROON);
-      doc.rect(inner, y, usable, 10, "F");
-      setText(7, "bold", [255, 255, 255]);
-      doc.text("S. No.", cols.serial, y + 6, { align: "center" });
-      doc.text("Particulars", cols.item, y + 6);
-      doc.text("Qty", cols.qty, y + 6, { align: "right" });
-      doc.text("Rate (INR)", cols.rate, y + 6, { align: "right" });
-      doc.text("Amount (INR)", cols.amount, y + 6, { align: "right" });
-      y += 10;
+      drawTableHeader();
     }
     setText(7);
     doc.text(String(index + 1), cols.serial, y + 6, { align: "center" });
+    if (productImageData[index]) {
+      doc.setDrawColor(204, 173, 145);
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(cols.image, y + 1.5, 11, 11, 0.8, 0.8, "FD");
+      try {
+        doc.addImage(productImageData[index], imageFormat(productImageData[index]), cols.image + 0.5, y + 2, 10, 10, undefined, "FAST");
+      } catch (_) { /* keep the quotation usable if one catalogue image is unsupported */ }
+    }
     setText(7.2, "bold");
     doc.text(nameLines, cols.item, y + 5, { lineHeightFactor: 1.05 });
     if (item.sku) {
@@ -180,8 +230,8 @@ export const createQuotationPdf = async (quote, options = {}) => {
   y += 3;
   const totalsX = 111;
   const totalsWidth = pageWidth - inner - totalsX;
-  const totalRows = 3 + (quote.tax_rate > 0 ? 1 : 0);
-  const totalsHeight = totalRows * 8 + 10;
+  const summaryRows = quotationSummaryRows(quote);
+  const totalsHeight = summaryRows.length * 8 + 10;
   borderedBox(totalsX, y, totalsWidth, totalsHeight, PALE_CREAM, 0.5);
   const totalLine = (label, value, rowY, bold = false) => {
     setText(7.2, bold ? "bold" : "normal");
@@ -189,15 +239,10 @@ export const createQuotationPdf = async (quote, options = {}) => {
     doc.text(value, totalsX + totalsWidth - 3, rowY, { align: "right" });
   };
   let totalY = y + 6;
-  totalLine("Taxable Amount", quoteMoney(quote.subtotal - quote.discount + quote.shipping), totalY, true);
-  totalY += 8;
-  totalLine("Discount", quoteMoney(quote.discount), totalY);
-  totalY += 8;
-  totalLine("Freight / Other Charges", quoteMoney(quote.shipping), totalY);
-  if (quote.tax_rate > 0) {
+  summaryRows.forEach((row) => {
+    totalLine(row.label, quoteMoney(row.value), totalY, row.bold);
     totalY += 8;
-    totalLine(`Taxes (${quoteMoney(quote.tax_rate)}%)`, quoteMoney(quote.tax_amount), totalY);
-  }
+  });
   const payableY = y + totalsHeight - 10;
   doc.setFillColor(...MAROON);
   doc.rect(totalsX, payableY, totalsWidth, 10, "F");

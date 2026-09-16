@@ -58,7 +58,9 @@ def build_quotation(
     *,
     created_at: Optional[datetime] = None,
     quote_id: Optional[str] = None,
+    product_images: Optional[dict[str, str]] = None,
 ) -> dict:
+    product_images = product_images or {}
     items = []
     subtotal = 0.0
     for raw in payload.items:
@@ -71,6 +73,7 @@ def build_quotation(
             "quantity": raw.quantity,
             "unit_price": quote_money(raw.unit_price),
             "line_total": line_total,
+            "image": product_images.get(raw.product_id or "") or None,
         })
 
     discount = quote_money(payload.discount)

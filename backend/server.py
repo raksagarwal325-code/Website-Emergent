@@ -563,6 +563,7 @@ class InquiryItem(BaseModel):
     sku: Optional[str] = None
     quantity: int = 1
     price: float
+    image: Optional[str] = None
 
 
 class InquiryItemInput(BaseModel):
@@ -1522,6 +1523,7 @@ async def create_inquiry(payload: InquiryCreate, _rl = Depends(rate_limit("inqui
             sku=doc.get("sku"),
             quantity=it.quantity,
             price=price,
+            image=(doc.get("images") or [None])[0],
         ))
         total += price * it.quantity
 
@@ -1591,9 +1593,33 @@ async def update_inquiry_status(inquiry_id: str, status: str = Query(...), admin
 async def list_inquiry_quotations(inquiry_id: str, admin: _AdminUser = Depends(require_admin)):
     if not await db.inquiries.find_one({"id": inquiry_id}, {"_id": 1}):
         raise HTTPException(404, "Inquiry not found")
-    return await db.quotations.find(
+    quotations = await db.quotations.find(
         {"inquiry_id": inquiry_id}, {"_id": 0}
     ).sort("created_at", -1).to_list(100)
+    # Backfill catalogue thumbnails at read time for quotations created before
+    # image snapshots were introduced. Commercial values remain immutable.
+    missing_product_ids = {
+        item.get("product_id")
+        for quotation in quotations
+        for item in quotation.get("items", [])
+        if item.get("product_id") and not item.get("image")
+    }
+    image_by_product_id = {}
+    if missing_product_ids:
+        products = await db.products.find(
+            {"id": {"$in": list(missing_product_ids)}},
+            {"_id": 0, "id": 1, "images": 1},
+        ).to_list(len(missing_product_ids))
+        image_by_product_id = {
+            product["id"]: product["images"][0]
+            for product in products
+            if product.get("images")
+        }
+    for quotation in quotations:
+        for item in quotation.get("items", []):
+            if not item.get("image"):
+                item["image"] = image_by_product_id.get(item.get("product_id"))
+    return quotations
 
 
 @api.post("/admin/inquiries/{inquiry_id}/quotations")
@@ -1604,7 +1630,24 @@ async def create_inquiry_quotation(
 ):
     if not await db.inquiries.find_one({"id": inquiry_id}, {"_id": 1}):
         raise HTTPException(404, "Inquiry not found")
-    quotation = build_quotation(inquiry_id, payload, admin.email)
+    product_ids = [item.product_id for item in payload.items if item.product_id]
+    image_by_product_id = {}
+    if product_ids:
+        products = await db.products.find(
+            {"id": {"$in": product_ids}},
+            {"_id": 0, "id": 1, "images": 1},
+        ).to_list(len(product_ids))
+        image_by_product_id = {
+            product["id"]: product["images"][0]
+            for product in products
+            if product.get("images")
+        }
+    quotation = build_quotation(
+        inquiry_id,
+        payload,
+        admin.email,
+        product_images=image_by_product_id,
+    )
     await db.quotations.insert_one(dict(quotation))
     await db.inquiries.update_one(
         {"id": inquiry_id},

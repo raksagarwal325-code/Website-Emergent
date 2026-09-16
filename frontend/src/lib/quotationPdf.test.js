@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { createQuotationPdf } from "./quotationPdf";
+import { createQuotationPdf, quotationSummaryRows } from "./quotationPdf";
 
 const items = [
   ["Noorjharokha Chain-Suspended Diamond-Cut Glass Wall Lantern", "SGE-WL-089", 1, 6000],
@@ -12,7 +12,22 @@ const items = [
   ["Phoolwari Etched Floral Dome Ceiling Light", "SGE-CL-001", 1, 3500],
 ].map(([name, sku, quantity, unitPrice]) => ({
   name, sku, quantity, unit_price: unitPrice, line_total: quantity * unitPrice,
+  image: `/products/${sku}.jpeg`,
 }));
+
+test("omits nil commercial rows while retaining non-zero taxes", () => {
+  const rows = quotationSummaryRows({ subtotal: 10000, discount: 0, shipping: 0, tax_rate: 18, tax_amount: 1800 });
+  expect(rows.map((row) => row.label)).toEqual(["Taxable Amount", "Taxes (18.00%)"]);
+});
+
+test("prints discount and freight only when they have a value", () => {
+  const rows = quotationSummaryRows({ subtotal: 10000, discount: 500, shipping: 750, tax_rate: 0, tax_amount: 0 });
+  expect(rows.map((row) => row.label)).toEqual([
+    "Taxable Amount",
+    "Discount",
+    "Freight / Other Charges",
+  ]);
+});
 
 test("renders the complete commercial quotation as a single A4 page", async () => {
   const logo = fs.readFileSync(path.join(process.cwd(), "public/logo.jpeg")).toString("base64");
@@ -32,9 +47,13 @@ test("renders the complete commercial quotation as a single A4 page", async () =
     tax_rate: 0,
     tax_amount: 0,
     total: 19700,
+    valid_until: "2026-10-01",
     terms: "",
     notes: "",
-  }, { logoDataUrl: `data:image/jpeg;base64,${logo}` });
+  }, {
+    logoDataUrl: `data:image/jpeg;base64,${logo}`,
+    productImageDataUrls: Object.fromEntries(items.map((item) => [item.image, `data:image/jpeg;base64,${logo}`])),
+  });
 
   expect(filename).toBe("SGE-Q-20260916-23EC13.pdf");
   expect(doc.getNumberOfPages()).toBe(1);
@@ -44,4 +63,3 @@ test("renders the complete commercial quotation as a single A4 page", async () =
     fs.writeFileSync(process.env.QUOTATION_PDF_OUTPUT, output);
   }
 });
-

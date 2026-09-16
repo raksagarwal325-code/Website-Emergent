@@ -35,6 +35,7 @@ def test_build_quotation_recomputes_every_amount_server_side():
     result = build_quotation(
         "inq-1", payload(), "owner@samratglass.com",
         created_at=created, quote_id="abcdef12-0000-0000-0000-000000000000",
+        product_images={"wall": "https://cdn.example/wall.webp"},
     )
 
     assert result["quote_number"] == "SGE-Q-20260916-ABCDEF"
@@ -45,6 +46,8 @@ def test_build_quotation_recomputes_every_amount_server_side():
     assert result["total"] == 11800
     assert result["valid_until"] == "2026-10-01"
     assert result["items"][1]["line_total"] == 3400
+    assert result["items"][0]["image"] == "https://cdn.example/wall.webp"
+    assert result["items"][1]["image"] is None
     assert result["created_by"] == "owner@samratglass.com"
     assert result["billing_address"] == "Raniwala Market, Firozabad"
     assert result["shipping_address"] == "Same as billing address"
