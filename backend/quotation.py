@@ -7,6 +7,9 @@ from fastapi import HTTPException
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
+DEFAULT_QUOTATION_BUSINESS = {'name': 'SAMRAT GLASS EMPORIUM', 'address': 'Raniwala Market, Babboo Ji Ki Jeen, Firozabad - 283203', 'gstin': '09ADCFS9258D1ZS', 'whatsapp': '+91 89203 92937', 'email': 'samratglassemp@gmail.com', 'bank': 'ICICI Bank', 'branch': 'Firozabad', 'accountType': 'Current Account', 'accountNumber': '097405000031', 'ifsc': 'ICIC0000974', 'signatory': 'Rakshit Agarwal'}
+
+
 class QuotationItemInput(BaseModel):
     product_id: Optional[str] = None
     name: str = Field(min_length=1, max_length=300)
@@ -59,7 +62,7 @@ def format_quotation_number(year: int, sequence: int) -> str:
 
 
 def build_quotation(
-    inquiry_id: str,
+    inquiry_id: Optional[str],
     payload: QuotationCreate,
     admin_email: str,
     *,
@@ -68,6 +71,7 @@ def build_quotation(
     quote_number: Optional[str] = None,
     product_images: Optional[dict[str, str]] = None,
     branding: Optional[dict[str, str]] = None,
+    business: Optional[dict[str, str]] = None,
 ) -> dict:
     product_images = product_images or {}
     branding = branding or {}
@@ -115,6 +119,7 @@ def build_quotation(
         "valid_until": (created.date() + timedelta(days=payload.validity_days)).isoformat(),
         "terms": payload.terms,
         "notes": payload.notes,
+        "business": {**DEFAULT_QUOTATION_BUSINESS, **(business or {})},
         "signature_url": branding.get("signature_url") or None,
         "stamp_url": branding.get("stamp_url") or None,
         "status": "draft",

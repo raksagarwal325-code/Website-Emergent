@@ -38,16 +38,24 @@ const initialForm = (inquiry) => ({
   notes: "",
 });
 
-export default function InquiryQuotationBuilder({ inquiry, onClose, onSaved }) {
+export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved }) {
   const [form, setForm] = useState(() => initialForm(inquiry));
   const [savedQuotes, setSavedQuotes] = useState([]);
   const [savedQuote, setSavedQuote] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [catalogue, setCatalogue] = useState([]);
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    let alive = true;
+    api.adminProductsExport().then(rows => { if (alive) setCatalogue(Array.isArray(rows) ? rows : rows.items || []); }).catch(() => toast.error("Could not load catalogue; you can still add a custom item"));
+    return () => { alive = false; };
+  }, []);
+  const addItem = (product = {}) => change({ items: [...form.items, { product_id: product.id || null, name: product.name || "", sku: product.sku || "", quantity: 1, unit_price: product.price || 0 }] });
 
   useEffect(() => {
     let alive = true;
-    api.listInquiryQuotations(inquiry.id)
+    (inquiry.id ? api.listInquiryQuotations(inquiry.id) : api.listStandaloneQuotations())
       .then((rows) => { if (alive) setSavedQuotes(Array.isArray(rows) ? rows : []); })
       .catch(() => { if (alive) toast.error("Could not load earlier quotations"); })
       .finally(() => { if (alive) setLoadingHistory(false); });
@@ -85,7 +93,8 @@ export default function InquiryQuotationBuilder({ inquiry, onClose, onSaved }) {
     }
     setSaving(true);
     try {
-      const quote = await api.createInquiryQuotation(inquiry.id, {
+      const create = inquiry.id ? (data) => api.createInquiryQuotation(inquiry.id, data) : api.createStandaloneQuotation;
+      const quote = await create({
         ...form,
         items: form.items.map((item) => ({
           ...item,
@@ -142,7 +151,7 @@ export default function InquiryQuotationBuilder({ inquiry, onClose, onSaved }) {
     <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm overflow-y-auto p-4 md:p-8" role="dialog" aria-modal="true" aria-labelledby="quotation-builder-title" data-testid="quotation-builder">
       <div className="mx-auto max-w-5xl border border-[#D4AF37]/35 bg-[#12080b] shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#12080b]/95 px-5 py-4 backdrop-blur">
-          <div><div className="eyebrow">Inquiry quotation</div><h2 id="quotation-builder-title" className="font-serif text-2xl">Create quote for {inquiry.customer_name}</h2></div>
+          <div><div className="eyebrow">Inquiry quotation</div><h2 id="quotation-builder-title" className="font-serif text-2xl">{inquiry.id ? `Create quote for ${inquiry.customer_name}` : "New quotation"}</h2></div>
           <button type="button" onClick={onClose} aria-label="Close quotation builder" className="p-2 text-white/60 hover:text-white"><X size={20} /></button>
         </div>
 
@@ -162,6 +171,9 @@ export default function InquiryQuotationBuilder({ inquiry, onClose, onSaved }) {
 
             <section>
               <div className="mb-2 eyebrow">Products</div>
+              <input aria-label="Search catalogue for quotation" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search product name or SKU to add" className="mb-2 w-full border border-white/15 bg-black/40 p-3" />
+              {search.trim() && <div className="max-h-48 overflow-auto">{catalogue.filter(p => `${p.name} ${p.sku}`.toLowerCase().includes(search.toLowerCase())).slice(0, 30).map(p => <button type="button" key={p.id} onClick={() => { addItem(p); setSearch(""); }} className="block w-full border-b border-white/10 p-2 text-left text-sm">{p.sku} · {p.name}</button>)}</div>}
+              <button type="button" onClick={() => addItem()} className="mb-3 text-sm text-[#D4AF37]">+ Add custom item</button>
               <div className="space-y-3">
                 {form.items.map((item, index) => (
                   <div key={`${item.product_id || "custom"}-${index}`} className="grid gap-2 border border-white/10 p-3 md:grid-cols-[1fr_90px_130px_40px] md:items-end">
@@ -196,7 +208,7 @@ export default function InquiryQuotationBuilder({ inquiry, onClose, onSaved }) {
             <button type="button" onClick={() => shareOnWhatsApp()} disabled={saving || !form.customer_phone || !form.items.length} data-testid="quotation-whatsapp" className="flex w-full items-center justify-center gap-2 border border-[#25D366]/50 px-4 py-3 text-xs uppercase tracking-[0.2em] text-[#25D366] hover:bg-[#25D366]/10 disabled:opacity-40"><MessageCircle size={15} /> WhatsApp quotation</button>
 
             <div className="border-t border-white/10 pt-4">
-              <div className="eyebrow mb-3">Saved for this inquiry</div>
+              <div className="eyebrow mb-3">Saved quotations</div>
               {loadingHistory && <div className="text-xs text-white/40">Loading…</div>}
               {!loadingHistory && !savedQuotes.length && <div className="text-xs text-white/40">No saved quotations yet.</div>}
               <div className="space-y-2">{savedQuotes.map((quote) => <div key={quote.id} className="border border-white/10 p-3"><div className="text-xs text-[#D4AF37]">{quote.quote_number}</div><div className="mt-1 text-[11px] text-white/45">₹{money(quote.total)} · {new Date(quote.created_at).toLocaleDateString("en-IN")}</div><div className="mt-2 flex gap-3"><button type="button" onClick={() => download(quote)} className="text-[10px] uppercase tracking-wider text-white/65 hover:text-white">PDF</button><button type="button" onClick={() => shareOnWhatsApp(quote)} className="text-[10px] uppercase tracking-wider text-[#25D366]">WhatsApp</button></div></div>)}</div>

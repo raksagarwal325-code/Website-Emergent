@@ -188,6 +188,8 @@ export const api = {
   listInquiryQuotations: (id) => client.get(
     `/admin/inquiries/${encodeURIComponent(id)}/quotations`,
   ).then(r => r.data),
+  listStandaloneQuotations: () => client.get("/admin/quotations").then(r => r.data),
+  createStandaloneQuotation: (data) => client.post("/admin/quotations", data).then(r => r.data),
   createInquiryQuotation: (id, data) => client.post(
     `/admin/inquiries/${encodeURIComponent(id)}/quotations`, data,
   ).then(r => r.data),

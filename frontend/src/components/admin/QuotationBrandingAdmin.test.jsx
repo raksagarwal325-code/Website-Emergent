@@ -1,6 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 jest.mock("../../lib/api", () => ({ api: {
+  updateSettings: jest.fn(),
   adminUploadQuotationBrandAsset: jest.fn(),
   adminClearQuotationBrandAsset: jest.fn(),
   resolveImage: (url) => `https://samratglass.com${url}`,
@@ -37,4 +38,14 @@ test("uploads, previews and removes reusable quotation branding", async () => {
   fireEvent.click(screen.getByTestId("quotation-signature-remove"));
   await waitFor(() => expect(mockApi.adminClearQuotationBrandAsset).toHaveBeenCalledWith("signature"));
   expect(onSave).toHaveBeenCalledTimes(2);
+});
+
+
+test("saves owner-edited bank details as strings preserving leading zeroes", async () => {
+  mockApi.updateSettings.mockResolvedValue({});
+  render(<QuotationBrandingAdmin settings={{}} />);
+  expect(screen.getByLabelText("Account number")).toHaveValue("097405000031");
+  fireEvent.change(screen.getByLabelText("Account number"), { target: { value: "001234567890" } });
+  fireEvent.click(screen.getByText("Save business details"));
+  await waitFor(() => expect(mockApi.updateSettings).toHaveBeenCalledWith({ quotation_business: expect.objectContaining({ accountNumber: "001234567890" }) }));
 });
