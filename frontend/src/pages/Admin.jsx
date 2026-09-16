@@ -16,6 +16,7 @@ import CategoryImagesAdmin from "../components/admin/CategoryImagesAdmin";
 import MediaLibraryAdmin from "../components/MediaLibraryAdmin";
 import ProductVersionHistory from "../components/ProductVersionHistory";
 import BulkCatalogueManager from "../components/BulkCatalogueManager";
+import InquiryQuotationBuilder from "../components/InquiryQuotationBuilder";
 import { LEGAL_DEFAULT_UPDATED_AT, serializeLegalDefault } from "../lib/legalContent";
 
 const emptyProduct = {
@@ -832,6 +833,7 @@ function InquiriesAdmin() {
   const [confirming, setConfirming] = useState(null); // { ids: string[], mode: "single"|"bulk" }
   const [deleting, setDeleting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [quotationInquiry, setQuotationInquiry] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -1050,6 +1052,16 @@ function InquiriesAdmin() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {inq.items?.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid={`inq-quote-${inq.id}`}
+                    onClick={() => setQuotationInquiry(inq)}
+                    className="text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-[#D4AF37]/60 text-[#D4AF37] hover:bg-[#D4AF37]/10"
+                  >
+                    Create quote
+                  </button>
+                )}
                 {waLink && (
                   <a href={waLink} target="_blank" rel="noreferrer" data-testid={`inq-wa-${inq.id}`}
                     className="text-[10px] uppercase tracking-[0.24em] px-3 py-1.5 border border-[#25D366]/50 text-[#25D366] hover:bg-[#25D366]/10">
@@ -1111,6 +1123,13 @@ function InquiriesAdmin() {
           onCancel={() => (deleting ? null : setConfirming(null))}
           onConfirm={doDelete}
           busy={deleting}
+        />
+      )}
+      {quotationInquiry && (
+        <InquiryQuotationBuilder
+          inquiry={quotationInquiry}
+          onClose={() => setQuotationInquiry(null)}
+          onSaved={() => reload()}
         />
       )}
     </div>

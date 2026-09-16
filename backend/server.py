@@ -35,6 +35,7 @@ from product_history import editable_product_snapshot, product_changes  # noqa: 
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
 from collection_index import build_collection_detail, build_collection_index  # noqa: E402
+from quotation import QuotationCreate, build_quotation  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -1586,6 +1587,36 @@ async def update_inquiry_status(inquiry_id: str, status: str = Query(...), admin
     return {"ok": True}
 
 
+@api.get("/admin/inquiries/{inquiry_id}/quotations")
+async def list_inquiry_quotations(inquiry_id: str, admin: _AdminUser = Depends(require_admin)):
+    if not await db.inquiries.find_one({"id": inquiry_id}, {"_id": 1}):
+        raise HTTPException(404, "Inquiry not found")
+    return await db.quotations.find(
+        {"inquiry_id": inquiry_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+
+
+@api.post("/admin/inquiries/{inquiry_id}/quotations")
+async def create_inquiry_quotation(
+    inquiry_id: str,
+    payload: QuotationCreate,
+    admin: _AdminUser = Depends(require_admin),
+):
+    if not await db.inquiries.find_one({"id": inquiry_id}, {"_id": 1}):
+        raise HTTPException(404, "Inquiry not found")
+    quotation = build_quotation(inquiry_id, payload, admin.email)
+    await db.quotations.insert_one(dict(quotation))
+    await db.inquiries.update_one(
+        {"id": inquiry_id},
+        {"$set": {
+            "status": "in_progress",
+            "latest_quotation_id": quotation["id"],
+            "latest_quotation_number": quotation["quote_number"],
+        }},
+    )
+    return quotation
+
+
 class _IdList(BaseModel):
     """Body payload for bulk-delete endpoints. IDs are deduplicated and
     validated (non-empty, string) before use."""
@@ -1611,12 +1642,11 @@ def _clean_ids(payload: _IdList) -> list[str]:
 
 @api.delete("/inquiries/{inquiry_id}")
 async def admin_delete_inquiry(inquiry_id: str, admin: _AdminUser = Depends(require_admin)):
-    """Permanently remove a single enquiry. Enquiries are self-contained
-    (there is no owned child collection in the current data model), so no
-    cascade is performed — unrelated contact messages are untouched."""
+    """Permanently remove an enquiry and its owned quotation snapshots."""
     res = await db.inquiries.delete_one({"id": inquiry_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Inquiry not found")
+    await db.quotations.delete_many({"inquiry_id": inquiry_id})
     return {"ok": True, "deleted": 1}
 
 
@@ -1626,6 +1656,7 @@ async def admin_bulk_delete_inquiries(payload: _IdList, admin: _AdminUser = Depe
     non-existent IDs are silently skipped rather than aborting the batch."""
     ids = _clean_ids(payload)
     res = await db.inquiries.delete_many({"id": {"$in": ids}})
+    await db.quotations.delete_many({"inquiry_id": {"$in": ids}})
     return {"ok": True, "requested": len(ids), "deleted": res.deleted_count}
 
 
