@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { createQuotationPdf, quotationSummaryRows } from "./quotationPdf";
+import { createQuotationPdf, quotationDefaultTerms, quotationSummaryRows } from "./quotationPdf";
 
 const items = [
   ["Noorjharokha Chain-Suspended Diamond-Cut Glass Wall Lantern", "SGE-WL-089", 1, 6000],
@@ -27,6 +27,13 @@ test("prints discount and freight only when they have a value", () => {
     "Discount",
     "Freight / Other Charges",
   ]);
+});
+
+test("describes the actual GST treatment in default terms", () => {
+  expect(quotationDefaultTerms({ tax_rate: 18, tax_amount: 1800 })[0])
+    .toBe("GST is charged separately at 18.00% as shown above.");
+  expect(quotationDefaultTerms({ tax_rate: 0, tax_amount: 0 })[0])
+    .toBe("No GST has been added to this quotation.");
 });
 
 test("renders the complete commercial quotation as a single A4 page", async () => {

@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { api } from "./api";
 import COMPANY from "../constants/quotationBusiness.json";
 
 const NIGHT = [14, 5, 16];
@@ -16,14 +17,6 @@ const FONT_URLS = {
   playfairRegular: "https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKdFvUDQ.ttf",
   playfairBold: "https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKebukDQ.ttf",
 };
-
-const DEFAULT_TERMS = [
-  "Prices are inclusive/exclusive of GST as mentioned above.",
-  "Delivery timeline will be confirmed upon order confirmation.",
-  "Freight will be payable at actuals, if applicable.",
-  "Goods once sold will not be taken back.",
-  "Subject to Firozabad jurisdiction only.",
-];
 
 export const quoteMoney = (value) => Number(value || 0).toLocaleString("en-IN", {
   minimumFractionDigits: 2,
@@ -109,7 +102,7 @@ const compressProductImage = (dataUrl) => {
   });
 };
 
-const fetchImageData = (url) => fetch(url)
+const fetchImageData = (url) => fetch(api.resolveImage(url))
   .then((response) => {
     if (!response.ok) throw new Error("Quotation image could not be loaded");
     return response.blob();
@@ -145,6 +138,20 @@ const imageFormat = (dataUrl) => {
 };
 
 const dateText = (value) => new Date(value).toLocaleDateString("en-IN");
+
+export const quotationDefaultTerms = (quote) => {
+  const hasTax = Number(quote.tax_rate) > 0 && Number(quote.tax_amount) > 0;
+  const taxTerm = hasTax
+    ? `GST is charged separately at ${quoteMoney(quote.tax_rate)}% as shown above.`
+    : "No GST has been added to this quotation.";
+  return [
+    taxTerm,
+    "Delivery timeline will be confirmed upon order confirmation.",
+    "Freight will be payable at actuals, if applicable.",
+    "Goods once sold will not be taken back.",
+    "Subject to Firozabad jurisdiction only.",
+  ];
+};
 
 export const quotationSummaryRows = (quote) => {
   const rows = [{ label: "Taxable Amount", value: quote.subtotal - quote.discount + quote.shipping, bold: true }];
@@ -383,7 +390,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
 
   setText(6.4, "bold", MAROON);
   doc.text("TERMS & CONDITIONS", termsX, footerTop + 6);
-  const terms = quote.terms ? quote.terms.split(/\n+/).filter(Boolean) : DEFAULT_TERMS;
+  const terms = quote.terms ? quote.terms.split(/\n+/).filter(Boolean) : quotationDefaultTerms(quote);
   setText(5.15, "normal", INK);
   let termsY = footerTop + 11.5;
   terms.slice(0, 5).forEach((term) => {
