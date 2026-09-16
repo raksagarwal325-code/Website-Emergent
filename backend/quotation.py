@@ -19,6 +19,9 @@ class QuotationCreate(BaseModel):
     customer_name: str = Field(min_length=1, max_length=200)
     customer_email: Optional[EmailStr] = None
     customer_phone: str = Field(default="", max_length=50)
+    billing_address: str = Field(default="", max_length=1000)
+    shipping_address: str = Field(default="", max_length=1000)
+    customer_gstin: str = Field(default="", max_length=30)
     items: List[QuotationItemInput] = Field(min_length=1, max_length=100)
     discount: float = Field(default=0, ge=0, le=100_000_000)
     shipping: float = Field(default=0, ge=0, le=100_000_000)
@@ -27,7 +30,10 @@ class QuotationCreate(BaseModel):
     terms: str = Field(default="", max_length=3000)
     notes: str = Field(default="", max_length=3000)
 
-    @field_validator("customer_name", "customer_phone", "terms", "notes", mode="before")
+    @field_validator(
+        "customer_name", "customer_phone", "billing_address",
+        "shipping_address", "customer_gstin", "terms", "notes", mode="before",
+    )
     @classmethod
     def _clean_quote_text(cls, value):
         return str(value or "").strip()
@@ -82,6 +88,9 @@ def build_quotation(
         "customer_name": payload.customer_name.strip(),
         "customer_email": str(payload.customer_email) if payload.customer_email else None,
         "customer_phone": payload.customer_phone.strip(),
+        "billing_address": payload.billing_address,
+        "shipping_address": payload.shipping_address,
+        "customer_gstin": payload.customer_gstin,
         "items": items,
         "subtotal": subtotal,
         "discount": discount,
