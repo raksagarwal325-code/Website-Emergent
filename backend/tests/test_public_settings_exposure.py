@@ -14,8 +14,7 @@ Settings object to the admin panel.
 This test suite pins:
   A. anonymous GET returns 200 and NEVER contains `google_maps_api_key`
   B. anonymous GET still exposes representative public fields
-  C. anonymous GET does not expose `watermark` (admin-only operational
-     config), guarding against future field additions leaking again
+  C. anonymous GET does not expose admin-only operational branding/config
   D. admin GET /admin/settings returns the full model (incl. the key)
   E. anon GET /admin/settings returns 401 (auth gate present)
   F. PUT /settings remains admin-protected + CSRF-guarded
@@ -121,14 +120,15 @@ def test_public_settings_excludes_google_maps_api_key():
     )
 
 
-def test_public_settings_also_excludes_watermark_admin_field():
-    """Watermark is admin-only operational config. Not a secret, but
+def test_public_settings_excludes_admin_only_operational_fields():
+    """Watermark and quotation branding are admin-only operational config. Not secrets, but
     following least-privilege it is not shipped to public visitors. This
     test guards against a future change putting it back on the public
     model."""
     r = requests.get(f"{API}/settings", timeout=15)
     data = r.json()
     assert "watermark" not in data
+    assert "quotation_branding" not in data
 
 
 # ---------- B. Public endpoint still returns required public fields ----------

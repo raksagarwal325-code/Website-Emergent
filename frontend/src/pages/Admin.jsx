@@ -12,6 +12,7 @@ import ProductNameSuggester from "../components/ProductNameSuggester";
 import ProductFullRegenerator from "../components/ProductFullRegenerator";
 import ProductDraftConversation from "../components/ProductDraftConversation";
 import HeroSliderAdmin from "../components/admin/HeroSliderAdmin";
+import QuotationBrandingAdmin from "../components/admin/QuotationBrandingAdmin";
 import CategoryImagesAdmin from "../components/admin/CategoryImagesAdmin";
 import MediaLibraryAdmin from "../components/MediaLibraryAdmin";
 import ProductVersionHistory from "../components/ProductVersionHistory";
@@ -129,6 +130,7 @@ export default function Admin() {
       {tab === "settings" && settings && (
         <div className="space-y-8">
           <SettingsAdmin settings={settings} onSave={refresh} />
+          <QuotationBrandingAdmin settings={settings} onSave={refresh} />
           <LegalAdmin settings={settings} onSave={refresh} />
           <WatermarkAdmin settings={settings} onSave={refresh} />
         </div>

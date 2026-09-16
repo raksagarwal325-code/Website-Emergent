@@ -17,6 +17,7 @@ _IMAGE_UPLOAD_CALLERS = {
     "admin_upload_category_featured",
     "upload_image",
     "watermark_preview",
+    "admin_upload_quotation_branding",
 }
 
 _IMAGE_MIME_BY_FORMAT = {
@@ -175,7 +176,7 @@ def _upload_caller_name(depth: int = 12) -> str | None:
 def _route_will_reject_oversize(caller: str, data: bytes, content_type: str) -> bool:
     """Return True when server.py should own the existing oversize response."""
     size = len(data)
-    if caller in {"admin_upload_hero_slide", "admin_upload_category_featured"}:
+    if caller in {"admin_upload_hero_slide", "admin_upload_category_featured", "admin_upload_quotation_branding"}:
         return size > _SIX_MIB
     if caller == "upload_image":
         claimed = str(content_type or "").split(";", 1)[0].strip().lower()

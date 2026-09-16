@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import UpdateOne
+from pymongo import ReturnDocument, UpdateOne
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from starlette.middleware.cors import CORSMiddleware
 
@@ -35,7 +35,7 @@ from product_history import editable_product_snapshot, product_changes  # noqa: 
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
 from collection_index import build_collection_detail, build_collection_index  # noqa: E402
-from quotation import QuotationCreate, build_quotation  # noqa: E402
+from quotation import QuotationCreate, build_quotation, format_quotation_number  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -703,6 +703,10 @@ class Settings(BaseModel):
         "position": "center",
         "adaptive_tone": True,
     })
+    quotation_branding: dict = Field(default_factory=lambda: {
+        "signature_url": "",
+        "stamp_url": "",
+    })
 
 
 class PublicSettings(BaseModel):
@@ -772,6 +776,7 @@ class SettingsUpdate(BaseModel):
     business_hours: Optional[str] = None
     google_maps_url: Optional[str] = None
     watermark: Optional[dict] = None
+    quotation_branding: Optional[dict] = None
 
 
 # --- Helpers ---
@@ -1619,7 +1624,32 @@ async def list_inquiry_quotations(inquiry_id: str, admin: _AdminUser = Depends(r
         for item in quotation.get("items", []):
             if not item.get("image"):
                 item["image"] = image_by_product_id.get(item.get("product_id"))
+    settings = await db.settings.find_one(
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1}
+    ) or {}
+    branding = settings.get("quotation_branding") or {}
+    for quotation in quotations:
+        if not quotation.get("signature_url"):
+            quotation["signature_url"] = branding.get("signature_url") or None
+        if not quotation.get("stamp_url"):
+            quotation["stamp_url"] = branding.get("stamp_url") or None
     return quotations
+
+
+async def _next_quotation_number(created_at: datetime) -> str:
+    """Atomically allocate a sequence that restarts for each UTC year."""
+    year = created_at.year
+    counter = await db.counters.find_one_and_update(
+        {"id": f"quotation:{year}"},
+        {
+            "$inc": {"sequence": 1},
+            "$setOnInsert": {"year": year, "created_at": created_at.isoformat()},
+            "$set": {"updated_at": created_at.isoformat()},
+        },
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    return format_quotation_number(year, int(counter["sequence"]))
 
 
 @api.post("/admin/inquiries/{inquiry_id}/quotations")
@@ -1642,11 +1672,19 @@ async def create_inquiry_quotation(
             for product in products
             if product.get("images")
         }
+    created_at = datetime.now(timezone.utc)
+    quote_number = await _next_quotation_number(created_at)
+    settings = await db.settings.find_one(
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1}
+    ) or {}
     quotation = build_quotation(
         inquiry_id,
         payload,
         admin.email,
+        created_at=created_at,
+        quote_number=quote_number,
         product_images=image_by_product_id,
+        branding=settings.get("quotation_branding") or {},
     )
     await db.quotations.insert_one(dict(quotation))
     await db.inquiries.update_one(
@@ -2593,6 +2631,74 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
         "url": public_url,
         "asset_id": asset_id_for_url(public_url),
     }
+
+
+@api.post("/admin/quotation-branding/{asset_kind}")
+async def admin_upload_quotation_branding(
+    asset_kind: Literal["signature", "stamp"],
+    file: UploadFile = File(...),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Store an unwatermarked signature/stamp used only on admin quotations."""
+    content_type = (file.content_type or "").lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(400, "Only image files are allowed")
+    data = await file.read()
+    if len(data) > 6 * 1024 * 1024:
+        raise HTTPException(413, "Branding image must be 6MB or smaller")
+
+    extension_by_type = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+    }
+    ext = extension_by_type.get(content_type)
+    if not ext:
+        raise HTTPException(400, "Use PNG, JPEG, WebP or GIF")
+
+    file_id = str(uuid.uuid4())
+    public_path = f"{APP_NAME}/quotation-branding/{file_id}.{ext}"
+    result = put_object(public_path, data, MIME_TYPES[ext])
+    public_url = f"/api/files/{result['path']}"
+    await db.files.insert_one({
+        "id": file_id,
+        "storage_path": result["path"],
+        "original_path": result["path"],
+        "original_filename": file.filename,
+        "content_type": MIME_TYPES[ext],
+        "size": result["size"],
+        "watermarked": False,
+        "kind": "image",
+        "usage": f"quotation_{asset_kind}",
+        "created_at": now_iso(),
+    })
+    field = f"quotation_branding.{asset_kind}_url"
+    await db.settings.update_one(
+        {"id": "settings"},
+        {"$set": {field: public_url}},
+        upsert=True,
+    )
+    settings = await db.settings.find_one(
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1}
+    ) or {}
+    return settings.get("quotation_branding") or {}
+
+
+@api.delete("/admin/quotation-branding/{asset_kind}")
+async def admin_clear_quotation_branding(
+    asset_kind: Literal["signature", "stamp"],
+    admin: _AdminUser = Depends(require_admin),
+):
+    field = f"quotation_branding.{asset_kind}_url"
+    await db.settings.update_one(
+        {"id": "settings"}, {"$set": {field: ""}}, upsert=True
+    )
+    settings = await db.settings.find_one(
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1}
+    ) or {}
+    return settings.get("quotation_branding") or {}
 
 
 # --- Central admin media library ----------------------------------------------

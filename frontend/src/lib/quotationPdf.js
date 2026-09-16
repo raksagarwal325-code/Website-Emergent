@@ -89,6 +89,10 @@ export const createQuotationPdf = async (quote, options = {}) => {
     }
     return loadProductImageData(item.image);
   }));
+  const [signatureData, stampData] = await Promise.all([
+    options.signatureDataUrl === undefined ? loadProductImageData(quote.signature_url) : options.signatureDataUrl,
+    options.stampDataUrl === undefined ? loadProductImageData(quote.stamp_url) : options.stampDataUrl,
+  ]);
 
   const setText = (size = 8, style = "normal", colour = INK, family = "helvetica") => {
     doc.setFont(family, style);
@@ -285,7 +289,17 @@ export const createQuotationPdf = async (quote, options = {}) => {
   const signX = inner + (footerWidth + footerGap) * 2;
   sectionTitle("FOR - SAMRAT GLASS EMPORIUM", signX + 3, footerTop + 7);
   setText(6.5);
-  doc.text("For Samrat Glass Emporium", signX + footerWidth / 2, footerTop + 20, { align: "center" });
+  doc.text("For Samrat Glass Emporium", signX + footerWidth / 2, footerTop + 13, { align: "center" });
+  if (stampData) {
+    try {
+      doc.addImage(stampData, imageFormat(stampData), signX + 4, footerTop + 16, 18, 18, undefined, "FAST");
+    } catch (_) { /* keep typed authorisation when an uploaded image is unsupported */ }
+  }
+  if (signatureData) {
+    try {
+      doc.addImage(signatureData, imageFormat(signatureData), signX + 25, footerTop + 22, 29, 10, undefined, "FAST");
+    } catch (_) { /* keep typed authorisation when an uploaded image is unsupported */ }
+  }
   doc.setDrawColor(...MAROON);
   doc.line(signX + 8, footerTop + 37, signX + footerWidth - 8, footerTop + 37);
   setText(7, "bold");

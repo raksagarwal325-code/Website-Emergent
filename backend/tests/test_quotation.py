@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from quotation import QuotationCreate, build_quotation
+from quotation import QuotationCreate, build_quotation, format_quotation_number
 
 
 def payload(**overrides):
@@ -35,10 +35,15 @@ def test_build_quotation_recomputes_every_amount_server_side():
     result = build_quotation(
         "inq-1", payload(), "owner@samratglass.com",
         created_at=created, quote_id="abcdef12-0000-0000-0000-000000000000",
+        quote_number="SGE-2026-0041",
         product_images={"wall": "https://cdn.example/wall.webp"},
+        branding={
+            "signature_url": "/api/files/signature.png",
+            "stamp_url": "/api/files/stamp.png",
+        },
     )
 
-    assert result["quote_number"] == "SGE-Q-20260916-ABCDEF"
+    assert result["quote_number"] == "SGE-2026-0041"
     assert result["subtotal"] == 9400
     assert result["discount"] == 400
     assert result["shipping"] == 1000
@@ -52,6 +57,15 @@ def test_build_quotation_recomputes_every_amount_server_side():
     assert result["billing_address"] == "Raniwala Market, Firozabad"
     assert result["shipping_address"] == "Same as billing address"
     assert result["customer_gstin"] == "09ADCFS9258D1ZS"
+    assert result["signature_url"] == "/api/files/signature.png"
+    assert result["stamp_url"] == "/api/files/stamp.png"
+
+
+def test_yearly_quotation_number_has_four_digit_sequence():
+    assert format_quotation_number(2026, 1) == "SGE-2026-0001"
+    assert format_quotation_number(2026, 41) == "SGE-2026-0041"
+    with pytest.raises(ValueError, match="positive"):
+        format_quotation_number(2026, 0)
 
 
 def test_discount_cannot_exceed_product_subtotal():
