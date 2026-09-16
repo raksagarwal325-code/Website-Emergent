@@ -9,6 +9,7 @@ const mockPdfSave = jest.fn();
 const mockPdfDocument = () => ({
   internal: { pageSize: { getWidth: () => 210, getHeight: () => 297 } },
   setFillColor: jest.fn(), rect: jest.fn(), setTextColor: jest.fn(),
+  roundedRect: jest.fn(), addImage: jest.fn(), setLineWidth: jest.fn(),
   setFont: jest.fn(), setFontSize: jest.fn(), text: jest.fn(),
   splitTextToSize: (value) => [value], addPage: jest.fn(),
   setDrawColor: jest.fn(), line: jest.fn(), save: mockPdfSave,
@@ -81,12 +82,16 @@ test("prefills the inquiry and saves edited quotation values", async () => {
   fireEvent.change(screen.getByLabelText("Unit price 1"), { target: { value: "6500" } });
   fireEvent.change(screen.getByLabelText("Discount"), { target: { value: "500" } });
   fireEvent.change(screen.getByLabelText("Freight or other charges"), { target: { value: "1000" } });
+  fireEvent.change(screen.getByLabelText("Billing address"), { target: { value: "Raniwala Market, Firozabad" } });
+  fireEvent.change(screen.getByLabelText("Customer GSTIN"), { target: { value: "09adcfS9258d1zs" } });
   fireEvent.click(screen.getByTestId("quotation-save"));
 
   await waitFor(() => expect(mockApi.createInquiryQuotation).toHaveBeenCalledTimes(1));
   expect(mockApi.createInquiryQuotation).toHaveBeenCalledWith("inq-kishor", expect.objectContaining({
     discount: 500,
     shipping: 1000,
+    billing_address: "Raniwala Market, Firozabad",
+    customer_gstin: "09ADCFS9258D1ZS",
     items: [expect.objectContaining({ quantity: 2, unit_price: 6500, sku: "SGE-WL-089" })],
   }));
   expect(await screen.findByText("SGE-Q-20260916-ABCDEF")).toBeInTheDocument();
@@ -98,5 +103,5 @@ test("downloads a branded PDF from the saved quotation snapshot", async () => {
   const historyNumber = await screen.findByText("SGE-Q-20260916-ABCDEF");
   const historyCard = historyNumber.closest("div.border");
   fireEvent.click(historyCard.querySelector("button"));
-  expect(mockPdfSave).toHaveBeenCalledWith("SGE-Q-20260916-ABCDEF.pdf");
+  await waitFor(() => expect(mockPdfSave).toHaveBeenCalledWith("SGE-Q-20260916-ABCDEF.pdf"));
 });

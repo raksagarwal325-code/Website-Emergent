@@ -12,6 +12,9 @@ def payload(**overrides):
         "customer_name": "Kishor A Lalwani",
         "customer_email": "kishor@example.com",
         "customer_phone": "+919820700130",
+        "billing_address": "Raniwala Market, Firozabad",
+        "shipping_address": "Same as billing address",
+        "customer_gstin": "09ADCFS9258D1ZS",
         "items": [
             {"product_id": "wall", "name": "Wall Lantern", "sku": "SGE-WL-089", "quantity": 1, "unit_price": 6000},
             {"product_id": "candle", "name": "Candle Stand", "sku": "SGE-CS-013", "quantity": 2, "unit_price": 1700},
@@ -43,6 +46,9 @@ def test_build_quotation_recomputes_every_amount_server_side():
     assert result["valid_until"] == "2026-10-01"
     assert result["items"][1]["line_total"] == 3400
     assert result["created_by"] == "owner@samratglass.com"
+    assert result["billing_address"] == "Raniwala Market, Firozabad"
+    assert result["shipping_address"] == "Same as billing address"
+    assert result["customer_gstin"] == "09ADCFS9258D1ZS"
 
 
 def test_discount_cannot_exceed_product_subtotal():

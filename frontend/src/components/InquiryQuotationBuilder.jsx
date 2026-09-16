@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Download, LoaderCircle, MessageCircle, Save, Trash2, X } from "lucide-react";
-import jsPDF from "jspdf";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { createQuotationPdf } from "../lib/quotationPdf";
+
+export { createQuotationPdf } from "../lib/quotationPdf";
 
 const money = (value) => Number(value || 0).toLocaleString("en-IN", {
   minimumFractionDigits: Number(value || 0) % 1 ? 2 : 0,
@@ -18,6 +20,9 @@ const initialForm = (inquiry) => ({
   customer_name: inquiry.customer_name || "",
   customer_email: inquiry.customer_email || "",
   customer_phone: inquiry.customer_phone || "",
+  billing_address: "",
+  shipping_address: "",
+  customer_gstin: "",
   items: (inquiry.items || []).map((item) => ({
     product_id: item.product_id || null,
     name: item.name || "",
@@ -32,129 +37,6 @@ const initialForm = (inquiry) => ({
   terms: "",
   notes: "",
 });
-
-export const createQuotationPdf = (quote) => {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const left = 16;
-  const right = pageWidth - 16;
-  let y = 18;
-
-  const ensureSpace = (height = 12) => {
-    if (y + height <= pageHeight - 18) return;
-    doc.addPage();
-    y = 18;
-  };
-
-  doc.setFillColor(28, 7, 12);
-  doc.rect(0, 0, pageWidth, 42, "F");
-  doc.setTextColor(212, 175, 55);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.text("SAMRAT GLASS EMPORIUM", left, 17);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(236, 220, 204);
-  doc.text("Handcrafted lighting from Firozabad · Since 1981", left, 24);
-  doc.text("samratglass.com · WhatsApp +91 89203 92937", left, 30);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(255, 255, 255);
-  doc.text("QUOTATION", right, 17, { align: "right" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.text(quote.quote_number, right, 24, { align: "right" });
-  doc.text(new Date(quote.created_at).toLocaleDateString("en-IN"), right, 30, { align: "right" });
-
-  y = 52;
-  doc.setTextColor(55, 43, 45);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text("QUOTED TO", left, y);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  y += 7;
-  doc.text(quote.customer_name || "Customer", left, y);
-  doc.setFontSize(8.5);
-  if (quote.customer_phone) { y += 5; doc.text(quote.customer_phone, left, y); }
-  if (quote.customer_email) { y += 5; doc.text(quote.customer_email, left, y); }
-  doc.setFont("helvetica", "bold");
-  doc.text(`Valid until: ${new Date(`${quote.valid_until}T00:00:00`).toLocaleDateString("en-IN")}`, right, 52, { align: "right" });
-
-  y = Math.max(y + 12, 78);
-  doc.setFillColor(242, 237, 232);
-  doc.rect(left, y - 5, right - left, 9, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.text("PRODUCT / REFERENCE", left + 2, y);
-  doc.text("QTY", 140, y, { align: "right" });
-  doc.text("UNIT PRICE", 169, y, { align: "right" });
-  doc.text("AMOUNT", right - 2, y, { align: "right" });
-  y += 9;
-
-  quote.items.forEach((item) => {
-    const lines = doc.splitTextToSize(item.name, 88);
-    const rowHeight = Math.max(12, lines.length * 4 + 6);
-    ensureSpace(rowHeight);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text(lines, left + 2, y);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    if (item.sku) doc.text(`SKU ${item.sku}`, left + 2, y + lines.length * 4 + 1);
-    doc.setFontSize(8.5);
-    doc.text(String(item.quantity), 140, y, { align: "right" });
-    doc.text(`INR ${money(item.unit_price)}`, 169, y, { align: "right" });
-    doc.text(`INR ${money(item.line_total)}`, right - 2, y, { align: "right" });
-    y += rowHeight;
-    doc.setDrawColor(225, 218, 214);
-    doc.line(left, y - 4, right, y - 4);
-  });
-
-  ensureSpace(48);
-  const valueX = right - 2;
-  const labelX = 145;
-  doc.setFontSize(8.5);
-  doc.setFont("helvetica", "normal");
-  [["Subtotal", quote.subtotal], ["Discount", -quote.discount], ["Freight / other charges", quote.shipping]].forEach(([label, value]) => {
-    doc.text(label, labelX, y);
-    doc.text(`INR ${money(value)}`, valueX, y, { align: "right" });
-    y += 6;
-  });
-  if (quote.tax_rate > 0) {
-    doc.text(`GST / tax (${money(quote.tax_rate)}%)`, labelX, y);
-    doc.text(`INR ${money(quote.tax_amount)}`, valueX, y, { align: "right" });
-    y += 6;
-  }
-  doc.setDrawColor(212, 175, 55);
-  doc.line(labelX, y - 2, right, y - 2);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("TOTAL", labelX, y + 5);
-  doc.text(`INR ${money(quote.total)}`, valueX, y + 5, { align: "right" });
-  y += 18;
-
-  if (quote.notes) {
-    ensureSpace(20);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.text("NOTES", left, y);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
-    const lines = doc.splitTextToSize(quote.notes, right - left);
-    doc.text(lines, left, y + 5); y += lines.length * 4 + 10;
-  }
-  if (quote.terms) {
-    ensureSpace(20);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.text("TERMS", left, y);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
-    doc.text(doc.splitTextToSize(quote.terms, right - left), left, y + 5);
-  }
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(105, 92, 94);
-  doc.text("Thank you for considering Samrat Glass Emporium.", pageWidth / 2, pageHeight - 10, { align: "center" });
-  return { doc, filename: `${quote.quote_number}.pdf` };
-};
 
 export default function InquiryQuotationBuilder({ inquiry, onClose, onSaved }) {
   const [form, setForm] = useState(() => initialForm(inquiry));
@@ -232,13 +114,13 @@ export default function InquiryQuotationBuilder({ inquiry, onClose, onSaved }) {
   const download = async (existingQuote = null) => {
     const quote = existingQuote || await ensureSaved();
     if (!quote) return;
-    const { doc, filename } = createQuotationPdf(quote);
+    const { doc, filename } = await createQuotationPdf(quote);
     doc.save(filename);
   };
   const shareOnWhatsApp = async (existingQuote = null) => {
     const quote = existingQuote || await ensureSaved();
     if (!quote) return;
-    const { doc, filename } = createQuotationPdf(quote);
+    const { doc, filename } = await createQuotationPdf(quote);
     const blob = doc.output("blob");
     const file = typeof File === "function" ? new File([blob], filename, { type: "application/pdf" }) : null;
     if (file && navigator.share && navigator.canShare?.({ files: [file] })) {
@@ -270,6 +152,12 @@ export default function InquiryQuotationBuilder({ inquiry, onClose, onSaved }) {
               <label className="text-xs text-white/55">Customer name<input aria-label="Customer name" value={form.customer_name} onChange={(e) => change({ customer_name: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
               <label className="text-xs text-white/55">WhatsApp number<input aria-label="WhatsApp number" value={form.customer_phone} onChange={(e) => change({ customer_phone: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
               <label className="text-xs text-white/55">Email<input aria-label="Customer email" value={form.customer_email} onChange={(e) => change({ customer_email: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
+            </section>
+
+            <section className="grid gap-3 md:grid-cols-2">
+              <label className="text-xs text-white/55">Billing address<textarea aria-label="Billing address" rows="4" value={form.billing_address} onChange={(e) => change({ billing_address: e.target.value })} placeholder="Customer/company and complete billing address" className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
+              <label className="text-xs text-white/55">Shipping address<textarea aria-label="Shipping address" rows="4" value={form.shipping_address} onChange={(e) => change({ shipping_address: e.target.value })} placeholder="Leave blank to show Same as Billing Address" className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
+              <label className="text-xs text-white/55 md:col-span-2 md:max-w-sm">Customer GSTIN (optional)<input aria-label="Customer GSTIN" value={form.customer_gstin} onChange={(e) => change({ customer_gstin: e.target.value.toUpperCase() })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
             </section>
 
             <section>
