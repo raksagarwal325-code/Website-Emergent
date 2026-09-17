@@ -1,3 +1,4 @@
+import { heritageEyebrow } from "../lib/brandOrigin";
 import React, { useEffect, useRef, useState, Suspense, lazy } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
@@ -121,8 +122,7 @@ export default function Home() {
         <div className="relative max-w-7xl mx-auto px-6 min-h-[calc(100vh-5rem)] flex items-center py-10 md:py-12">
           <motion.div className="max-w-2xl" initial={prefersReducedMotion ? false : "hidden"} animate="visible" variants={editorialGroup}>
             <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft}>
-              <p className="mb-4 text-xs uppercase tracking-[0.2em] text-[#D4AF37]">Made in India · Handcrafted in Firozabad · Since 1981</p>
-              <div className="mb-5 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2"><span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]" /><span className="text-xs uppercase tracking-[0.28em] text-[#BF9972]">{H.eyebrow}</span></div>
+              <Link to="/craft" aria-label="Made in India — explore our workshop and craftsmanship" className="mb-5 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2 hover:border-[#D4AF37] focus-visible:outline focus-visible:outline-2"><span className="w-1.5 h-1.5 shrink-0 rounded-full bg-[#D4AF37]" /><span className="text-xs uppercase tracking-[0.18em] leading-relaxed text-[#BF9972]">{heritageEyebrow(H.eyebrow)}</span></Link>
               <h1 className="font-serif text-5xl sm:text-6xl lg:text-6xl xl:text-7xl leading-[1.02]">{H.headline_line1}<br /><span className="italic brand-gradient-text">{H.headline_line2}</span></h1>
               <motion.div aria-hidden className="mt-6 h-px w-40 origin-left bg-gradient-to-r from-[#D4AF37]/90 to-transparent" initial={prefersReducedMotion ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, delay: 0.25, ease: LUXURY_EASE }} />
             </motion.div>
