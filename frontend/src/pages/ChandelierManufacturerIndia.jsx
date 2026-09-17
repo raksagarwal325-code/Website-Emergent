@@ -98,7 +98,7 @@ export default function ChandelierManufacturerIndia() {
       </nav>
 
       <section className="mb-16 sm:mb-20">
-        <div className="eyebrow mb-4">Made in Firozabad since 1981</div>
+        <div className="eyebrow mb-4">Made in India · Firozabad · Since 1981</div>
         <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.08] max-w-5xl">
           Chandelier Manufacturer in India — <span className="italic brand-gradient-text">Handcrafted in Firozabad Since 1981</span>
         </h1>

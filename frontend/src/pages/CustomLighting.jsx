@@ -28,7 +28,7 @@ export default function CustomLighting() {
 
       {/* Hero ------------------------------------------------------------ */}
       <section className="mb-20">
-        <div className="eyebrow mb-3">Made-to-order</div>
+        <div className="eyebrow mb-3">Made in India · Made to order</div>
         <h1
           className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-tight"
           data-testid="custom-lighting-h1"

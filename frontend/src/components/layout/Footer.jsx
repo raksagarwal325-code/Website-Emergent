@@ -164,7 +164,7 @@ export default function Footer() {
               <img src="/logo.jpeg" alt="Samrat Glass Emporium" className="w-20 h-20 md:w-24 md:h-24 object-cover brand-glow flex-shrink-0" />
               <div>
                 <div className="font-serif text-xl md:text-2xl brand-gradient-text leading-tight">{settings?.brand_name || "Samrat Glass Emporium"}</div>
-                <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mt-1.5">Firozabad · Since 1981</div>
+                <div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972] mt-1.5">Made in India · Firozabad · Since 1981</div>
               </div>
             </div>
             <p className="mt-5 text-sm leading-relaxed max-w-sm">{f.description}</p>
