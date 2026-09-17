@@ -1,5 +1,5 @@
 import CraftOriginLink from "../components/CraftOriginLink";
-import { productOriginLabel } from "../lib/brandOrigin";
+import { PRODUCT_ORIGIN } from "../lib/brandOrigin";
 import React, { useEffect, useRef, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, MapPin } from "lucide-react";
@@ -341,6 +341,7 @@ export default function ProductDetail() {
             <div className="mt-3 text-white/50 text-sm" data-testid="product-reference-code">Reference Code: {product.sku}</div>
           </div>
 
+          <div>
           <div className="flex items-baseline gap-3 flex-wrap">
             {(() => {
               const p = formatProductPrice(product);
@@ -366,6 +367,9 @@ export default function ProductDetail() {
                 </>
               );
             })()}
+          </div>
+
+          <CraftOriginLink className="mt-4" label={PRODUCT_ORIGIN} />
           </div>
 
           <p className="text-white/70 leading-relaxed">{product.short_description}</p>
@@ -401,7 +405,6 @@ export default function ProductDetail() {
 
           {/* Buying confidence — surface reassurance at the decision point instead of hiding it in tabs. */}
           <div data-testid="buying-confidence" className="border border-white/10 bg-white/[0.02] p-5">
-            <CraftOriginLink className="mb-3" label={productOriginLabel(product) || "Samrat Glass Emporium · Firozabad · Since 1981"} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-white/70">
               <div>✓ Secure Pan-India delivery</div>
               <div>✓ Transit-damage replacement</div>

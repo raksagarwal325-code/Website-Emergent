@@ -8,16 +8,5 @@ export function heritageEyebrow(value = "") {
   return [BRAND_ORIGIN, ...custom].join(" · ");
 }
 
-// Only explicit origin specifications support a product-level origin claim.
-export function productOriginLabel(product) {
-  const entries = Object.entries(product?.specs || {}).filter(([key]) =>
-    /^(country of origin|place of origin|origin|made in)$/i.test(key.trim())
-  );
-  const values = entries.map(([, value]) => String(value).trim());
-  if (!values.length || values.some((value) =>
-    !/^(india|made in india|firozabad(?:,?\s*(?:uttar pradesh|india))*|uttar pradesh,?\s*india)$/i.test(value)
-  )) return null;
-  return values.some((value) => /^firozabad/i.test(value))
-    ? "Made in India · Crafted in Firozabad"
-    : "Made in India";
-}
+// Owner confirmed on 17 September 2026 that every catalogue product is made in India.
+export const PRODUCT_ORIGIN = "Made in India";

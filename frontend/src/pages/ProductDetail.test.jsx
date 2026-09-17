@@ -224,3 +224,15 @@ describe("ProductDetail — zero-review UX", () => {
     expect(screen.queryByTestId("reviews-empty-prompt")).not.toBeInTheDocument();
   });
 });
+
+test.each([false, true])("shows confirmed Indian origin below the price, including price-on-request=%s", async (onRequest) => {
+  formatProductPrice.mockReturnValue({ onRequest, primary: "₹45000", label: null });
+  renderProduct();
+  const origin = await screen.findByRole("link", { name: /Made in India.*See our workshop/i });
+  expect(origin).toHaveAttribute("href", "/craft");
+  const price = screen.getByTestId("product-price");
+  const inquiry = screen.getByTestId("add-to-cart-btn");
+  expect(price.compareDocumentPosition(origin) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(origin.compareDocumentPosition(inquiry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getAllByText("Made in India")).toHaveLength(1);
+});
