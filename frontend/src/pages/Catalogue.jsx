@@ -567,7 +567,7 @@ export default function Catalogue() {
             {/* Title block */}
             <div>
               <div style={{ fontSize: "8.5pt", letterSpacing: "0.28em", textTransform: "uppercase", color: "#BF9972", marginBottom: "6mm" }}>
-                Est. Firozabad · The City of Glass · Since 1981
+                Made in India · Firozabad · Since 1981
               </div>
               <h1 style={{ fontFamily: "Georgia, serif", fontSize: "56pt", lineHeight: 1.02, margin: 0,
                 color: "#D4AF37" }}>

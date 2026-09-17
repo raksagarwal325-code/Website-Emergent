@@ -413,7 +413,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
 
   const closingY = footerTop + footerHeight + 6;
   setText(9.5, "italic", MAROON, "times");
-  doc.text("Crafted in Firozabad. Made for your space.", pageWidth / 2, closingY, { align: "center" });
+  doc.text("Made in India. Handcrafted in Firozabad.", pageWidth / 2, closingY, { align: "center" });
   if (quote.notes) {
     setText(5.8, "normal", MUTED);
     doc.text(doc.splitTextToSize(`Notes: ${quote.notes}`, usable - 15).slice(0, 2), pageWidth / 2, closingY + 5, { align: "center" });

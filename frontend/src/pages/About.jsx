@@ -36,6 +36,7 @@ export default function About() {
             <img src="/logo.jpeg" alt="Samrat Glass Emporium" className="w-20 h-20 object-cover brand-glow" />
           </div>
           <div className="eyebrow mb-6">{a.eyebrow}</div>
+            <p className="mb-4 text-xs uppercase tracking-[0.2em] text-[#D4AF37]">Made in India · Handcrafted in Firozabad</p>
           <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05]">
             {a.title_pre} <span className="brand-gradient-text">{a.title_highlight}</span>
           </h1>

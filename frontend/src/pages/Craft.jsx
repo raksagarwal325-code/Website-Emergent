@@ -47,7 +47,7 @@ export default function Craft() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
           >
-            <div className="eyebrow mb-6">Firozabad · Since 1981</div>
+            <div className="eyebrow mb-6">Made in India · Firozabad · Since 1981</div>
             <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05]">
               The Craft <span className="brand-gradient-text italic">behind the lighting.</span>
             </h1>
