@@ -1,3 +1,5 @@
+import CraftOriginLink from "../components/CraftOriginLink";
+import { productOriginLabel } from "../lib/brandOrigin";
 import React, { useEffect, useRef, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, MapPin } from "lucide-react";
@@ -399,9 +401,7 @@ export default function ProductDetail() {
 
           {/* Buying confidence — surface reassurance at the decision point instead of hiding it in tabs. */}
           <div data-testid="buying-confidence" className="border border-white/10 bg-white/[0.02] p-5">
-            <div className="text-[10px] uppercase tracking-[0.24em] text-[#D4AF37] mb-3">
-              Handcrafted in Firozabad · Since 1981
-            </div>
+            <CraftOriginLink className="mb-3" label={productOriginLabel(product) || "Samrat Glass Emporium · Firozabad · Since 1981"} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-white/70">
               <div>✓ Secure Pan-India delivery</div>
               <div>✓ Transit-damage replacement</div>

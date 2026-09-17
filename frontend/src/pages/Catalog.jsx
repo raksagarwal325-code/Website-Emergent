@@ -1,3 +1,4 @@
+import CraftOriginLink from "../components/CraftOriginLink";
 import React, { useCallback, useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import SEO from "../components/SEO";
@@ -44,6 +45,7 @@ export default function Catalog() {
 
       <CategorySwitchBar categories={dynamicCats} />
 
+      <div className="mb-6"><CraftOriginLink /></div>
       <CatalogueBrowser dynamicCategories={dynamicCats} onListingChange={handleListingChange} />
     </div>
   );

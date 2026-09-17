@@ -1,3 +1,4 @@
+import CraftOriginLink from "../components/CraftOriginLink";
 import React, { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import SEO from "../components/SEO";
@@ -167,6 +168,7 @@ export default function CategoryPage() {
         </aside>
       )}
 
+      <div className="mb-6"><CraftOriginLink /></div>
       <CatalogueBrowser lockedCategory={category.db_name} onListingChange={handleListingChange} />
 
       <aside
