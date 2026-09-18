@@ -126,7 +126,7 @@ export default function Admin() {
       {tab === "inquiries" && <InquiriesAdmin />}
       {tab === "quotations" && <section className="space-y-5">
         <h2 className="font-serif text-3xl">Quotations</h2>
-        <p className="text-white/60">Create a quotation for any customer using catalogue products or custom items. Earlier standalone quotations are available in the builder.</p>
+        <p className="text-white/60">Create a quotation for any customer using catalogue products or custom items. All saved quotations, including inquiry quotations, are available in the builder.</p>
         <button type="button" onClick={() => setStandaloneQuoteOpen(true)} className="bg-[#D4AF37] px-5 py-3 text-black">New quotation / saved quotations</button>
         <QuotationBrandingAdmin settings={settings} onSave={refresh} />
         {standaloneQuoteOpen && <InquiryQuotationBuilder onClose={() => setStandaloneQuoteOpen(false)} />}
@@ -1140,7 +1140,9 @@ function InquiriesAdmin() {
         <InquiryQuotationBuilder
           inquiry={quotationInquiry}
           onClose={() => setQuotationInquiry(null)}
-          onSaved={() => reload()}
+          onSaved={(quote) => setInquiries(current => current.map(row => row.id === quote.inquiry_id
+            ? { ...row, status: "in_progress", latest_quotation_id: quote.id, latest_quotation_number: quote.quote_number }
+            : row))}
         />
       )}
     </div>

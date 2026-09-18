@@ -1603,14 +1603,14 @@ async def list_inquiry_quotations(inquiry_id: str, admin: _AdminUser = Depends(r
 
 @api.get("/admin/quotations")
 async def list_standalone_quotations(admin: _AdminUser = Depends(require_admin)):
-    return await _list_quotations(None)
+    return await _list_quotations(None, all_quotes=True)
 
 
-async def _list_quotations(inquiry_id):
+async def _list_quotations(inquiry_id, all_quotes=False):
     if inquiry_id is not None and not await db.inquiries.find_one({"id": inquiry_id}, {"_id": 1}):
         raise HTTPException(404, "Inquiry not found")
     quotations = await db.quotations.find(
-        {"inquiry_id": inquiry_id}, {"_id": 0}
+        {} if all_quotes else {"inquiry_id": inquiry_id}, {"_id": 0}
     ).sort("created_at", -1).to_list(100)
     # Backfill catalogue thumbnails at read time for quotations created before
     # image snapshots were introduced. Commercial values remain immutable.
@@ -1717,6 +1717,27 @@ async def _create_quotation(inquiry_id, payload, admin):
                 "latest_quotation_number": quotation["quote_number"],
             }},
         )
+    return quotation
+
+
+@api.put("/admin/quotations/{quote_id}")
+async def update_quotation(quote_id: str, payload: QuotationCreate, admin: _AdminUser = Depends(require_admin)):
+    existing = await db.quotations.find_one({"id": quote_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Quotation not found")
+    quotation = build_quotation(
+        existing.get("inquiry_id"), payload, existing.get("created_by", admin.email),
+        quote_id=existing["id"], quote_number=existing["quote_number"],
+        created_at=datetime.fromisoformat(existing["created_at"]),
+        business=existing.get("business") or {},
+        branding={key: existing.get(key) for key in ("signature_url", "stamp_url")},
+    )
+    quotation["status"] = existing.get("status", "draft")
+    quotation["updated_at"] = datetime.now(timezone.utc).isoformat()
+    quotation["updated_by"] = admin.email
+    result = await db.quotations.update_one({"id": quote_id}, {"$set": quotation})
+    if not result.matched_count:
+        raise HTTPException(404, "Quotation not found")
     return quotation
 
 
