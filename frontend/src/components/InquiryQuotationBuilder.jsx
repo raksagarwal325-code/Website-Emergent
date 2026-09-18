@@ -123,6 +123,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
         tax_rate: numberValue(form.tax_rate),
         validity_days: Math.max(1, Math.round(numberValue(form.validity_days))),
       });
+      setForm({ ...initialForm(quote), ...quote, customer_email: quote.customer_email || "" });
       setSavedQuote(quote);
       setEditingId(quote.id);
       setSavedQuotes((current) => [quote, ...current.filter((row) => row.id !== quote.id)]);
