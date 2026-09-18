@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Download, LoaderCircle, MessageCircle, Save, Trash2, X } from "lucide-react";
+import { Download, History, LoaderCircle, MessageCircle, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { createQuotationPdf } from "../lib/quotationPdf";
@@ -60,6 +60,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [savedQuotes, setSavedQuotes] = useState([]);
   const [savedQuote, setSavedQuote] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [catalogue, setCatalogue] = useState([]);
   const [search, setSearch] = useState("");
@@ -142,6 +144,25 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setForm({ ...initialForm(quote), ...quote, customer_email: quote.customer_email || "" });
     setEditingId(quote.id);
     setSavedQuote(quote);
+    setHistoryOpen(false);
+  };
+  const deleteQuote = async (quote) => {
+    if (!window.confirm(`Delete quotation ${quote.quote_number}? This cannot be undone.`)) return;
+    setDeletingId(quote.id);
+    try {
+      await api.deleteQuotation(quote.id);
+      setSavedQuotes((current) => current.filter((row) => row.id !== quote.id));
+      if (editingId === quote.id) {
+        setForm(initialForm(inquiry));
+        setEditingId(null);
+        setSavedQuote(null);
+      }
+      toast.success(`Quotation ${quote.quote_number} deleted`);
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not delete quotation"));
+    } finally {
+      setDeletingId(null);
+    }
   };
   const uploadImage = async (index, file) => {
     if (!file) return;
@@ -187,8 +208,35 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       <div className="mx-auto max-w-5xl border border-[#D4AF37]/35 bg-[#12080b] shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#12080b]/95 px-5 py-4 backdrop-blur">
           <div><div className="eyebrow">Inquiry quotation</div><h2 id="quotation-builder-title" className="font-serif text-2xl">{inquiry.id ? `Create quote for ${inquiry.customer_name}` : "New quotation"}</h2></div>
-          <button type="button" onClick={onClose} aria-label="Close quotation builder" className="p-2 text-white/60 hover:text-white"><X size={20} /></button>
+          <div className="flex items-center gap-2">
+            <button type="button" aria-label={`Saved quotations (${savedQuotes.length})`} onClick={() => setHistoryOpen(true)} className="flex items-center gap-2 border border-[#D4AF37]/40 px-3 py-2 text-[10px] uppercase tracking-wider text-[#D4AF37] hover:bg-[#D4AF37]/10"><History size={15} /> Saved quotations ({savedQuotes.length})</button>
+            <button type="button" onClick={onClose} aria-label="Close quotation builder" className="p-2 text-white/60 hover:text-white"><X size={20} /></button>
+          </div>
         </div>
+
+        {historyOpen && <div className="fixed inset-0 z-[90] flex justify-end bg-black/75" role="dialog" aria-modal="true" aria-labelledby="quotation-history-title">
+          <button type="button" aria-label="Close saved quotations" onClick={() => setHistoryOpen(false)} className="absolute inset-0 cursor-default" />
+          <section className="relative h-full w-full max-w-md overflow-y-auto border-l border-[#D4AF37]/35 bg-[#12080b] p-5 shadow-2xl">
+            <div className="sticky top-0 z-10 -mx-5 -mt-5 mb-5 flex items-center justify-between border-b border-white/10 bg-[#12080b]/95 px-5 py-4 backdrop-blur">
+              <div><div className="eyebrow">Quotation history</div><h3 id="quotation-history-title" className="font-serif text-2xl">Saved quotations</h3></div>
+              <button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close quotation history" className="p-2 text-white/60 hover:text-white"><X size={20} /></button>
+            </div>
+            <p className="mb-4 text-xs text-white/50">Edit, download, share or delete any saved quotation.</p>
+            {loadingHistory && <div className="text-xs text-white/40">Loading…</div>}
+            {!loadingHistory && !savedQuotes.length && <div className="text-xs text-white/40">No saved quotations yet.</div>}
+            <div className="space-y-3">{savedQuotes.map((quote) => <article key={quote.id} className="border border-white/10 p-4">
+              <div className="text-sm text-[#D4AF37]">{quote.quote_number}</div>
+              <div className="mt-1 text-sm text-white/70">{quote.customer_name}</div>
+              <div className="mt-1 text-xs text-white/45">₹{money(quote.total)} · {new Date(quote.created_at).toLocaleDateString("en-IN")}</div>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+                <button type="button" onClick={() => download(quote)} className="text-[10px] uppercase tracking-wider text-white/65 hover:text-white">PDF</button>
+                <button type="button" disabled={saving || uploading} onClick={() => editQuote(quote)} className="text-[10px] uppercase tracking-wider text-[#D4AF37] disabled:opacity-40">Edit</button>
+                <button type="button" onClick={() => shareOnWhatsApp(quote)} className="text-[10px] uppercase tracking-wider text-[#25D366]">WhatsApp</button>
+                <button type="button" disabled={deletingId === quote.id} onClick={() => deleteQuote(quote)} aria-label={`Delete quotation ${quote.quote_number}`} className="text-[10px] uppercase tracking-wider text-red-300 disabled:opacity-40">{deletingId === quote.id ? "Deleting…" : "Delete"}</button>
+              </div>
+            </article>)}</div>
+          </section>
+        </div>}
 
         <div className="grid gap-6 p-5 lg:grid-cols-[1fr_300px]">
           <div className="space-y-6">
@@ -248,12 +296,6 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
             <button type="button" onClick={() => download()} disabled={saving || uploading || !form.items.length} data-testid="quotation-download" className="flex w-full items-center justify-center gap-2 border border-white/25 px-4 py-3 text-xs uppercase tracking-[0.2em] text-white hover:border-[#D4AF37] disabled:opacity-40"><Download size={15} /> Download PDF</button>
             <button type="button" onClick={() => shareOnWhatsApp()} disabled={saving || uploading || !form.customer_phone || !form.items.length} data-testid="quotation-whatsapp" className="flex w-full items-center justify-center gap-2 border border-[#25D366]/50 px-4 py-3 text-xs uppercase tracking-[0.2em] text-[#25D366] hover:bg-[#25D366]/10 disabled:opacity-40"><MessageCircle size={15} /> WhatsApp quotation</button>
 
-            <div className="border-t border-white/10 pt-4">
-              <div className="eyebrow mb-3">Saved quotations</div><p className="mb-3 text-xs text-white/50">Reopen a saved quote with Edit. Save changes keeps its quotation number.</p>
-              {loadingHistory && <div className="text-xs text-white/40">Loading…</div>}
-              {!loadingHistory && !savedQuotes.length && <div className="text-xs text-white/40">No saved quotations yet.</div>}
-              <div className="space-y-2">{savedQuotes.map((quote) => <div key={quote.id} className="border border-white/10 p-3"><div className="text-xs text-[#D4AF37]">{quote.quote_number}</div><div className="mt-1 text-xs text-white/70">{quote.customer_name}</div><div className="mt-1 text-[11px] text-white/45">₹{money(quote.total)} · {new Date(quote.created_at).toLocaleDateString("en-IN")}</div><div className="mt-2 flex gap-3"><button type="button" onClick={() => download(quote)} className="text-[10px] uppercase tracking-wider text-white/65 hover:text-white">PDF</button><button type="button" disabled={saving || uploading} onClick={() => editQuote(quote)} className="text-[10px] uppercase tracking-wider text-[#D4AF37]">Edit</button><button type="button" onClick={() => shareOnWhatsApp(quote)} className="text-[10px] uppercase tracking-wider text-[#25D366]">WhatsApp</button></div></div>)}</div>
-            </div>
           </aside>
         </div>
       </div>
