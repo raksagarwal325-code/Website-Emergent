@@ -21,7 +21,7 @@ import InquiryQuotationBuilder from "../components/InquiryQuotationBuilder";
 import { LEGAL_DEFAULT_UPDATED_AT, serializeLegalDefault } from "../lib/legalContent";
 
 const emptyProduct = {
-  name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "USD",
+  name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "INR",
   short_description: "", description: "", images: [], tags: [], specs: {}, stock: 0, featured: false, badge: "", fixed_price: false, price_display: "starting_from", status: "published",
 };
 
