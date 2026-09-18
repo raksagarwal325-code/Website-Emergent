@@ -290,7 +290,7 @@ class Product(BaseModel):
     category: str
     price: float
     compare_at_price: Optional[float] = None
-    currency: str = "USD"
+    currency: str = "INR"
     short_description: str = ""
     description: str = ""
     images: List[str] = []
@@ -311,6 +311,12 @@ class Product(BaseModel):
     status: str = "published"
     seo_slug: str = ""
 
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _currency_is_inr(cls, _value):
+        """Samrat product prices are stored and published in Indian rupees."""
+        return "INR"
+
 
 class ProductCreate(BaseModel):
     name: str
@@ -318,7 +324,7 @@ class ProductCreate(BaseModel):
     category: str
     price: float
     compare_at_price: Optional[float] = None
-    currency: str = "USD"
+    currency: str = "INR"
     short_description: str = ""
     description: str = ""
     images: List[str] = []
@@ -330,6 +336,12 @@ class ProductCreate(BaseModel):
     fixed_price: bool = False
     price_display: str = "starting_from"
     status: str = "published"
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _currency_is_inr(cls, _value):
+        """Never persist a client-supplied foreign currency for INR prices."""
+        return "INR"
 
 
 class ProductRestoreRequest(BaseModel):
