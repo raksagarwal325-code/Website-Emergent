@@ -2,6 +2,9 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const mockApi = {
+  updateQuotation: jest.fn(),
+  upload: jest.fn(),
+  resolveImage: value => value,
   listInquiryQuotations: jest.fn(),
   adminProductsExport: jest.fn().mockResolvedValue([]),
   listStandaloneQuotations: jest.fn().mockResolvedValue([]),
@@ -68,6 +71,8 @@ const savedQuote = {
 };
 
 beforeEach(() => {
+  sessionStorage.clear();
+  jest.clearAllMocks();
   mockApi.adminProductsExport.mockResolvedValue([]);
   mockApi.listStandaloneQuotations.mockResolvedValue([]);
   MockJsPDF.mockImplementation(() => mockPdfDocument());
@@ -134,4 +139,51 @@ test("adds a catalogue SKU to a standalone quote", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "SGE-HL-001 · Glass shade" }));
   expect(screen.getByLabelText("Product 1")).toHaveValue("Glass shade");
   expect(screen.getByLabelText("Unit price 1")).toHaveValue(900);
+});
+
+
+test("validation errors show readable text and preserve the form after refresh", async () => {
+  const { toast } = require("sonner");
+  mockApi.createInquiryQuotation.mockRejectedValueOnce({ response: { data: { detail: [
+    { loc: ["body", "customer_email"], msg: "Invalid email" }
+  ] } } });
+  const view = render(<InquiryQuotationBuilder inquiry={inquiry} />);
+  await screen.findByText("No saved quotations yet.");
+  fireEvent.change(screen.getByLabelText("Customer name"), { target: { value: "Retained customer" } });
+  fireEvent.click(screen.getByTestId("quotation-save"));
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith("customer_email: Invalid email"));
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  view.unmount();
+  render(<InquiryQuotationBuilder inquiry={inquiry} />);
+  expect(screen.getByLabelText("Customer name")).toHaveValue("Retained customer");
+});
+
+test("reopens a saved quotation and updates the same ID without creating another", async () => {
+  mockApi.listStandaloneQuotations.mockResolvedValue([savedQuote]);
+  mockApi.updateQuotation.mockResolvedValue({ ...savedQuote, notes: "Revised" });
+  const view = render(<InquiryQuotationBuilder />);
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  expect(screen.getByLabelText("Unit price 1")).toHaveValue(6500);
+  fireEvent.change(screen.getByLabelText("Quotation notes"), { target: { value: "Revised" } });
+  fireEvent.click(screen.getByTestId("quotation-save"));
+  await waitFor(() => expect(mockApi.updateQuotation).toHaveBeenCalledWith("quote-1", expect.objectContaining({ notes: "Revised" })));
+  expect(mockApi.createStandaloneQuotation).not.toHaveBeenCalled();
+  view.unmount();
+  render(<InquiryQuotationBuilder />);
+  expect(screen.getByLabelText("Quotation notes")).toHaveValue("Revised");
+  expect(screen.getByTestId("quotation-save")).toHaveTextContent("Save changes");
+});
+
+test("uploads a custom item image and saves it in the quotation", async () => {
+  mockApi.upload.mockResolvedValue({ url: "/api/files/custom.webp" });
+  mockApi.createStandaloneQuotation.mockResolvedValue(savedQuote);
+  render(<InquiryQuotationBuilder />);
+  await screen.findByText("No saved quotations yet.");
+  fireEvent.change(screen.getByLabelText("Customer name"), { target: { value: "Customer" } });
+  fireEvent.click(screen.getByText("+ Add custom item"));
+  fireEvent.change(screen.getByLabelText("Product 1"), { target: { value: "Custom chandelier" } });
+  fireEvent.change(screen.getByLabelText("Image for product 1"), { target: { files: [new File(["image"], "custom.webp", { type: "image/webp" })] } });
+  await screen.findByAltText("Custom chandelier");
+  fireEvent.click(screen.getByTestId("quotation-save"));
+  await waitFor(() => expect(mockApi.createStandaloneQuotation).toHaveBeenCalledWith(expect.objectContaining({ items: [expect.objectContaining({ image: "/api/files/custom.webp" })] })));
 });

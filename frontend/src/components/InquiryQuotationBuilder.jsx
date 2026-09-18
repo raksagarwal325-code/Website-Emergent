@@ -16,6 +16,13 @@ const numberValue = (value) => {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 };
 
+const errorMessage = (error, fallback) => {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) return detail.map(row => `${(row.loc || []).slice(1).join(" / ")}: ${row.msg || "Invalid value"}`).join("; ");
+  return error?.message || fallback;
+};
+
 const initialForm = (inquiry) => ({
   customer_name: inquiry.customer_name || "",
   customer_email: inquiry.customer_email || "",
@@ -28,7 +35,8 @@ const initialForm = (inquiry) => ({
     name: item.name || "",
     sku: item.sku || "",
     quantity: item.quantity || 1,
-    unit_price: item.price || 0,
+    unit_price: item.unit_price ?? item.price ?? 0,
+    image: item.image || null,
   })),
   discount: 0,
   shipping: 0,
@@ -39,7 +47,16 @@ const initialForm = (inquiry) => ({
 });
 
 export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved }) {
-  const [form, setForm] = useState(() => initialForm(inquiry));
+  const draftKey = `quotation-draft:${inquiry.id || "standalone"}`;
+  const [draft] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem(draftKey) || "null"); } catch { return null; }
+  });
+  const [form, setForm] = useState(() => draft?.form || initialForm(inquiry));
+  const [editingId, setEditingId] = useState(draft?.editingId || null);
+  const [uploading, setUploading] = useState(false);
+  useEffect(() => {
+    try { sessionStorage.setItem(draftKey, JSON.stringify({ form, editingId })); } catch { /* Storage may be unavailable. */ }
+  }, [draftKey, form, editingId]);
   const [savedQuotes, setSavedQuotes] = useState([]);
   const [savedQuote, setSavedQuote] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -51,7 +68,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     api.adminProductsExport().then(rows => { if (alive) setCatalogue(Array.isArray(rows) ? rows : rows.items || []); }).catch(() => toast.error("Could not load catalogue; you can still add a custom item"));
     return () => { alive = false; };
   }, []);
-  const addItem = (product = {}) => change({ items: [...form.items, { product_id: product.id || null, name: product.name || "", sku: product.sku || "", quantity: 1, unit_price: product.price || 0 }] });
+  const addItem = (product = {}) => change({ items: [...form.items, { product_id: product.id || null, name: product.name || "", sku: product.sku || "", quantity: 1, unit_price: product.price || 0, image: product.images?.[0] || null }] });
 
   useEffect(() => {
     let alive = true;
@@ -93,7 +110,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     }
     setSaving(true);
     try {
-      const create = inquiry.id ? (data) => api.createInquiryQuotation(inquiry.id, data) : api.createStandaloneQuotation;
+      const create = editingId ? (data) => api.updateQuotation(editingId, data) : inquiry.id ? (data) => api.createInquiryQuotation(inquiry.id, data) : api.createStandaloneQuotation;
       const quote = await create({
         ...form,
         items: form.items.map((item) => ({
@@ -106,17 +123,35 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
         tax_rate: numberValue(form.tax_rate),
         validity_days: Math.max(1, Math.round(numberValue(form.validity_days))),
       });
+      setForm({ ...initialForm(quote), ...quote, customer_email: quote.customer_email || "" });
       setSavedQuote(quote);
+      setEditingId(quote.id);
       setSavedQuotes((current) => [quote, ...current.filter((row) => row.id !== quote.id)]);
       onSaved?.(quote);
       toast.success(`Quotation ${quote.quote_number} saved`);
       return quote;
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Could not save quotation");
+      toast.error(errorMessage(error, "Could not save quotation"));
       return null;
     } finally {
       setSaving(false);
     }
+  };
+
+  const editQuote = (quote) => {
+    setForm({ ...initialForm(quote), ...quote, customer_email: quote.customer_email || "" });
+    setEditingId(quote.id);
+    setSavedQuote(quote);
+  };
+  const uploadImage = async (index, file) => {
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { toast.error("Choose a JPG, PNG or WebP image"); return; }
+    setUploading(true);
+    try {
+      const result = await api.upload(file);
+      changeItem(index, { image: result.url });
+    } catch (error) { toast.error(errorMessage(error, "Could not upload image")); }
+    finally { setUploading(false); }
   };
 
   const ensureSaved = async () => savedQuote || save();
@@ -180,7 +215,12 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                     <label className="text-xs text-white/55">Product<input aria-label={`Product ${index + 1}`} value={item.name} onChange={(e) => changeItem(index, { name: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /><span className="mt-1 block text-[10px] uppercase tracking-wider text-[#BF9972]">{item.sku ? `SKU ${item.sku}` : "Custom line"}</span></label>
                     <label className="text-xs text-white/55">Quantity<input aria-label={`Quantity ${index + 1}`} type="number" min="1" value={item.quantity} onChange={(e) => changeItem(index, { quantity: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
                     <label className="text-xs text-white/55">Unit price (₹)<input aria-label={`Unit price ${index + 1}`} type="number" min="0" value={item.unit_price} onChange={(e) => changeItem(index, { unit_price: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
-                    <button type="button" aria-label={`Remove product ${index + 1}`} onClick={() => removeItem(index)} className="mb-0.5 p-2 text-white/45 hover:text-red-300"><Trash2 size={15} /></button>
+                    <button type="button" disabled={uploading} aria-label={`Remove product ${index + 1}`} onClick={() => removeItem(index)} className="mb-0.5 p-2 text-white/45 hover:text-red-300"><Trash2 size={15} /></button>
+                    <div className="md:col-span-4 flex items-center gap-3">
+                      {item.image && <img src={api.resolveImage(item.image)} alt={item.name || "Item image"} className="h-16 w-16 object-contain" />}
+                      <label className="text-xs text-[#D4AF37] cursor-pointer">{uploading ? "Uploading…" : item.image ? "Replace image" : "Add image"}<input className="block mt-1 max-w-full" type="file" accept="image/jpeg,image/png,image/webp" aria-label={`Image for product ${index + 1}`} disabled={uploading || saving} onChange={e => uploadImage(index, e.target.files?.[0])} /></label>
+                      {item.image && <button type="button" disabled={uploading} onClick={() => changeItem(index, { image: null })} className="text-xs text-white/60">Remove image</button>}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -203,15 +243,16 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
               <div className="eyebrow mb-4">Quotation total</div>
               <div className="space-y-2 text-sm"><div className="flex justify-between"><span className="text-white/55">Subtotal</span><span>₹{money(totals.subtotal)}</span></div><div className="flex justify-between"><span className="text-white/55">Tax</span><span>₹{money(totals.tax)}</span></div><div className="mt-3 flex justify-between border-t border-white/10 pt-3 font-serif text-xl text-[#D4AF37]"><span>Total</span><span data-testid="quotation-grand-total">₹{money(totals.total)}</span></div></div>
             </div>
-            <button type="button" onClick={save} disabled={saving || !form.items.length} data-testid="quotation-save" className="flex w-full items-center justify-center gap-2 bg-[#D4AF37] px-4 py-3 text-xs uppercase tracking-[0.2em] text-black disabled:opacity-40">{saving ? <LoaderCircle size={15} className="animate-spin" /> : <Save size={15} />} Save quotation</button>
-            <button type="button" onClick={() => download()} disabled={saving || !form.items.length} data-testid="quotation-download" className="flex w-full items-center justify-center gap-2 border border-white/25 px-4 py-3 text-xs uppercase tracking-[0.2em] text-white hover:border-[#D4AF37] disabled:opacity-40"><Download size={15} /> Download PDF</button>
-            <button type="button" onClick={() => shareOnWhatsApp()} disabled={saving || !form.customer_phone || !form.items.length} data-testid="quotation-whatsapp" className="flex w-full items-center justify-center gap-2 border border-[#25D366]/50 px-4 py-3 text-xs uppercase tracking-[0.2em] text-[#25D366] hover:bg-[#25D366]/10 disabled:opacity-40"><MessageCircle size={15} /> WhatsApp quotation</button>
+            {editingId && <button type="button" disabled={saving || uploading} onClick={() => { setForm(initialForm(inquiry)); setEditingId(null); setSavedQuote(null); }} className="text-sm text-[#D4AF37]">+ New quotation</button>}
+            <button type="button" onClick={save} disabled={saving || uploading || !form.items.length} data-testid="quotation-save" className="flex w-full items-center justify-center gap-2 bg-[#D4AF37] px-4 py-3 text-xs uppercase tracking-[0.2em] text-black disabled:opacity-40">{saving ? <LoaderCircle size={15} className="animate-spin" /> : <Save size={15} />} {editingId ? "Save changes" : "Save quotation"}</button>
+            <button type="button" onClick={() => download()} disabled={saving || uploading || !form.items.length} data-testid="quotation-download" className="flex w-full items-center justify-center gap-2 border border-white/25 px-4 py-3 text-xs uppercase tracking-[0.2em] text-white hover:border-[#D4AF37] disabled:opacity-40"><Download size={15} /> Download PDF</button>
+            <button type="button" onClick={() => shareOnWhatsApp()} disabled={saving || uploading || !form.customer_phone || !form.items.length} data-testid="quotation-whatsapp" className="flex w-full items-center justify-center gap-2 border border-[#25D366]/50 px-4 py-3 text-xs uppercase tracking-[0.2em] text-[#25D366] hover:bg-[#25D366]/10 disabled:opacity-40"><MessageCircle size={15} /> WhatsApp quotation</button>
 
             <div className="border-t border-white/10 pt-4">
-              <div className="eyebrow mb-3">Saved quotations</div>
+              <div className="eyebrow mb-3">Saved quotations</div><p className="mb-3 text-xs text-white/50">Reopen a saved quote with Edit. Save changes keeps its quotation number.</p>
               {loadingHistory && <div className="text-xs text-white/40">Loading…</div>}
               {!loadingHistory && !savedQuotes.length && <div className="text-xs text-white/40">No saved quotations yet.</div>}
-              <div className="space-y-2">{savedQuotes.map((quote) => <div key={quote.id} className="border border-white/10 p-3"><div className="text-xs text-[#D4AF37]">{quote.quote_number}</div><div className="mt-1 text-[11px] text-white/45">₹{money(quote.total)} · {new Date(quote.created_at).toLocaleDateString("en-IN")}</div><div className="mt-2 flex gap-3"><button type="button" onClick={() => download(quote)} className="text-[10px] uppercase tracking-wider text-white/65 hover:text-white">PDF</button><button type="button" onClick={() => shareOnWhatsApp(quote)} className="text-[10px] uppercase tracking-wider text-[#25D366]">WhatsApp</button></div></div>)}</div>
+              <div className="space-y-2">{savedQuotes.map((quote) => <div key={quote.id} className="border border-white/10 p-3"><div className="text-xs text-[#D4AF37]">{quote.quote_number}</div><div className="mt-1 text-xs text-white/70">{quote.customer_name}</div><div className="mt-1 text-[11px] text-white/45">₹{money(quote.total)} · {new Date(quote.created_at).toLocaleDateString("en-IN")}</div><div className="mt-2 flex gap-3"><button type="button" onClick={() => download(quote)} className="text-[10px] uppercase tracking-wider text-white/65 hover:text-white">PDF</button><button type="button" disabled={saving || uploading} onClick={() => editQuote(quote)} className="text-[10px] uppercase tracking-wider text-[#D4AF37]">Edit</button><button type="button" onClick={() => shareOnWhatsApp(quote)} className="text-[10px] uppercase tracking-wider text-[#25D366]">WhatsApp</button></div></div>)}</div>
             </div>
           </aside>
         </div>

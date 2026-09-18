@@ -11,6 +11,7 @@ DEFAULT_QUOTATION_BUSINESS = {'name': 'SAMRAT GLASS EMPORIUM', 'address': 'Raniw
 
 
 class QuotationItemInput(BaseModel):
+    image: Optional[str] = Field(default=None, max_length=2000)
     product_id: Optional[str] = None
     name: str = Field(min_length=1, max_length=300)
     sku: Optional[str] = Field(default=None, max_length=100)
@@ -87,7 +88,7 @@ def build_quotation(
             "quantity": raw.quantity,
             "unit_price": quote_money(raw.unit_price),
             "line_total": line_total,
-            "image": product_images.get(raw.product_id or "") or None,
+            "image": raw.image or product_images.get(raw.product_id or "") or None,
         })
 
     discount = quote_money(payload.discount)

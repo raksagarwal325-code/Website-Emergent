@@ -120,3 +120,41 @@ def test_standalone_create_uses_shared_sequence_and_does_not_mutate_inquiries():
     db.quotations.insert_one.assert_awaited_once()
     db.inquiries.find_one.assert_not_awaited()
     db.inquiries.update_one.assert_not_awaited()
+
+
+def test_custom_image_survives_snapshot():
+    result = build_quotation(None, payload(items=[{"name": "Custom", "unit_price": 6000, "image": "/api/files/custom.webp"}]), "owner@example.com")
+    assert result["items"][0]["image"] == "/api/files/custom.webp"
+
+
+def test_edit_keeps_identity_and_recalculates_persisted_values():
+    import ast
+    import asyncio
+    from pathlib import Path
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    existing = build_quotation(None, payload(), "owner@example.com", quote_number="SGE-2026-0042")
+    db = SimpleNamespace(quotations=SimpleNamespace(
+        find_one=AsyncMock(return_value=existing),
+        update_one=AsyncMock(return_value=SimpleNamespace(matched_count=1)),
+    ))
+    source = ast.parse((Path(__file__).resolve().parents[1] / "server.py").read_text())
+    node = next(n for n in source.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "update_quotation")
+    node.decorator_list = []
+    node.args.defaults = []
+    namespace = {"db": db, "datetime": datetime, "timezone": timezone, "QuotationCreate": QuotationCreate,
+                 "_AdminUser": object, "build_quotation": build_quotation, "HTTPException": HTTPException}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "server.py", "exec"), namespace)
+    revised = payload(items=[{"name": "Custom", "unit_price": 500, "quantity": 2, "image": "/api/files/new.webp"}], discount=0, shipping=0, tax_rate=0)
+    result = asyncio.run(namespace["update_quotation"](existing["id"], revised, SimpleNamespace(email="editor@example.com")))
+    assert result["id"] == existing["id"]
+    assert result["quote_number"] == existing["quote_number"]
+    assert result["created_at"] == existing["created_at"]
+    assert result["business"] == existing["business"]
+    assert result["total"] == 1000
+    assert result["items"][0]["image"] == "/api/files/new.webp"
+    db.quotations.update_one.assert_awaited_once_with({"id": existing["id"]}, {"$set": result})
+    db.quotations.find_one.return_value = None
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(namespace["update_quotation"]("missing", revised, SimpleNamespace(email="editor@example.com")))
+    assert error.value.status_code == 404
