@@ -158,3 +158,43 @@ def test_edit_keeps_identity_and_recalculates_persisted_values():
     with pytest.raises(HTTPException) as error:
         asyncio.run(namespace["update_quotation"]("missing", revised, SimpleNamespace(email="editor@example.com")))
     assert error.value.status_code == 404
+
+
+def test_delete_quotation_repairs_latest_inquiry_reference():
+    import ast
+    import asyncio
+    from pathlib import Path
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    source = ast.parse((Path(__file__).resolve().parents[1] / "server.py").read_text())
+    node = next(n for n in source.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "delete_quotation")
+    node.decorator_list = []
+    node.args.defaults = []
+    db = SimpleNamespace(
+        quotations=SimpleNamespace(
+            find_one=AsyncMock(side_effect=[
+                {"inquiry_id": "inq-1"},
+                {"id": "quote-older", "quote_number": "SGE-2026-0001"},
+            ]),
+            delete_one=AsyncMock(return_value=SimpleNamespace(deleted_count=1)),
+        ),
+        inquiries=SimpleNamespace(
+            find_one=AsyncMock(return_value={"latest_quotation_id": "quote-latest"}),
+            update_one=AsyncMock(),
+        ),
+    )
+    namespace = {"db": db, "_AdminUser": object, "HTTPException": HTTPException}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "server.py", "exec"), namespace)
+
+    result = asyncio.run(namespace["delete_quotation"]("quote-latest", SimpleNamespace()))
+
+    assert result == {"ok": True, "deleted": 1, "id": "quote-latest"}
+    db.quotations.delete_one.assert_awaited_once_with({"id": "quote-latest"})
+    db.inquiries.update_one.assert_awaited_once_with(
+        {"id": "inq-1"},
+        {"$set": {
+            "latest_quotation_id": "quote-older",
+            "latest_quotation_number": "SGE-2026-0001",
+        }},
+    )

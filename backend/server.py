@@ -1741,6 +1741,40 @@ async def update_quotation(quote_id: str, payload: QuotationCreate, admin: _Admi
     return quotation
 
 
+@api.delete("/admin/quotations/{quote_id}")
+async def delete_quotation(quote_id: str, admin: _AdminUser = Depends(require_admin)):
+    existing = await db.quotations.find_one({"id": quote_id}, {"_id": 0, "inquiry_id": 1})
+    if not existing:
+        raise HTTPException(404, "Quotation not found")
+    result = await db.quotations.delete_one({"id": quote_id})
+    if not result.deleted_count:
+        raise HTTPException(404, "Quotation not found")
+
+    inquiry_id = existing.get("inquiry_id")
+    if inquiry_id:
+        inquiry = await db.inquiries.find_one(
+            {"id": inquiry_id}, {"_id": 0, "latest_quotation_id": 1}
+        )
+        if inquiry and inquiry.get("latest_quotation_id") == quote_id:
+            replacement = await db.quotations.find_one(
+                {"inquiry_id": inquiry_id},
+                {"_id": 0, "id": 1, "quote_number": 1},
+                sort=[("created_at", -1)],
+            )
+            if replacement:
+                update = {"$set": {
+                    "latest_quotation_id": replacement["id"],
+                    "latest_quotation_number": replacement["quote_number"],
+                }}
+            else:
+                update = {"$unset": {
+                    "latest_quotation_id": "",
+                    "latest_quotation_number": "",
+                }}
+            await db.inquiries.update_one({"id": inquiry_id}, update)
+    return {"ok": True, "deleted": 1, "id": quote_id}
+
+
 class _IdList(BaseModel):
     """Body payload for bulk-delete endpoints. IDs are deduplicated and
     validated (non-empty, string) before use."""

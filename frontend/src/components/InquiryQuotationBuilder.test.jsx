@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const mockApi = {
   updateQuotation: jest.fn(),
+  deleteQuotation: jest.fn(),
   upload: jest.fn(),
   resolveImage: value => value,
   listInquiryQuotations: jest.fn(),
@@ -78,12 +79,13 @@ beforeEach(() => {
   MockJsPDF.mockImplementation(() => mockPdfDocument());
   mockApi.listInquiryQuotations.mockResolvedValue([]);
   mockApi.createInquiryQuotation.mockResolvedValue(savedQuote);
+  mockApi.deleteQuotation.mockResolvedValue({ ok: true, deleted: 1, id: savedQuote.id });
   mockPdfSave.mockClear();
 });
 
 test("prefills the inquiry and saves edited quotation values", async () => {
   render(<InquiryQuotationBuilder inquiry={inquiry} onClose={jest.fn()} onSaved={jest.fn()} />);
-  await screen.findByText("No saved quotations yet.");
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
   expect(screen.getByLabelText("Customer name")).toHaveValue("Kishor A Lalwani");
   expect(screen.getByLabelText("Product 1")).toHaveValue(inquiry.items[0].name);
   expect(screen.getByTestId("quotation-grand-total")).toHaveTextContent("₹6,000");
@@ -104,14 +106,15 @@ test("prefills the inquiry and saves edited quotation values", async () => {
     customer_gstin: "09ADCFS9258D1ZS",
     items: [expect.objectContaining({ quantity: 2, unit_price: 6500, sku: "SGE-WL-089" })],
   }));
-  expect(await screen.findByText("SGE-2026-0001")).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Saved quotations (1)" })).toBeInTheDocument();
 });
 
 test("downloads a branded PDF from the saved quotation snapshot", async () => {
   mockApi.listInquiryQuotations.mockResolvedValue([savedQuote]);
   render(<InquiryQuotationBuilder inquiry={inquiry} onClose={jest.fn()} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Saved quotations (1)" }));
   const historyNumber = await screen.findByText("SGE-2026-0001");
-  const historyCard = historyNumber.closest("div.border");
+  const historyCard = historyNumber.closest("article");
   fireEvent.click(historyCard.querySelector("button"));
   await waitFor(() => expect(mockPdfSave).toHaveBeenCalledWith("SGE-2026-0001.pdf"));
 });
@@ -120,7 +123,7 @@ test("downloads a branded PDF from the saved quotation snapshot", async () => {
 test("creates a standalone quotation with a custom item without creating an inquiry", async () => {
   mockApi.createStandaloneQuotation.mockResolvedValue(savedQuote);
   render(<InquiryQuotationBuilder onClose={jest.fn()} />);
-  await screen.findByText("No saved quotations yet.");
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
   fireEvent.change(screen.getByLabelText("Customer name"), { target: { value: "Walk-in customer" } });
   fireEvent.click(screen.getByText("+ Add custom item"));
   fireEvent.change(screen.getByLabelText("Product 1"), { target: { value: "Custom glass shade" } });
@@ -134,7 +137,7 @@ test("creates a standalone quotation with a custom item without creating an inqu
 test("adds a catalogue SKU to a standalone quote", async () => {
   mockApi.adminProductsExport.mockResolvedValue([{ id: "shade", sku: "SGE-HL-001", name: "Glass shade", price: 900 }]);
   render(<InquiryQuotationBuilder onClose={jest.fn()} />);
-  await screen.findByText("No saved quotations yet.");
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
   fireEvent.change(screen.getByLabelText("Search catalogue for quotation"), { target: { value: "SGE-HL-001" } });
   fireEvent.click(await screen.findByRole("button", { name: "SGE-HL-001 · Glass shade" }));
   expect(screen.getByLabelText("Product 1")).toHaveValue("Glass shade");
@@ -148,7 +151,7 @@ test("validation errors show readable text and preserve the form after refresh",
     { loc: ["body", "customer_email"], msg: "Invalid email" }
   ] } } });
   const view = render(<InquiryQuotationBuilder inquiry={inquiry} />);
-  await screen.findByText("No saved quotations yet.");
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
   fireEvent.change(screen.getByLabelText("Customer name"), { target: { value: "Retained customer" } });
   fireEvent.click(screen.getByTestId("quotation-save"));
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith("customer_email: Invalid email"));
@@ -162,6 +165,7 @@ test("reopens a saved quotation and updates the same ID without creating another
   mockApi.listStandaloneQuotations.mockResolvedValue([savedQuote]);
   mockApi.updateQuotation.mockResolvedValue({ ...savedQuote, notes: "Revised" });
   const view = render(<InquiryQuotationBuilder />);
+  fireEvent.click(await screen.findByRole("button", { name: "Saved quotations (1)" }));
   fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
   expect(screen.getByLabelText("Unit price 1")).toHaveValue(6500);
   fireEvent.change(screen.getByLabelText("Quotation notes"), { target: { value: "Revised" } });
@@ -178,7 +182,7 @@ test("uploads a custom item image and saves it in the quotation", async () => {
   mockApi.upload.mockResolvedValue({ url: "/api/files/custom.webp" });
   mockApi.createStandaloneQuotation.mockResolvedValue(savedQuote);
   render(<InquiryQuotationBuilder />);
-  await screen.findByText("No saved quotations yet.");
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
   fireEvent.change(screen.getByLabelText("Customer name"), { target: { value: "Customer" } });
   fireEvent.click(screen.getByText("+ Add custom item"));
   fireEvent.change(screen.getByLabelText("Product 1"), { target: { value: "Custom chandelier" } });
@@ -186,4 +190,19 @@ test("uploads a custom item image and saves it in the quotation", async () => {
   await screen.findByAltText("Custom chandelier");
   fireEvent.click(screen.getByTestId("quotation-save"));
   await waitFor(() => expect(mockApi.createStandaloneQuotation).toHaveBeenCalledWith(expect.objectContaining({ items: [expect.objectContaining({ image: "/api/files/custom.webp" })] })));
+});
+
+test("opens quotation history from the sticky header and deletes a saved quotation", async () => {
+  mockApi.listStandaloneQuotations.mockResolvedValue([savedQuote]);
+  const confirm = jest.spyOn(window, "confirm").mockReturnValue(true);
+  render(<InquiryQuotationBuilder />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Saved quotations (1)" }));
+  expect(screen.getByRole("heading", { name: "Saved quotations" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Delete quotation SGE-2026-0001" }));
+
+  await waitFor(() => expect(mockApi.deleteQuotation).toHaveBeenCalledWith("quote-1"));
+  expect(await screen.findByText("No saved quotations yet.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Saved quotations (0)" })).toBeInTheDocument();
+  confirm.mockRestore();
 });
