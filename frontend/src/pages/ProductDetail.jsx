@@ -428,11 +428,11 @@ export default function ProductDetail() {
                     id="actual-product-check-title"
                     className="mt-2 font-serif text-xl text-white"
                   >
-                    See the current piece before ordering
+                    Ask about the current piece before ordering
                   </h2>
                   <p className="mt-2 text-sm leading-relaxed text-white/65">
-                    Ask for current workshop or showroom photos and a short light-on
-                    video of this exact reference.
+                    Message us on WhatsApp to check whether current workshop or showroom
+                    photos or videos are available for this reference.
                   </p>
                 </div>
               </div>
@@ -443,10 +443,10 @@ export default function ProductDetail() {
                 rel="noreferrer"
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 border border-[#D4AF37] px-5 py-3 text-[10px] uppercase tracking-[0.24em] text-[#D4AF37] transition-colors hover:bg-[#D4AF37] hover:text-black sm:w-auto"
               >
-                <MessageCircle size={14} /> Request current photo / video
+                <MessageCircle size={14} /> Ask about current visuals
               </a>
               <p className="mt-3 text-[10px] tracking-wide text-white/40">
-                Shared privately on WhatsApp · no obligation to order
+                Availability varies by product · shared privately on WhatsApp
               </p>
             </section>
           )}
