@@ -254,6 +254,17 @@ jobs:
           test -s build/index.html \
             || { echo "::error::build/index.html missing or empty"; exit 1; }
 
+      - name: Assert product share previews were prerendered
+        run: |
+          set -euo pipefail
+          test -d build/product \
+            || { echo "::error::build/product is missing"; exit 1; }
+          product_count="$(find build/product -mindepth 2 -maxdepth 2 -name index.html | wc -l)"
+          test "$product_count" -gt 0 \
+            || { echo "::error::no product prerender HTML files were generated"; exit 1; }
+          grep -R -m1 'property="og:image" content="https://' build/product >/dev/null \
+            || { echo "::error::product prerenders have no absolute og:image"; exit 1; }
+
       - name: Assert every expected category prerender HTML file exists
         run: |
           set -euo pipefail

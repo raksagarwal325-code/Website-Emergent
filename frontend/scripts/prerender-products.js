@@ -1,0 +1,197 @@
+#!/usr/bin/env node
+/**
+ * Emit crawler-readable HTML for every published product.
+ *
+ * WhatsApp and several social crawlers do not execute the React bundle before
+ * reading Open Graph metadata. These static product entry points make the
+ * product name, description and primary image available in the first response.
+ */
+const fs = require("fs");
+const path = require("path");
+const http = require("http");
+const https = require("https");
+const {
+  SITE_ORIGIN,
+  escapeHtml,
+  productPath,
+  resolveApiBase,
+} = require("./prerender-categories");
+
+const ROOT = path.resolve(__dirname, "..");
+const BUILD_DIR = path.join(ROOT, "build");
+const DEFAULT_SHARE_IMAGE = `${SITE_ORIGIN}/logo.jpeg`;
+const PAGE_SIZE = 48;
+
+function fetchJson(url, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const transport = url.startsWith("https:") ? https : http;
+    const req = transport.get(url, { timeout: timeoutMs }, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume();
+        reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+        return;
+      }
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+        } catch (error) {
+          reject(new Error(`bad JSON from ${url}: ${error.message}`));
+        }
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error(`timeout after ${timeoutMs}ms for ${url}`)));
+    req.on("error", reject);
+  });
+}
+
+function absoluteUrl(value, apiBase, fallback = DEFAULT_SHARE_IMAGE) {
+  if (!value) return fallback;
+  try {
+    if (value.startsWith("/api/")) {
+      return new URL(value, `${apiBase.replace(/\/+$/, "")}/`).href;
+    }
+    return new URL(value, `${SITE_ORIGIN}/`).href;
+  } catch {
+    return fallback;
+  }
+}
+
+function metaDescription(product) {
+  const source = product.short_description || product.description ||
+    `${product.name} by Samrat Glass Emporium, handcrafted in Firozabad, India.`;
+  return String(source).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 240);
+}
+
+function safeJson(value) {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+function productSchema(product, canonical, image, description) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "@id": `${canonical}#product`,
+    url: canonical,
+    name: product.name,
+    ...(product.sku ? { sku: product.sku } : {}),
+    description,
+    image: [image],
+    brand: { "@type": "Brand", name: "Samrat Glass Emporium" },
+    ...(product.category ? { category: product.category } : {}),
+  };
+}
+
+function removeShareMetadata(html) {
+  return html
+    .replace(/<meta\s+property="og:(?:title|description|type|url|image|image:secure_url|image:alt)"[^>]*>\s*/gi, "")
+    .replace(/<meta\s+name="twitter:(?:card|title|description|image)"[^>]*>\s*/gi, "")
+    .replace(/<link\s+rel="canonical"[^>]*>\s*/gi, "");
+}
+
+function injectProduct(template, product, apiBase) {
+  const route = productPath(product);
+  const canonical = `${SITE_ORIGIN}${route}`;
+  const title = `${product.name} · Samrat Glass Emporium`;
+  const description = metaDescription(product);
+  const image = absoluteUrl((product.images || [])[0], apiBase);
+  const schema = productSchema(product, canonical, image, description);
+
+  let html = template
+    .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
+    .replace(
+      /<meta\s+name="description"[^>]*>/i,
+      `<meta name="description" content="${escapeHtml(description)}" />`,
+    );
+  html = removeShareMetadata(html);
+
+  const shareMetadata = [
+    `<meta property="og:title" content="${escapeHtml(title)}" />`,
+    `<meta property="og:description" content="${escapeHtml(description)}" />`,
+    `<meta property="og:type" content="product" />`,
+    `<meta property="og:url" content="${canonical}" />`,
+    `<meta property="og:image" content="${escapeHtml(image)}" />`,
+    `<meta property="og:image:secure_url" content="${escapeHtml(image)}" />`,
+    `<meta property="og:image:alt" content="${escapeHtml(product.name)}" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
+    `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
+    `<meta name="twitter:image" content="${escapeHtml(image)}" />`,
+    `<link rel="canonical" href="${canonical}" />`,
+  ].join("\n");
+
+  html = html.replace(
+    /<\/head>/i,
+    `${shareMetadata}\n<script type="application/ld+json" data-schema="prerender-product">${safeJson(schema)}</script>\n</head>`,
+  );
+
+  const body = `<main class="prerender-shell"><article><p class="prerender-eyebrow">${escapeHtml(product.category || "Handcrafted lighting")}</p><h1>${escapeHtml(product.name)}</h1><img src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}"/><p>${escapeHtml(description)}</p>${product.sku ? `<p>Reference Code: ${escapeHtml(product.sku)}</p>` : ""}</article></main>`;
+  return html.replace(/<div id="root">[\s\S]*?<\/div>/i, `<div id="root">${body}</div>`);
+}
+
+async function fetchPublishedProducts(apiBase, fetcher = fetchJson) {
+  const products = [];
+  let expectedTotal = null;
+  for (let page = 1; page <= 200; page += 1) {
+    const url = `${apiBase.replace(/\/+$/, "")}/api/products?sort=name&limit=${PAGE_SIZE}&page=${page}`;
+    const response = await fetcher(url);
+    if (!response || !Array.isArray(response.items)) {
+      throw new Error(`page ${page} returned an invalid products response`);
+    }
+    if (expectedTotal == null) expectedTotal = Number(response.total);
+    products.push(...response.items.filter(
+      (item) => item && item.id && item.name && (!item.status || item.status === "published"),
+    ));
+    const totalPages = Number(response.total_pages) || 0;
+    if (page >= totalPages || response.items.length === 0) break;
+  }
+  if (!products.length) throw new Error("the public catalogue returned no published products");
+  if (Number.isFinite(expectedTotal) && products.length !== expectedTotal) {
+    throw new Error(`expected ${expectedTotal} published products but fetched ${products.length}`);
+  }
+  return products;
+}
+
+async function runPrerenderProducts(options = {}) {
+  const apiBase = options.apiBase || resolveApiBase();
+  const buildDir = options.buildDir || BUILD_DIR;
+  const templatePath = options.templatePath || path.join(buildDir, "index.html");
+  const logger = options.logger || console;
+  const fetcher = options.fetcher || fetchJson;
+  const template = fs.readFileSync(templatePath, "utf8");
+  const products = await fetchPublishedProducts(apiBase, fetcher);
+  const writtenRoutes = new Set();
+
+  for (const product of products) {
+    const route = productPath(product);
+    if (writtenRoutes.has(route)) throw new Error(`duplicate product route: ${route}`);
+    writtenRoutes.add(route);
+    const outDir = path.join(buildDir, route.replace(/^\//, ""));
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(path.join(outDir, "index.html"), injectProduct(template, product, apiBase), "utf8");
+  }
+
+  logger.log(`[prerender-products] Done. ${products.length} product pages written.`);
+  return { count: products.length, routes: [...writtenRoutes] };
+}
+
+if (require.main === module) {
+  runPrerenderProducts()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error(`[prerender-products] ERROR: ${error.message}`);
+      process.exit(1);
+    });
+}
+
+module.exports = {
+  absoluteUrl,
+  fetchPublishedProducts,
+  injectProduct,
+  metaDescription,
+  productSchema,
+  runPrerenderProducts,
+  DEFAULT_SHARE_IMAGE,
+  PAGE_SIZE,
+};
