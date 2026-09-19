@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Mail, MapPin, Clock, Phone, ExternalLink } from "lucide-react";
 import { useSettings } from "../../context/SettingsContext";
@@ -116,6 +116,36 @@ function FooterLink({ label, href, external, icon: Icon, testId }) {
   return <Link to={href} data-testid={testId}>{inner}</Link>;
 }
 
+function FooterAccordion({ title, children, className = "", contentClassName = "", desktopTitle = true, testId }) {
+  const [open, setOpen] = useState(false);
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const contentId = `footer-${slug}-content`;
+
+  return (
+    <section className={className} data-testid={testId}>
+      <button
+        type="button"
+        className="sm:hidden flex min-h-[52px] w-full items-center justify-between border-b border-[#BF9972]/15 text-left"
+        aria-expanded={open}
+        aria-controls={contentId}
+        data-testid={`footer-${slug}-toggle`}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="eyebrow">{title}</span>
+        <span aria-hidden="true" className="text-xl font-light leading-none text-[#D4AF37]">{open ? "−" : "+"}</span>
+      </button>
+      {desktopTitle && <div className="eyebrow mb-4 hidden sm:block">{title}</div>}
+      <div
+        id={contentId}
+        data-testid={contentId}
+        className={`${open ? "block pb-5 pt-4" : "hidden"} sm:block sm:pb-0 sm:pt-0 ${contentClassName}`}
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
 export default function Footer() {
   const { settings, hp } = useSettings();
   const f = hp.footer || {};
@@ -157,9 +187,9 @@ export default function Footer() {
 
       <div className="relative max-w-7xl mx-auto px-6">
         {/* Top: brand block + 4 link columns · 5 cols on desktop, 2 on tablet, stacked on mobile */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-0 sm:gap-10 lg:gap-10">
           {/* Brand block */}
-          <div className="sm:col-span-2 lg:col-span-3">
+          <div className="sm:col-span-2 lg:col-span-3 pb-8 sm:pb-0">
             <div className="flex items-start gap-4 md:gap-5">
               <img src="/logo.jpeg" alt="Samrat Glass Emporium" className="w-20 h-20 md:w-24 md:h-24 object-cover brand-glow flex-shrink-0" />
               <div>
@@ -193,8 +223,7 @@ export default function Footer() {
           </div>
 
           {/* Explore */}
-          <div className="lg:col-span-2">
-            <div className="eyebrow mb-4">Explore</div>
+          <FooterAccordion title="Explore" className="lg:col-span-2">
             <ul className="space-y-2.5 text-sm">
               {EXPLORE_LINKS.map((l) => (
                 <li key={l.label}>
@@ -202,11 +231,10 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
-          </div>
+          </FooterAccordion>
 
           {/* Support */}
-          <div className="lg:col-span-2">
-            <div className="eyebrow mb-4">Support</div>
+          <FooterAccordion title="Support" className="lg:col-span-2">
             <ul className="space-y-2.5 text-sm">
               {SUPPORT_LINKS.map((l) => (
                 <li key={l.label}>
@@ -214,11 +242,10 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
-          </div>
+          </FooterAccordion>
 
           {/* Legal */}
-          <div className="lg:col-span-2">
-            <div className="eyebrow mb-4">Legal</div>
+          <FooterAccordion title="Legal" className="lg:col-span-2">
             <ul className="space-y-2.5 text-sm">
               {LEGAL_LINKS.map((l) => (
                 <li key={l.label}>
@@ -226,11 +253,10 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
-          </div>
+          </FooterAccordion>
 
           {/* Contact — widened to col-span-3 so email/hours/address never break awkwardly */}
-          <div className="sm:col-span-2 lg:col-span-3" data-testid="footer-contact-col">
-            <div className="eyebrow mb-4">Contact</div>
+          <FooterAccordion title="Contact" className="sm:col-span-2 lg:col-span-3" testId="footer-contact-col">
             <div className="space-y-3.5">
               {waHref && (
                 <ContactRow icon={WA} value={phoneDisplay} href={waHref} external testId="footer-contact-whatsapp" />
@@ -270,7 +296,7 @@ export default function Footer() {
                 </div>
               )}
             </div>
-          </div>
+          </FooterAccordion>
         </div>
 
         {/* Collections strip — crawlable direct links to every category page.
@@ -279,21 +305,25 @@ export default function Footer() {
         <nav
           aria-label="Collections"
           data-testid="footer-collections"
-          className="mt-12 pt-6 border-t border-[#BF9972]/10 -mx-1 overflow-x-auto md:overflow-visible"
+          className="mt-0 sm:mt-12 sm:border-t sm:border-[#BF9972]/10 sm:pt-6"
         >
-          <div className="flex md:flex-wrap items-center gap-x-6 gap-y-2 text-[11px] uppercase tracking-[0.24em] whitespace-nowrap md:whitespace-normal px-1">
-            <span className="text-white/40">Collections:</span>
+          <FooterAccordion
+            title="Collections"
+            desktopTitle={false}
+            contentClassName="grid grid-cols-2 gap-x-4 gap-y-3 text-[11px] uppercase tracking-[0.24em] sm:flex sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-2"
+          >
+            <span className="hidden text-white/40 sm:inline">Collections:</span>
             {SEO_CATEGORIES.map((c) => (
               <Link
                 key={c.slug}
                 to={`/category/${c.slug}`}
                 data-testid={`footer-collections-${c.slug}`}
-                className="text-white/70 hover:text-[#D4AF37] link-underline"
+                className="min-w-0 leading-snug text-white/70 hover:text-[#D4AF37] link-underline"
               >
                 {c.label}
               </Link>
             ))}
-          </div>
+          </FooterAccordion>
         </nav>
 
         {/* Bottom row — single-line combined copyright */}
