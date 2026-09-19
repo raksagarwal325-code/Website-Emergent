@@ -47,9 +47,9 @@ export const productMessage = (product, url) => {
 };
 
 /**
- * Compose the pilot "actual product" request. This keeps the request
- * specific to the exact catalogue reference and avoids implying that
- * workshop media is already published on the product page.
+ * Compose an "actual product" request. This keeps the request specific
+ * to the exact catalogue reference without promising that a video is
+ * available for every product.
  */
 export const actualProductMessage = (product, url) => {
   const nameSku = `${product?.name || "this product"}${
