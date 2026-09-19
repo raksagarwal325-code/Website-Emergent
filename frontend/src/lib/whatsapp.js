@@ -13,6 +13,7 @@
 
 const BRAND_PREFIX = "Hi Samrat Glass Emporium,";
 const PUBLIC_SITE_ORIGIN = "https://samratglass.com";
+const WHATSAPP_PREVIEW_VERSION = "2";
 
 /**
  * Named prefilled messages for each public entry point. Kept in an
@@ -38,6 +39,10 @@ const withWhatsAppPreviewKey = (url) => {
   try {
     const parsed = new URL(url, PUBLIC_SITE_ORIGIN);
     parsed.searchParams.set("share", "whatsapp");
+    // WhatsApp caches link-card failures by the complete URL. Bump this
+    // version whenever the product preview format changes so it re-fetches
+    // the current Open Graph image instead of reusing an older no-image card.
+    parsed.searchParams.set("preview", WHATSAPP_PREVIEW_VERSION);
     return parsed.href;
   } catch {
     return url;
