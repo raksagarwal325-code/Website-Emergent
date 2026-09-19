@@ -256,6 +256,7 @@ describe("ProductDetail — live product photo request", () => {
     expect(message).toContain(inStockFixture.sku);
     expect(message).toContain("please share recent live photos");
     expect(message).toContain("/product/");
+    expect(message).toContain("?share=whatsapp");
   });
 
   test("includes each product's own SKU in its WhatsApp request", async () => {

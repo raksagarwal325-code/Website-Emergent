@@ -9,6 +9,7 @@
 import {
   WA_MESSAGES,
   buildWaLink,
+  actualProductMessage,
   productMessage,
   cartMessage,
   galleryProductMessage,
@@ -78,6 +79,17 @@ describe("productMessage / waProductLink", () => {
     expect(decoded).toContain("Hi Samrat Glass Emporium,");
     expect(decoded).toContain("X");
     expect(decoded).toContain("S1");
+  });
+});
+
+describe("actualProductMessage", () => {
+  test("uses a stable WhatsApp preview URL so old link-card caches do not hide the image", () => {
+    const msg = actualProductMessage(
+      { name: "Rajdarbar", sku: "SGE-TA-009" },
+      "https://samratglass.com/product/rajdarbar-sge-ta-009",
+    );
+    expect(msg).toContain("SGE-TA-009");
+    expect(msg).toContain("https://samratglass.com/product/rajdarbar-sge-ta-009?share=whatsapp");
   });
 });
 
