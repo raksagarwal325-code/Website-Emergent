@@ -9,6 +9,16 @@ import { useEffect } from "react";
 // never the Emergent preview host (which changes per environment and shouldn't
 // be indexed).
 const PRODUCTION_ORIGIN = "https://samratglass.com";
+const DEFAULT_SHARE_IMAGE = `${PRODUCTION_ORIGIN}/logo.jpeg`;
+
+const absoluteAssetUrl = (value) => {
+  if (!value) return DEFAULT_SHARE_IMAGE;
+  try {
+    return new URL(value, `${PRODUCTION_ORIGIN}/`).href;
+  } catch {
+    return DEFAULT_SHARE_IMAGE;
+  }
+};
 
 const setMeta = (selector, attrName, name, content) => {
   if (!content) return;
@@ -47,18 +57,21 @@ export default function SEO({
       (typeof window !== "undefined" && window.location.pathname) ||
       "";
     const url = `${PRODUCTION_ORIGIN}${routePath}`;
+    const shareImage = absoluteAssetUrl(image);
     setCanonical(url);
     setMeta('name="description"', "name", "description", description);
     setMeta('property="og:title"', "property", "og:title", title);
     setMeta('property="og:description"', "property", "og:description", description);
-    setMeta('property="og:image"', "property", "og:image", image);
+    setMeta('property="og:image"', "property", "og:image", shareImage);
+    setMeta('property="og:image:secure_url"', "property", "og:image:secure_url", shareImage);
+    setMeta('property="og:image:alt"', "property", "og:image:alt", title || "Samrat Glass Emporium");
     setMeta('property="og:type"', "property", "og:type", type);
     setMeta('property="og:url"', "property", "og:url", url);
     setMeta('property="og:site_name"', "property", "og:site_name", "Samrat Glass Emporium");
-    setMeta('name="twitter:card"', "name", "twitter:card", image ? "summary_large_image" : "summary");
+    setMeta('name="twitter:card"', "name", "twitter:card", "summary_large_image");
     setMeta('name="twitter:title"', "name", "twitter:title", title);
     setMeta('name="twitter:description"', "name", "twitter:description", description);
-    setMeta('name="twitter:image"', "name", "twitter:image", image);
+    setMeta('name="twitter:image"', "name", "twitter:image", shareImage);
     // Per-page robots directive. `noindex` pages must set noindex,follow so
     // link equity still flows to indexable products but the page itself is
     // kept out of the SERP. On unmount we REMOVE the tag so subsequent pages
