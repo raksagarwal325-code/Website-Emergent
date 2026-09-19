@@ -108,7 +108,6 @@ export default function ProductDetail() {
       ? `${window.location.origin}${productPath(product)}`
       : "";
   const waLink = waProductLink(settings?.whatsapp_number, product, productUrl) || "#";
-  const isActualProductPilot = product.sku === "SGE-TL-009";
   const actualProductWaLink =
     waActualProductLink(
       settings?.whatsapp_number || settings?.whatsapp,
@@ -410,8 +409,7 @@ export default function ProductDetail() {
             </button>
           </div>
 
-          {isActualProductPilot && (
-            <section
+          <section
               data-testid="actual-product-check"
               aria-labelledby="actual-product-check-title"
               className="border border-[#D4AF37]/35 bg-[#D4AF37]/[0.05] p-5"
@@ -449,7 +447,6 @@ export default function ProductDetail() {
                 Shared privately on WhatsApp · no obligation to order
               </p>
             </section>
-          )}
 
           {/* Buying confidence — surface reassurance at the decision point instead of hiding it in tabs. */}
           <div data-testid="buying-confidence" className="border border-white/10 bg-white/[0.02] p-5">
