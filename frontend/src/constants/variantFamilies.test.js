@@ -31,10 +31,10 @@ test("selector exposes only attributes that actually differ", () => {
   expect(axes.find((axis) => axis.key === "use").values).toEqual(["Chandelier", "Chandelier", "Table Lamp"]);
 });
 
-test("glass cut is a verified selectable axis when saved designs differ", () => {
+test("Glass Type is recognised as a verified glass cut axis when saved designs differ", () => {
   const items = [
-    product("1", "Kandil Bell-Jar", "Hanging Light", { "Glass Cut / Design": "Etched Fern" }),
-    product("2", "Kandil Bell-Jar", "Hanging Light", { "Glass Cut / Design": "Feather Cut" }),
+    product("1", "Kandil Bell-Jar", "Hanging Light", { "Glass Type": "Etched Fern" }),
+    product("2", "Kandil Bell-Jar", "Hanging Light", { "Glass Type": "Feather Cut" }),
   ];
 
   expect(variantAxes(items)).toEqual(expect.arrayContaining([
