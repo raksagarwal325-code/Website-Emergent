@@ -55,7 +55,7 @@ export const actualProductMessage = (product, url) => {
   const nameSku = `${product?.name || "this product"}${
     product?.sku ? ` (${product.sku})` : ""
   }`;
-  const base = `${BRAND_PREFIX} please share current actual photos and a short light-on video of ${nameSku} before I order.`;
+  const base = `${BRAND_PREFIX} please let me know whether current actual photos or videos are available for ${nameSku}.`;
   return url ? `${base}\n${url}` : base;
 };
 
