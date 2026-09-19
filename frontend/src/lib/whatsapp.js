@@ -47,6 +47,19 @@ export const productMessage = (product, url) => {
 };
 
 /**
+ * Compose the pilot "actual product" request. This keeps the request
+ * specific to the exact catalogue reference and avoids implying that
+ * workshop media is already published on the product page.
+ */
+export const actualProductMessage = (product, url) => {
+  const nameSku = `${product?.name || "this product"}${
+    product?.sku ? ` (${product.sku})` : ""
+  }`;
+  const base = `${BRAND_PREFIX} please share current actual photos and a short light-on video of ${nameSku} before I order.`;
+  return url ? `${base}\n${url}` : base;
+};
+
+/**
  * Compose the gallery-project product WhatsApp message. Uses the
  * project title as extra context.
  */
@@ -96,6 +109,8 @@ export const waGalleryLink = (number) => buildWaLink(number, WA_MESSAGES.gallery
 export const waNotFoundLink = (number) => buildWaLink(number, WA_MESSAGES.notFound);
 export const waProductLink = (number, product, url) =>
   buildWaLink(number, productMessage(product, url));
+export const waActualProductLink = (number, product, url) =>
+  buildWaLink(number, actualProductMessage(product, url));
 export const waGalleryProductLink = (number, product, project) =>
   buildWaLink(number, galleryProductMessage(product, project));
 export const waCartLink = (number, items, siteOrigin) =>
