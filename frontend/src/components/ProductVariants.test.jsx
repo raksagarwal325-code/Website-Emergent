@@ -144,6 +144,42 @@ test("shows a verified glass cut dropdown and opens the closest real configurati
 });
 
 
+test("uses canonical Glass Design instead of a conflicting descriptive Glass Type", async () => {
+  const fancy = {
+    id: "fancy", sku: "SGE-TL-009", name: "Rajsi Peacock-and-Floral Table Lamp",
+    category: "Table Lamp",
+    specs: {
+      "Glass Colour": "Clear",
+      "Glass Design": "Fancy-Cut",
+      "Glass Type": "Peacock-and-floral cut clear glass",
+      Height: '30"',
+    },
+  };
+  const diamond = {
+    id: "diamond", sku: "SGE-TL-010", name: "Rajsi Diamond-Lattice Table Lamp",
+    category: "Table Lamp",
+    specs: {
+      "Glass Colour": "Clear",
+      "Glass Design": "Diamond-Cut",
+      "Glass Type": "Diamond-lattice cut clear glass",
+      Height: '30"',
+    },
+  };
+  mockApi.getProductVariants.mockResolvedValue({
+    family: { slug: "rajsi", name: "Rajsi", axes: ["glass_cut"] },
+    items: [fancy, diamond],
+  });
+
+  render(<MemoryRouter><ProductVariants product={fancy} /><LocationProbe /></MemoryRouter>);
+
+  const glassDesign = await screen.findByLabelText("Glass cut / design");
+  expect(glassDesign).toHaveValue("Fancy-Cut");
+  expect(screen.getByTestId("selected-configuration")).toHaveTextContent("Cut · Fancy-Cut");
+  expect(screen.queryByRole("option", { name: "Peacock-and-floral cut clear glass" })).not.toBeInTheDocument();
+  fireEvent.change(glassDesign, { target: { value: "Diamond-Cut" } });
+  expect(screen.getByTestId("location")).toHaveTextContent("sge-tl-010");
+});
+
 test("preserves glass cut before lower-priority attributes when changing width", async () => {
   const diamondNine = {
     id: "diamond-nine", sku: "SGE-HL-056", name: "Kandil Diamond-Cut Compact",
