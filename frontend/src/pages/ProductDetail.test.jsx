@@ -49,14 +49,6 @@ const explicitPreorderFixture = {
   preorder: true,
 };
 
-const actualProductPilotFixture = {
-  ...inStockFixture,
-  id: "p-actual-product-pilot",
-  name: "Rajsi Classic Diamond-Lattice Clear-Glass Urn Table Lamp",
-  sku: "SGE-TL-009",
-  category: "Table Lamp",
-};
-
 let mockCurrentFixture = inStockFixture;
 let mockReviews = [];
 
@@ -246,9 +238,9 @@ test.each([false, true])("shows confirmed Indian origin below the price, includi
 });
 
 
-describe("ProductDetail — actual product pilot", () => {
-  test("shows a current photo/video request only for SGE-TL-009", async () => {
-    mockCurrentFixture = actualProductPilotFixture;
+describe("ProductDetail — live product photo request", () => {
+  test("shows the current photo request on every product", async () => {
+    mockCurrentFixture = inStockFixture;
     renderProduct();
 
     const panel = await screen.findByTestId("actual-product-check");
@@ -261,15 +253,19 @@ describe("ProductDetail — actual product pilot", () => {
       expect.stringContaining("https://wa.me/919999999999?text="),
     );
     const message = new URL(requestLink.getAttribute("href")).searchParams.get("text");
-    expect(message).toContain("SGE-TL-009");
+    expect(message).toContain(inStockFixture.sku);
     expect(message).toContain("please share recent live photos");
     expect(message).toContain("/product/");
   });
 
-  test("does not show the pilot on other products", async () => {
-    mockCurrentFixture = inStockFixture;
+  test("includes each product's own SKU in its WhatsApp request", async () => {
+    mockCurrentFixture = zeroStockFixture;
     renderProduct();
-    await screen.findByRole("heading", { level: 1, name: inStockFixture.name });
-    expect(screen.queryByTestId("actual-product-check")).not.toBeInTheDocument();
+
+    await screen.findByTestId("actual-product-check");
+    const requestLink = screen.getByTestId("actual-product-request-btn");
+    const message = new URL(requestLink.getAttribute("href")).searchParams.get("text");
+    expect(message).toContain(zeroStockFixture.sku);
+    expect(message).toContain("please share recent live photos");
   });
 });
