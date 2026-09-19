@@ -48,7 +48,7 @@ function firstSpec(product, keys) {
 
 function matchingPieceDetails(product) {
   const glassColour = firstSpec(product, ["Glass Colour", "Glass Color", "Colour", "Color"]);
-  const glassCut = firstSpec(product, ["Glass Cut / Design", "Glass Cut", "Cut Design", "Glass Design", "Glass Pattern"]);
+  const glassCut = firstSpec(product, ["Glass Cut / Design", "Glass Cut", "Glass Type", "Cut Design", "Glass Design", "Glass Pattern"]);
   const lights = firstSpec(product, ["Number of Lights", "Lights", "Light Count"]);
   const directSize = firstSpec(product, ["Dimensions", "Size"]);
   const height = firstSpec(product, ["Height"]);
