@@ -252,8 +252,8 @@ describe("ProductDetail — actual product pilot", () => {
     renderProduct();
 
     const panel = await screen.findByTestId("actual-product-check");
-    expect(panel).toHaveTextContent("See the current piece before ordering");
-    expect(panel).toHaveTextContent("current workshop or showroom photos");
+    expect(panel).toHaveTextContent("Ask about the current piece before ordering");
+    expect(panel).toHaveTextContent("photos or videos are available");
 
     const requestLink = screen.getByTestId("actual-product-request-btn");
     expect(requestLink).toHaveAttribute(
@@ -262,7 +262,7 @@ describe("ProductDetail — actual product pilot", () => {
     );
     const message = new URL(requestLink.getAttribute("href")).searchParams.get("text");
     expect(message).toContain("SGE-TL-009");
-    expect(message).toContain("current actual photos");
+    expect(message).toContain("whether current actual photos or videos are available");
     expect(message).toContain("/product/");
   });
 
