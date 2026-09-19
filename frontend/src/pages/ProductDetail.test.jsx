@@ -49,6 +49,14 @@ const explicitPreorderFixture = {
   preorder: true,
 };
 
+const actualProductPilotFixture = {
+  ...inStockFixture,
+  id: "p-actual-product-pilot",
+  name: "Rajsi Classic Diamond-Lattice Clear-Glass Urn Table Lamp",
+  sku: "SGE-TL-009",
+  category: "Table Lamp",
+};
+
 let mockCurrentFixture = inStockFixture;
 let mockReviews = [];
 
@@ -92,7 +100,7 @@ beforeEach(() => {
   api.listReviews.mockImplementation(() => Promise.resolve(mockReviews));
   api.submitReview.mockImplementation(() => Promise.resolve({ ok: true }));
   api.createReview.mockImplementation(() => Promise.resolve({ ok: true }));
-  api.getSettings.mockImplementation(() => Promise.resolve({ whatsapp: "+919999999999", admin_email: "test@example.com" }));
+  api.getSettings.mockImplementation(() => Promise.resolve({ whatsapp_number: "+919999999999", whatsapp: "+919999999999", admin_email: "test@example.com" }));
   formatPrice.mockImplementation((v) => `₹${v}`);
   formatProductPrice.mockImplementation((p) => ({ onRequest: false, primary: `₹${p.price || 0}`, label: null, compareAt: null }));
   formatPhone.mockImplementation((p) => p);
@@ -235,4 +243,33 @@ test.each([false, true])("shows confirmed Indian origin below the price, includi
   expect(price.compareDocumentPosition(origin) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(origin.compareDocumentPosition(inquiry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getAllByText("Made in India")).toHaveLength(1);
+});
+
+
+describe("ProductDetail — actual product pilot", () => {
+  test("shows a current photo/video request only for SGE-TL-009", async () => {
+    mockCurrentFixture = actualProductPilotFixture;
+    renderProduct();
+
+    const panel = await screen.findByTestId("actual-product-check");
+    expect(panel).toHaveTextContent("See the current piece before ordering");
+    expect(panel).toHaveTextContent("current workshop or showroom photos");
+
+    const requestLink = screen.getByTestId("actual-product-request-btn");
+    expect(requestLink).toHaveAttribute(
+      "href",
+      expect.stringContaining("https://wa.me/919999999999?text="),
+    );
+    const message = new URL(requestLink.getAttribute("href")).searchParams.get("text");
+    expect(message).toContain("SGE-TL-009");
+    expect(message).toContain("current actual photos");
+    expect(message).toContain("/product/");
+  });
+
+  test("does not show the pilot on other products", async () => {
+    mockCurrentFixture = inStockFixture;
+    renderProduct();
+    await screen.findByRole("heading", { level: 1, name: inStockFixture.name });
+    expect(screen.queryByTestId("actual-product-check")).not.toBeInTheDocument();
+  });
 });
