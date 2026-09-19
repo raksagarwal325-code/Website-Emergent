@@ -120,15 +120,15 @@ test("shows administrator-approved lights and size as linked choices within a pr
 test("shows a verified glass cut dropdown and opens the closest real configuration", async () => {
   const etchedNine = {
     id: "etched-nine", sku: "SGE-HL-006", name: "Kandil Bell-Jar Etched Fern Compact",
-    category: "Hanging Light", specs: { "Glass Colour": "Clear", "Glass Cut / Design": "Etched Fern", Diameter: '9"', "Number of Lights": "1" },
+    category: "Hanging Light", specs: { "Glass Colour": "Clear", "Glass Type": "Etched Fern", Diameter: '9"', "Number of Lights": "1" },
   };
   const featherNine = {
     id: "feather-nine", sku: "SGE-HL-031", name: "Kandil Bell-Jar Feather-Cut Clear",
-    category: "Hanging Light", specs: { "Glass Colour": "Clear", "Glass Cut / Design": "Feather Cut", Diameter: '9"', "Number of Lights": "1" },
+    category: "Hanging Light", specs: { "Glass Colour": "Clear", "Glass Type": "Feather Cut", Diameter: '9"', "Number of Lights": "1" },
   };
   const etchedTwelve = {
     id: "etched-twelve", sku: "SGE-HL-052", name: "Kandil Bell-Jar Etched Fern Grand",
-    category: "Hanging Light", specs: { "Glass Colour": "Clear", "Glass Cut / Design": "Etched Fern", Diameter: '12"', "Number of Lights": "3" },
+    category: "Hanging Light", specs: { "Glass Colour": "Clear", "Glass Type": "Etched Fern", Diameter: '12"', "Number of Lights": "3" },
   };
   mockApi.getProductVariants.mockResolvedValue({
     family: { slug: "kandil-bell-jar", name: "Kandil Bell-Jar", axes: ["glass_colour", "glass_cut", "lights", "size"] },
