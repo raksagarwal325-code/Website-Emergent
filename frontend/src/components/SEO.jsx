@@ -20,6 +20,21 @@ const absoluteAssetUrl = (value) => {
   }
 };
 
+const socialPreviewAssetUrl = (value) => {
+  const absolute = absoluteAssetUrl(value);
+  try {
+    const parsed = new URL(absolute);
+    const marker = "/api/files/";
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex < 0) return absolute;
+    const storagePath = parsed.pathname.slice(markerIndex + marker.length);
+    if (!storagePath || !storagePath.includes("/products/")) return absolute;
+    return `${parsed.origin}/api/social-preview/${storagePath}.jpg`;
+  } catch {
+    return DEFAULT_SHARE_IMAGE;
+  }
+};
+
 const setMeta = (selector, attrName, name, content) => {
   if (!content) return;
   let el = document.head.querySelector(`meta[${selector}]`);
@@ -57,13 +72,17 @@ export default function SEO({
       (typeof window !== "undefined" && window.location.pathname) ||
       "";
     const url = `${PRODUCTION_ORIGIN}${routePath}`;
-    const shareImage = absoluteAssetUrl(image);
+    const shareImage = socialPreviewAssetUrl(image);
+    const shareImageType = shareImage.includes("/api/social-preview/") || /\.jpe?g(?:$|[?#])/i.test(shareImage)
+      ? "image/jpeg"
+      : "";
     setCanonical(url);
     setMeta('name="description"', "name", "description", description);
     setMeta('property="og:title"', "property", "og:title", title);
     setMeta('property="og:description"', "property", "og:description", description);
     setMeta('property="og:image"', "property", "og:image", shareImage);
     setMeta('property="og:image:secure_url"', "property", "og:image:secure_url", shareImage);
+    setMeta('property="og:image:type"', "property", "og:image:type", shareImageType);
     setMeta('property="og:image:alt"', "property", "og:image:alt", title || "Samrat Glass Emporium");
     setMeta('property="og:type"', "property", "og:type", type);
     setMeta('property="og:url"', "property", "og:url", url);

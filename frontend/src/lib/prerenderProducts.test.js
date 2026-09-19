@@ -15,7 +15,7 @@ const PRODUCT = {
   sku: "SGE-TA-009",
   category: "Table Chandelier",
   short_description: "A handcrafted clear-glass table chandelier from Firozabad.",
-  images: ["/api/files/products/rajdarbar.webp"],
+  images: ["/api/files/lumiere-catalog/products/rajdarbar.webp"],
   status: "published",
 };
 
@@ -24,9 +24,10 @@ const TEMPLATE = `<!doctype html><html><head><title>Default</title><meta name="d
 describe("product social prerender", () => {
   test("puts an absolute product image in the initial Open Graph and Twitter metadata", () => {
     const html = injectProduct(TEMPLATE, PRODUCT, "https://samratglass.com");
-    const expected = "https://samratglass.com/api/files/products/rajdarbar.webp";
+    const expected = "https://samratglass.com/api/social-preview/lumiere-catalog/products/rajdarbar.webp.jpg";
     expect(html).toContain(`<meta property="og:image" content="${expected}" />`);
     expect(html).toContain(`<meta property="og:image:secure_url" content="${expected}" />`);
+    expect(html).toContain('<meta property="og:image:type" content="image/jpeg" />');
     expect(html).toContain(`<meta name="twitter:image" content="${expected}" />`);
     expect(html).toContain(`<meta property="og:image:alt" content="${PRODUCT.name}" />`);
     expect(html).toContain(`<link rel="canonical" href="https://samratglass.com${productPath(PRODUCT)}" />`);

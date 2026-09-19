@@ -58,6 +58,24 @@ function absoluteUrl(value, apiBase, fallback = DEFAULT_SHARE_IMAGE) {
   }
 }
 
+function socialPreviewUrl(value, apiBase) {
+  const image = absoluteUrl(value, apiBase);
+  try {
+    const parsed = new URL(image);
+    const marker = "/api/files/";
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex < 0) return { url: image, type: null };
+    const storagePath = parsed.pathname.slice(markerIndex + marker.length);
+    if (!storagePath || !storagePath.includes("/products/")) return { url: image, type: null };
+    return {
+      url: `${parsed.origin}/api/social-preview/${storagePath}.jpg`,
+      type: "image/jpeg",
+    };
+  } catch {
+    return { url: DEFAULT_SHARE_IMAGE, type: "image/jpeg" };
+  }
+}
+
 function metaDescription(product) {
   const source = product.short_description || product.description ||
     `${product.name} by Samrat Glass Emporium, handcrafted in Firozabad, India.`;
@@ -85,7 +103,7 @@ function productSchema(product, canonical, image, description) {
 
 function removeShareMetadata(html) {
   return html
-    .replace(/<meta\s+property="og:(?:title|description|type|url|image|image:secure_url|image:alt)"[^>]*>\s*/gi, "")
+    .replace(/<meta\s+property="og:(?:title|description|type|url|image|image:secure_url|image:type|image:alt)"[^>]*>\s*/gi, "")
     .replace(/<meta\s+name="twitter:(?:card|title|description|image)"[^>]*>\s*/gi, "")
     .replace(/<link\s+rel="canonical"[^>]*>\s*/gi, "");
 }
@@ -95,7 +113,8 @@ function injectProduct(template, product, apiBase) {
   const canonical = `${SITE_ORIGIN}${route}`;
   const title = `${product.name} · Samrat Glass Emporium`;
   const description = metaDescription(product);
-  const image = absoluteUrl((product.images || [])[0], apiBase);
+  const shareImage = socialPreviewUrl((product.images || [])[0], apiBase);
+  const image = shareImage.url;
   const schema = productSchema(product, canonical, image, description);
 
   let html = template
@@ -113,6 +132,7 @@ function injectProduct(template, product, apiBase) {
     `<meta property="og:url" content="${canonical}" />`,
     `<meta property="og:image" content="${escapeHtml(image)}" />`,
     `<meta property="og:image:secure_url" content="${escapeHtml(image)}" />`,
+    ...(shareImage.type ? [`<meta property="og:image:type" content="${shareImage.type}" />`] : []),
     `<meta property="og:image:alt" content="${escapeHtml(product.name)}" />`,
     `<meta name="twitter:card" content="summary_large_image" />`,
     `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
@@ -187,6 +207,7 @@ if (require.main === module) {
 
 module.exports = {
   absoluteUrl,
+  socialPreviewUrl,
   fetchPublishedProducts,
   injectProduct,
   metaDescription,
