@@ -144,6 +144,58 @@ test("shows a verified glass cut dropdown and opens the closest real configurati
 });
 
 
+test("preserves glass cut before lower-priority attributes when changing width", async () => {
+  const diamondNine = {
+    id: "diamond-nine", sku: "SGE-HL-056", name: "Kandil Diamond-Cut Compact",
+    category: "Hanging Light",
+    specs: { "Glass Colour": "Clear", "Glass Type": "Diamond-Cut", "Number of Lights": "1", Height: '32"', Width: '9"' },
+  };
+  const featherTwelve = {
+    id: "feather-twelve", sku: "SGE-HL-031", name: "Kandil Feather-Cut Clear",
+    category: "Hanging Light",
+    specs: { "Glass Colour": "Clear", "Glass Type": "Feather-Cut", "Number of Lights": "1", Height: '32"', Width: '12"' },
+  };
+  const diamondTwelve = {
+    id: "diamond-twelve", sku: "SGE-HL-065", name: "Kandil Diamond-Cut Grand",
+    category: "Hanging Light",
+    specs: { "Glass Colour": "Clear", "Glass Type": "Diamond-Cut", "Number of Lights": "3", Height: '36"', Width: '12"' },
+  };
+  mockApi.getProductVariants.mockResolvedValue({
+    family: { slug: "kandil", name: "Kandil", axes: ["glass_colour", "glass_cut", "lights", "size"] },
+    items: [diamondNine, featherTwelve, diamondTwelve],
+  });
+
+  render(<MemoryRouter><ProductVariants product={diamondNine} /><LocationProbe /></MemoryRouter>);
+
+  expect(await screen.findByLabelText("Glass cut / design")).toHaveValue("Diamond-Cut");
+  const width = screen.getByLabelText("Width");
+  fireEvent.change(width, { target: { value: '12"' } });
+  expect(screen.getByTestId("location")).toHaveTextContent("sge-hl-065");
+});
+
+test("falls back to another design only when the selected design is unavailable at the new width", async () => {
+  const diamondNine = {
+    id: "diamond-nine", sku: "SGE-HL-056", name: "Kandil Diamond-Cut Compact",
+    category: "Hanging Light",
+    specs: { "Glass Colour": "Clear", "Glass Type": "Diamond-Cut", "Number of Lights": "1", Height: '32"', Width: '9"' },
+  };
+  const featherTwelve = {
+    id: "feather-twelve", sku: "SGE-HL-031", name: "Kandil Feather-Cut Clear",
+    category: "Hanging Light",
+    specs: { "Glass Colour": "Clear", "Glass Type": "Feather-Cut", "Number of Lights": "1", Height: '36"', Width: '12"' },
+  };
+  mockApi.getProductVariants.mockResolvedValue({
+    family: { slug: "kandil", name: "Kandil", axes: ["glass_colour", "glass_cut", "lights", "size"] },
+    items: [diamondNine, featherTwelve],
+  });
+
+  render(<MemoryRouter><ProductVariants product={diamondNine} /><LocationProbe /></MemoryRouter>);
+
+  const width = await screen.findByLabelText("Width");
+  fireEvent.change(width, { target: { value: '12"' } });
+  expect(screen.getByTestId("location")).toHaveTextContent("sge-hl-031");
+});
+
 test("legacy Size approval shows Diameter separately when height is unchanged", async () => {
   const compact = {
     id: "compact", sku: "SGE-HL-006", name: "Kandil Compact",
