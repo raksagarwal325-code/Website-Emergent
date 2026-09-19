@@ -8,6 +8,7 @@ import {
   suggestVariantFamilies,
   VARIANT_SPEC_AXES,
   variantAxes,
+  variantAxisApprovalKey,
   withVariantFamilies,
 } from "../../constants/variantFamilies";
 
@@ -60,7 +61,7 @@ export default function VariantFamiliesAdmin() {
     setSelectedIds(new Set(family.product_ids));
     setPinnedIds(new Set(family.product_ids));
     const familyProducts = products.filter((product) => family.product_ids.includes(product.id));
-    const detected = variantAxes(familyProducts).map((axis) => axis.key);
+    const detected = variantAxes(familyProducts).map((axis) => variantAxisApprovalKey(axis.key));
     setSelectedAxes(new Set(family.axes?.length ? family.axes : detected));
   }, [selectedSlug, families, products]);
 
@@ -99,7 +100,7 @@ export default function VariantFamiliesAdmin() {
     setSearch("");
     setCategory("");
     setReviewingSuggestion(suggestion.slug);
-    setSelectedAxes(new Set(variantAxes(suggestion.products).map((axis) => axis.key)));
+    setSelectedAxes(new Set(variantAxes(suggestion.products).map((axis) => variantAxisApprovalKey(axis.key))));
     if (suggestionsRef.current) suggestionsRef.current.open = false;
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
       reviewPanelRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
@@ -208,7 +209,7 @@ export default function VariantFamiliesAdmin() {
             {reviewingSuggestion && <div className="mb-5 border border-[#D4AF37]/50 p-4 flex flex-wrap items-center justify-between gap-4"><div className="text-sm text-white/65"><strong className="block text-[#D4AF37] font-normal mb-1">Reviewing a private variant suggestion</strong>Confirm the products and select only the differences customers should be able to choose. Nothing becomes public until you approve it.</div><button disabled={saving || selectedIds.size < 2 || selectedAxes.size < 1} onClick={save} className="shrink-0 bg-[#D4AF37] text-black px-6 py-3 text-xs uppercase tracking-[0.18em] disabled:opacity-50">{saving ? "Saving…" : "Approve reviewed family"}</button></div>}
             <label className="block"><span className="text-xs uppercase tracking-[0.2em] text-white/50">Family name</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Use the shared product/family name" className="mt-2 w-full bg-[#090909] border border-white/20 px-4 py-3" /></label>
             <div data-testid="variant-selected-count" className="mt-4 text-sm text-white/55">{selectedIds.size} exact products selected</div>
-            <div className="mt-4"><div className="text-[10px] uppercase tracking-[0.18em] text-white/45 mb-2">Select applicable differences</div><div className="flex flex-wrap gap-2">{AXIS_OPTIONS.map((axis) => { const active = selectedAxes.has(axis.key); const detected = axes.some((item) => item.key === axis.key); return <button key={axis.key} type="button" aria-pressed={active} onClick={() => toggleAxis(axis.key)} className={`border px-3 py-2 text-[10px] uppercase tracking-[0.15em] transition-colors ${active ? "border-[#D4AF37] bg-[#D4AF37] text-black" : "border-white/20 text-white/50 hover:border-[#D4AF37]/60"}`}>{active && <Check size={12} className="inline mr-1" />}Differs by {axis.label}{detected ? "" : " · verify"}</button>; })}</div><div className="text-[10px] text-white/35 mt-2">Suggested selections are based on saved product specifications. You can add or remove any option after checking the products.</div></div>
+            <div className="mt-4"><div className="text-[10px] uppercase tracking-[0.18em] text-white/45 mb-2">Select applicable differences</div><div className="flex flex-wrap gap-2">{AXIS_OPTIONS.map((axis) => { const active = selectedAxes.has(axis.key); const detected = axes.some((item) => variantAxisApprovalKey(item.key) === axis.key); return <button key={axis.key} type="button" aria-pressed={active} onClick={() => toggleAxis(axis.key)} className={`border px-3 py-2 text-[10px] uppercase tracking-[0.15em] transition-colors ${active ? "border-[#D4AF37] bg-[#D4AF37] text-black" : "border-white/20 text-white/50 hover:border-[#D4AF37]/60"}`}>{active && <Check size={12} className="inline mr-1" />}Differs by {axis.label}{detected ? "" : " · verify"}</button>; })}</div><div className="text-[10px] text-white/35 mt-2">Suggested selections are based on saved product specifications. You can add or remove any option after checking the products.</div></div>
             {selectedProducts.length > 0 && <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">{selectedProducts.slice(0, 4).map((product) => <div key={product.id} className="min-w-0"><div className="aspect-square bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{product.images?.[0] ? <img src={api.resolveImage(product.images[0])} alt={product.name} loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <span className="text-[9px] uppercase tracking-wider text-white/25">No image</span>}</div><div className="text-[10px] text-[#D4AF37] truncate mt-2">{product.sku}</div><div className="text-[10px] text-white/45 truncate">{product.name}</div></div>)}</div>}
           </div>
 
