@@ -5,6 +5,7 @@ from PIL import Image
 from starlette.applications import Starlette
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import PlainTextResponse
+from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from upload_security import configured_cors_origins, validate_upload_bytes
@@ -44,11 +45,12 @@ def test_cors_origins_are_static_exact_production_origins():
 
 
 def test_untrusted_origin_fails_credentialed_cors_preflight():
-    inner = Starlette()
-
-    @inner.route("/")
     async def homepage(_request):
         return PlainTextResponse("ok")
+
+    inner = Starlette(routes=[
+        Route("/", homepage),
+    ])
 
     app = CORSMiddleware(
         inner,
