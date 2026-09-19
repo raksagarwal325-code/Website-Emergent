@@ -1,6 +1,6 @@
 const VARIANT_SPEC_AXES = [
   { key: "glass_colour", label: "Glass colour", specs: ["Glass Colour", "Glass Color", "Colour", "Color"] },
-  { key: "glass_cut", label: "Glass cut / design", specs: ["Glass Cut / Design", "Glass Cut", "Cut Design", "Glass Design", "Glass Pattern"] },
+  { key: "glass_cut", label: "Glass cut / design", specs: ["Glass Cut / Design", "Glass Cut", "Glass Type", "Cut Design", "Glass Design", "Glass Pattern"] },
   { key: "metal_finish", label: "Metal finish", specs: ["Metal Finish", "Finish"] },
   { key: "lights", label: "Lights", specs: ["Number of Lights", "Lights", "Light Count"] },
   { key: "size", label: "Size", specs: ["Dimensions", "Size"] },
