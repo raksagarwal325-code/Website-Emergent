@@ -253,7 +253,7 @@ describe("ProductDetail — live product photo request", () => {
       expect.stringContaining("https://wa.me/919999999999?text="),
     );
     const message = new URL(requestLink.getAttribute("href")).searchParams.get("text");
-    expect(message).toContain("SGE-TL-009");
+    expect(message).toContain(inStockFixture.sku);
     expect(message).toContain("please share recent live photos");
     expect(message).toContain("/product/");
   });
