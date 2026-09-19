@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Check, ChevronDown, Layers3 } from "lucide-react";
 import { api } from "../lib/api";
 import { productPath } from "../lib/productUrl";
-import { variantAxes } from "../constants/variantFamilies";
+import { isVariantAxisApproved, variantAxes } from "../constants/variantFamilies";
 
 function normalized(value) {
   return String(value || "").trim().toLowerCase();
@@ -111,7 +111,7 @@ export default function ProductVariants({ product }) {
   const approvedAxes = Array.isArray(data.family?.axes) ? data.family.axes : [];
   const allAxes = useMemo(() => {
     const detected = variantAxes(items);
-    return approvedAxes.length ? detected.filter((axis) => approvedAxes.includes(axis.key)) : detected;
+    return approvedAxes.length ? detected.filter((axis) => isVariantAxisApproved(axis.key, approvedAxes)) : detected;
   }, [items, approvedAxes]);
   useEffect(() => {
     if (items.length < 2 || typeof window === "undefined" || window.location.hash !== "#matching-pieces") return undefined;
@@ -127,7 +127,7 @@ export default function ProductVariants({ product }) {
   const sameCategoryItems = items.filter((item) => normalized(item.category) === normalized(product.category));
   const sameCategoryAxes = variantAxes(sameCategoryItems)
     .filter((axis) => axis.key !== "product_type" && axis.key !== "use")
-    .filter((axis) => !approvedAxes.length || approvedAxes.includes(axis.key));
+    .filter((axis) => !approvedAxes.length || isVariantAxisApproved(axis.key, approvedAxes));
   const sameCategoryCurrentIndex = sameCategoryItems.findIndex((item) => item.id === product?.id);
   const permitsMatchingTypes = approvedAxes.includes("use") || approvedAxes.includes("product_type");
   const matchingCategories = permitsMatchingTypes

@@ -142,3 +142,28 @@ test("shows a verified glass cut dropdown and opens the closest real configurati
   fireEvent.change(glassCut, { target: { value: "Feather Cut" } });
   expect(screen.getByTestId("location")).toHaveTextContent("sge-hl-031");
 });
+
+
+test("legacy Size approval shows Diameter separately when height is unchanged", async () => {
+  const compact = {
+    id: "compact", sku: "SGE-HL-006", name: "Kandil Compact",
+    category: "Hanging Light", specs: { Height: '20"', Diameter: '12"', Dimensions: '20" × 12"' },
+  };
+  const wide = {
+    id: "wide", sku: "SGE-HL-114", name: "Kandil Wide",
+    category: "Hanging Light", specs: { Height: '20"', Diameter: '16"', Dimensions: '20" × 16"' },
+  };
+  mockApi.getProductVariants.mockResolvedValue({
+    family: { slug: "kandil", name: "Kandil", axes: ["size"] },
+    items: [compact, wide],
+  });
+
+  render(<MemoryRouter><ProductVariants product={compact} /><LocationProbe /></MemoryRouter>);
+
+  expect(screen.queryByLabelText("Height")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Size")).not.toBeInTheDocument();
+  const diameter = await screen.findByLabelText("Diameter");
+  expect(diameter).toHaveValue('12"');
+  fireEvent.change(diameter, { target: { value: '16"' } });
+  expect(screen.getByTestId("location")).toHaveTextContent("sge-hl-114");
+});

@@ -1,5 +1,6 @@
 import {
   getVariantFamilies,
+  isVariantAxisApproved,
   suggestVariantFamilies,
   variantAxes,
   variantBaseName,
@@ -55,4 +56,18 @@ test("approved families retain only supported customer-selectable axes", () => {
   }] } });
 
   expect(families[0].axes).toEqual(["glass_colour", "glass_cut", "mechanism"]);
+});
+
+
+test("height and diameter become independent axes while legacy size approval permits them", () => {
+  const items = [
+    product("1", "Kandil Compact", "Hanging Light", { Height: '20"', Diameter: '12"', Dimensions: '20" × 12"' }),
+    product("2", "Kandil Wide", "Hanging Light", { Height: '20"', Diameter: '16"', Dimensions: '20" × 16"' }),
+  ];
+
+  const axes = variantAxes(items);
+  expect(axes.map((axis) => axis.key)).toEqual(["diameter"]);
+  expect(axes[0]).toEqual(expect.objectContaining({ label: "Diameter", values: ['12"', '16"'] }));
+  expect(isVariantAxisApproved("diameter", ["size"])).toBe(true);
+  expect(isVariantAxisApproved("height", ["size"])).toBe(true);
 });

@@ -98,24 +98,46 @@ function firstSpec(product, keys) {
   return "";
 }
 
-function sizeValue(product) {
-  const direct = firstSpec(product, ["Dimensions", "Size"]);
-  if (direct) return direct;
-  const height = firstSpec(product, ["Height"]);
-  const width = firstSpec(product, ["Width", "Diameter"]);
-  if (height && width) return `${height} × ${width}`;
-  return height || width;
+const STRUCTURED_DIMENSION_AXES = [
+  { key: "height", label: "Height", specs: ["Height"] },
+  { key: "diameter", label: "Diameter", specs: ["Diameter"] },
+  { key: "width", label: "Width", specs: ["Width"] },
+];
+const STRUCTURED_DIMENSION_KEYS = new Set(STRUCTURED_DIMENSION_AXES.map((axis) => axis.key));
+
+export function variantAxisApprovalKey(key) {
+  return STRUCTURED_DIMENSION_KEYS.has(key) ? "size" : key;
+}
+
+export function isVariantAxisApproved(key, approvedAxes = []) {
+  return approvedAxes.includes(key) || (approvedAxes.includes("size") && STRUCTURED_DIMENSION_KEYS.has(key));
 }
 
 export function variantAxes(products = []) {
-  const candidates = VARIANT_SPEC_AXES.map((axis) => ({
+  const candidates = VARIANT_SPEC_AXES
+    .filter((axis) => axis.key !== "size")
+    .map((axis) => ({
+      ...axis,
+      values: products.map((product) => firstSpec(product, axis.specs)),
+    }));
+  candidates.push(...STRUCTURED_DIMENSION_AXES.map((axis) => ({
     ...axis,
-    values: products.map((product) => axis.key === "size" ? sizeValue(product) : firstSpec(product, axis.specs)),
-  }));
+    values: products.map((product) => firstSpec(product, axis.specs)),
+  })));
+  candidates.push({
+    key: "size",
+    label: "Size",
+    specs: ["Dimensions", "Size"],
+    values: products.map((product) => firstSpec(product, ["Dimensions", "Size"])),
+  });
   if (new Set(products.map((product) => meaningful(product?.category))).size > 1) {
     candidates.push({ key: "use", label: "Form / use", values: products.map((product) => meaningful(product?.category)) });
   }
-  return candidates.filter((axis) => new Set(axis.values.filter(Boolean).map((value) => value.toLowerCase())).size > 1);
+  const differing = candidates.filter((axis) =>
+    new Set(axis.values.filter(Boolean).map((value) => value.toLowerCase())).size > 1
+  );
+  const hasStructuredDimension = differing.some((axis) => STRUCTURED_DIMENSION_KEYS.has(axis.key));
+  return hasStructuredDimension ? differing.filter((axis) => axis.key !== "size") : differing;
 }
 
 export { VARIANT_SPEC_AXES };
