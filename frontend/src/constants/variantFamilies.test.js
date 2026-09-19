@@ -43,6 +43,23 @@ test("Glass Type is recognised as a verified glass cut axis when saved designs d
   ]));
 });
 
+test("Glass Design outranks a conflicting descriptive Glass Type value", () => {
+  const items = [
+    product("1", "Rajsi Peacock Table Lamp", "Table Lamp", {
+      "Glass Design": "Fancy-Cut",
+      "Glass Type": "Peacock-and-floral cut clear glass",
+    }),
+    product("2", "Rajsi Diamond Table Lamp", "Table Lamp", {
+      "Glass Design": "Diamond-Cut",
+      "Glass Type": "Diamond-lattice cut clear glass",
+    }),
+  ];
+
+  expect(variantAxes(items)).toEqual(expect.arrayContaining([
+    expect.objectContaining({ key: "glass_cut", values: ["Fancy-Cut", "Diamond-Cut"] }),
+  ]));
+});
+
 test("already approved products are excluded from new suggestions", () => {
   const items = [product("1", "Neelpushp Amber Chandelier", "Chandelier"), product("2", "Neelpushp Blue Chandelier", "Chandelier")];
   expect(suggestVariantFamilies(items, [{ product_ids: ["1", "2"] }])).toEqual([]);
