@@ -83,15 +83,15 @@ describe("productMessage / waProductLink", () => {
 });
 
 describe("actualProductMessage", () => {
-  test("uses a stable WhatsApp preview URL so old link-card caches do not hide the image", () => {
+  test("uses the clean product URL without customer-visible preview parameters", () => {
     const msg = actualProductMessage(
       { name: "Rajdarbar", sku: "SGE-TA-009" },
       "https://samratglass.com/product/rajdarbar-sge-ta-009",
     );
     expect(msg).toContain("SGE-TA-009");
-    expect(msg).toContain(
-      "https://samratglass.com/product/rajdarbar-sge-ta-009?share=whatsapp&preview=2",
-    );
+    expect(msg).toContain("https://samratglass.com/product/rajdarbar-sge-ta-009");
+    expect(msg).not.toContain("share=whatsapp");
+    expect(msg).not.toContain("preview=");
   });
 });
 

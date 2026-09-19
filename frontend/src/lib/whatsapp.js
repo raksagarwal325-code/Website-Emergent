@@ -13,7 +13,6 @@
 
 const BRAND_PREFIX = "Hi Samrat Glass Emporium,";
 const PUBLIC_SITE_ORIGIN = "https://samratglass.com";
-const WHATSAPP_PREVIEW_VERSION = "2";
 
 /**
  * Named prefilled messages for each public entry point. Kept in an
@@ -33,21 +32,6 @@ export const WA_MESSAGES = {
 };
 
 const digitsOnly = (n) => String(n || "").replace(/[^0-9]/g, "");
-
-const withWhatsAppPreviewKey = (url) => {
-  if (!url) return "";
-  try {
-    const parsed = new URL(url, PUBLIC_SITE_ORIGIN);
-    parsed.searchParams.set("share", "whatsapp");
-    // WhatsApp caches link-card failures by the complete URL. Bump this
-    // version whenever the product preview format changes so it re-fetches
-    // the current Open Graph image instead of reusing an older no-image card.
-    parsed.searchParams.set("preview", WHATSAPP_PREVIEW_VERSION);
-    return parsed.href;
-  } catch {
-    return url;
-  }
-};
 
 /**
  * Compose the product-page WhatsApp message. Includes the product URL
@@ -72,8 +56,7 @@ export const actualProductMessage = (product, url) => {
     product?.sku ? ` (${product.sku})` : ""
   }`;
   const base = `${BRAND_PREFIX} please share recent live photos of ${nameSku}. If available, a short video would also be helpful.`;
-  const previewUrl = withWhatsAppPreviewKey(url);
-  return previewUrl ? `${base}\n${previewUrl}` : base;
+  return url ? `${base}\n${url}` : base;
 };
 
 /**
