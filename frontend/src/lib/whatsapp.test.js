@@ -89,7 +89,9 @@ describe("actualProductMessage", () => {
       "https://samratglass.com/product/rajdarbar-sge-ta-009",
     );
     expect(msg).toContain("SGE-TA-009");
-    expect(msg).toContain("https://samratglass.com/product/rajdarbar-sge-ta-009?share=whatsapp");
+    expect(msg).toContain(
+      "https://samratglass.com/product/rajdarbar-sge-ta-009?share=whatsapp&preview=2",
+    );
   });
 });
 
