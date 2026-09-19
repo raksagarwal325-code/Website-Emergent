@@ -2,7 +2,7 @@ import CraftOriginLink from "../components/CraftOriginLink";
 import { PRODUCT_ORIGIN } from "../lib/brandOrigin";
 import React, { useEffect, useRef, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, MapPin } from "lucide-react";
+import { Heart, ShoppingBag, MessageCircle, Star, ArrowLeft, Truck, CreditCard, MapPin, Camera } from "lucide-react";
 import { api, formatPrice, formatProductPrice } from "../lib/api";
 import { schemaAvailabilityFor, isMadeToOrder } from "../lib/productAvailability";
 import { useCatalog } from "../context/CatalogContext";
@@ -11,7 +11,7 @@ import SEO from "../components/SEO";
 import SchemaLD from "../components/SchemaLD";
 import SeenInProjects from "../components/SeenInProjects";
 import { trackViewItem } from "../lib/analytics";
-import { waProductLink } from "../lib/whatsapp";
+import { waActualProductLink, waProductLink } from "../lib/whatsapp";
 import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
 import { productPath } from "../lib/productUrl";
 import { productImageAlt } from "../lib/imageSeo";
@@ -108,6 +108,13 @@ export default function ProductDetail() {
       ? `${window.location.origin}${productPath(product)}`
       : "";
   const waLink = waProductLink(settings?.whatsapp_number, product, productUrl) || "#";
+  const isActualProductPilot = product.sku === "SGE-TL-009";
+  const actualProductWaLink =
+    waActualProductLink(
+      settings?.whatsapp_number || settings?.whatsapp,
+      product,
+      productUrl,
+    ) || "#";
 
   const handleBack = () => {
     const historyIndex = window.history?.state?.idx;
@@ -402,6 +409,47 @@ export default function ProductDetail() {
               <Heart size={16} fill={fav ? "#D4AF37" : "none"} />
             </button>
           </div>
+
+          {isActualProductPilot && (
+            <section
+              data-testid="actual-product-check"
+              aria-labelledby="actual-product-check-title"
+              className="border border-[#D4AF37]/35 bg-[#D4AF37]/[0.05] p-5"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-[#D4AF37]/40 text-[#D4AF37]">
+                  <Camera size={18} aria-hidden="true" />
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.28em] text-[#D4AF37]">
+                    Actual product check
+                  </div>
+                  <h2
+                    id="actual-product-check-title"
+                    className="mt-2 font-serif text-xl text-white"
+                  >
+                    See the current piece before ordering
+                  </h2>
+                  <p className="mt-2 text-sm leading-relaxed text-white/65">
+                    Ask for current workshop or showroom photos and a short light-on
+                    video of this exact reference.
+                  </p>
+                </div>
+              </div>
+              <a
+                data-testid="actual-product-request-btn"
+                href={actualProductWaLink}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-5 inline-flex w-full items-center justify-center gap-2 border border-[#D4AF37] px-5 py-3 text-[10px] uppercase tracking-[0.24em] text-[#D4AF37] transition-colors hover:bg-[#D4AF37] hover:text-black sm:w-auto"
+              >
+                <MessageCircle size={14} /> Request current photo / video
+              </a>
+              <p className="mt-3 text-[10px] tracking-wide text-white/40">
+                Shared privately on WhatsApp · no obligation to order
+              </p>
+            </section>
+          )}
 
           {/* Buying confidence — surface reassurance at the decision point instead of hiding it in tabs. */}
           <div data-testid="buying-confidence" className="border border-white/10 bg-white/[0.02] p-5">
