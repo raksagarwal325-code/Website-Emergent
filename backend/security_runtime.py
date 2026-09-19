@@ -44,6 +44,7 @@ _AI_FETCH_CALLERS = {
     "_resolve_product_image",
 }
 _IMAGE_VARIANT_WIDTHS = {320, 640, 960, 1280}
+_SOCIAL_PREVIEW_WIDTH = 640
 _PRODUCT_PATH_RE = re.compile(r"^[^/]+/products/(?!.*(?:^|/)originals/)[A-Za-z0-9._/-]+$")
 _IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
 
@@ -192,6 +193,11 @@ def _variant_storage_path(path: str, width: int) -> str:
     return f"{app_prefix}/product-variants/webp/{width}/{product_tail}.webp"
 
 
+def _social_preview_storage_path(path: str) -> str:
+    app_prefix, _, product_tail = path.partition("/products/")
+    return f"{app_prefix}/product-variants/jpeg/social-{_SOCIAL_PREVIEW_WIDTH}/{product_tail}.jpg"
+
+
 def _render_webp_variant(data: bytes, width: int) -> bytes:
     """Resize a public product image without touching the stored master."""
     from PIL import Image, ImageOps
@@ -208,6 +214,32 @@ def _render_webp_variant(data: bytes, width: int) -> bytes:
             image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
         output = io.BytesIO()
         image.save(output, format="WEBP", quality=90, method=6)
+        return output.getvalue()
+
+
+def _render_social_preview(data: bytes, width: int = _SOCIAL_PREVIEW_WIDTH) -> bytes:
+    """Create a compact JPEG for WhatsApp and Open Graph crawlers."""
+    from PIL import Image, ImageOps
+
+    with Image.open(io.BytesIO(data)) as opened:
+        if getattr(opened, "is_animated", False):
+            raise ValueError("animated images are not supported")
+        image = ImageOps.exif_transpose(opened)
+        if image.width > width:
+            ratio = width / float(image.width)
+            height = max(1, round(image.height * ratio))
+            image = image.resize((width, height), Image.Resampling.LANCZOS)
+
+        if image.mode in {"RGBA", "LA"} or "transparency" in image.info:
+            rgba = image.convert("RGBA")
+            background = Image.new("RGBA", rgba.size, (42, 17, 37, 255))
+            background.alpha_composite(rgba)
+            image = background.convert("RGB")
+        elif image.mode != "RGB":
+            image = image.convert("RGB")
+
+        output = io.BytesIO()
+        image.save(output, format="JPEG", quality=82, optimize=True, progressive=True)
         return output.getvalue()
 
 
@@ -248,6 +280,38 @@ def _install_image_delivery(server_module) -> None:
             raise HTTPException(status_code=502, detail="Image variant generation failed") from exc
 
         return Response(content=rendered, media_type="image/webp", headers={"Cache-Control": _IMMUTABLE_CACHE})
+
+    @app.get("/api/social-preview/{path:path}")
+    async def _social_preview(path: str):
+        if not path.lower().endswith(".jpg"):
+            raise HTTPException(status_code=404, detail="Social preview not found")
+        source_path = path[:-4]
+        if not _valid_product_path(source_path):
+            raise HTTPException(status_code=404, detail="Social preview not found")
+
+        preview_path = _social_preview_storage_path(source_path)
+        try:
+            cached, _cached_type = await asyncio.to_thread(get_object, preview_path)
+            return Response(content=cached, media_type="image/jpeg", headers={"Cache-Control": _IMMUTABLE_CACHE})
+        except Exception:
+            pass
+
+        try:
+            source, source_type = await asyncio.to_thread(get_object, source_path)
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail="Source image not found") from exc
+        if not str(source_type or "").lower().startswith("image/"):
+            raise HTTPException(status_code=415, detail="Unsupported source type")
+
+        try:
+            rendered = await asyncio.to_thread(_render_social_preview, source)
+            await asyncio.to_thread(put_object, preview_path, rendered, "image/jpeg")
+        except ValueError as exc:
+            raise HTTPException(status_code=415, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail="Social preview generation failed") from exc
+
+        return Response(content=rendered, media_type="image/jpeg", headers={"Cache-Control": _IMMUTABLE_CACHE})
 
     app.state.sge_image_delivery_installed = True
 

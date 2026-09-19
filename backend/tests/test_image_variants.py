@@ -36,3 +36,23 @@ def test_render_webp_variant_never_upscales_small_source():
 
     with Image.open(io.BytesIO(rendered)) as result:
         assert result.size == (240, 320)
+
+
+def test_social_preview_is_compact_jpeg_with_bounded_width():
+    source = Image.new("RGB", (1254, 1254), (10, 80, 40))
+    buf = io.BytesIO()
+    source.save(buf, format="PNG")
+
+    rendered = security_runtime._render_social_preview(buf.getvalue())
+    with Image.open(io.BytesIO(rendered)) as result:
+        assert result.format == "JPEG"
+        assert result.mode == "RGB"
+        assert result.size == (640, 640)
+    assert len(rendered) < len(buf.getvalue())
+
+
+def test_social_preview_storage_path_is_separate_from_master_and_webp_variants():
+    path = "lumiere-catalog/products/example.png"
+    assert security_runtime._social_preview_storage_path(path) == (
+        "lumiere-catalog/product-variants/jpeg/social-640/example.png.jpg"
+    )
