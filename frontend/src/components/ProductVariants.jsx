@@ -65,14 +65,26 @@ function matchingPieceDetails(product) {
   ].filter((detail) => detail && detail.value.length <= 40);
 }
 
+const VARIANT_MATCH_WEIGHTS = {
+  glass_cut: 1000,
+  glass_colour: 100,
+  metal_finish: 50,
+  lights: 40,
+  mechanism: 30,
+  height: 10,
+  diameter: 10,
+  width: 10,
+  size: 10,
+};
+
 function closestProduct(items, axes, currentIndex, axisIndex, wantedValue) {
   const candidates = items.map((item, index) => ({ item, index }))
     .filter(({ index }) => normalized(axes[axisIndex].values[index]) === normalized(wantedValue));
   if (!candidates.length) return null;
   return candidates.sort((a, b) => {
     const score = ({ index }) => axes.reduce((total, axis, i) => {
-      if (i === axisIndex) return total;
-      return total + (normalized(axis.values[index]) === normalized(axis.values[currentIndex]) ? 1 : 0);
+      if (i === axisIndex || normalized(axis.values[index]) !== normalized(axis.values[currentIndex])) return total;
+      return total + (VARIANT_MATCH_WEIGHTS[axis.key] || 1);
     }, 0);
     return score(b) - score(a);
   })[0].item;
