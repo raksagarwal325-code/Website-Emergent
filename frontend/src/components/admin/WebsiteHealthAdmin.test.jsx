@@ -1,4 +1,4 @@
-import { buildSopRecommendation, buildWebsiteHealth, evaluateSopCompliance, groupFindings, productCompleteness, SOP_RULES } from "./WebsiteHealthAdmin";
+import { buildSopRecommendation, buildWebsiteHealth, evaluateSopCompliance, groupFindings, hydrateSopRules, productCompleteness, SOP_RULES } from "./WebsiteHealthAdminV2";
 
 const descriptionWithFeatures = (count = 8) => `<p>This chandelier has a balanced decorative silhouette, patterned glass surfaces and warm reflected detail suited to an elegant focal point.</p><p>Its layered form brings ambient character to living rooms, dining spaces, entrance halls and considered hospitality interiors.</p><h3>Key Features</h3><ul>${Array.from({ length: count }, (_, index) => `<li>Product-specific visible feature ${index + 1}</li>`).join("")}</ul>`;
 
@@ -99,10 +99,27 @@ test("health audit reports exact counts rather than a rounded catalogue average"
   expect(health).not.toHaveProperty("publishedAverageCompleteness");
 });
 
-test("Floor Chandelier stays unresolved because the supplied SOP contains Floor Lamp rules", () => {
-  const result = evaluateSopCompliance({ ...healthyProduct, id: "fc1", sku: "SGE-FC-001", category: "Floor Chandelier" });
-  expect(result.coverage).toBe("unresolved");
-  expect(result.issues.some((item) => item.issue === "Floor Chandelier SOP mapping unresolved")).toBe(true);
+test("Floor Chandelier uses the approved central SOP mapping", () => {
+  const specs = Object.fromEntries(SOP_RULES["floor chandelier"].schema.map((field) => [field, field === "Product Type" ? "Floor Chandelier" : `${field} value`]));
+  const result = evaluateSopCompliance({ ...healthyProduct, id: "fc1", sku: "SGE-FC-001", category: "Floor Chandelier", specs });
+  expect(result.coverage).toBe("covered");
+  expect(result.issues.some((item) => item.issue.includes("unresolved"))).toBe(false);
+});
+
+test("Website Health hydrates categories from the backend SOP registry", () => {
+  const original = { ...SOP_RULES };
+  try {
+    expect(hydrateSopRules({
+      defaults: { features: 8 },
+      categories: {
+        "Floor Chandelier": { sku_prefix: "FC", schema: ["Product Type"], image_counts: [2], image_count_exceptions: {} },
+      },
+    })).toBe(true);
+    expect(SOP_RULES["floor chandelier"].productType).toBe("Floor Chandelier");
+  } finally {
+    Object.keys(SOP_RULES).forEach((key) => delete SOP_RULES[key]);
+    Object.assign(SOP_RULES, original);
+  }
 });
 
 test("Table Lamp approved four-image exception is accepted", () => {
@@ -119,7 +136,7 @@ test("Table Lamp approved four-image exception is accepted", () => {
   expect(result.issues.some((item) => item.issue === "Image count requires SOP review")).toBe(false);
 });
 
-test("Wall Light keeps its written six-to-eight feature rule", () => {
+test("Wall Light uses the central exact eight-feature rule", () => {
   const specs = Object.fromEntries(SOP_RULES["wall light"].schema.map((field) => [field, `${field} value`]));
   const result = evaluateSopCompliance({
     ...healthyProduct,
@@ -129,7 +146,7 @@ test("Wall Light keeps its written six-to-eight feature rule", () => {
     specs,
     description: descriptionWithFeatures(6),
   });
-  expect(result.issues.some((item) => item.issue === "Key Features count does not match SOP")).toBe(false);
+  expect(result.issues.some((item) => item.issue === "Key Features count does not match SOP")).toBe(true);
 });
 
 test("approved confirmation wording is counted separately from structural compliance", () => {

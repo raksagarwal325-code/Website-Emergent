@@ -43,6 +43,14 @@ export const SOP_RULES = {
     imageCounts: [2],
     productType: "Chandelier",
   },
+  "floor chandelier": {
+    category: "Floor Chandelier",
+    sku: /^SGE-FC-\d{3}$/i,
+    schema: SHARED_18_FIELDS.map((field) => field === "Suspension Type" ? "Base Type" : field),
+    featureRange: [8, 8],
+    imageCounts: [2],
+    productType: "Floor Chandelier",
+  },
   "floor lamp": {
     category: "Floor Lamp",
     sku: /^SGE-FL-\d{3}$/i,
@@ -88,7 +96,7 @@ export const SOP_RULES = {
     category: "Wall Light",
     sku: /^SGE-WL-\d{3}$/i,
     schema: ["Material", "Finish", "Height", "Width", "Glass Type", "Glass Colour", "Product Type", "Number of Lights", "Number of Arms", "Holder Type", "Bulb Type", "Package Contents", "Suitable For", "Style", "Care Instructions", "Customization", "Collection / Family"],
-    featureRange: [6, 8],
+    featureRange: [8, 8],
     imageCounts: [1, 2],
   },
 };
@@ -96,6 +104,7 @@ export const SOP_RULES = {
 const CATEGORY_ALIASES = {
   "candle stands": "candle stand",
   chandeliers: "chandelier",
+  "floor chandeliers": "floor chandelier",
   "floor lamps": "floor lamp",
   "gate lights": "gate light",
   "hanging lights": "hanging light",
@@ -103,6 +112,25 @@ const CATEGORY_ALIASES = {
   "table lamps": "table lamp",
   "wall lights": "wall light",
 };
+
+export function hydrateSopRules(registry) {
+  if (!registry?.categories) return false;
+  const hydrated = {};
+  Object.entries(registry.categories).forEach(([category, config]) => {
+    hydrated[category.toLowerCase()] = {
+      category,
+      sku: new RegExp(`^SGE-${config.sku_prefix}-\\d{3}$`, "i"),
+      schema: config.schema,
+      featureRange: [registry.defaults?.features || 8, registry.defaults?.features || 8],
+      imageCounts: config.image_counts || [2],
+      imageCountExceptions: config.image_count_exceptions || {},
+      productType: category,
+    };
+  });
+  Object.keys(SOP_RULES).forEach((key) => delete SOP_RULES[key]);
+  Object.assign(SOP_RULES, hydrated);
+  return true;
+}
 
 const text = (value) => String(value || "").trim();
 const imagesOf = (product) => (Array.isArray(product?.images) ? product.images.map(text).filter(Boolean) : []);
@@ -158,7 +186,6 @@ const isManuallyVerified = (product) => {
 export function evaluateSopCompliance(product) {
   const categoryKey = normalizeCategory(product?.category);
   const rule = SOP_RULES[categoryKey];
-  const unresolved = categoryKey === "floor chandelier";
   const issues = [];
   const add = (issue, severity = "review", detail = "") => issues.push({ issue, severity, detail });
 
@@ -168,9 +195,7 @@ export function evaluateSopCompliance(product) {
   if (!Object.prototype.hasOwnProperty.call(product || {}, "status") || !VALID_STATUS.has(product?.status)) add("Publication status is missing or invalid", "critical");
   if (!Object.prototype.hasOwnProperty.call(product || {}, "price_display") || !VALID_PRICE_DISPLAY.has(product?.price_display)) add("Price display mode is missing or invalid", "critical");
 
-  if (unresolved) {
-    add("Floor Chandelier SOP mapping unresolved", "review", "The supplied document contains Floor Lamp / SGE-FL rules, so it is not applied automatically.");
-  } else if (!rule) {
+  if (!rule) {
     add("No approved SOP mapped to category", "review", text(product?.category) || "Uncategorised");
   } else {
     if (text(product?.category) !== rule.category) add("Category does not use the SOP's exact value", "critical", `Expected ${rule.category}`);
@@ -782,11 +807,12 @@ export default function WebsiteHealthAdminV2() {
   const [refreshedAt, setRefreshedAt] = useState(null);
   const [savingRecommendation, setSavingRecommendation] = useState("");
   const [recommendationMessage, setRecommendationMessage] = useState(null);
+  const [sopVersion, setSopVersion] = useState("");
 
   const refresh = async () => {
     setLoading(true);
     setReleaseError("");
-    const [catalogue, siteStats, releaseResult] = await Promise.all([
+    const [catalogue, siteStats, releaseResult, sopRegistry] = await Promise.all([
       api.listAllProducts({ include_drafts: 1, limit: 5000, raw: true }).catch(() => []),
       api.stats().catch(() => null),
       fetch(`${API}/admin/health/release`, {
@@ -799,7 +825,9 @@ export default function WebsiteHealthAdminV2() {
         setReleaseError(error?.message || "Deployment check unavailable");
         return null;
       }),
+      api.adminProductSop().catch(() => null),
     ]);
+    if (hydrateSopRules(sopRegistry)) setSopVersion(sopRegistry.version || "");
     setProducts(catalogue);
     setStats(siteStats);
     setRelease(releaseResult);
@@ -881,6 +909,7 @@ export default function WebsiteHealthAdminV2() {
         <div>
           <div className="eyebrow mb-3">Backoffice · Website Health</div>
           <h1 className="font-serif text-4xl">Website Health</h1>
+          {sopVersion && <div className="mt-2 text-[10px] uppercase tracking-[0.18em] text-[#D4AF37]">Central product SOP {sopVersion}</div>}
           <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">
             Focused checks for catalogue quality, live-site health, search readiness and growth structure. Each area has its own tab so only the information you choose is shown.
           </p>

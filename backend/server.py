@@ -29,7 +29,7 @@ from watermark import apply_watermark  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
-from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply_owner_facts, apply_reference_family, conversation_facts, extract_catalogue_references, facts_as_notes, find_similar_product, normalize_ai_record, normalize_product_name, shared_reference_family, sop_prompt, validate_record  # noqa: E402
+from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_PREFIX, apply_owner_facts, apply_reference_family, apply_reference_model, conversation_facts, extract_catalogue_references, facts_as_notes, find_similar_product, normalize_ai_record, normalize_product_name, product_sop_registry, shared_reference_model, sop_prompt, validate_record  # noqa: E402
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, inspect_media_bytes  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
@@ -310,6 +310,8 @@ class Product(BaseModel):
     #               (e.g. AI-generated products default to this).
     status: str = "published"
     seo_slug: str = ""
+    sop_evidence: dict = Field(default_factory=dict)
+    sop_corrections: List[dict] = Field(default_factory=list)
 
     @field_validator("currency", mode="before")
     @classmethod
@@ -336,6 +338,8 @@ class ProductCreate(BaseModel):
     fixed_price: bool = False
     price_display: str = "starting_from"
     status: str = "published"
+    sop_evidence: dict = Field(default_factory=dict)
+    sop_corrections: List[dict] = Field(default_factory=list)
 
     @field_validator("currency", mode="before")
     @classmethod
@@ -3811,6 +3815,83 @@ class AISopConversationRequest(BaseModel):
     session_id: str = ""
 
 
+async def _resolve_catalogue_references(notes: str, recovered: dict | None = None) -> dict:
+    """Resolve all explicit references against the complete catalogue."""
+    recovered = recovered or {}
+    skus = []
+    for sku in [*(recovered.get("references") or []), *extract_catalogue_references(notes)]:
+        normalized = str(sku or "").upper()
+        if normalized and normalized not in skus:
+            skus.append(normalized)
+    if not skus:
+        return {"skus": [], "products": [], "missing": [], "family": None, "model": None, "model_source": None}
+    matched = await db.products.find(
+        {"sku": {"$in": skus}},
+        {"_id": 0, "sku": 1, "name": 1, "category": 1, "images": 1, "specs": 1},
+    ).to_list(len(skus))
+    by_sku = {str(product.get("sku") or "").upper(): product for product in matched}
+    products = [by_sku[sku] for sku in skus if sku in by_sku]
+    complete = len(products) == len(skus)
+    model, model_source = shared_reference_model(products) if complete else (None, None)
+    return {
+        "skus": skus,
+        "products": products,
+        "missing": [sku for sku in skus if sku not in by_sku],
+        "family": model if model_source == "saved_family" else None,
+        "model": model,
+        "model_source": model_source,
+    }
+
+
+def _reference_prompt(context: dict) -> str:
+    if not context.get("skus"):
+        return "(none)"
+    rows = []
+    for product in context.get("products") or []:
+        specs = product.get("specs") or {}
+        rows.append(json.dumps({
+            "sku": product.get("sku"),
+            "name": product.get("name"),
+            "category": product.get("category"),
+            "family": specs.get("Collection / Family"),
+            "specs": specs,
+        }, ensure_ascii=False))
+    if context.get("missing"):
+        rows.append("MISSING: " + ", ".join(context["missing"]))
+    return "\n".join(rows)
+
+
+def _sop_evidence(context: dict, recovered: dict, owner_notes: str, source_images: list[str] | None = None) -> dict:
+    return {
+        "sop_version": SOP_VERSION,
+        "reference_skus": context.get("skus") or [],
+        "matched_references": [
+            {
+                "sku": product.get("sku"),
+                "name": product.get("name"),
+                "category": product.get("category"),
+                "family": (product.get("specs") or {}).get("Collection / Family"),
+                "image": ((product.get("images") or [None])[0]),
+            }
+            for product in context.get("products") or []
+        ],
+        "missing_references": context.get("missing") or [],
+        "confirmed_family": context.get("family"),
+        "confirmed_model": context.get("model"),
+        "model_source": context.get("model_source"),
+        "recovered_facts": recovered,
+        "owner_notes": owner_notes,
+        "source_images": source_images or [],
+        "authority": "owner facts → SOP → exact catalogue references → images → AI suggestion",
+    }
+
+
+@api.get("/admin/product-sop")
+async def admin_product_sop(admin: _AdminUser = Depends(require_admin)):
+    """Return the single SOP registry used by upload, correction and health."""
+    return product_sop_registry()
+
+
 async def _next_sku_numbers() -> dict:
     next_by_category = {}
     for category, prefix in SKU_PREFIX.items():
@@ -3852,12 +3933,16 @@ async def _generate_sop_product(item: AISopBatchItem) -> dict:
         )
     recovered_notes = facts_as_notes(recovered)
     effective_notes = "; ".join(part for part in (recovered_notes, item.notes.strip()) if part)
+    reference_context = await _resolve_catalogue_references(effective_notes, recovered)
     effective_height = item.height.strip() or str(recovered.get("height") or "").strip()
     effective_width = item.width.strip() or str(recovered.get("width") or "").strip()
     message = (
         f"Known facts: Height={effective_height or 'unknown'}; Width={effective_width or 'unknown'}; "
         f"owner/conversation facts={effective_notes or 'none'}. "
         "Facts recovered from the approved uploaded conversation are authoritative and must not be reinterpreted.\n"
+        "Exact catalogue references are authoritative evidence. Reuse their confirmed family/model only when they agree; "
+        "preserve this new product's visible differences and selected category. Never use an SKU as a model name.\n"
+        f"Resolved catalogue references:\n{_reference_prompt(reference_context)}\n"
         f"Existing {item.category} names for duplicate comparison:\n{context or '(none)'}"
     )
     chat = LlmChat(api_key=api_key, session_id=f"ai-sop-{uuid.uuid4().hex[:12]}", system_message=sop_prompt(item.category)).with_model("gemini", "gemini-3-flash-preview")
@@ -3874,7 +3959,23 @@ async def _generate_sop_product(item: AISopBatchItem) -> dict:
         normalized = normalize_ai_record(
             json.loads(match.group(0)), item.category, effective_height, effective_width
         )
-        return apply_owner_facts(normalized, effective_notes)
+        normalized = apply_owner_facts(normalized, effective_notes)
+        if reference_context.get("family"):
+            normalized = apply_reference_family(normalized, reference_context["family"], item.category)
+        elif reference_context.get("model"):
+            normalized = apply_reference_model(normalized, reference_context["model"], item.category)
+        normalized["sop_evidence"] = _sop_evidence(
+            reference_context, recovered, item.notes.strip(), item.image_filenames
+        )
+        if reference_context.get("missing"):
+            normalized.setdefault("confidence_notes", []).append(
+                "Catalogue reference not found: " + ", ".join(reference_context["missing"])
+            )
+        if reference_context.get("skus") and not reference_context.get("model") and not reference_context.get("missing"):
+            normalized.setdefault("confidence_notes", []).append(
+                "Referenced products do not share one confirmed family; owner confirmation is required"
+            )
+        return normalized
     except json.JSONDecodeError:
         logger.warning("AI product generation returned malformed JSON")
         raise HTTPException(502, "AI returned an invalid product response")
@@ -3927,30 +4028,28 @@ async def ai_revise_product_conversation(
     )
     owner_notes = facts_as_notes(recovered)
     instruction = payload.instruction.strip()
-    reference_skus = extract_catalogue_references(instruction)
-    reference_products = []
-    reference_family = None
+    existing_evidence = current.get("sop_evidence") if isinstance(current.get("sop_evidence"), dict) else {}
+    newest_references = extract_catalogue_references(instruction)
+    reference_seed = newest_references or existing_evidence.get("reference_skus") or []
+    reference_notes = ", ".join(reference_seed)
+    reference_recovered = dict(recovered)
+    if newest_references:
+        reference_recovered.pop("references", None)
+    reference_context = await _resolve_catalogue_references(reference_notes, reference_recovered)
+    reference_skus = reference_context["skus"]
+    reference_products = reference_context["products"]
+    reference_family = reference_context["family"]
+    reference_model = reference_context["model"]
     if reference_skus:
-        matched_products = await db.products.find(
-            {"sku": {"$in": reference_skus}},
-            {"_id": 0, "sku": 1, "name": 1, "category": 1, "specs": 1},
-        ).to_list(len(reference_skus))
-        products_by_sku = {
-            str(product.get("sku") or "").upper(): product
-            for product in matched_products
-        }
-        missing_skus = [sku for sku in reference_skus if sku not in products_by_sku]
-        if missing_skus:
+        if reference_context["missing"]:
             return {
                 "action": "question",
                 "message": (
-                    "I could not find " + ", ".join(missing_skus)
+                    "I could not find " + ", ".join(reference_context["missing"])
                     + " in the catalogue, so I left the draft unchanged. Please confirm the reference."
                 ),
             }
-        reference_products = [products_by_sku[sku] for sku in reference_skus]
-        reference_family = shared_reference_family(reference_products)
-        if not reference_family:
+        if not reference_model:
             matches = "; ".join(
                 f"{product['sku']}: {product.get('name') or '(unnamed)'}"
                 for product in reference_products
@@ -3962,11 +4061,7 @@ async def ai_revise_product_conversation(
                     "Which exact catalogue model/family name should this draft use?"
                 ),
             }
-    reference_context = "\n".join(
-        f"- {product['sku']}: {product.get('name')}; category={product.get('category')}; "
-        f"family={(product.get('specs') or {}).get('Collection / Family')}"
-        for product in reference_products
-    )
+    reference_prompt = _reference_prompt(reference_context)
     system_message = sop_prompt(category) + """
 You are also a product-draft correction assistant. Continue a natural conversation
 about ONE product. Treat the current draft, images, conversation history, explicit
@@ -3996,7 +4091,7 @@ Do not ask the owner to manually repair fields you can correctly regenerate.
     user_text = (
         f"CURRENT DRAFT:\n{json.dumps(current, ensure_ascii=False)}\n\n"
         f"RECOVERED OWNER FACTS: {owner_notes or 'none'}\n\n"
-        f"CATALOGUE REFERENCE MATCHES:\n{reference_context or '(none)'}\n\n"
+        f"CATALOGUE REFERENCE MATCHES:\n{reference_prompt}\n\n"
         f"CONVERSATION SO FAR:\n{transcript or '(first correction)'}\n\n"
         f"NEW OWNER MESSAGE: {instruction}"
     )
@@ -4040,6 +4135,8 @@ Do not ask the owner to manually repair fields you can correctly regenerate.
     ))
     if reference_family:
         normalized = apply_reference_family(normalized, reference_family, category)
+    elif reference_model:
+        normalized = apply_reference_model(normalized, reference_model, category)
 
     warnings = list(normalized.pop("confidence_notes", []))
     revised = {
@@ -4056,17 +4153,28 @@ Do not ask the owner to manually repair fields you can correctly regenerate.
         "fixed_price": False,
         "price_display": "on_request",
         "status": "draft",
+        "sop_evidence": _sop_evidence(
+            reference_context, recovered, instruction, payload.image_filenames
+        ),
+        "sop_corrections": [
+            *(current.get("sop_corrections") or []),
+            {
+                "instruction": instruction,
+                "reference_skus": reference_skus,
+                "applied_at": datetime.now(timezone.utc).isoformat(),
+            },
+        ][-20:],
     }
     validation = validate_record(revised, category)
     if recovered.get("action") == "replace":
         target = recovered.get("target_sku") or "the existing product"
         validation.append(f"Uploaded conversation requires replacing {target}; do not create a new SKU")
     name_changed = normalize_product_name(revised.get("name")) != normalize_product_name(current.get("name"))
-    if reference_family:
+    if reference_model:
         verb = "Updated the visible draft name" if name_changed else "Confirmed the visible draft name"
         assistant_message = (
             f"Matched {', '.join(reference_skus)}. {verb} using the confirmed "
-            f"{reference_family} model/family: {revised['name']}."
+            f"{reference_model} catalogue model: {revised['name']}."
         )
     elif (
         not name_changed
@@ -4131,6 +4239,16 @@ async def ai_analyze_product_batch(payload: AISopBatchRequest, admin: _AdminUser
             counters[item.category] += 1
             warnings = list(draft.pop("confidence_notes", []))
             validation = validate_record(draft, item.category)
+            evidence = draft.get("sop_evidence") or {}
+            if evidence.get("missing_references"):
+                validation.append(
+                    "Confirm missing catalogue reference(s): "
+                    + ", ".join(evidence["missing_references"])
+                )
+            if evidence.get("reference_skus") and not evidence.get("confirmed_model") and not evidence.get("missing_references"):
+                validation.append(
+                    "Referenced products do not share one confirmed family; confirm the exact model/family before creation"
+                )
             recovered = conversation_facts(item.image_filenames)
             recovered_category = recovered.get("category")
             if recovered_category and recovered_category != item.category:
@@ -4145,7 +4263,7 @@ async def ai_analyze_product_batch(payload: AISopBatchRequest, admin: _AdminUser
                 )
             catalogue = catalogue_by_category.get(item.category, [])
             same_as_match = re.search(
-                r"\b(?:same as|identical to|duplicate of|replace(?:s|d)?(?: by| with)?)\b[^;\n]{0,40}\b(SGE-[A-Z]{2}-\d{3})\b",
+                r"\b(?:identical to|duplicate of|replace(?:s|d)?(?: by| with)?)\b[^;\n]{0,40}\b(SGE-[A-Z]{2}-\d{3})\b",
                 item.notes or "",
                 re.I,
             )

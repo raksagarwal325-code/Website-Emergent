@@ -27,6 +27,19 @@ SKU_PREFIX = {
 }
 
 DIMENSION_FALLBACK = "To be confirmed before order"
+SOP_VERSION = "2026-09-21.1"
+
+IMAGE_RULES = {
+    "Candle Stand": {"counts": [2]},
+    "Chandelier": {"counts": [2]},
+    "Floor Chandelier": {"counts": [2]},
+    "Floor Lamp": {"counts": [2]},
+    "Gate Light": {"counts": [1, 2]},
+    "Hanging Light": {"counts": [2]},
+    "Table Chandelier": {"counts": [2]},
+    "Table Lamp": {"counts": [2], "exceptions": {"SGE-TL-047": [4]}},
+    "Wall Light": {"counts": [1, 2]},
+}
 
 
 # Reconciled from the approved category SOPs.  Keep behavioural differences
@@ -103,6 +116,39 @@ NUMBER_WORDS = {
     13: "Thirteen", 14: "Fourteen", 15: "Fifteen", 16: "Sixteen",
     18: "Eighteen", 20: "Twenty", 24: "Twenty-Four", 30: "Thirty",
 }
+
+
+def product_sop_registry() -> dict:
+    """Public, serializable SOP registry shared by every Admin workflow."""
+    return {
+        "version": SOP_VERSION,
+        "authority_order": [
+            "owner_confirmed_fact",
+            "approved_sop",
+            "exact_catalogue_reference",
+            "image_visible_fact",
+            "ai_suggestion",
+        ],
+        "defaults": {
+            "status": "draft",
+            "badge": "Needs Review",
+            "price_display": "on_request",
+            "currency": "INR",
+            "dimension_fallback": DIMENSION_FALLBACK,
+            "paragraphs": 2,
+            "features": 8,
+        },
+        "categories": {
+            category: {
+                "sku_prefix": SKU_PREFIX[category],
+                "schema": fields,
+                "profile": CATEGORY_PROFILES[category],
+                "image_counts": IMAGE_RULES[category]["counts"],
+                "image_count_exceptions": IMAGE_RULES[category].get("exceptions", {}),
+            }
+            for category, fields in SCHEMAS.items()
+        },
+    }
 
 
 def sop_prompt(category: str) -> str:
@@ -324,6 +370,50 @@ def shared_reference_family(products: list[dict]) -> str | None:
     if not families or len({family.casefold() for family in families}) != 1:
         return None
     return families[0]
+
+
+def shared_reference_model(products: list[dict]) -> tuple[str | None, str | None]:
+    """Resolve a model label from saved family data or matching title prefixes.
+
+    Older rows may predate the Collection / Family field while still following
+    the catalogue rule that a distinctive model starts every title.  A title
+    prefix is used only when every explicitly selected reference agrees.
+    """
+    family = shared_reference_family(products)
+    if family:
+        return family, "saved_family"
+    names = [str(product.get("name") or "").strip() for product in products]
+    if not names or any(not name for name in names):
+        return None, None
+    token_lists = [re.findall(r"[A-Za-z0-9'’]+", name) for name in names]
+    common = []
+    if len(token_lists) == 1:
+        token_lists[0] = token_lists[0][:1]
+    for tokens in zip(*token_lists):
+        if len({token.casefold() for token in tokens}) != 1:
+            break
+        common.append(tokens[0])
+        if len(common) == 4:
+            break
+    generic = {
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        "diamond", "crystal", "glass", "heritage", "clear", "gold", "silver", "black", "white",
+    }
+    if not common or common[0].casefold() in generic:
+        return None, None
+    return " ".join(common), "shared_title_prefix"
+
+
+def apply_reference_model(record: dict, model: str, category: str) -> dict:
+    """Make a title-confirmed model visible without inventing a family spec."""
+    model = str(model or "").strip()
+    if not model:
+        return record
+    name = str(record.get("name") or "").strip()
+    if not re.match(rf"^{re.escape(model)}\b", name, re.I):
+        name = f"{model} {name}"
+    record["name"] = enforce_product_name_ending(name, category)
+    return record
 
 
 def apply_reference_family(record: dict, family: str, category: str) -> dict:

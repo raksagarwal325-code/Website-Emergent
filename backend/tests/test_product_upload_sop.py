@@ -1,4 +1,4 @@
-from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, apply_owner_facts, apply_reference_family, conversation_facts, enforce_product_name_ending, extract_catalogue_references, find_similar_product, normalize_ai_record, owner_facts, shared_reference_family, sop_prompt, validate_record
+from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, SOP_VERSION, apply_owner_facts, apply_reference_family, apply_reference_model, conversation_facts, enforce_product_name_ending, extract_catalogue_references, find_similar_product, normalize_ai_record, owner_facts, product_sop_registry, shared_reference_family, shared_reference_model, sop_prompt, validate_record
 
 
 def _ai():
@@ -19,6 +19,16 @@ def test_every_attached_sop_category_has_a_fixed_schema():
         "Floor Lamp": 18, "Gate Light": 20, "Hanging Light": 18,
         "Table Chandelier": 18, "Table Lamp": 16, "Wall Light": 17,
     }
+
+
+def test_central_registry_exposes_every_category_and_locked_defaults():
+    registry = product_sop_registry()
+    assert registry["version"] == SOP_VERSION
+    assert set(registry["categories"]) == set(SCHEMAS)
+    assert registry["categories"]["Floor Chandelier"]["sku_prefix"] == "FC"
+    assert registry["categories"]["Floor Chandelier"]["schema"] == SCHEMAS["Floor Chandelier"]
+    assert registry["defaults"]["status"] == "draft"
+    assert registry["defaults"]["price_display"] == "on_request"
 
 
 def test_normalization_enforces_order_dimensions_and_description_shape():
@@ -101,6 +111,19 @@ def test_shared_reference_family_requires_exact_saved_agreement():
     assert shared_reference_family(products) == "Fanoos"
     products[1]["specs"]["Collection / Family"] = "Rajsi"
     assert shared_reference_family(products) is None
+
+
+def test_legacy_references_resolve_one_shared_distinctive_title_model():
+    products = [
+        {"name": "Sultana Diamond-Lattice Six-Light Floor Lamp", "specs": {}},
+        {"name": "Sultana Fluted Glass Eight-Light Floor Lamp", "specs": {}},
+    ]
+    assert shared_reference_model(products) == ("Sultana", "shared_title_prefix")
+    record = normalize_ai_record(_ai(), "Floor Chandelier")
+    corrected = apply_reference_model(record, "Sultana", "Floor Chandelier")
+    assert corrected["name"].startswith("Sultana ")
+    assert corrected["name"].endswith("Floor Chandelier")
+    assert "Collection / Family" not in corrected["specs"] or corrected["specs"]["Collection / Family"] == DIMENSION_FALLBACK
 
 
 def test_catalogue_reference_family_changes_visible_name_and_spec():

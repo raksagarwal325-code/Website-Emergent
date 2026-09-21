@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { pairProductFiles, Status } from "./AIProductGenerator";
+import { extractReferenceSkus, pairProductFiles, Status } from "./AIProductGenerator";
 
 describe("AI bulk product image pairing", () => {
   const image = (name) => new File(["image"], name, { type: "image/png" });
@@ -23,6 +23,14 @@ describe("AI bulk product image pairing", () => {
     expect(rows).toHaveLength(3);
     expect(rows.map((row) => row.files.map((file) => file.name))).toEqual([
       names.slice(0, 2), names.slice(2, 4), names.slice(4, 6),
+    ]);
+  });
+});
+
+describe("universal catalogue references", () => {
+  test("expands shorthand references using the shared category prefix", () => {
+    expect(extractReferenceSkus("matches FL-13 and 16; also SGE-WL-004")).toEqual([
+      "SGE-FL-013", "SGE-FL-016", "SGE-WL-004",
     ]);
   });
 });
