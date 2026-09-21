@@ -30,6 +30,7 @@ from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
 from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_PREFIX, apply_owner_facts, apply_reference_family, apply_reference_model, conversation_facts, extract_catalogue_references, facts_as_notes, find_similar_product, normalize_ai_record, normalize_product_name, product_sop_registry, shared_reference_model, sop_prompt, validate_record  # noqa: E402
+from product_ai import configure_product_chat, product_ai_settings  # noqa: E402
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, inspect_media_bytes  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
@@ -3246,7 +3247,7 @@ OUTPUT FORMAT — strictly this JSON schema (no prose before/after, no code fenc
 
 
 async def _generate_product_json(image_bytes: bytes, mime: str) -> dict:
-    """Send the image to Gemini 3 Flash and coerce the response into our JSON schema."""
+    """Send the image to the configured product AI and parse its JSON draft."""
     import base64
     from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 
@@ -3254,11 +3255,11 @@ async def _generate_product_json(image_bytes: bytes, mime: str) -> dict:
     if not api_key:
         raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY is not configured")
 
-    chat = LlmChat(
+    chat = configure_product_chat(LlmChat(
         api_key=api_key,
         session_id=f"ai-product-{uuid.uuid4().hex[:12]}",
         system_message=_AI_PROMPT_SYSTEM,
-    ).with_model("gemini", "gemini-3-flash-preview")
+    ))
 
     b64 = base64.b64encode(image_bytes).decode("ascii")
     user_msg = UserMessage(
@@ -3424,7 +3425,7 @@ async def _existing_name_index(extra: Optional[List[str]] = None) -> set:
 
 
 async def _ai_name_batch(image_bytes: bytes, mime: str, existing: set) -> List[dict]:
-    """Ask Gemini for a batch of 5 name suggestions, given the image and the
+    """Ask the configured product AI for 5 names, given the image and the
     list of names to avoid."""
     import base64
     from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent, TextDelta, StreamDone
@@ -3433,11 +3434,11 @@ async def _ai_name_batch(image_bytes: bytes, mime: str, existing: set) -> List[d
     if not api_key:
         raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY is not configured")
 
-    chat = LlmChat(
+    chat = configure_product_chat(LlmChat(
         api_key=api_key,
         session_id=f"ai-name-{uuid.uuid4().hex[:12]}",
         system_message=_NAME_SYSTEM_PROMPT,
-    ).with_model("gemini", "gemini-3-flash-preview")
+    ))
 
     # Provide a small, current sample of existing names so the model can steer
     # away from close variants. Cap at 60 to keep the prompt lean.
@@ -3744,11 +3745,11 @@ async def ai_regenerate_from_name(payload: AIRelatedRequest, admin: _AdminUser =
     if not api_key:
         raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY is not configured")
 
-    chat = LlmChat(
+    chat = configure_product_chat(LlmChat(
         api_key=api_key,
         session_id=f"ai-related-{uuid.uuid4().hex[:12]}",
         system_message=_RELATED_SYSTEM_PROMPT,
-    ).with_model("gemini", "gemini-3-flash-preview")
+    ))
 
     user_msg = UserMessage(
         text=(
@@ -3889,7 +3890,7 @@ def _sop_evidence(context: dict, recovered: dict, owner_notes: str, source_image
 @api.get("/admin/product-sop")
 async def admin_product_sop(admin: _AdminUser = Depends(require_admin)):
     """Return the single SOP registry used by upload, correction and health."""
-    return product_sop_registry()
+    return {**product_sop_registry(), "ai": product_ai_settings()}
 
 
 async def _next_sku_numbers() -> dict:
@@ -3945,7 +3946,11 @@ async def _generate_sop_product(item: AISopBatchItem) -> dict:
         f"Resolved catalogue references:\n{_reference_prompt(reference_context)}\n"
         f"Existing {item.category} names for duplicate comparison:\n{context or '(none)'}"
     )
-    chat = LlmChat(api_key=api_key, session_id=f"ai-sop-{uuid.uuid4().hex[:12]}", system_message=sop_prompt(item.category)).with_model("gemini", "gemini-3-flash-preview")
+    chat = configure_product_chat(LlmChat(
+        api_key=api_key,
+        session_id=f"ai-sop-{uuid.uuid4().hex[:12]}",
+        system_message=sop_prompt(item.category),
+    ))
     parts = []
     async for ev in chat.stream_message(UserMessage(text=message, file_contents=images)):
         if isinstance(ev, TextDelta): parts.append(ev.content)
@@ -4095,11 +4100,11 @@ Do not ask the owner to manually repair fields you can correctly regenerate.
         f"CONVERSATION SO FAR:\n{transcript or '(first correction)'}\n\n"
         f"NEW OWNER MESSAGE: {instruction}"
     )
-    chat = LlmChat(
+    chat = configure_product_chat(LlmChat(
         api_key=api_key,
         session_id=payload.session_id or f"product-review-{uuid.uuid4().hex[:12]}",
         system_message=system_message,
-    ).with_model("gemini", "gemini-3-flash-preview")
+    ))
     parts = []
     async for event in chat.stream_message(UserMessage(text=user_text, file_contents=images)):
         if isinstance(event, TextDelta):

@@ -1,5 +1,8 @@
 import { render, screen } from "@testing-library/react";
-import { extractReferenceSkus, pairProductFiles, Status } from "./AIProductGenerator";
+import AIProductGenerator, { extractReferenceSkus, pairProductFiles, Status } from "./AIProductGenerator";
+import { api } from "../lib/api";
+
+jest.mock("../lib/api", () => ({ api: { adminProductSop: jest.fn() } }));
 
 describe("AI bulk product image pairing", () => {
   const image = (name) => new File(["image"], name, { type: "image/png" });
@@ -41,5 +44,14 @@ describe("AI SOP result status", () => {
     render(<Status row={{ state: "ready", validation: ["Product name must end with Chandelier"] }} />);
     expect(screen.getByText("needs correction")).toBeInTheDocument();
     expect(screen.queryByText("ready")).not.toBeInTheDocument();
+  });
+});
+
+describe("product AI identity", () => {
+  test("shows the OpenAI model returned by the protected SOP endpoint", async () => {
+    api.adminProductSop.mockResolvedValue({ version: "2026.09", ai: { label: "OpenAI", model: "gpt-5" } });
+    render(<AIProductGenerator />);
+    expect(await screen.findByText(/SOP 2026\.09 · OpenAI gpt-5/i)).toBeInTheDocument();
+    expect(screen.getByText(/OpenAI proposes each draft/i)).toBeInTheDocument();
   });
 });
