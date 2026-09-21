@@ -294,6 +294,54 @@ def owner_facts(notes: str) -> dict:
     return facts
 
 
+def extract_catalogue_references(value: str) -> list[str]:
+    """Expand owner shorthand such as ``FL-13 and 16`` into exact SKUs."""
+    references = []
+    pattern = re.compile(
+        r"\b(?:SGE-)?([A-Z]{2})-(\d{1,3})"
+        r"((?:\s*(?:,|/|&|\band\b|\bor\b)\s*\d{1,3})*)",
+        re.I,
+    )
+    for match in pattern.finditer(str(value or "")):
+        prefix = match.group(1).upper()
+        numbers = [match.group(2), *re.findall(r"\d{1,3}", match.group(3) or "")]
+        for number in numbers:
+            sku = f"SGE-{prefix}-{int(number):03d}"
+            if sku not in references:
+                references.append(sku)
+    return references
+
+
+def shared_reference_family(products: list[dict]) -> str | None:
+    """Return the exact shared saved family, or None when references disagree."""
+    families = []
+    for product in products:
+        specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
+        family = str(specs.get("Collection / Family") or "").strip()
+        if not family or family == DIMENSION_FALLBACK:
+            return None
+        families.append(family)
+    if not families or len({family.casefold() for family in families}) != 1:
+        return None
+    return families[0]
+
+
+def apply_reference_family(record: dict, family: str, category: str) -> dict:
+    """Make a catalogue-confirmed family visible in both title and specs."""
+    family = str(family or "").strip()
+    if not family:
+        return record
+    specs = record.get("specs") or {}
+    if "Collection / Family" in specs:
+        specs["Collection / Family"] = family
+    name = str(record.get("name") or "").strip()
+    if not re.match(rf"^{re.escape(family)}\b", name, re.I):
+        name = f"{family} {name}"
+    record["name"] = enforce_product_name_ending(name, category)
+    record["specs"] = specs
+    return record
+
+
 def apply_owner_facts(record: dict, notes: str) -> dict:
     """Make owner-confirmed family/count facts non-overridable after AI generation."""
     facts = owner_facts(notes)

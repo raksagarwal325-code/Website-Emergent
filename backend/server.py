@@ -29,7 +29,7 @@ from watermark import apply_watermark  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
-from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply_owner_facts, conversation_facts, facts_as_notes, find_similar_product, normalize_ai_record, sop_prompt, validate_record  # noqa: E402
+from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SKU_PREFIX, apply_owner_facts, apply_reference_family, conversation_facts, extract_catalogue_references, facts_as_notes, find_similar_product, normalize_ai_record, normalize_product_name, shared_reference_family, sop_prompt, validate_record  # noqa: E402
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, inspect_media_bytes  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
@@ -3927,6 +3927,46 @@ async def ai_revise_product_conversation(
     )
     owner_notes = facts_as_notes(recovered)
     instruction = payload.instruction.strip()
+    reference_skus = extract_catalogue_references(instruction)
+    reference_products = []
+    reference_family = None
+    if reference_skus:
+        matched_products = await db.products.find(
+            {"sku": {"$in": reference_skus}},
+            {"_id": 0, "sku": 1, "name": 1, "category": 1, "specs": 1},
+        ).to_list(len(reference_skus))
+        products_by_sku = {
+            str(product.get("sku") or "").upper(): product
+            for product in matched_products
+        }
+        missing_skus = [sku for sku in reference_skus if sku not in products_by_sku]
+        if missing_skus:
+            return {
+                "action": "question",
+                "message": (
+                    "I could not find " + ", ".join(missing_skus)
+                    + " in the catalogue, so I left the draft unchanged. Please confirm the reference."
+                ),
+            }
+        reference_products = [products_by_sku[sku] for sku in reference_skus]
+        reference_family = shared_reference_family(reference_products)
+        if not reference_family:
+            matches = "; ".join(
+                f"{product['sku']}: {product.get('name') or '(unnamed)'}"
+                for product in reference_products
+            )
+            return {
+                "action": "question",
+                "message": (
+                    f"The references do not have one shared confirmed family ({matches}). "
+                    "Which exact catalogue model/family name should this draft use?"
+                ),
+            }
+    reference_context = "\n".join(
+        f"- {product['sku']}: {product.get('name')}; category={product.get('category')}; "
+        f"family={(product.get('specs') or {}).get('Collection / Family')}"
+        for product in reference_products
+    )
     system_message = sop_prompt(category) + """
 You are also a product-draft correction assistant. Continue a natural conversation
 about ONE product. Treat the current draft, images, conversation history, explicit
@@ -3936,6 +3976,12 @@ Authority: the newest explicit owner correction wins unless it contradicts an
 unchanged physical fact visible in the images. Recovered uploaded-conversation
 facts remain authoritative. Never silently invent a family, dimension, material,
 count, electrical value, price, stock, warranty or certification.
+
+Catalogue reference matches below are database facts, not suggestions. When the
+owner says this product matches or is the same model as those references, use
+their one shared confirmed model/family as the exact first word(s) of the title.
+SKU codes are references, not model names. Keep this draft's selected category
+as the title's final words even when a reference belongs to another category.
 
 Return JSON only:
 {"action":"revision","message":"concise explanation","product":{the complete SOP record}}
@@ -3950,6 +3996,7 @@ Do not ask the owner to manually repair fields you can correctly regenerate.
     user_text = (
         f"CURRENT DRAFT:\n{json.dumps(current, ensure_ascii=False)}\n\n"
         f"RECOVERED OWNER FACTS: {owner_notes or 'none'}\n\n"
+        f"CATALOGUE REFERENCE MATCHES:\n{reference_context or '(none)'}\n\n"
         f"CONVERSATION SO FAR:\n{transcript or '(first correction)'}\n\n"
         f"NEW OWNER MESSAGE: {instruction}"
     )
@@ -3991,6 +4038,8 @@ Do not ask the owner to manually repair fields you can correctly regenerate.
     normalized = apply_owner_facts(normalized, "; ".join(
         part for part in (owner_notes, instruction) if part
     ))
+    if reference_family:
+        normalized = apply_reference_family(normalized, reference_family, category)
 
     warnings = list(normalized.pop("confidence_notes", []))
     revised = {
@@ -4012,6 +4061,24 @@ Do not ask the owner to manually repair fields you can correctly regenerate.
     if recovered.get("action") == "replace":
         target = recovered.get("target_sku") or "the existing product"
         validation.append(f"Uploaded conversation requires replacing {target}; do not create a new SKU")
+    name_changed = normalize_product_name(revised.get("name")) != normalize_product_name(current.get("name"))
+    if reference_family:
+        verb = "Updated the visible draft name" if name_changed else "Confirmed the visible draft name"
+        assistant_message = (
+            f"Matched {', '.join(reference_skus)}. {verb} using the confirmed "
+            f"{reference_family} model/family: {revised['name']}."
+        )
+    elif (
+        not name_changed
+        and re.search(r"\b(?:name|title|model|family|match(?:es|ed)?|same as)\b", instruction, re.I)
+    ):
+        return {
+            "action": "question",
+            "message": (
+                "The visible product name did not change, so I have not marked this correction as applied. "
+                "Please provide the exact catalogue SKU or exact model/family name to use."
+            ),
+        }
     return {
         "action": "revision",
         "message": assistant_message or "I revised the draft using your correction and the category SOP.",
