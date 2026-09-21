@@ -202,10 +202,10 @@ test("category snapshot exposes SOP state and counts instead of average complete
   expect(chandelier.sopStatus).toBe("Mapped");
   expect(chandelier.structuralPass).toBe(1);
   expect(chandelier).not.toHaveProperty("averageCompleteness");
-  expect(floorChandelier.sopStatus).toBe("Unresolved");
+  expect(floorChandelier.sopStatus).toBe("Mapped");
 });
 
-test("category snapshot does not report SOP confirmation backlog for unmapped categories", () => {
+test("mapped Floor Chandelier reports its confirmation backlog", () => {
   const floorChandelier = {
     ...healthyProduct,
     id: "fc-confirmation",
@@ -214,7 +214,7 @@ test("category snapshot does not report SOP confirmation backlog for unmapped ca
     specs: { Height: "To be confirmed before order" },
   };
   const health = buildWebsiteHealth([floorChandelier]);
-  expect(health.categories[0].sopStatus).toBe("Unresolved");
-  expect(health.categories[0].confirmationBacklog).toBe(0);
-  expect(health.confirmationBacklog).toBe(0);
+  expect(health.categories[0].sopStatus).toBe("Mapped");
+  expect(health.categories[0].confirmationBacklog).toBe(1);
+  expect(health.confirmationBacklog).toBe(1);
 });
