@@ -51,7 +51,7 @@ describe("product AI identity", () => {
   test("shows the OpenAI model returned by the protected SOP endpoint", async () => {
     api.adminProductSop.mockResolvedValue({ version: "2026.09", ai: { label: "OpenAI", model: "gpt-5" } });
     render(<AIProductGenerator />);
-    expect(await screen.findByText(/SOP 2026\.09 · OpenAI gpt-5/i)).toBeInTheDocument();
+    expect(await screen.findByTestId("ai-product-generator")).toHaveTextContent(/SOP 2026\.09 · OpenAI gpt-5/i);
     expect(screen.getByText(/OpenAI proposes each draft/i)).toBeInTheDocument();
   });
 });
