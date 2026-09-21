@@ -1,4 +1,4 @@
-from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, SOP_VERSION, apply_owner_facts, apply_reference_family, apply_reference_model, conversation_facts, enforce_product_name_ending, extract_catalogue_references, find_similar_product, normalize_ai_record, owner_facts, product_sop_registry, shared_reference_family, shared_reference_model, sop_prompt, validate_record
+from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, SOP_VERSION, apply_owner_facts, apply_reference_family, apply_reference_model, blocking_identity_notes, conversation_facts, enforce_product_name_ending, extract_catalogue_references, find_similar_product, normalize_ai_record, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_family, shared_reference_model, sop_prompt, validate_record
 
 
 def _ai():
@@ -87,6 +87,15 @@ def test_owner_family_and_light_count_override_ai_inference():
     assert corrected["specs"]["Number of Lights"] == "6"
 
 
+def test_owner_family_removes_unconfirmed_generated_model_name():
+    record = normalize_ai_record(_ai(), "Floor Lamp")
+    record["name"] = "Stambhjyoti Diamond-Lattice Globe Six-Light Floor Lamp"
+    record["specs"]["Collection / Family"] = DIMENSION_FALLBACK
+    corrected = apply_owner_facts(record, "Rajsi family; matches FL-13 and 16; 6 lights")
+    assert corrected["name"] == "Rajsi Diamond-Lattice Globe Six-Light Floor Lamp"
+    assert corrected["specs"]["Collection / Family"] == "Rajsi"
+
+
 def test_owner_fact_parser_accepts_label_style_notes():
     assert owner_facts("Family: Rajsi; 6 light holders") == {"family": "Rajsi", "lights": 6}
 
@@ -124,6 +133,33 @@ def test_legacy_references_resolve_one_shared_distinctive_title_model():
     assert corrected["name"].startswith("Sultana ")
     assert corrected["name"].endswith("Floor Chandelier")
     assert "Collection / Family" not in corrected["specs"] or corrected["specs"]["Collection / Family"] == DIMENSION_FALLBACK
+
+
+def test_identity_references_recover_category_from_exact_catalogue_rows():
+    products = [
+        {"category": "Floor Lamp", "sku": "SGE-FL-013"},
+        {"category": "Floor Lamp", "sku": "SGE-FL-016"},
+    ]
+    assert shared_reference_category(products) == "Floor Lamp"
+    assert reference_category_for_notes(
+        "Chandelier", products, "Rajsi family; matches FL-13 and 16; 6 lights"
+    ) == "Floor Lamp"
+
+
+def test_cross_category_matching_piece_keeps_selected_category():
+    products = [{"category": "Wall Light", "sku": "SGE-WL-043"}]
+    assert reference_category_for_notes(
+        "Chandelier", products, "matching piece; same family as SGE-WL-043"
+    ) == "Chandelier"
+
+
+def test_ai_reported_category_conflict_is_promoted_to_blocking_validation():
+    note = (
+        "The piece appears to be a floor-standing lamp on a tripod base, not a "
+        "ceiling-suspended chandelier; classification details require confirmation."
+    )
+    assert blocking_identity_notes([note]) == [note]
+    assert blocking_identity_notes(["Height and width are unknown."]) == []
 
 
 def test_catalogue_reference_family_changes_visible_name_and_spec():
@@ -253,3 +289,21 @@ def test_generic_description_is_not_accepted_as_a_distinctive_product_name():
 
     record["name"] = "Ratnashobha Six-Light Heritage Glass Bell-Pendant Chandelier"
     assert "Product name must begin with a distinctive catalogue model name" not in validate_record(record, "Chandelier")
+
+
+def test_validation_blocks_category_or_owner_family_drift_after_analysis():
+    record = normalize_ai_record(_ai(), "Chandelier")
+    record["status"] = "draft"
+    record["sop_evidence"] = {
+        "resolved_category": "Floor Lamp",
+        "owner_notes": "Rajsi family; matches FL-13 and 16",
+        "confirmed_model": "Fanoos",
+    }
+    errors = validate_record(record, "Chandelier")
+    assert "Category must remain Floor Lamp, as resolved during SOP analysis" in errors
+    assert "Product name must begin with the owner-confirmed family Rajsi" not in errors
+
+    record["name"] = "Stambhjyoti Diamond-Lattice Floor Lamp"
+    record["category"] = "Floor Lamp"
+    errors = validate_record(record, "Floor Lamp")
+    assert "Product name must begin with the owner-confirmed family Rajsi" in errors

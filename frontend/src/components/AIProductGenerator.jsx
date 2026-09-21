@@ -22,6 +22,17 @@ export const extractReferenceSkus = (value) => {
   return references;
 };
 
+export const inferReferenceCategory = (value, products = []) => {
+  const bySku = products instanceof Map
+    ? products
+    : new Map(products.map((product) => [String(product.sku || "").toUpperCase(), product]));
+  const references = extractReferenceSkus(value);
+  const matches = references.map((sku) => bySku.get(sku)).filter(Boolean);
+  if (!matches.length || matches.length !== references.length) return "";
+  const categories = [...new Set(matches.map((product) => String(product.category || "").trim()).filter(Boolean))];
+  return categories.length === 1 ? categories[0] : "";
+};
+
 export const pairProductFiles = (files) => {
   const groups = new Map();
   Array.from(files || []).forEach((file, position) => {
@@ -40,7 +51,7 @@ export const pairProductFiles = (files) => {
   }
   return paired.sort((a, b) => a.position - b.position).map(({ key, entries, warning }, index) => {
     const ordered = [...entries].sort((a, b) => Number(isWhite(a.file.name)) - Number(isWhite(b.file.name))).map(({ file }) => file);
-    return { client_id: `${Date.now()}-${index}-${key}`, files: ordered, previews: ordered.map((file) => typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : ""), category: "Chandelier", height: "", width: "", notes: "", reference_query: "", state: "queued", selected: true, warnings: warning ? [warning] : [] };
+    return { client_id: `${Date.now()}-${index}-${key}`, files: ordered, previews: ordered.map((file) => typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : ""), category: "", height: "", width: "", notes: "", reference_query: "", state: "queued", selected: true, warnings: warning ? [warning] : [] };
   });
 };
 
@@ -74,8 +85,21 @@ export default function AIProductGenerator({ products = [], onDone, setEditingPr
   };
 
   const analyze = async () => {
-    const pending = rows.filter((r) => r.selected && !["created", "ready"].includes(r.state));
-    if (!pending.length || busy) return;
+    const selected = rows.filter((r) => r.selected && !["created", "ready"].includes(r.state));
+    if (!selected.length || busy) return;
+    const pending = selected.map((row) => ({
+      ...row,
+      category: row.category || inferReferenceCategory(row.notes, productsBySku),
+    }));
+    if (pending.some((row) => !row.category)) {
+      toast.error("Select a category, or add exact matching catalogue references that share one category");
+      return;
+    }
+    pending.forEach((row) => {
+      if (row.category !== rows.find((item) => item.client_id === row.client_id)?.category) {
+        patchRow(row.client_id, { category: row.category });
+      }
+    });
     setBusy(true);
     try {
       const uploaded = [];
@@ -90,7 +114,7 @@ export default function AIProductGenerator({ products = [], onDone, setEditingPr
       }
       if (!uploaded.length) return;
       const response = await api.aiAnalyzeProductBatch(uploaded.map((r) => ({ client_id: r.client_id, image_urls: r.imageUrls, image_filenames: r.files.map((file) => file.name), category: r.category, height: r.height, width: r.width, notes: r.notes })));
-      response.results.forEach((result) => patchRow(result.client_id, result.success ? { state: "ready", draft: result.draft, warnings: result.warnings || [], validation: result.validation || [] } : { state: "error", error: result.error || "Analysis failed" }));
+      response.results.forEach((result) => patchRow(result.client_id, result.success ? { state: "ready", category: result.resolved_category || result.draft?.category || "", draft: result.draft, warnings: result.warnings || [], validation: result.validation || [] } : { state: "error", error: result.error || "Analysis failed" }));
       toast.success("Batch analysed — review warnings, then create all drafts");
     } catch (e) { toast.error(e?.response?.data?.detail || e.message || "Batch analysis failed"); }
     finally { setBusy(false); }
@@ -118,7 +142,7 @@ export default function AIProductGenerator({ products = [], onDone, setEditingPr
     {rows.length > 0 && <div className="overflow-x-auto border border-white/10"><table className="w-full min-w-[1050px] text-sm"><thead className="bg-black/40 text-[10px] uppercase tracking-widest text-white/45"><tr>{["Use", "Images", "Category", "Height", "Width", "Family / reference / facts", "Result", ""].map((h) => <th key={h} className="p-3 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.client_id} className="border-t border-white/10 align-top">
       <td className="p-3"><input type="checkbox" checked={row.selected} disabled={busy || row.state === "created"} onChange={(e) => update(row.client_id, "selected", e.target.checked)} /></td>
       <td className="p-3"><div className="flex gap-1">{row.previews.map((src, i) => <img key={src} src={src} alt={i ? "White background" : "Black background"} className="h-14 w-14 object-contain bg-black border border-white/10" />)}</div><div className="text-[10px] text-white/35 mt-1 max-w-40">{row.files.map((f) => f.name).join(" + ")}</div></td>
-      <td className="p-3"><select value={row.category} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "category", e.target.value)} className="bg-black border border-white/15 px-2 py-2">{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></td>
+      <td className="p-3"><select value={row.category} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "category", e.target.value)} className="bg-black border border-white/15 px-2 py-2"><option value="">Select category</option>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></td>
       <td className="p-3"><input value={row.height} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "height", e.target.value)} placeholder={'e.g. 24"'} className="w-24 bg-black border border-white/15 px-2 py-2" /></td>
       <td className="p-3"><input value={row.width} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "width", e.target.value)} placeholder={'e.g. 18"'} className="w-24 bg-black border border-white/15 px-2 py-2" /></td>
       <td className="p-3"><textarea value={row.notes} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "notes", e.target.value)} placeholder="Rajsi family; matches FL-13 and 16; 6 lights…" rows={2} className="w-72 bg-black border border-white/15 px-2 py-2" />

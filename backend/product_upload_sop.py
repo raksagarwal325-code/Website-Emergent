@@ -27,7 +27,7 @@ SKU_PREFIX = {
 }
 
 DIMENSION_FALLBACK = "To be confirmed before order"
-SOP_VERSION = "2026-09-21.1"
+SOP_VERSION = "2026-09-21.2"
 
 IMAGE_RULES = {
     "Candle Stand": {"counts": [2]},
@@ -404,6 +404,68 @@ def shared_reference_model(products: list[dict]) -> tuple[str | None, str | None
     return " ".join(common), "shared_title_prefix"
 
 
+def shared_reference_category(products: list[dict]) -> str | None:
+    """Return the one saved category shared by every exact reference."""
+    categories = [str(product.get("category") or "").strip() for product in products]
+    if not categories or any(category not in SCHEMAS for category in categories):
+        return None
+    if len({category.casefold() for category in categories}) != 1:
+        return None
+    return categories[0]
+
+
+def reference_category_for_notes(selected_category: str, products: list[dict], notes: str) -> str:
+    """Reconcile an accidental/default category with identity references.
+
+    ``matches FL-13 and 16`` describes the uploaded product's identity and can
+    safely recover Floor Lamp from those exact catalogue rows. Explicit
+    cross-category wording (for example ``matching wall-light piece`` or
+    ``same family as``) keeps the deliberately selected category instead.
+    """
+    referenced_category = shared_reference_category(products)
+    selected_category = str(selected_category or "").strip()
+    if not referenced_category or referenced_category == selected_category:
+        return selected_category
+    value = str(notes or "")
+    cross_category = re.search(
+        r"\b(?:matching\s+piece|companion\s+piece|same\s+family\s+as|"
+        r"family\s+reference|glass\s+reference|design\s+reference)\b",
+        value,
+        re.I,
+    )
+    identity_match = re.search(
+        r"\b(?:matches?|same\s+(?:product|model)\s+as|identical\s+to|duplicate\s+of)\b",
+        value,
+        re.I,
+    )
+    if identity_match and not cross_category:
+        return referenced_category
+    return selected_category
+
+
+def blocking_identity_notes(notes: list[str]) -> list[str]:
+    """Promote AI-reported category/identity conflicts to blocking validation."""
+    blocked = []
+    for note in notes or []:
+        value = str(note or "").strip()
+        if not value:
+            continue
+        classification_uncertain = re.search(
+            r"\b(?:category|classification|product\s+type)\b.{0,80}"
+            r"\b(?:confirm|uncertain|conflict|incorrect|wrong|mismatch)\b",
+            value,
+            re.I,
+        )
+        explicit_mismatch = re.search(
+            r"\b(?:appears?\s+to\s+be|is)\b.{0,100}\bnot\s+(?:a|an)\b",
+            value,
+            re.I,
+        )
+        if classification_uncertain or explicit_mismatch:
+            blocked.append(value)
+    return blocked
+
+
 def apply_reference_model(record: dict, model: str, category: str) -> dict:
     """Make a title-confirmed model visible without inventing a family spec."""
     model = str(model or "").strip()
@@ -450,6 +512,18 @@ def apply_owner_facts(record: dict, notes: str) -> dict:
         if previous_family and re.match(rf"^{re.escape(previous_family)}\b", name, re.I):
             name = re.sub(rf"^{re.escape(previous_family)}\b", family, name, count=1, flags=re.I)
         elif not re.match(rf"^{re.escape(family)}\b", name, re.I):
+            # The SOP asks AI to lead with a model name. When the owner supplies
+            # the real family, remove an unconfirmed generated first-word model
+            # before applying that authoritative family.
+            first_word = re.match(r"^([A-Za-z][A-Za-z'’\-]*)\b", name)
+            descriptive_openings = {
+                "antique", "bell", "brass", "clear", "crystal", "decorative",
+                "diamond", "etched", "floral", "fluted", "glass", "gold",
+                "heritage", "opal", "ornate", "pleated", "scrolled", "silver",
+                "traditional", "victorian",
+            }
+            if first_word and first_word.group(1).casefold() not in descriptive_openings:
+                name = name[first_word.end():].lstrip(" —–-")
             name = f"{family} {name}"
     lights = facts.get("lights")
     if lights is not None and "Number of Lights" in specs:
@@ -543,6 +617,19 @@ def validate_record(record: dict, category: str) -> list[str]:
     if (record.get("status") or "draft") != "draft":
         errors.append("New products must remain Draft / Needs Review")
     name = str(record.get("name") or "").strip()
+    evidence = record.get("sop_evidence") if isinstance(record.get("sop_evidence"), dict) else {}
+    resolved_category = str(evidence.get("resolved_category") or "").strip()
+    if resolved_category and resolved_category != category:
+        errors.append(
+            f"Category must remain {resolved_category}, as resolved during SOP analysis"
+        )
+    confirmed = owner_facts(evidence.get("owner_notes") or "")
+    confirmed_family = confirmed.get("family")
+    confirmed_model = str(evidence.get("confirmed_model") or "").strip()
+    required_opening = confirmed_family or confirmed_model
+    if required_opening and not re.match(rf"^{re.escape(required_opening)}\b", name, re.I):
+        source = "owner-confirmed family" if confirmed_family else "catalogue-confirmed model"
+        errors.append(f"Product name must begin with the {source} {required_opening}")
     expected_ending = CATEGORY_PROFILES[category]["name_ending"]
     if not name.casefold().endswith(expected_ending.casefold()):
         errors.append(f"Product name must end with {expected_ending}")

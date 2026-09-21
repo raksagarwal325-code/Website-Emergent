@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import AIProductGenerator, { extractReferenceSkus, pairProductFiles, Status } from "./AIProductGenerator";
+import AIProductGenerator, { extractReferenceSkus, inferReferenceCategory, pairProductFiles, Status } from "./AIProductGenerator";
 import { api } from "../lib/api";
 
 jest.mock("../lib/api", () => ({ api: { adminProductSop: jest.fn() } }));
@@ -18,6 +18,7 @@ describe("AI bulk product image pairing", () => {
     const [row] = pairProductFiles([image("single-product.png")]);
     expect(row.files).toHaveLength(1);
     expect(row.state).toBe("queued");
+    expect(row.category).toBe("");
   });
 
   test("pairs timestamp filenames sequentially in upload order", () => {
@@ -35,6 +36,19 @@ describe("universal catalogue references", () => {
     expect(extractReferenceSkus("matches FL-13 and 16; also SGE-WL-004")).toEqual([
       "SGE-FL-013", "SGE-FL-016", "SGE-WL-004",
     ]);
+  });
+
+  test("infers one category from exact normalized catalogue references", () => {
+    const products = [
+      { sku: "SGE-FL-013", category: "Floor Lamp" },
+      { sku: "SGE-FL-016", category: "Floor Lamp" },
+    ];
+    expect(inferReferenceCategory("Rajsi family; matches FL-13 and 16", products)).toBe("Floor Lamp");
+  });
+
+  test("does not infer a category when any stated reference is missing", () => {
+    const products = [{ sku: "SGE-FL-013", category: "Floor Lamp" }];
+    expect(inferReferenceCategory("matches FL-13 and 16", products)).toBe("");
   });
 });
 
