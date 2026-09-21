@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import AIProductGenerator, { extractReferenceSkus, inferReferenceCategory, pairProductFiles, Status } from "./AIProductGenerator";
 import { api } from "../lib/api";
 
@@ -28,6 +28,15 @@ describe("AI bulk product image pairing", () => {
     expect(rows.map((row) => row.files.map((file) => file.name))).toEqual([
       names.slice(0, 2), names.slice(2, 4), names.slice(4, 6),
     ]);
+  });
+
+  test("keeps selected files after the file input is cleared", async () => {
+    api.adminProductSop.mockResolvedValue({});
+    render(<AIProductGenerator products={[]} />);
+    const input = screen.getByTestId("ai-gen-file-input");
+    fireEvent.change(input, { target: { files: [image("021.png"), image("021A.png")] } });
+    expect(await screen.findByText("021.png + 021A.png")).toBeInTheDocument();
+    expect(input.value).toBe("");
   });
 });
 
