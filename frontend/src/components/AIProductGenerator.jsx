@@ -74,6 +74,15 @@ export default function AIProductGenerator({ products = [], onDone, setEditingPr
   const update = (id, field, value) => patchRow(id, { [field]: value });
   const remove = (row) => { row.previews.forEach(URL.revokeObjectURL); setRows((cur) => cur.filter((r) => r.client_id !== row.client_id)); };
   const clear = () => { rows.forEach((r) => r.previews.forEach(URL.revokeObjectURL)); setRows([]); };
+  const addFiles = (event) => {
+    // Snapshot the FileList before clearing the input. React may execute the
+    // functional state updater after the DOM input has already been reset.
+    const selectedFiles = Array.from(event.currentTarget.files || []);
+    event.currentTarget.value = "";
+    if (selectedFiles.length) {
+      setRows((current) => [...current, ...pairProductFiles(selectedFiles)]);
+    }
+  };
   const addReference = (row) => {
     const query = String(row.reference_query || "").trim();
     if (!query) return;
@@ -138,7 +147,7 @@ export default function AIProductGenerator({ products = [], onDone, setEditingPr
 
   return <section className="border border-[#D4AF37]/35 bg-[#0d0510] p-5 md:p-6 space-y-5" data-testid="ai-product-generator">
     <div className="flex items-start gap-3"><div className="w-9 h-9 grid place-items-center rounded-full border border-[#D4AF37]/60 text-[#D4AF37]"><Sparkles size={16} /></div><div><div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">Universal product intelligence {sop?.version ? `· SOP ${sop.version}` : ""}{sop?.ai?.label ? ` · ${sop.ai.label} ${sop.ai.model}` : ""}</div><h2 className="font-serif text-xl">Pair, match, analyse, review and create</h2><p className="text-xs text-white/50 mt-1">OpenAI proposes each draft; one approved SOP controls catalogue matching, naming, specifications and final validation. Every listing stays unpublished as Needs Review.</p></div></div>
-    <label className="block border-2 border-dashed border-[#D4AF37]/25 hover:border-[#D4AF37]/60 cursor-pointer p-6 text-center" data-testid="ai-gen-dropzone"><input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(e) => { setRows((cur) => [...cur, ...pairProductFiles(e.target.files)]); e.target.value = ""; }} className="hidden" data-testid="ai-gen-file-input" /><Upload size={20} className="mx-auto text-[#D4AF37]" /><div className="text-sm mt-2">Choose all black-and-white product image pairs</div><div className="text-[10px] uppercase tracking-widest text-white/40 mt-1">Up to 30 products per batch</div></label>
+    <label className="block border-2 border-dashed border-[#D4AF37]/25 hover:border-[#D4AF37]/60 cursor-pointer p-6 text-center" data-testid="ai-gen-dropzone"><input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={addFiles} className="hidden" data-testid="ai-gen-file-input" /><Upload size={20} className="mx-auto text-[#D4AF37]" /><div className="text-sm mt-2">Choose all black-and-white product image pairs</div><div className="text-[10px] uppercase tracking-widest text-white/40 mt-1">Up to 30 products per batch</div></label>
     {rows.length > 0 && <div className="overflow-x-auto border border-white/10"><table className="w-full min-w-[1050px] text-sm"><thead className="bg-black/40 text-[10px] uppercase tracking-widest text-white/45"><tr>{["Use", "Images", "Category", "Height", "Width", "Family / reference / facts", "Result", ""].map((h) => <th key={h} className="p-3 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.client_id} className="border-t border-white/10 align-top">
       <td className="p-3"><input type="checkbox" checked={row.selected} disabled={busy || row.state === "created"} onChange={(e) => update(row.client_id, "selected", e.target.checked)} /></td>
       <td className="p-3"><div className="flex gap-1">{row.previews.map((src, i) => <img key={src} src={src} alt={i ? "White background" : "Black background"} className="h-14 w-14 object-contain bg-black border border-white/10" />)}</div><div className="text-[10px] text-white/35 mt-1 max-w-40">{row.files.map((f) => f.name).join(" + ")}</div></td>
