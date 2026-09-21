@@ -301,6 +301,7 @@ export const api = {
     client.post("/ai/commit-product-batch", { products }).then(r => r.data),
   aiReviseProductConversation: (payload) =>
     client.post("/ai/revise-product-conversation", payload).then(r => r.data),
+  adminProductSop: () => client.get("/admin/product-sop").then(r => r.data),
   aiNameSuggestions: (opts) =>
     client.post("/ai/name-suggestions", opts).then(r => r.data),
   aiRegenerateDetails: (opts) =>

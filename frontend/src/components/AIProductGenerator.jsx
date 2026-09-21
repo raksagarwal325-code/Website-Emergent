@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Edit3, Loader2, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
@@ -7,6 +7,20 @@ import ProductDraftConversation from "./ProductDraftConversation";
 const CATEGORIES = ["Chandelier", "Hanging Light", "Wall Light", "Table Lamp", "Floor Lamp", "Candle Stand", "Floor Chandelier", "Table Chandelier", "Gate Light"];
 const pairKey = (name) => name.replace(/\.[^.]+$/, "").replace(/[\s_-]*(?:a|white|light|off|black|dark|lit|on)$/i, "").trim().toLowerCase();
 const isWhite = (name) => /(?:a|[\s_-](?:white|light|off))(?:\.[^.]+)?$/i.test(name);
+
+export const extractReferenceSkus = (value) => {
+  const references = [];
+  const pattern = /\b(?:SGE-)?([A-Z]{2})-(\d{1,3})((?:\s*(?:,|\/|&|\band\b|\bor\b)\s*\d{1,3})*)/gi;
+  for (const match of String(value || "").matchAll(pattern)) {
+    const tailNumbers = String(match[3] || "").match(/\d{1,3}/g) || [];
+    const numbers = [match[2], ...tailNumbers];
+    numbers.forEach((number) => {
+      const sku = `SGE-${match[1].toUpperCase()}-${String(Number(number)).padStart(3, "0")}`;
+      if (!references.includes(sku)) references.push(sku);
+    });
+  }
+  return references;
+};
 
 export const pairProductFiles = (files) => {
   const groups = new Map();
@@ -26,7 +40,7 @@ export const pairProductFiles = (files) => {
   }
   return paired.sort((a, b) => a.position - b.position).map(({ key, entries, warning }, index) => {
     const ordered = [...entries].sort((a, b) => Number(isWhite(a.file.name)) - Number(isWhite(b.file.name))).map(({ file }) => file);
-    return { client_id: `${Date.now()}-${index}-${key}`, files: ordered, previews: ordered.map((file) => typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : ""), category: "Chandelier", height: "", width: "", notes: "", state: "queued", selected: true, warnings: warning ? [warning] : [] };
+    return { client_id: `${Date.now()}-${index}-${key}`, files: ordered, previews: ordered.map((file) => typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : ""), category: "Chandelier", height: "", width: "", notes: "", reference_query: "", state: "queued", selected: true, warnings: warning ? [warning] : [] };
   });
 };
 
@@ -38,14 +52,26 @@ export const Status = ({ row }) => {
   return <span className="text-white/45">{row.files.length === 2 ? "paired" : "one image"}</span>;
 };
 
-export default function AIProductGenerator({ onDone, setEditingProduct }) {
+export default function AIProductGenerator({ products = [], onDone, setEditingProduct }) {
   const [rows, setRows] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [sop, setSop] = useState(null);
+  useEffect(() => { api.adminProductSop().then(setSop).catch(() => null); }, []);
+  const productsBySku = useMemo(() => new Map(products.map((product) => [String(product.sku || "").toUpperCase(), product])), [products]);
   const patchRow = (id, patch) => setRows((cur) => cur.map((row) => row.client_id === id ? { ...row, ...patch } : row));
   const selectedReady = useMemo(() => rows.filter((r) => r.selected && r.state === "ready" && !(r.validation || []).length), [rows]);
   const update = (id, field, value) => patchRow(id, { [field]: value });
   const remove = (row) => { row.previews.forEach(URL.revokeObjectURL); setRows((cur) => cur.filter((r) => r.client_id !== row.client_id)); };
   const clear = () => { rows.forEach((r) => r.previews.forEach(URL.revokeObjectURL)); setRows([]); };
+  const addReference = (row) => {
+    const query = String(row.reference_query || "").trim();
+    if (!query) return;
+    const sku = query.split(" · ")[0].toUpperCase();
+    if (!productsBySku.has(sku)) return toast.error("Choose an exact catalogue product from the list");
+    const notes = row.notes.trim();
+    update(row.client_id, "notes", `${notes}${notes ? "; " : ""}reference ${sku}`);
+    update(row.client_id, "reference_query", "");
+  };
 
   const analyze = async () => {
     const pending = rows.filter((r) => r.selected && !["created", "ready"].includes(r.state));
@@ -87,7 +113,7 @@ export default function AIProductGenerator({ onDone, setEditingProduct }) {
   };
 
   return <section className="border border-[#D4AF37]/35 bg-[#0d0510] p-5 md:p-6 space-y-5" data-testid="ai-product-generator">
-    <div className="flex items-start gap-3"><div className="w-9 h-9 grid place-items-center rounded-full border border-[#D4AF37]/60 text-[#D4AF37]"><Sparkles size={16} /></div><div><div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">AI bulk product upload</div><h2 className="font-serif text-xl">Pair, analyse, review and create in one batch</h2><p className="text-xs text-white/50 mt-1">Matching filenames are paired first; remaining files are paired in selection order (black, then white). Every listing stays unpublished as Needs Review.</p></div></div>
+    <div className="flex items-start gap-3"><div className="w-9 h-9 grid place-items-center rounded-full border border-[#D4AF37]/60 text-[#D4AF37]"><Sparkles size={16} /></div><div><div className="text-[10px] uppercase tracking-[0.28em] text-[#BF9972]">Universal product intelligence {sop?.version ? `· SOP ${sop.version}` : ""}</div><h2 className="font-serif text-xl">Pair, match, analyse, review and create</h2><p className="text-xs text-white/50 mt-1">One approved SOP controls catalogue matching, naming, specifications and final validation. Every listing stays unpublished as Needs Review.</p></div></div>
     <label className="block border-2 border-dashed border-[#D4AF37]/25 hover:border-[#D4AF37]/60 cursor-pointer p-6 text-center" data-testid="ai-gen-dropzone"><input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(e) => { setRows((cur) => [...cur, ...pairProductFiles(e.target.files)]); e.target.value = ""; }} className="hidden" data-testid="ai-gen-file-input" /><Upload size={20} className="mx-auto text-[#D4AF37]" /><div className="text-sm mt-2">Choose all black-and-white product image pairs</div><div className="text-[10px] uppercase tracking-widest text-white/40 mt-1">Up to 30 products per batch</div></label>
     {rows.length > 0 && <div className="overflow-x-auto border border-white/10"><table className="w-full min-w-[1050px] text-sm"><thead className="bg-black/40 text-[10px] uppercase tracking-widest text-white/45"><tr>{["Use", "Images", "Category", "Height", "Width", "Family / reference / facts", "Result", ""].map((h) => <th key={h} className="p-3 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.client_id} className="border-t border-white/10 align-top">
       <td className="p-3"><input type="checkbox" checked={row.selected} disabled={busy || row.state === "created"} onChange={(e) => update(row.client_id, "selected", e.target.checked)} /></td>
@@ -95,8 +121,11 @@ export default function AIProductGenerator({ onDone, setEditingProduct }) {
       <td className="p-3"><select value={row.category} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "category", e.target.value)} className="bg-black border border-white/15 px-2 py-2">{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></td>
       <td className="p-3"><input value={row.height} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "height", e.target.value)} placeholder={'e.g. 24"'} className="w-24 bg-black border border-white/15 px-2 py-2" /></td>
       <td className="p-3"><input value={row.width} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "width", e.target.value)} placeholder={'e.g. 18"'} className="w-24 bg-black border border-white/15 px-2 py-2" /></td>
-      <td className="p-3"><textarea value={row.notes} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "notes", e.target.value)} placeholder="Rajsi family; same as SGE-…; 6 lights…" rows={2} className="w-64 bg-black border border-white/15 px-2 py-2" /></td>
-      <td className="p-3 max-w-xs"><div className="text-[10px] uppercase tracking-widest"><Status row={row} /></div>{row.draft && <div className="mt-3 border-l-2 border-[#D4AF37] pl-3 py-1"><div className="text-[9px] uppercase tracking-[0.2em] text-[#D4AF37]">Suggested product name</div><div data-testid={`suggested-product-name-${row.client_id}`} className="font-serif text-lg leading-snug mt-1 text-white">{row.draft.name}</div><div className="text-[10px] text-[#BF9972] mt-1">{row.draft.sku} · {Object.keys(row.draft.specs || {}).length} specifications</div></div>}{[...(row.warnings || []), ...(row.validation || [])].map((w) => <div key={w} className="text-[10px] text-amber-300 mt-1">⚠ {w}</div>)}{row.error && <div className="text-[10px] text-red-400 mt-1">{row.error}</div>}{row.draft && row.state === "ready" && <ProductDraftConversation compact product={row.draft} imageFilenames={row.files.map((file) => file.name)} onApply={(draft, meta) => patchRow(row.client_id, { draft, validation: meta.validation, warnings: meta.warnings, state: row.state === "created" ? "ready" : row.state })} />}{row.state === "created" && <button onClick={() => setEditingProduct?.(row.draft)} className="mt-2 text-[10px] uppercase tracking-widest text-[#D4AF37]"><Edit3 size={10} className="inline mr-1" />Review & edit</button>}</td>
+      <td className="p-3"><textarea value={row.notes} disabled={busy || !!row.draft} onChange={(e) => update(row.client_id, "notes", e.target.value)} placeholder="Rajsi family; matches FL-13 and 16; 6 lights…" rows={2} className="w-72 bg-black border border-white/15 px-2 py-2" />
+        {!row.draft && <div className="mt-2 flex gap-1"><input list={`catalogue-products-${row.client_id}`} value={row.reference_query || ""} onChange={(e) => update(row.client_id, "reference_query", e.target.value)} placeholder="Search exact SKU or product" className="min-w-0 flex-1 bg-black border border-white/15 px-2 py-1 text-[10px]" /><datalist id={`catalogue-products-${row.client_id}`}>{products.map((product) => <option key={product.id || product.sku} value={`${product.sku} · ${product.name}`} />)}</datalist><button type="button" onClick={() => addReference(row)} className="border border-[#D4AF37]/40 px-2 text-[9px] uppercase text-[#D4AF37]">Add</button></div>}
+        {extractReferenceSkus(row.notes).map((sku) => { const product = productsBySku.get(sku); return product ? <div key={sku} className="mt-2 flex gap-2 border border-white/10 p-1.5"><img src={product.images?.[0]} alt="" className="h-9 w-9 bg-black object-contain" /><div className="min-w-0"><div className="text-[9px] text-[#D4AF37]">{sku}</div><div className="truncate text-[9px] text-white/60">{product.name}</div></div></div> : <div key={sku} className="mt-1 text-[9px] text-amber-300">Reference not found: {sku}</div>; })}
+      </td>
+      <td className="p-3 max-w-xs"><div className="text-[10px] uppercase tracking-widest"><Status row={row} /></div>{row.draft && <div className="mt-3 border-l-2 border-[#D4AF37] pl-3 py-1"><div className="text-[9px] uppercase tracking-[0.2em] text-[#D4AF37]">Suggested product name</div><div data-testid={`suggested-product-name-${row.client_id}`} className="font-serif text-lg leading-snug mt-1 text-white">{row.draft.name}</div><div className="text-[10px] text-[#BF9972] mt-1">{row.draft.sku} · {Object.keys(row.draft.specs || {}).length} specifications</div>{row.draft.sop_evidence?.matched_references?.length > 0 && <div className="mt-2 text-[9px] leading-4 text-white/45">Evidence: {row.draft.sop_evidence.matched_references.map((item) => `${item.sku} — ${item.name}`).join("; ")}</div>}</div>}{[...(row.warnings || []), ...(row.validation || [])].map((w) => <div key={w} className="text-[10px] text-amber-300 mt-1">⚠ {w}</div>)}{row.error && <div className="text-[10px] text-red-400 mt-1">{row.error}</div>}{row.draft && row.state === "ready" && <ProductDraftConversation compact product={row.draft} imageFilenames={row.files.map((file) => file.name)} onApply={(draft, meta) => patchRow(row.client_id, { draft, validation: meta.validation, warnings: meta.warnings, state: row.state === "created" ? "ready" : row.state })} />}{row.state === "created" && <button onClick={() => setEditingProduct?.(row.draft)} className="mt-2 text-[10px] uppercase tracking-widest text-[#D4AF37]"><Edit3 size={10} className="inline mr-1" />Review & edit</button>}</td>
       <td className="p-3"><button disabled={busy} onClick={() => remove(row)} aria-label="Remove product"><X size={14} /></button></td>
     </tr>)}</tbody></table></div>}
     <div className="flex flex-wrap gap-3"><button onClick={analyze} disabled={busy || !rows.some((r) => r.selected && !["ready", "created"].includes(r.state))} data-testid="ai-gen-run-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.24em] disabled:opacity-40">{busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Analyse batch</button><button onClick={createAll} disabled={busy || !selectedReady.length} data-testid="ai-gen-create-btn" className="border border-emerald-500/60 text-emerald-300 px-6 py-3 uppercase text-xs tracking-[0.24em] disabled:opacity-40">Create all ready drafts ({selectedReady.length})</button>{!busy && rows.length > 0 && <button onClick={clear} className="text-xs text-white/40 px-3">Clear all</button>}</div>

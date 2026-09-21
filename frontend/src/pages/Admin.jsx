@@ -344,6 +344,7 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
       {/* AI drafts — visible for both create and edit flows */}
       {!editing && (
         <AIProductGenerator
+          products={products}
           onDone={refresh}
           setEditingProduct={(draft) => { setEditing(draft); refresh(); }}
         />
