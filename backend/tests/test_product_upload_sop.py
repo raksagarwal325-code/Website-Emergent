@@ -1,4 +1,4 @@
-from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, apply_owner_facts, conversation_facts, enforce_product_name_ending, find_similar_product, normalize_ai_record, owner_facts, sop_prompt, validate_record
+from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, apply_owner_facts, apply_reference_family, conversation_facts, enforce_product_name_ending, extract_catalogue_references, find_similar_product, normalize_ai_record, owner_facts, shared_reference_family, sop_prompt, validate_record
 
 
 def _ai():
@@ -79,6 +79,36 @@ def test_owner_family_and_light_count_override_ai_inference():
 
 def test_owner_fact_parser_accepts_label_style_notes():
     assert owner_facts("Family: Rajsi; 6 light holders") == {"family": "Rajsi", "lights": 6}
+
+
+def test_catalogue_reference_parser_expands_shared_prefix_shorthand():
+    assert extract_catalogue_references("It matches FL-13 and 16 check") == [
+        "SGE-FL-013", "SGE-FL-016",
+    ]
+
+
+def test_catalogue_reference_parser_normalizes_and_deduplicates_full_skus():
+    assert extract_catalogue_references("SGE-FL-013, FL-13 / 16") == [
+        "SGE-FL-013", "SGE-FL-016",
+    ]
+
+
+def test_shared_reference_family_requires_exact_saved_agreement():
+    products = [
+        {"specs": {"Collection / Family": "Fanoos"}},
+        {"specs": {"Collection / Family": "Fanoos"}},
+    ]
+    assert shared_reference_family(products) == "Fanoos"
+    products[1]["specs"]["Collection / Family"] = "Rajsi"
+    assert shared_reference_family(products) is None
+
+
+def test_catalogue_reference_family_changes_visible_name_and_spec():
+    record = normalize_ai_record(_ai(), "Floor Chandelier")
+    record["name"] = "Diamond Lattice Scrolled Victorian Floor Chandelier"
+    corrected = apply_reference_family(record, "Fanoos", "Floor Chandelier")
+    assert corrected["name"] == "Fanoos Diamond Lattice Scrolled Victorian Floor Chandelier"
+    assert corrected["specs"]["Collection / Family"] == "Fanoos"
 
 
 def test_every_schema_has_an_embedded_category_profile():
