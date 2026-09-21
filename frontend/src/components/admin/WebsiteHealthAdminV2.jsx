@@ -241,7 +241,7 @@ export function evaluateSopCompliance(product) {
   return {
     product,
     rule,
-    coverage: unresolved ? "unresolved" : rule ? "covered" : "missing",
+    coverage: rule ? "covered" : "missing",
     issues,
     structuralPass: Boolean(rule) && issues.length === 0,
     manualVerified: Boolean(rule) && isManuallyVerified(product),
