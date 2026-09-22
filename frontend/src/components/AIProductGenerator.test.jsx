@@ -82,6 +82,17 @@ describe("product AI identity", () => {
     api.adminProductSop.mockResolvedValue({ version: "2026-09-22.1", ai: { label: "OpenAI", model: "gpt-5" } });
     render(<AIProductGenerator products={[]} />);
     expect(await screen.findByText(/Every upload searches the full catalogue/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("ai-gen-file-input"), {
+      target: {
+        files: [
+          new File(["image"], "021.png", { type: "image/png" }),
+          new File(["image"], "021A.png", { type: "image/png" }),
+        ],
+      },
+    });
+
+    expect(await screen.findByText("021.png + 021A.png")).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Type only confirmed family/i)).toHaveValue("");
     expect(screen.getByText(/The catalogue scan runs even when this is empty/i)).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Auto-detect category" })).toBeInTheDocument();
