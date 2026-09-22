@@ -1,4 +1,4 @@
-from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, SOP_VERSION, apply_owner_facts, apply_reference_family, apply_reference_model, blocking_identity_notes, conversation_facts, enforce_product_name_ending, extract_catalogue_references, find_similar_product, normalize_ai_record, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_family, shared_reference_model, sop_prompt, validate_record
+from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, SOP_VERSION, apply_owner_facts, apply_reference_family, apply_reference_model, automatic_catalogue_model, blocking_identity_notes, catalogue_manifest_row, conversation_facts, enforce_product_name_ending, extract_catalogue_references, find_similar_product, normalize_ai_record, normalize_catalogue_matches, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_family, shared_reference_model, sop_prompt, validate_record
 
 
 def _ai():
@@ -168,6 +168,92 @@ def test_catalogue_reference_family_changes_visible_name_and_spec():
     corrected = apply_reference_family(record, "Fanoos", "Floor Chandelier")
     assert corrected["name"] == "Fanoos Diamond Lattice Scrolled Victorian Floor Chandelier"
     assert corrected["specs"]["Collection / Family"] == "Fanoos"
+
+
+def test_catalogue_family_replaces_an_ai_invented_opening():
+    record = normalize_ai_record(_ai(), "Floor Lamp")
+    record["name"] = "Nishkana Filigree Lantern Diamond-Cut Clear Glass Floor Lamp"
+    record["specs"]["Collection / Family"] = "Nishkana"
+    corrected = apply_reference_family(record, "Fanoos", "Floor Lamp")
+    assert corrected["name"] == "Fanoos Filigree Lantern Diamond-Cut Clear Glass Floor Lamp"
+    assert corrected["specs"]["Collection / Family"] == "Fanoos"
+
+
+def test_catalogue_manifest_contains_identity_fields_not_unknown_placeholders():
+    product = {
+        "sku": "SGE-FL-016",
+        "name": "Fanoos Diamond-Cut Glass Heritage Floor Lamp — Clear",
+        "category": "Floor Lamp",
+        "specs": {
+            "Collection / Family": "Fanoos",
+            "Glass Type": "Diamond-Cut",
+            "Height": DIMENSION_FALLBACK,
+        },
+    }
+    assert catalogue_manifest_row(product) == {
+        "sku": "SGE-FL-016",
+        "category": "Floor Lamp",
+        "name": "Fanoos Diamond-Cut Glass Heritage Floor Lamp — Clear",
+        "specs": {"Collection / Family": "Fanoos", "Glass Type": "Diamond-Cut"},
+    }
+
+
+def test_two_verified_fixture_matches_lock_shared_fanoos_family():
+    products = [
+        {
+            "sku": "SGE-FL-013", "name": "Fanoos Opal Glass Heritage Floor Lamp",
+            "category": "Floor Lamp", "images": ["/api/files/fl13.jpg"],
+            "specs": {"Collection / Family": "Fanoos"},
+        },
+        {
+            "sku": "SGE-FL-016", "name": "Fanoos Diamond-Cut Glass Heritage Floor Lamp",
+            "category": "Floor Lamp", "images": ["/api/files/fl16.jpg"],
+            "specs": {"Collection / Family": "Fanoos"},
+        },
+    ]
+    matches = normalize_catalogue_matches([
+        {"sku": "SGE-FL-013", "relation": "same_fixture_different_glass", "confidence": 0.91},
+        {"sku": "SGE-FL-016", "relation": "same_fixture", "confidence": 0.94},
+        {"sku": "SGE-XX-999", "relation": "same_fixture", "confidence": 1},
+    ], products)
+    identity = automatic_catalogue_model(matches, products)
+    assert identity["model"] == "Fanoos"
+    assert identity["family"] == "Fanoos"
+    assert identity["category"] == "Floor Lamp"
+    assert [match["sku"] for match in identity["matches"]] == ["SGE-FL-016", "SGE-FL-013"]
+
+
+def test_glass_only_match_never_assigns_fixture_family():
+    products = [{
+        "sku": "SGE-FL-016", "name": "Fanoos Diamond-Cut Glass Heritage Floor Lamp",
+        "category": "Floor Lamp", "specs": {"Collection / Family": "Fanoos"},
+    }]
+    matches = normalize_catalogue_matches([
+        {"sku": "SGE-FL-016", "relation": "same_glass_design", "confidence": 0.99},
+    ], products)
+    assert automatic_catalogue_model(matches, products) == {}
+
+
+def test_one_moderate_fixture_match_does_not_lock_a_family():
+    products = [{
+        "sku": "SGE-FL-016", "name": "Fanoos Diamond-Cut Glass Heritage Floor Lamp",
+        "category": "Floor Lamp", "specs": {"Collection / Family": "Fanoos"},
+    }]
+    matches = normalize_catalogue_matches([
+        {"sku": "SGE-FL-016", "relation": "same_fixture", "confidence": 0.90},
+    ], products)
+    assert automatic_catalogue_model(matches, products) == {}
+
+
+def test_commit_validation_preserves_automatic_catalogue_family_lock():
+    record = normalize_ai_record(_ai(), "Floor Lamp")
+    record["name"] = "Nishkana Diamond-Cut Clear Glass Floor Lamp"
+    record["status"] = "draft"
+    record["sop_evidence"] = {
+        "resolved_category": "Floor Lamp",
+        "automatic_catalogue_model": "Fanoos",
+    }
+    assert "Product name must begin with the catalogue-confirmed model Fanoos" in validate_record(record, "Floor Lamp")
 
 
 def test_every_schema_has_an_embedded_category_profile():
