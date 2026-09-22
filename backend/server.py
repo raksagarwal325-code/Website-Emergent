@@ -3968,7 +3968,9 @@ def _sop_evidence(
         "resolved_category": resolved_category,
         "category_source": (
             "exact_catalogue_reference"
-            if resolved_category and resolved_category != selected_category
+            if context.get("category") and resolved_category != selected_category
+            else "automatic_catalogue_scan"
+            if resolved_category and not selected_category
             else "admin_selection"
         ),
         "automatic_catalogue_matches": automatic_matches or [],
