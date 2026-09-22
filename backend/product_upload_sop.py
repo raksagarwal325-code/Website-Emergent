@@ -27,7 +27,7 @@ SKU_PREFIX = {
 }
 
 DIMENSION_FALLBACK = "To be confirmed before order"
-SOP_VERSION = "2026-09-21.2"
+SOP_VERSION = "2026-09-22.1"
 
 IMAGE_RULES = {
     "Candle Stand": {"counts": [2]},
@@ -117,6 +117,15 @@ NUMBER_WORDS = {
     18: "Eighteen", 20: "Twenty", 24: "Twenty-Four", 30: "Thirty",
 }
 
+CATALOGUE_MATCH_RELATIONS = {
+    "same_fixture",
+    "same_fixture_different_glass",
+    "same_glass_design",
+    "similar_only",
+}
+CATALOGUE_FIXTURE_MATCH_THRESHOLD = 0.86
+CATALOGUE_SINGLE_MATCH_THRESHOLD = 0.93
+
 
 def product_sop_registry() -> dict:
     """Public, serializable SOP registry shared by every Admin workflow."""
@@ -156,12 +165,13 @@ def sop_prompt(category: str) -> str:
     profile = CATEGORY_PROFILES[category]
     return f"""You are preparing ONE Samrat Glass Emporium {category} catalogue record from one or two photographs of the SAME product.
 
-Return strict JSON only with: name, short_description, paragraph_1, paragraph_2, key_features, tags, specs, confidence_notes.
+Return strict JSON only with: name, short_description, paragraph_1, paragraph_2, key_features, tags, specs, confidence_notes, and catalogue_matches when catalogue candidate images are supplied.
 
 APPROVED SOP — NON-NEGOTIABLE:
 - Identity: {profile['identity']}. The product name must be long, specific, unique, truthful and end with {profile['name_ending']} as its final words.\n- Begin the title with a distinctive catalogue model name, not a generic feature such as a light count, glass, crystal, diamond-cut, heritage or colour. A model name is a marketing identifier and must not be copied into Collection / Family unless owner-confirmed.
 - Owner notes are confirmed facts and outrank visual inference and catalogue comparison. Use every supplied family, reference, light count and other stated fact exactly.
 - Existing catalogue rows are duplicate/reference evidence only. Never reuse an existing title for a different item or conceal a possible duplicate by rewording.
+- When candidate catalogue images are supplied, catalogue_matches must report only visually verified candidates; a glass-only match must never assign a fixture family.
 - {GLOBAL_CONTROLS}
 - Image order is normally illuminated black/dark first, matching white/light second. Report a missing pair, mismatch, obscured count or uncertain identity in confidence_notes.
 - short_description is exactly one sentence of 20-35 words.
@@ -404,6 +414,128 @@ def shared_reference_model(products: list[dict]) -> tuple[str | None, str | None
     return " ".join(common), "shared_title_prefix"
 
 
+def catalogue_manifest_row(product: dict) -> dict:
+    """Return the compact, factual catalogue identity used for visual search."""
+    specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
+    identity_keys = (
+        "Collection / Family", "Glass Type", "Glass Colour", "Color", "Finish",
+        "Number of Lights", "Number of Arms", "Base Type", "Shade Type",
+        "Suspension Type", "Style", "Product Type",
+    )
+    return {
+        "sku": str(product.get("sku") or "").upper(),
+        "category": str(product.get("category") or "").strip(),
+        "name": str(product.get("name") or "").strip(),
+        "specs": {
+            key: str(specs.get(key) or "").strip()
+            for key in identity_keys
+            if str(specs.get(key) or "").strip()
+            and str(specs.get(key) or "").strip() != DIMENSION_FALLBACK
+        },
+    }
+
+
+def normalize_catalogue_matches(value, products: list[dict]) -> list[dict]:
+    """Keep only catalogue-backed visual matches with controlled relations."""
+    if isinstance(value, dict):
+        value = value.get("matches") or []
+    if not isinstance(value, list):
+        return []
+    by_sku = {
+        str(product.get("sku") or "").upper(): product
+        for product in products
+        if product.get("sku")
+    }
+    normalized = []
+    seen = set()
+    for row in value[:12]:
+        if not isinstance(row, dict):
+            continue
+        sku = str(row.get("sku") or "").upper().strip()
+        relation = str(row.get("relation") or "similar_only").strip().lower()
+        if sku not in by_sku or sku in seen or relation not in CATALOGUE_MATCH_RELATIONS:
+            continue
+        try:
+            confidence = max(0.0, min(1.0, float(row.get("confidence") or 0)))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        product = by_sku[sku]
+        specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
+        normalized.append({
+            "sku": sku,
+            "name": str(product.get("name") or "").strip(),
+            "category": str(product.get("category") or "").strip(),
+            "family": str(specs.get("Collection / Family") or "").strip() or None,
+            "image": next((url for url in (product.get("images") or []) if isinstance(url, str) and url), None),
+            "relation": relation,
+            "confidence": round(confidence, 3),
+            "reason": str(row.get("reason") or "").strip()[:240],
+        })
+        seen.add(sku)
+    return sorted(normalized, key=lambda row: row["confidence"], reverse=True)[:8]
+
+
+def automatic_catalogue_model(matches: list[dict], products: list[dict]) -> dict:
+    """Resolve a safe family/model only from high-confidence fixture matches.
+
+    A single reference must be exceptionally strong. Two or more agreeing
+    references may establish a family at the normal fixture threshold. Glass-
+    only matches never assign a fixture family.
+    """
+    by_sku = {
+        str(product.get("sku") or "").upper(): product
+        for product in products
+        if product.get("sku")
+    }
+    groups = {}
+    for match in matches or []:
+        if match.get("relation") not in {"same_fixture", "same_fixture_different_glass"}:
+            continue
+        confidence = float(match.get("confidence") or 0)
+        if confidence < CATALOGUE_FIXTURE_MATCH_THRESHOLD:
+            continue
+        product = by_sku.get(str(match.get("sku") or "").upper())
+        if not product:
+            continue
+        model, source = shared_reference_model([product])
+        if not model:
+            continue
+        key = model.casefold()
+        group = groups.setdefault(key, {"model": model, "sources": [], "products": [], "matches": []})
+        group["sources"].append(source)
+        group["products"].append(product)
+        group["matches"].append(match)
+
+    ranked = sorted(
+        groups.values(),
+        key=lambda group: (
+            sum(float(match["confidence"]) for match in group["matches"]) / len(group["matches"]),
+            len(group["matches"]),
+        ),
+        reverse=True,
+    )
+    if not ranked:
+        return {}
+    winner = ranked[0]
+    average = sum(float(match["confidence"]) for match in winner["matches"]) / len(winner["matches"])
+    if len(winner["matches"]) == 1 and average < CATALOGUE_SINGLE_MATCH_THRESHOLD:
+        return {}
+    if len(ranked) > 1:
+        runner_up = sum(float(match["confidence"]) for match in ranked[1]["matches"]) / len(ranked[1]["matches"])
+        if average - runner_up < 0.08:
+            return {}
+    categories = {str(product.get("category") or "").strip() for product in winner["products"]}
+    return {
+        "model": winner["model"],
+        "source": "automatic_catalogue_family" if "saved_family" in winner["sources"] else "automatic_title_model",
+        "family": winner["model"] if "saved_family" in winner["sources"] else None,
+        "products": winner["products"],
+        "matches": winner["matches"],
+        "confidence": round(average, 3),
+        "category": next(iter(categories)) if len(categories) == 1 else None,
+    }
+
+
 def shared_reference_category(products: list[dict]) -> str | None:
     """Return the one saved category shared by every exact reference."""
     categories = [str(product.get("category") or "").strip() for product in products]
@@ -473,6 +605,19 @@ def apply_reference_model(record: dict, model: str, category: str) -> dict:
         return record
     name = str(record.get("name") or "").strip()
     if not re.match(rf"^{re.escape(model)}\b", name, re.I):
+        specs = record.get("specs") if isinstance(record.get("specs"), dict) else {}
+        generated_family = str(specs.get("Collection / Family") or "").strip()
+        if generated_family and generated_family != DIMENSION_FALLBACK and re.match(rf"^{re.escape(generated_family)}\b", name, re.I):
+            name = re.sub(rf"^{re.escape(generated_family)}\s+", "", name, count=1, flags=re.I)
+        else:
+            first_word = re.match(r"^([A-Za-z][A-Za-z'’\-]*)\b", name)
+            if first_word and first_word.group(1).casefold() not in {
+                "antique", "bell", "brass", "clear", "crystal", "decorative",
+                "diamond", "etched", "floral", "fluted", "glass", "gold",
+                "heritage", "opal", "ornate", "pleated", "scrolled", "silver",
+                "traditional", "victorian",
+            }:
+                name = name[first_word.end():].lstrip(" —–-")
         name = f"{model} {name}"
     record["name"] = enforce_product_name_ending(name, category)
     return record
@@ -484,10 +629,22 @@ def apply_reference_family(record: dict, family: str, category: str) -> dict:
     if not family:
         return record
     specs = record.get("specs") or {}
+    previous_family = str(specs.get("Collection / Family") or "").strip()
     if "Collection / Family" in specs:
         specs["Collection / Family"] = family
     name = str(record.get("name") or "").strip()
     if not re.match(rf"^{re.escape(family)}\b", name, re.I):
+        if previous_family and previous_family != DIMENSION_FALLBACK and re.match(rf"^{re.escape(previous_family)}\b", name, re.I):
+            name = re.sub(rf"^{re.escape(previous_family)}\s+", "", name, count=1, flags=re.I)
+        else:
+            first_word = re.match(r"^([A-Za-z][A-Za-z'’\-]*)\b", name)
+            if first_word and first_word.group(1).casefold() not in {
+                "antique", "bell", "brass", "clear", "crystal", "decorative",
+                "diamond", "etched", "floral", "fluted", "glass", "gold",
+                "heritage", "opal", "ornate", "pleated", "scrolled", "silver",
+                "traditional", "victorian",
+            }:
+                name = name[first_word.end():].lstrip(" —–-")
         name = f"{family} {name}"
     record["name"] = enforce_product_name_ending(name, category)
     record["specs"] = specs
@@ -625,10 +782,18 @@ def validate_record(record: dict, category: str) -> list[str]:
         )
     confirmed = owner_facts(evidence.get("owner_notes") or "")
     confirmed_family = confirmed.get("family")
-    confirmed_model = str(evidence.get("confirmed_model") or "").strip()
+    confirmed_model = str(
+        evidence.get("confirmed_model")
+        or evidence.get("automatic_catalogue_model")
+        or ""
+    ).strip()
     required_opening = confirmed_family or confirmed_model
     if required_opening and not re.match(rf"^{re.escape(required_opening)}\b", name, re.I):
-        source = "owner-confirmed family" if confirmed_family else "catalogue-confirmed model"
+        source = (
+            "owner-confirmed family"
+            if confirmed_family
+            else "catalogue-confirmed model"
+        )
         errors.append(f"Product name must begin with the {source} {required_opening}")
     expected_ending = CATEGORY_PROFILES[category]["name_ending"]
     if not name.casefold().endswith(expected_ending.casefold()):
