@@ -147,16 +147,22 @@ export const quotationDefaultTerms = (quote) => {
   return [
     taxTerm,
     "Delivery timeline will be confirmed upon order confirmation.",
-    "Freight will be payable at actuals, if applicable.",
+    Number(quote.shipping) > 0
+      ? `Freight / other charges of INR ${quoteMoney(quote.shipping)} are included in the quotation total.`
+      : "Freight, if applicable, will be confirmed before order confirmation.",
     "Goods once sold will not be taken back.",
     "Subject to Firozabad jurisdiction only.",
   ];
 };
 
 export const quotationSummaryRows = (quote) => {
-  const rows = [{ label: "Taxable Amount", value: quote.subtotal - quote.discount + quote.shipping, bold: true }];
-  if (Number(quote.discount) > 0) rows.push({ label: "Discount", value: quote.discount });
-  if (Number(quote.shipping) > 0) rows.push({ label: "Freight / Other Charges", value: quote.shipping });
+  const discount = Number(quote.discount) || 0;
+  const shipping = Number(quote.shipping) || 0;
+  const rows = [];
+  if (discount > 0 || shipping > 0) rows.push({ label: "Products Subtotal", value: quote.subtotal });
+  if (discount > 0) rows.push({ label: "Discount", value: -discount });
+  if (shipping > 0) rows.push({ label: "Freight / Other Charges", value: shipping });
+  rows.push({ label: "Taxable Amount", value: quote.subtotal - discount + shipping, bold: true });
   if (Number(quote.tax_rate) > 0 && Number(quote.tax_amount) > 0) {
     rows.push({ label: `Taxes (${quoteMoney(quote.tax_rate)}%)`, value: quote.tax_amount });
   }
