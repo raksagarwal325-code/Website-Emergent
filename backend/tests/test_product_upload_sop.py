@@ -1,4 +1,4 @@
-from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, SOP_VERSION, apply_owner_facts, apply_reference_family, apply_reference_model, automatic_catalogue_model, blocking_identity_notes, catalogue_manifest_row, conversation_facts, enforce_product_name_ending, extract_catalogue_references, find_similar_product, normalize_ai_record, normalize_catalogue_matches, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_family, shared_reference_model, sop_prompt, validate_record
+from product_upload_sop import CATEGORY_PROFILES, DIMENSION_FALLBACK, SCHEMAS, SOP_VERSION, apply_identity_authority, apply_owner_facts, apply_reference_family, apply_reference_model, automatic_catalogue_model, blocking_identity_notes, catalogue_manifest_row, conversation_facts, enforce_product_name_ending, extract_catalogue_references, find_similar_product, normalize_ai_record, normalize_catalogue_matches, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_family, shared_reference_model, sop_prompt, validate_record
 
 
 def _ai():
@@ -256,6 +256,23 @@ def test_one_clear_fixture_variant_match_locks_the_existing_family():
     identity = automatic_catalogue_model(matches, products)
     assert identity["model"] == "Fanoos"
     assert identity["family"] == "Fanoos"
+
+
+def test_automatic_catalogue_family_survives_ai_family_cleanup():
+    record = normalize_ai_record(_ai(), "Floor Lamp")
+    record["name"] = "Crowned Diamond-Cut Hurricane Scroll-Gallery Ornate Tripod Floor Lamp"
+    record["specs"]["Collection / Family"] = "Crowned"
+    corrected = apply_identity_authority(
+        record,
+        "",
+        "Floor Lamp",
+        automatic_family="Fanoos",
+        automatic_model="Fanoos",
+    )
+    assert corrected["name"].startswith("Fanoos ")
+    assert not corrected["name"].startswith("Fanoos Crowned ")
+    assert corrected["specs"]["Collection / Family"] == "Fanoos"
+
 
 
 def test_commit_validation_preserves_automatic_catalogue_family_lock():
