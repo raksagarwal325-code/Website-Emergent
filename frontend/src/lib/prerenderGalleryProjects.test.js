@@ -17,7 +17,7 @@ test("uses the gallery's title slug and collision suffix; only current settings 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gallery-prerender-"));
   try {
     fs.writeFileSync(path.join(dir, "index.html"), TEMPLATE);
-    expect(await run({ buildDir: dir, fetcher: async () => ({ homepage_content: { gallery: { items: projects } } }), logger: { log: () => {} } })).toEqual(routes.map(({ route }) => route));
+    expect(await run({ buildDir: dir, apiBase: "https://example.test", fetcher: async () => ({ homepage_content: { gallery: { items: projects } } }), logger: { log: () => {} } })).toEqual(routes.map(({ route }) => route));
     const output = fs.readFileSync(path.join(dir, routes[0].route, "index.html"), "utf8");
     expect(output).toContain('<h1>A Client Installation — Lucknow</h1>');
     expect(output).toContain('<link rel="canonical" href="https://samratglass.com/gallery/a-client-installation-lucknow" />');
@@ -29,7 +29,7 @@ test("uses the gallery's title slug and collision suffix; only current settings 
 });
 
 test("does not invent project pages when settings are empty", async () => {
-  await expect(run({ fetcher: async () => ({ homepage_content: { gallery: { items: [] } } }) }))
+  await expect(run({ apiBase: "https://example.test", fetcher: async () => ({ homepage_content: { gallery: { items: [] } } }) }))
     .rejects.toThrow(/no gallery projects/);
 });
 
