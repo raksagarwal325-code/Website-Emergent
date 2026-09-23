@@ -10,8 +10,8 @@ const PAGES = [
     route: "/",
     title: "Samrat Glass Emporium · Handcrafted Chandeliers & Decorative Lighting · Firozabad",
     description: "Handcrafted chandeliers, hanging lights, wall lights, table lamps and decorative glass lighting from Firozabad — by Samrat Glass Emporium, established in 1981.",
-    h1: "Handcrafted chandeliers & decorative lighting from Firozabad",
-    intro: "Explore chandeliers, hanging lights, wall lights, table lamps and decorative glass lighting crafted in Firozabad by Samrat Glass Emporium.",
+    h1: "Luxury decorative lighting that turns houses into homes.",
+    intro: "A curated catalog of crystal chandeliers, pendant lights, wall sconces, table lamps and decorative lighting, handcrafted and hand-assembled by our artisans in Firozabad, with processes varying by design.",
     links: [["/catalog", "Explore the catalog"], ["/category/chandeliers", "Chandeliers"], ["/gallery", "Real installations"], ["/craft", "Our craft"], ["/contact", "Contact us"]],
   },
   {
