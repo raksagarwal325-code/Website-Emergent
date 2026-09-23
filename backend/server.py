@@ -29,7 +29,7 @@ from watermark import apply_watermark  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
-from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_PREFIX, apply_owner_facts, apply_reference_family, apply_reference_model, automatic_catalogue_model, blocking_identity_notes, catalogue_manifest_row, conversation_facts, extract_catalogue_references, facts_as_notes, find_similar_product, normalize_ai_record, normalize_catalogue_matches, normalize_product_name, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_model, sop_prompt, validate_record  # noqa: E402
+from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_PREFIX, apply_identity_authority, apply_owner_facts, apply_reference_family, apply_reference_model, automatic_catalogue_model, blocking_identity_notes, catalogue_manifest_row, conversation_facts, extract_catalogue_references, facts_as_notes, find_similar_product, normalize_ai_record, normalize_catalogue_matches, normalize_product_name, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_model, sop_prompt, validate_record  # noqa: E402
 from product_ai import configure_product_chat, product_ai_settings  # noqa: E402
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, inspect_media_bytes  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
@@ -4113,16 +4113,15 @@ async def _generate_sop_product(item: AISopBatchItem, catalogue_products: list[d
             ai_data, effective_category, effective_height, effective_width
         )
         confirmed_owner = owner_facts(effective_notes)
-        if not confirmed_owner.get("family"):
-            if reference_context.get("family"):
-                normalized = apply_reference_family(normalized, reference_context["family"], effective_category)
-            elif reference_context.get("model"):
-                normalized = apply_reference_model(normalized, reference_context["model"], effective_category)
-            elif automatic_identity.get("family"):
-                normalized = apply_reference_family(normalized, automatic_identity["family"], effective_category)
-            elif automatic_identity.get("model"):
-                normalized = apply_reference_model(normalized, automatic_identity["model"], effective_category)
-        normalized = apply_owner_facts(normalized, effective_notes)
+        normalized = apply_identity_authority(
+            normalized,
+            effective_notes,
+            effective_category,
+            reference_family=reference_context.get("family"),
+            reference_model=reference_context.get("model"),
+            automatic_family=automatic_identity.get("family"),
+            automatic_model=automatic_identity.get("model"),
+        )
         normalized["sop_evidence"] = _sop_evidence(
             reference_context,
             recovered,
@@ -4316,12 +4315,13 @@ Do not ask the owner to manually repair fields you can correctly regenerate.
     normalized = normalize_ai_record(generated, category, effective_height, effective_width)
     authoritative_notes = "; ".join(part for part in (owner_notes, instruction) if part)
     confirmed_owner = owner_facts(authoritative_notes)
-    if not confirmed_owner.get("family"):
-        if reference_family:
-            normalized = apply_reference_family(normalized, reference_family, category)
-        elif reference_model:
-            normalized = apply_reference_model(normalized, reference_model, category)
-    normalized = apply_owner_facts(normalized, authoritative_notes)
+    normalized = apply_identity_authority(
+        normalized,
+        authoritative_notes,
+        category,
+        reference_family=reference_family,
+        reference_model=reference_model,
+    )
 
     warnings = list(normalized.pop("confidence_notes", []))
     revised = {
