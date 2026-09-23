@@ -702,6 +702,37 @@ def apply_owner_facts(record: dict, notes: str) -> dict:
     return record
 
 
+def apply_identity_authority(
+    record: dict,
+    notes: str,
+    category: str,
+    *,
+    reference_family: str | None = None,
+    reference_model: str | None = None,
+    automatic_family: str | None = None,
+    automatic_model: str | None = None,
+) -> dict:
+    """Apply identity sources in authority order without erasing catalogue locks.
+
+    Owner facts clean up unconfirmed AI families first. When the owner has not
+    supplied a family, exact references outrank automatically verified catalogue
+    matches. Applying catalogue identity last prevents that verified family from
+    being mistaken for an AI invention and removed again.
+    """
+    confirmed_owner = owner_facts(notes)
+    record = apply_owner_facts(record, notes)
+    if confirmed_owner.get("family"):
+        return record
+
+    family = reference_family or automatic_family
+    model = reference_model or automatic_model
+    if family:
+        return apply_reference_family(record, family, category)
+    if model:
+        return apply_reference_model(record, model, category)
+    return record
+
+
 def enforce_product_name_ending(value: str, category: str) -> str:
     """Keep the long descriptive title while making the category its final words."""
     ending = CATEGORY_PROFILES[category]["name_ending"]
