@@ -124,7 +124,8 @@ CATALOGUE_MATCH_RELATIONS = {
     "similar_only",
 }
 CATALOGUE_FIXTURE_MATCH_THRESHOLD = 0.86
-CATALOGUE_SINGLE_MATCH_THRESHOLD = 0.93
+CATALOGUE_SINGLE_EXACT_FIXTURE_THRESHOLD = 0.86
+CATALOGUE_SINGLE_VARIANT_FIXTURE_THRESHOLD = 0.88
 
 
 def product_sop_registry() -> dict:
@@ -518,8 +519,15 @@ def automatic_catalogue_model(matches: list[dict], products: list[dict]) -> dict
         return {}
     winner = ranked[0]
     average = sum(float(match["confidence"]) for match in winner["matches"]) / len(winner["matches"])
-    if len(winner["matches"]) == 1 and average < CATALOGUE_SINGLE_MATCH_THRESHOLD:
-        return {}
+    if len(winner["matches"]) == 1:
+        relation = winner["matches"][0].get("relation")
+        threshold = (
+            CATALOGUE_SINGLE_EXACT_FIXTURE_THRESHOLD
+            if relation == "same_fixture"
+            else CATALOGUE_SINGLE_VARIANT_FIXTURE_THRESHOLD
+        )
+        if average < threshold:
+            return {}
     if len(ranked) > 1:
         runner_up = sum(float(match["confidence"]) for match in ranked[1]["matches"]) / len(ranked[1]["matches"])
         if average - runner_up < 0.08:
