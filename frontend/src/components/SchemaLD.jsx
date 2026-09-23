@@ -42,6 +42,12 @@ export function sanitizeSchemaData(data) {
 export default function SchemaLD({ id, data }) {
   useEffect(() => {
     if (!id || !data) return;
+    // Product entry points carry a minimal static Product node for crawlers
+    // without JavaScript. Once the richer client node is ready, replace it
+    // instead of leaving two definitions of the same #product entity.
+    if (data["@type"] === "Product") {
+      document.head.querySelector('script[data-schema="prerender-product"]')?.remove();
+    }
     let el = document.head.querySelector(`script[data-schema="${id}"]`);
     if (!el) {
       el = document.createElement("script");

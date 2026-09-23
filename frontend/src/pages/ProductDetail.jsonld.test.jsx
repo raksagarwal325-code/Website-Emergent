@@ -159,6 +159,17 @@ async function renderAndGetProductJsonLd() {
 }
 
 describe("Product JSON-LD — merchant listing fields", () => {
+  test("replaces the static prerender Product node after hydration", async () => {
+    const staticNode = document.createElement("script");
+    staticNode.type = "application/ld+json";
+    staticNode.setAttribute("data-schema", "prerender-product");
+    staticNode.textContent = JSON.stringify({ "@type": "Product", "@id": "https://samratglass.com/product/p-1#product" });
+    document.head.appendChild(staticNode);
+    await renderAndGetProductJsonLd();
+    expect(document.querySelector('script[data-schema="prerender-product"]')).toBeNull();
+    expect(document.querySelectorAll('script[data-schema^="product-"]')).toHaveLength(1);
+  });
+
   test("emits a valid Product with Offer", async () => {
     const ld = await renderAndGetProductJsonLd();
     expect(ld["@context"]).toBe("https://schema.org");
