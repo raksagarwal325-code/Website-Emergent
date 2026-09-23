@@ -234,15 +234,28 @@ def test_glass_only_match_never_assigns_fixture_family():
     assert automatic_catalogue_model(matches, products) == {}
 
 
-def test_one_moderate_fixture_match_does_not_lock_a_family():
+def test_one_weak_fixture_match_does_not_lock_a_family():
     products = [{
         "sku": "SGE-FL-016", "name": "Fanoos Diamond-Cut Glass Heritage Floor Lamp",
         "category": "Floor Lamp", "specs": {"Collection / Family": "Fanoos"},
     }]
     matches = normalize_catalogue_matches([
-        {"sku": "SGE-FL-016", "relation": "same_fixture", "confidence": 0.90},
+        {"sku": "SGE-FL-016", "relation": "same_fixture", "confidence": 0.84},
     ], products)
     assert automatic_catalogue_model(matches, products) == {}
+
+
+def test_one_clear_fixture_variant_match_locks_the_existing_family():
+    products = [{
+        "sku": "SGE-FL-013", "name": "Fanoos Opal Glass Heritage Floor Lamp",
+        "category": "Floor Lamp", "specs": {"Collection / Family": "Fanoos"},
+    }]
+    matches = normalize_catalogue_matches([
+        {"sku": "SGE-FL-013", "relation": "same_fixture_different_glass", "confidence": 0.88},
+    ], products)
+    identity = automatic_catalogue_model(matches, products)
+    assert identity["model"] == "Fanoos"
+    assert identity["family"] == "Fanoos"
 
 
 def test_commit_validation_preserves_automatic_catalogue_family_lock():
