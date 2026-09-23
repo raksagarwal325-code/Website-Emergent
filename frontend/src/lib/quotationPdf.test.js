@@ -23,10 +23,23 @@ test("omits nil commercial rows while retaining non-zero taxes", () => {
 test("prints discount and freight only when they have a value", () => {
   const rows = quotationSummaryRows({ subtotal: 10000, discount: 500, shipping: 750, tax_rate: 0, tax_amount: 0 });
   expect(rows.map((row) => row.label)).toEqual([
-    "Taxable Amount",
+    "Products Subtotal",
     "Discount",
     "Freight / Other Charges",
+    "Taxable Amount",
   ]);
+  expect(rows.map((row) => row.value)).toEqual([10000, -500, 750, 10250]);
+});
+
+test("explains freight included in a taxable quotation without double counting it", () => {
+  const quote = { subtotal: 28000, discount: 0, shipping: 2000, tax_rate: 18, tax_amount: 5400, total: 35400 };
+  expect(quotationSummaryRows(quote).map(({ label, value }) => [label, value])).toEqual([
+    ["Products Subtotal", 28000],
+    ["Freight / Other Charges", 2000],
+    ["Taxable Amount", 30000],
+    ["Taxes (18.00%)", 5400],
+  ]);
+  expect(quotationDefaultTerms(quote)).toContain("Freight / other charges of INR 2,000.00 are included in the quotation total.");
 });
 
 test("describes the actual GST treatment in default terms", () => {
