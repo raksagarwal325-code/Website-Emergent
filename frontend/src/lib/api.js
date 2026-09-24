@@ -195,6 +195,9 @@ export const api = {
   createInquiryQuotation: (id, data) => client.post(
     `/admin/inquiries/${encodeURIComponent(id)}/quotations`, data,
   ).then(r => r.data),
+  aiQuotationCustomisation: (data) => client.post(
+    "/ai/quotation-customisation", data,
+  ).then(r => r.data),
 
   createContact: (data) => client.post("/contact", data).then(r => r.data),
   listContact: () => client.get("/contact").then(r => r.data),
