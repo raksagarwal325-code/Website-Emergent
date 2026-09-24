@@ -2009,6 +2009,26 @@ _STATIC_SITEMAP_ENTRIES: list[tuple[str, str, str]] = [
 
 
 from xml.sax.saxutils import escape as xml_escape
+import re
+import unicodedata
+
+
+def _gallery_sitemap_paths(items):
+    """Mirror the frontend's title slug and collision numbering in list order."""
+    used = {}
+    paths = []
+    for index, project in enumerate(items if isinstance(items, list) else []):
+        if not isinstance(project, dict):
+            continue
+        title = str(project.get("title") or "")
+        base = unicodedata.normalize("NFKD", title.lower())
+        base = re.sub(r"[\u0300-\u036f]", "", base)
+        base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")[:80] or f"project-{index + 1}"
+        used[base] = used.get(base, 0) + 1
+        if title.strip() or any(project.get("images") or []):
+            slug = base if used[base] == 1 else f"{base}-{used[base]}"
+            paths.append(f"/gallery/{slug}")
+    return paths
 
 
 def _absolute_image_url(url: str) -> str:
@@ -2051,6 +2071,17 @@ async def sitemap_xml():
             f"<url><loc>{_SITE_ORIGIN}{path}</loc>"
             f"<changefreq>{freq}</changefreq><priority>{prio}</priority></url>"
         )
+    settings = await db.settings.find_one(
+        {"id": "settings"}, {"_id": 0, "homepage_content.gallery.items": 1}
+    ) or {}
+    gallery_items = ((settings.get("homepage_content") or {}).get("gallery") or {}).get("items")
+    for path in _gallery_sitemap_paths(gallery_items):
+        if path not in seen_paths:
+            seen_paths.add(path)
+            parts.append(
+                f"<url><loc>{_SITE_ORIGIN}{xml_escape(path)}</loc>"
+                "<changefreq>monthly</changefreq><priority>0.6</priority></url>"
+            )
     cursor = db.products.find(
         {"status": "published"},
         {"_id": 0, "id": 1, "name": 1, "sku": 1, "images": 1, "updated_at": 1},

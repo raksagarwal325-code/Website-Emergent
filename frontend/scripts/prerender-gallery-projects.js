@@ -93,6 +93,10 @@ async function run(options = {}) {
     fs.mkdirSync(path.dirname(output), { recursive: true });
     fs.writeFileSync(output, inject(template, entry), "utf8");
   }
+  // The core-page pass runs last and uses this build-local list to link only
+  // projects that were generated successfully in the same build.
+  fs.writeFileSync(path.join(buildDir, "gallery-projects-manifest.json"),
+    JSON.stringify(routes.map(({ route, project }) => ({ route, title: project.title || route.split("/").pop() }))), "utf8");
   (options.logger || console).log(`[prerender-gallery-projects] ${routes.length} pages written`);
   return routes.map((entry) => entry.route);
 }
