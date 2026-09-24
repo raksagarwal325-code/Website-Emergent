@@ -138,6 +138,9 @@ const imageFormat = (dataUrl) => {
 };
 
 const dateText = (value) => new Date(value).toLocaleDateString("en-IN");
+export const quotationPdfText = (value) => String(value || "")
+  .replace(/[\u2010-\u2015\u2212\u00ad]/g, "-")
+  .replace(/\u00a0/g, " ");
 const COMPONENT_LABELS = {
   glass_arms: "glass arm(s)",
   crystal_bobeche: "crystal bobeche",
@@ -349,7 +352,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
   drawTableHeader();
 
   quote.items.forEach((item, index) => {
-    const nameLines = doc.splitTextToSize(item.name, 68).slice(0, 3);
+    const nameLines = doc.splitTextToSize(quotationPdfText(item.name), 68).slice(0, 3);
     const referenceCodes = quotationReferenceCodesForItem(quote, item);
     const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
     const customParts = [];
@@ -357,9 +360,8 @@ export const createQuotationPdf = async (quote, options = {}) => {
     if (item.body_basis === "drawing") customParts.push("Body: approved drawing");
     if (item.body_basis === "drawing_pending") customParts.push("Body: drawing pending");
     if (referenceCodes.length) customParts.push(`Reference: ${referenceCodes.join(", ")}`);
-    if (item.customisation_notes) customParts.push(item.customisation_notes);
     if (item.approval_required) customParts.push("Approval required before production");
-    const customLines = customParts.length ? doc.splitTextToSize(customParts.join(" | "), 68).slice(0, 4) : [];
+    const customLines = customParts.length ? doc.splitTextToSize(customParts.join(" | "), 68) : [];
     const rowHeight = Math.max(13.5, nameLines.length * 3.1 + (item.sku ? 4 : 1) + customLines.length * 2.7 + 3);
     if (y + rowHeight > 225) startContinuationPage();
     setText(6.8, "normal", MUTED);
@@ -488,7 +490,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
     setText(8.2, "bold", GOLD);
     doc.text(reference.code, inner + 5, 57.8);
     setText(7.2, "bold", [255, 255, 255]);
-    doc.text(doc.splitTextToSize(reference.title, 110).slice(0, 1), inner + 27, 57.8);
+    doc.text(doc.splitTextToSize(quotationPdfText(reference.title), 110).slice(0, 1), inner + 27, 57.8);
     setText(5.5, "bold", [226, 216, 207]);
     doc.text(`${CATEGORY_LABELS[reference.category] || CATEGORY_LABELS.other} | Items ${applicableItems.map(({ itemIndex }) => itemIndex + 1).join(", ")}`, pageWidth - inner - 5, 57.8, { align: "right" });
 
@@ -514,7 +516,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
       setText(5.6, "bold", MAROON);
       doc.text(label, scopeX, scopeY);
       setText(5.7, "normal", colour);
-      const lines = doc.splitTextToSize(value, scopeWidth - 1).slice(0, 6);
+      const lines = doc.splitTextToSize(quotationPdfText(value), scopeWidth - 1).slice(0, 6);
       doc.text(lines, scopeX, scopeY + 4, { lineHeightFactor: 1.08 });
       scopeY += 5 + lines.length * 3 + 4;
     };
@@ -523,13 +525,16 @@ export const createQuotationPdf = async (quote, options = {}) => {
     setText(5.7, "bold", INK);
     doc.text(`Applies to ${applicableItems.length} product${applicableItems.length === 1 ? "" : "s"} in this quotation.`, scopeX, Math.min(scopeY + 1, panelTop + 94));
 
-    setText(6.5, "bold", MAROON);
-    doc.text("APPLICATION MAP", inner + 4, 182);
-    fillRect(inner, 187, usable, 8.5, WINE);
-    setText(6.1, "bold", [255, 255, 255]);
-    doc.text("Item", inner + 5, 192.5);
-    doc.text("Product", inner + 22, 192.5);
-    doc.text("Body / construction instruction", inner + 98, 192.5);
+    const drawApplicationHeader = (titleY, headerY, continued = false) => {
+      setText(6.5, "bold", MAROON);
+      doc.text(continued ? "APPLICATION MAP - CONTINUED" : "APPLICATION MAP", inner + 4, titleY);
+      fillRect(inner, headerY, usable, 8.5, WINE);
+      setText(6.1, "bold", [255, 255, 255]);
+      doc.text("Item", inner + 5, headerY + 5.5);
+      doc.text("Product", inner + 22, headerY + 5.5);
+      doc.text("Body / construction instruction", inner + 98, headerY + 5.5);
+    };
+    drawApplicationHeader(182, 187);
     let mapY = 195.5;
     applicableItems.forEach(({ item, itemIndex }, applicationIndex) => {
       const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
@@ -539,33 +544,47 @@ export const createQuotationPdf = async (quote, options = {}) => {
       else if (item.body_basis === "drawing_pending") bodyParts.push("Final design drawing pending");
       else bodyParts.push("Retain product body and construction");
       if ((item.matching_components || []).length) bodyParts.push(item.matching_components.map((value) => COMPONENT_LABELS[value] || value).join(", "));
-      if (item.customisation_notes) bodyParts.push(item.customisation_notes);
+      if (item.customisation_notes) bodyParts.push(quotationPdfText(item.customisation_notes));
       if (item.approval_required) bodyParts.push("Approval required before production");
-      const detailLines = doc.splitTextToSize(bodyParts.join("; "), 83).slice(0, 5);
-      const rowHeight = Math.max(11, detailLines.length * 3 + 3);
+      const detailLines = doc.splitTextToSize(bodyParts.join("; "), 83);
+      const productLines = doc.splitTextToSize(quotationPdfText(item.name), 69);
+      const rowHeight = Math.max(11, detailLines.length * 3 + 3, productLines.length * 3 + 3);
+      if (mapY + rowHeight > 263) {
+        pageFooter();
+        doc.addPage();
+        drawPageBase();
+        drawContinuationHeader();
+        drawApplicationHeader(39, 44, true);
+        mapY = 52.5;
+      }
       if (applicationIndex % 2 === 0) fillRect(inner, mapY, usable, rowHeight, [248, 243, 235]);
       setText(6, "normal", INK);
       doc.text(String(itemIndex + 1), inner + 5, mapY + 6.5);
       setText(6, "bold", INK);
-      doc.text(doc.splitTextToSize(item.name, 69).slice(0, 2), inner + 22, mapY + 5.2, { lineHeightFactor: 1.03 });
+      doc.text(productLines, inner + 22, mapY + 5.2, { lineHeightFactor: 1.03 });
       setText(5.6, "normal", INK);
       doc.text(detailLines, inner + 98, mapY + 5.2, { lineHeightFactor: 1.05 });
       mapY += rowHeight;
       line(inner, mapY, inner + usable, mapY, LINE, 0.15);
     });
 
-    const confirmationTop = Math.max(230, mapY + 8);
-    if (confirmationTop < 268) {
-      fillRect(inner, confirmationTop, usable, 27, CREAM, 1.2);
-      setText(6.3, "bold", MAROON);
-      doc.text("PRODUCTION CONFIRMATION", inner + 5, confirmationTop + 7);
-      const approvalItems = applicableItems.filter(({ item }) => item.approval_required);
-      const confirmation = approvalItems.length
-        ? `Final drawing / design approval is required before production for Item${approvalItems.length === 1 ? "" : "s"} ${approvalItems.map(({ itemIndex }) => itemIndex + 1).join(", ")}.`
-        : "The approved quotation and this reference schedule form the production instruction.";
-      setText(5.7, "normal", INK);
-      doc.text(doc.splitTextToSize(confirmation, usable - 10).slice(0, 3), inner + 5, confirmationTop + 14, { lineHeightFactor: 1.08 });
+    let confirmationTop = Math.max(230, mapY + 8);
+    if (confirmationTop + 27 > 269) {
+      pageFooter();
+      doc.addPage();
+      drawPageBase();
+      drawContinuationHeader();
+      confirmationTop = 39;
     }
+    fillRect(inner, confirmationTop, usable, 27, CREAM, 1.2);
+    setText(6.3, "bold", MAROON);
+    doc.text("PRODUCTION CONFIRMATION", inner + 5, confirmationTop + 7);
+    const approvalItems = applicableItems.filter(({ item }) => item.approval_required);
+    const confirmation = approvalItems.length
+      ? `Final drawing / design approval is required before production for Item${approvalItems.length === 1 ? "" : "s"} ${approvalItems.map(({ itemIndex }) => itemIndex + 1).join(", ")}.`
+      : "The approved quotation and this reference schedule form the production instruction.";
+    setText(5.7, "normal", INK);
+    doc.text(doc.splitTextToSize(confirmation, usable - 10), inner + 5, confirmationTop + 14, { lineHeightFactor: 1.08 });
     pageFooter();
   });
 
