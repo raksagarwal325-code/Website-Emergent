@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from quotation import QuotationCreate, build_quotation, format_quotation_number
+from quotation import QuotationAIAssistRequest, QuotationAIDraft, QuotationCreate, build_quotation, format_quotation_number
 
 
 def payload(**overrides):
@@ -66,6 +66,40 @@ def test_yearly_quotation_number_has_four_digit_sequence():
     assert format_quotation_number(2026, 41) == "SGE-2026-0041"
     with pytest.raises(ValueError, match="positive"):
         format_quotation_number(2026, 0)
+
+
+def test_ai_customisation_draft_accepts_known_items_and_valid_match():
+    request = QuotationAIAssistRequest(
+        image_url="/api/files/reference.webp",
+        instruction="Use the shade on both; make the wall light match the chandelier.",
+        items=[{"line_id": "chandelier", "name": "Chandelier"}, {"line_id": "wall", "name": "Wall light"}],
+    )
+    draft = QuotationAIDraft.model_validate({
+        "summary": "Use one shade reference on both products.",
+        "reference": {"category": "shade_design", "title": "Star-cut shade", "applies_to": ["chandelier", "wall"], "use_details": "Use the star-cut pattern.", "exclude_details": "Do not copy the reference body."},
+        "item_updates": [
+            {"line_id": "chandelier", "body_basis": "product", "customisation_notes": "Keep the chandelier body; change shades.", "approval_required": True},
+            {"line_id": "wall", "body_basis": "match_item", "body_reference_line_id": "chandelier", "matching_components": ["glass_arms"], "customisation_notes": "Match the chandelier body; change shades.", "approval_required": True},
+        ],
+        "warnings": [],
+    }).validate_for(request)
+    assert draft.reference.applies_to == ["chandelier", "wall"]
+    assert draft.item_updates[1].body_reference_line_id == "chandelier"
+
+
+def test_ai_customisation_draft_rejects_unknown_item_mapping():
+    request = QuotationAIAssistRequest(
+        image_url="/api/files/reference.webp",
+        instruction="Use this shade.",
+        items=[{"line_id": "chandelier", "name": "Chandelier"}],
+    )
+    draft = QuotationAIDraft.model_validate({
+        "summary": "Use the shade.",
+        "reference": {"category": "shade_design", "title": "Shade", "applies_to": ["unknown"], "use_details": "Use the cut pattern."},
+        "item_updates": [{"line_id": "chandelier", "customisation_notes": "Change shade only."}],
+    })
+    with pytest.raises(ValueError, match="unknown quotation item"):
+        draft.validate_for(request)
 
 
 def test_discount_cannot_exceed_product_subtotal():
