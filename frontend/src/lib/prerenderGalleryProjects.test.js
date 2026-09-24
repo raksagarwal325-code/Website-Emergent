@@ -2,6 +2,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { projectRoutes, inject, run } = require("../../scripts/prerender-gallery-projects");
+const { inject: injectCore, run: runCore, PAGES } = require("../../scripts/prerender-core-pages");
 
 const TEMPLATE = '<html><head><title>Default</title><meta name="description" content="Default"/><meta property="og:title" content="Default"/></head><body><div id="root"></div></body></html>';
 const projects = [
@@ -25,6 +26,17 @@ test("uses the gallery's title slug and collision suffix; only current settings 
     expect(output).toContain('https://samratglass.com/api/files/gallery/one.jpg');
     expect((output.match(/rel="canonical"/g) || [])).toHaveLength(1);
     expect((output.match(/property="og:title"/g) || [])).toHaveLength(1);
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, "gallery-projects-manifest.json"), "utf8"));
+    const landing = injectCore(TEMPLATE, PAGES.find((page) => page.route === "/gallery"), manifest);
+    for (const { route, title } of manifest) {
+      expect(landing).toContain(`href="${route}"`);
+      expect(landing).toContain(title);
+    }
+    runCore(dir);
+    const builtGallery = fs.readFileSync(path.join(dir, "gallery", "index.html"), "utf8");
+    expect(builtGallery).toContain(`href="${routes[0].route}"`);
+    expect(fs.existsSync(path.join(dir, "gallery-projects-manifest.json"))).toBe(false);
+    expect(landing).not.toContain("/gallery/noorvastra-etched-tulip-crystal-chandelier-custom-twelve-light-two-tier-installa");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -80,7 +80,7 @@ const PAGES = [
   },
 ];
 
-function inject(template, page) {
+function inject(template, page, projectLinks = []) {
   const canonical = `${SITE_ORIGIN}${page.route}`;
   const metadata = [
     `<meta property="og:title" content="${escapeHtml(page.title)}" />`,
@@ -90,7 +90,9 @@ function inject(template, page) {
     `<meta name="twitter:description" content="${escapeHtml(page.description)}" />`,
     `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
   ].join("\n");
-  const body = `<main class="prerender-shell"><article><h1>${escapeHtml(page.h1)}</h1><p>${escapeHtml(page.intro)}</p><nav aria-label="Related pages">${page.links.map(([href, label]) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`).join(" · ")}</nav></article></main>`;
+  const projects = page.route === "/gallery" && projectLinks.length
+    ? `<section aria-label="Projects"><h2>Explore our installations</h2><ul>${projectLinks.map(({ route, title }) => `<li><a href="${escapeHtml(route)}">${escapeHtml(title)}</a></li>`).join("")}</ul></section>` : "";
+  const body = `<main class="prerender-shell"><article><h1>${escapeHtml(page.h1)}</h1><p>${escapeHtml(page.intro)}</p><nav aria-label="Related pages">${page.links.map(([href, label]) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`).join(" · ")}</nav>${projects}</article></main>`;
   return template
     .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(page.title)}</title>`)
     .replace(/<meta\s+name="description"[^>]*>/i, `<meta name="description" content="${escapeHtml(page.description)}" />`)
@@ -102,12 +104,15 @@ function inject(template, page) {
 
 function run(buildDir = path.join(__dirname, "..", "build")) {
   const template = fs.readFileSync(path.join(buildDir, "index.html"), "utf8");
+  const manifest = path.join(buildDir, "gallery-projects-manifest.json");
+  const projectLinks = fs.existsSync(manifest) ? JSON.parse(fs.readFileSync(manifest, "utf8")) : [];
   // The homepage overwrites the template only after every other route is built.
   for (const page of [...PAGES.slice(1), PAGES[0]]) {
     const output = path.join(buildDir, page.route.replace(/^\//, ""), "index.html");
     fs.mkdirSync(path.dirname(output), { recursive: true });
-    fs.writeFileSync(output, inject(template, page), "utf8");
+    fs.writeFileSync(output, inject(template, page, projectLinks), "utf8");
   }
+  if (fs.existsSync(manifest)) fs.unlinkSync(manifest);
   return PAGES.length;
 }
 
