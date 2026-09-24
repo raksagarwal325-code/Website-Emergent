@@ -17,11 +17,38 @@ const PRODUCT = {
   short_description: "A handcrafted clear-glass table chandelier from Firozabad.",
   images: ["/api/files/lumiere-catalog/products/rajdarbar.webp"],
   status: "published",
+  price: 36000,
+  price_display: "starting_from",
 };
 
 const TEMPLATE = `<!doctype html><html><head><title>Default</title><meta name="description" content="Default"/><meta property="og:image" content="/logo.jpeg"/><meta name="twitter:image" content="/logo.jpeg"/></head><body><div id="root"></div></body></html>`;
 
 describe("product social prerender", () => {
+  test("puts the already public price in the initial Product offer", () => {
+    const html = injectProduct(TEMPLATE, PRODUCT, "https://samratglass.com");
+    const script = html.match(/<script type="application\\/ld\\+json" data-schema="prerender-product">(.*?)<\\/script>/);
+    expect(script).not.toBeNull();
+    const data = JSON.parse(script[1]);
+    expect(data.offers).toEqual({
+      "@type": "Offer",
+      url: `https://samratglass.com${productPath(PRODUCT)}`,
+      price: "36000",
+      priceCurrency: "INR",
+    });
+  });
+
+  test("does not expose internal Price on Request amounts or emit an incomplete Product snippet", () => {
+    const html = injectProduct(TEMPLATE, { ...PRODUCT, price_display: "on_request" }, "https://samratglass.com");
+    expect(html).not.toContain('data-schema="prerender-product"');
+    expect(html).not.toContain('"price":"36000"');
+  });
+
+  test("does not emit an offer for a missing or zero price", () => {
+    for (const price of [0, null, undefined]) {
+      const html = injectProduct(TEMPLATE, { ...PRODUCT, price }, "https://samratglass.com");
+      expect(html).not.toContain('data-schema="prerender-product"');
+    }
+  });
   test("puts an absolute product image in the initial Open Graph and Twitter metadata", () => {
     const html = injectProduct(TEMPLATE, PRODUCT, "https://samratglass.com");
     const expected = "https://samratglass.com/api/social-preview/lumiere-catalog/products/rajdarbar.webp.jpg";
