@@ -87,6 +87,11 @@ function safeJson(value) {
 }
 
 function productSchema(product, canonical, image, description) {
+  const price = Number(product.price);
+  // Price on Request must never expose the stored internal price. A Product
+  // snippet without a public offer or genuine reviews is not eligible, so do
+  // not emit an incomplete Product node for those pages.
+  if (product.price_display === "on_request" || !Number.isFinite(price) || price <= 0) return null;
   return {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -98,6 +103,12 @@ function productSchema(product, canonical, image, description) {
     image: [image],
     brand: { "@type": "Brand", name: "Samrat Glass Emporium" },
     ...(product.category ? { category: product.category } : {}),
+    offers: {
+      "@type": "Offer",
+      url: canonical,
+      price: String(price),
+      priceCurrency: "INR",
+    },
   };
 }
 
@@ -143,7 +154,7 @@ function injectProduct(template, product, apiBase) {
 
   html = html.replace(
     /<\/head>/i,
-    `${shareMetadata}\n<script type="application/ld+json" data-schema="prerender-product">${safeJson(schema)}</script>\n</head>`,
+    `${shareMetadata}${schema ? `\n<script type="application/ld+json" data-schema="prerender-product">${safeJson(schema)}</script>` : ""}\n</head>`,
   );
 
   const body = `<main class="prerender-shell"><article><p class="prerender-eyebrow">${escapeHtml(product.category || "Handcrafted lighting")}</p><h1>${escapeHtml(product.name)}</h1><img src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}"/><p>${escapeHtml(description)}</p>${product.sku ? `<p>Reference Code: ${escapeHtml(product.sku)}</p>` : ""}</article></main>`;
