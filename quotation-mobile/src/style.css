@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html { background: #12080b; color: #f8f2e9; }
+body { margin: 0; font-family: Arial, sans-serif; }
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+.font-serif { font-family: Georgia, serif; }
+.eyebrow { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: #d4af37; }
+@media (max-width: 767px) {
+  [data-testid="quotation-builder"] { padding: 0; }
+  [data-testid="quotation-builder"] > div { min-height: 100dvh; border: 0; padding-bottom: env(safe-area-inset-bottom); }
+  [data-testid="quotation-builder"] input, [data-testid="quotation-builder"] textarea { font-size: 16px; }
+  [data-testid="quotation-builder"] input[type="file"] { font-size: 12px; }
+}
