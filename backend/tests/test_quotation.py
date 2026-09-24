@@ -127,6 +127,52 @@ def test_custom_image_survives_snapshot():
     assert result["items"][0]["image"] == "/api/files/custom.webp"
 
 
+def test_custom_product_references_survive_as_structured_snapshot():
+    result = build_quotation(None, payload(
+        items=[
+            {
+                "line_id": "chandelier", "name": "Six-Light Crystal Chandelier",
+                "quantity": 1, "unit_price": 28000, "is_custom": True,
+                "body_basis": "product", "customisation_notes": "Retain chandelier proportions.",
+            },
+            {
+                "line_id": "wall-light", "name": "Matching Crystal Glass Wall Light",
+                "quantity": 2, "unit_price": 9000, "is_custom": True,
+                "body_basis": "match_item", "body_reference_line_id": "chandelier",
+                "matching_components": ["glass_arms", "crystal_bobeche", "crystal_drops", "metal_finish"],
+                "approval_required": True,
+            },
+        ],
+        design_references=[{
+            "id": "shade-reference", "code": "SD-01", "category": "shade_design",
+            "title": "Hand-cut starburst glass-shade design", "image": "/api/files/shade-reference.webp",
+            "applies_to": ["chandelier", "wall-light"],
+            "use_details": "Use the starburst motifs and lower radiating cuts.",
+            "exclude_details": "Do not copy the swan body, wall plate or metalwork.",
+        }],
+        discount=0,
+    ), "owner@example.com")
+
+    assert result["items"][1]["body_reference_line_id"] == "chandelier"
+    assert result["items"][1]["matching_components"] == [
+        "glass_arms", "crystal_bobeche", "crystal_drops", "metal_finish",
+    ]
+    assert result["items"][1]["approval_required"] is True
+    assert result["design_references"][0]["code"] == "SD-01"
+    assert result["design_references"][0]["applies_to"] == ["chandelier", "wall-light"]
+
+
+def test_custom_reference_rejects_unknown_item_links():
+    with pytest.raises(ValidationError, match="unknown item"):
+        payload(
+            items=[{"line_id": "item-1", "name": "Chandelier", "unit_price": 1000}],
+            design_references=[{
+                "id": "ref-1", "code": "SD-01", "category": "shade_design",
+                "title": "Shade design", "applies_to": ["missing-item"],
+            }],
+        )
+
+
 def test_edit_keeps_identity_and_recalculates_persisted_values():
     import ast
     import asyncio

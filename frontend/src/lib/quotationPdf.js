@@ -138,6 +138,24 @@ const imageFormat = (dataUrl) => {
 };
 
 const dateText = (value) => new Date(value).toLocaleDateString("en-IN");
+const COMPONENT_LABELS = {
+  glass_arms: "glass arm(s)",
+  crystal_bobeche: "crystal bobeche",
+  crystal_drops: "crystal drops",
+  metal_finish: "coordinated metal finish",
+};
+const CATEGORY_LABELS = {
+  shade_design: "Shade design",
+  metal_finish: "Metal finish",
+  crystal_arrangement: "Crystal arrangement",
+  body_design: "Body design",
+  dimensions: "Dimensions",
+  other: "Design reference",
+};
+
+export const quotationReferenceCodesForItem = (quote, item) => (quote.design_references || [])
+  .filter((reference) => (reference.applies_to || []).includes(item.line_id))
+  .map((reference) => reference.code);
 
 export const quotationDefaultTerms = (quote) => {
   const hasTax = Number(quote.tax_rate) > 0 && Number(quote.tax_amount) > 0;
@@ -187,6 +205,13 @@ export const createQuotationPdf = async (quote, options = {}) => {
       return options.productImageDataUrls[item.image];
     }
     return loadProductImageData(item.image);
+  }));
+  const designReferences = Array.isArray(quote.design_references) ? quote.design_references : [];
+  const referenceImageData = await Promise.all(designReferences.map((reference) => {
+    if (options.productImageDataUrls && Object.prototype.hasOwnProperty.call(options.productImageDataUrls, reference.image)) {
+      return options.productImageDataUrls[reference.image];
+    }
+    return loadProductImageData(reference.image);
   }));
   const [signatureData, stampData] = await Promise.all([
     options.signatureDataUrl === undefined ? loadRawImageData(quote.signature_url) : options.signatureDataUrl,
@@ -319,7 +344,16 @@ export const createQuotationPdf = async (quote, options = {}) => {
 
   quote.items.forEach((item, index) => {
     const nameLines = doc.splitTextToSize(item.name, 68).slice(0, 3);
-    const rowHeight = Math.max(13.5, nameLines.length * 3.1 + (item.sku ? 5 : 2));
+    const referenceCodes = quotationReferenceCodesForItem(quote, item);
+    const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
+    const customParts = [];
+    if (item.body_basis === "match_item" && linkedIndex >= 0) customParts.push(`Body: match Item ${linkedIndex + 1}`);
+    if (item.body_basis === "drawing") customParts.push("Body: approved drawing");
+    if (item.body_basis === "drawing_pending") customParts.push("Body: drawing pending");
+    if (referenceCodes.length) customParts.push(`Reference: ${referenceCodes.join(", ")}`);
+    if (item.approval_required) customParts.push("Approval required before production");
+    const customLines = customParts.length ? doc.splitTextToSize(customParts.join(" | "), 68).slice(0, 2) : [];
+    const rowHeight = Math.max(13.5, nameLines.length * 3.1 + (item.sku ? 4 : 1) + customLines.length * 2.7 + 3);
     if (y + rowHeight > 225) startContinuationPage();
     setText(6.8, "normal", MUTED);
     doc.text(String(index + 1), cols.serial, y + 6.8, { align: "center" });
@@ -329,6 +363,10 @@ export const createQuotationPdf = async (quote, options = {}) => {
     if (item.sku) {
       setText(5.5, "normal", MUTED);
       doc.text(`SKU ${item.sku}`, cols.item, y + 5 + nameLines.length * 3.1);
+    }
+    if (customLines.length) {
+      setText(5.1, "bold", MAROON);
+      doc.text(customLines, cols.item, y + 5 + nameLines.length * 3.1 + (item.sku ? 3.3 : 0), { lineHeightFactor: 1.02 });
     }
     setText(7, "normal", INK);
     doc.text(String(item.quantity), cols.qty, y + 6.8, { align: "right" });
@@ -425,6 +463,103 @@ export const createQuotationPdf = async (quote, options = {}) => {
     doc.text(doc.splitTextToSize(`Notes: ${quote.notes}`, usable - 15).slice(0, 2), pageWidth / 2, closingY + 5, { align: "center" });
   }
   pageFooter();
+
+  designReferences.forEach((reference, referenceIndex) => {
+    doc.addPage();
+    drawPageBase();
+    drawContinuationHeader();
+    const applicableItems = quote.items
+      .map((item, itemIndex) => ({ item, itemIndex }))
+      .filter(({ item }) => (reference.applies_to || []).includes(item.line_id));
+
+    setText(14, "bold", INK, "times");
+    doc.text("Design Reference Schedule", inner + 4, 39);
+    setText(6.2, "normal", MUTED);
+    doc.text("Each reference is shown once and linked to every applicable quotation item.", inner + 4, 45);
+
+    fillRect(inner, 50, usable, 12, WINE, 1.2);
+    setText(8.2, "bold", GOLD);
+    doc.text(reference.code, inner + 5, 57.8);
+    setText(7.2, "bold", [255, 255, 255]);
+    doc.text(doc.splitTextToSize(reference.title, 110).slice(0, 1), inner + 27, 57.8);
+    setText(5.5, "bold", [226, 216, 207]);
+    doc.text(`${CATEGORY_LABELS[reference.category] || CATEGORY_LABELS.other} | Items ${applicableItems.map(({ itemIndex }) => itemIndex + 1).join(", ")}`, pageWidth - inner - 5, 57.8, { align: "right" });
+
+    const panelTop = 67;
+    const panelHeight = 104;
+    fillRect(inner, panelTop, usable, panelHeight, CREAM, 1.5);
+    doc.setDrawColor(...LINE);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(inner, panelTop, usable, panelHeight, 1.5, 1.5, "S");
+    addContainedImage(referenceImageData[referenceIndex], inner + 5, panelTop + 7, 50, 66);
+    setText(6, "bold", MAROON);
+    doc.text("SOURCE REFERENCE", inner + 30, panelTop + 79, { align: "center" });
+    setText(5.2, "normal", MUTED);
+    doc.text(`${CATEGORY_LABELS[reference.category] || CATEGORY_LABELS.other} only`, inner + 30, panelTop + 84, { align: "center" });
+
+    const scopeX = inner + 63;
+    const scopeWidth = usable - 70;
+    setText(6.5, "bold", MAROON);
+    doc.text("REFERENCE SCOPE", scopeX, panelTop + 9);
+    let scopeY = panelTop + 16;
+    const drawScope = (label, value, colour = INK) => {
+      if (!value) return;
+      setText(5.6, "bold", MAROON);
+      doc.text(label, scopeX, scopeY);
+      setText(5.7, "normal", colour);
+      const lines = doc.splitTextToSize(value, scopeWidth - 1).slice(0, 6);
+      doc.text(lines, scopeX, scopeY + 4, { lineHeightFactor: 1.08 });
+      scopeY += 5 + lines.length * 3 + 4;
+    };
+    drawScope("USE FROM THIS REFERENCE", reference.use_details || "Use the confirmed design details shown in this reference image.");
+    drawScope("DO NOT COPY", reference.exclude_details);
+    setText(5.7, "bold", INK);
+    doc.text(`Applies to ${applicableItems.length} product${applicableItems.length === 1 ? "" : "s"} in this quotation.`, scopeX, Math.min(scopeY + 1, panelTop + 94));
+
+    setText(6.5, "bold", MAROON);
+    doc.text("APPLICATION MAP", inner + 4, 182);
+    fillRect(inner, 187, usable, 8.5, WINE);
+    setText(6.1, "bold", [255, 255, 255]);
+    doc.text("Item", inner + 5, 192.5);
+    doc.text("Product", inner + 22, 192.5);
+    doc.text("Body / construction instruction", inner + 98, 192.5);
+    let mapY = 195.5;
+    applicableItems.forEach(({ item, itemIndex }, applicationIndex) => {
+      const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
+      const bodyParts = [];
+      if (item.body_basis === "match_item" && linkedIndex >= 0) bodyParts.push(`Match Item ${linkedIndex + 1}`);
+      else if (item.body_basis === "drawing") bodyParts.push("Use approved drawing");
+      else if (item.body_basis === "drawing_pending") bodyParts.push("Final design drawing pending");
+      else bodyParts.push("Keep product design");
+      if ((item.matching_components || []).length) bodyParts.push(item.matching_components.map((value) => COMPONENT_LABELS[value] || value).join(", "));
+      if (item.approval_required) bodyParts.push("Approval required before production");
+      const detailLines = doc.splitTextToSize(bodyParts.join("; "), 83).slice(0, 3);
+      const rowHeight = Math.max(11, detailLines.length * 3 + 3);
+      if (applicationIndex % 2 === 0) fillRect(inner, mapY, usable, rowHeight, [248, 243, 235]);
+      setText(6, "normal", INK);
+      doc.text(String(itemIndex + 1), inner + 5, mapY + 6.5);
+      setText(6, "bold", INK);
+      doc.text(doc.splitTextToSize(item.name, 69).slice(0, 2), inner + 22, mapY + 5.2, { lineHeightFactor: 1.03 });
+      setText(5.6, "normal", INK);
+      doc.text(detailLines, inner + 98, mapY + 5.2, { lineHeightFactor: 1.05 });
+      mapY += rowHeight;
+      line(inner, mapY, inner + usable, mapY, LINE, 0.15);
+    });
+
+    const confirmationTop = Math.max(230, mapY + 8);
+    if (confirmationTop < 268) {
+      fillRect(inner, confirmationTop, usable, 27, CREAM, 1.2);
+      setText(6.3, "bold", MAROON);
+      doc.text("PRODUCTION CONFIRMATION", inner + 5, confirmationTop + 7);
+      const approvalItems = applicableItems.filter(({ item }) => item.approval_required);
+      const confirmation = approvalItems.length
+        ? `Final drawing / design approval is required before production for Item${approvalItems.length === 1 ? "" : "s"} ${approvalItems.map(({ itemIndex }) => itemIndex + 1).join(", ")}.`
+        : "The approved quotation and this reference schedule form the production instruction.";
+      setText(5.7, "normal", INK);
+      doc.text(doc.splitTextToSize(confirmation, usable - 10).slice(0, 3), inner + 5, confirmationTop + 14, { lineHeightFactor: 1.08 });
+    }
+    pageFooter();
+  });
 
   return { doc, filename: `${quote.quote_number}.pdf` };
 };
