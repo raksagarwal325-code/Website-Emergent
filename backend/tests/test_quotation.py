@@ -72,25 +72,24 @@ def test_ai_customisation_draft_accepts_known_items_and_valid_match():
     request = QuotationAIAssistRequest(
         image_url="/api/files/reference.webp",
         instruction="Use the shade on both; make the wall light match the chandelier.",
+        target_line_id="wall",
         items=[{"line_id": "chandelier", "name": "Chandelier"}, {"line_id": "wall", "name": "Wall light"}],
     )
     draft = QuotationAIDraft.model_validate({
         "summary": "Use one shade reference on both products.",
-        "reference": {"category": "shade_design", "title": "Star-cut shade", "applies_to": ["chandelier", "wall"], "use_details": "Use the star-cut pattern.", "exclude_details": "Do not copy the reference body."},
-        "item_updates": [
-            {"line_id": "chandelier", "body_basis": "product", "customisation_notes": "Keep the chandelier body; change shades.", "approval_required": True},
-            {"line_id": "wall", "body_basis": "match_item", "body_reference_line_id": "chandelier", "matching_components": ["glass_arms"], "customisation_notes": "Match the chandelier body; change shades.", "approval_required": True},
-        ],
+        "reference": {"category": "shade_design", "title": "Star-cut shade", "applies_to": ["wall"], "use_details": "Use the star-cut pattern.", "exclude_details": "Do not copy the reference body."},
+        "item_updates": [{"line_id": "wall", "body_basis": "match_item", "body_reference_line_id": "chandelier", "matching_components": ["glass_arms"], "customisation_notes": "Match the chandelier body; change shades.", "approval_required": True}],
         "warnings": [],
     }).validate_for(request)
-    assert draft.reference.applies_to == ["chandelier", "wall"]
-    assert draft.item_updates[1].body_reference_line_id == "chandelier"
+    assert draft.reference.applies_to == ["wall"]
+    assert draft.item_updates[0].body_reference_line_id == "chandelier"
 
 
 def test_ai_customisation_draft_rejects_unknown_item_mapping():
     request = QuotationAIAssistRequest(
         image_url="/api/files/reference.webp",
         instruction="Use this shade.",
+        target_line_id="chandelier",
         items=[{"line_id": "chandelier", "name": "Chandelier"}],
     )
     draft = QuotationAIDraft.model_validate({
@@ -100,6 +99,28 @@ def test_ai_customisation_draft_rejects_unknown_item_mapping():
     })
     with pytest.raises(ValueError, match="unknown quotation item"):
         draft.validate_for(request)
+
+
+def test_ai_customisation_allows_written_instruction_without_reference_image():
+    request = QuotationAIAssistRequest(
+        image_url=None,
+        instruction="Make this wall light match the chandelier with glass arms and crystal drops.",
+        target_line_id="wall",
+        items=[{"line_id": "chandelier", "name": "Chandelier"}, {"line_id": "wall", "name": "Wall light"}],
+    )
+    assert request.image_url is None
+    assert request.target_line_id == "wall"
+
+
+def test_ai_customisation_normalises_non_breaking_hyphens_for_pdf_output():
+    draft = QuotationAIDraft.model_validate({
+        "summary": "Six\u2011Light chandelier",
+        "reference": {"category": "shade_design", "title": "Star\u2011Etched shade", "applies_to": ["item"], "use_details": "Globe\u2011to\u2011teardrop profile."},
+        "item_updates": [{"line_id": "item", "suggested_name": "Six\u2011Light Chandelier", "customisation_notes": "Use star\u2011etched glass."}],
+    })
+    assert draft.summary == "Six-Light chandelier"
+    assert draft.reference.title == "Star-Etched shade"
+    assert draft.item_updates[0].suggested_name == "Six-Light Chandelier"
 
 
 def test_discount_cannot_exceed_product_subtotal():
@@ -168,7 +189,11 @@ def test_custom_product_references_survive_as_structured_snapshot():
                 "line_id": "chandelier", "name": "Six-Light Crystal Chandelier",
                 "quantity": 1, "unit_price": 28000, "is_custom": True,
                 "body_basis": "product", "customisation_notes": "Retain chandelier proportions.",
-            },
+                "customisation_instruction": "Keep the body and change the shades.",
+                "customisation_reference_image": "/api/files/shade-reference.webp",
+                "customisation_ai_summary": "Shade change prepared.",
+                "customisation_ai_prepared": True,
+                },
             {
                 "line_id": "wall-light", "name": "Matching Crystal Glass Wall Light",
                 "quantity": 2, "unit_price": 9000, "is_custom": True,
@@ -192,6 +217,8 @@ def test_custom_product_references_survive_as_structured_snapshot():
         "glass_arms", "crystal_bobeche", "crystal_drops", "metal_finish",
     ]
     assert result["items"][1]["approval_required"] is True
+    assert result["items"][0]["customisation_instruction"] == "Keep the body and change the shades."
+    assert result["items"][0]["customisation_ai_prepared"] is True
     assert result["design_references"][0]["code"] == "SD-01"
     assert result["design_references"][0]["applies_to"] == ["chandelier", "wall-light"]
 
