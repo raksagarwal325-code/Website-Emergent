@@ -10,6 +10,15 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 DEFAULT_QUOTATION_BUSINESS = {'name': 'SAMRAT GLASS EMPORIUM', 'address': 'Raniwala Market, Babboo Ji Ki Jeen, Firozabad - 283203', 'gstin': '09ADCFS9258D1ZS', 'whatsapp': '+91 89203 92937', 'email': 'samratglassemp@gmail.com', 'bank': 'ICICI Bank', 'branch': 'Firozabad', 'accountType': 'Current Account', 'accountNumber': '097405000031', 'ifsc': 'ICIC0000974', 'signatory': 'Rakshit Agarwal'}
 
 
+def quotation_text(value) -> str:
+    """Keep AI/customer text compatible with the built-in PDF fonts."""
+    return str(value or "").translate(str.maketrans({
+        "\u00a0": " ", "\u00ad": "-", "\u2010": "-", "\u2011": "-",
+        "\u2012": "-", "\u2013": "-", "\u2014": "-", "\u2015": "-",
+        "\u2212": "-",
+    })).strip()
+
+
 class QuotationItemInput(BaseModel):
     line_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     image: Optional[str] = Field(default=None, max_length=2000)
@@ -26,11 +35,19 @@ class QuotationItemInput(BaseModel):
     ]] = Field(default_factory=list, max_length=4)
     customisation_notes: str = Field(default="", max_length=1500)
     approval_required: bool = False
+    customisation_instruction: str = Field(default="", max_length=3000)
+    customisation_reference_image: Optional[str] = Field(default=None, max_length=2000)
+    customisation_ai_summary: str = Field(default="", max_length=1000)
+    customisation_ai_prepared: bool = False
+    customisation_reference_id: Optional[str] = Field(default=None, max_length=100)
 
-    @field_validator("name", "sku", "customisation_notes", mode="before")
+    @field_validator(
+        "name", "sku", "customisation_notes", "customisation_instruction",
+        "customisation_ai_summary", mode="before",
+    )
     @classmethod
     def _clean_item_text(cls, value):
-        return str(value or "").strip()
+        return quotation_text(value)
 
 
 class QuotationDesignReferenceInput(BaseModel):
@@ -54,7 +71,7 @@ class QuotationDesignReferenceInput(BaseModel):
     @field_validator("title", "use_details", "exclude_details", mode="before")
     @classmethod
     def _clean_reference_text(cls, value):
-        return str(value or "").strip()
+        return quotation_text(value)
 
 
 class QuotationAIAssistItem(BaseModel):
@@ -64,8 +81,9 @@ class QuotationAIAssistItem(BaseModel):
 
 
 class QuotationAIAssistRequest(BaseModel):
-    image_url: str = Field(min_length=1, max_length=2000)
+    image_url: Optional[str] = Field(default=None, max_length=2000)
     instruction: str = Field(min_length=3, max_length=3000)
+    target_line_id: str = Field(min_length=1, max_length=100)
     items: List[QuotationAIAssistItem] = Field(min_length=1, max_length=100)
 
     @field_validator("image_url", "instruction", mode="before")
@@ -76,6 +94,8 @@ class QuotationAIAssistRequest(BaseModel):
     @field_validator("image_url")
     @classmethod
     def _uploaded_reference_only(cls, value):
+        if value is None or not str(value).strip():
+            return None
         if not value.startswith("/api/files/"):
             raise ValueError("Reference image must be uploaded before AI analysis.")
         return value
@@ -85,6 +105,8 @@ class QuotationAIAssistRequest(BaseModel):
         line_ids = [item.line_id for item in self.items]
         if len(line_ids) != len(set(line_ids)):
             raise ValueError("Quotation item line IDs must be unique.")
+        if self.target_line_id not in set(line_ids):
+            raise ValueError("Target quotation item is not present in the request.")
         return self
 
 
@@ -98,6 +120,11 @@ class QuotationAIReferenceDraft(BaseModel):
     use_details: str = Field(min_length=1, max_length=1500)
     exclude_details: str = Field(default="", max_length=1500)
 
+    @field_validator("title", "use_details", "exclude_details", mode="before")
+    @classmethod
+    def _clean_reference_text(cls, value):
+        return quotation_text(value)
+
 
 class QuotationAIItemDraft(BaseModel):
     line_id: str = Field(min_length=1, max_length=100)
@@ -110,6 +137,11 @@ class QuotationAIItemDraft(BaseModel):
     customisation_notes: str = Field(min_length=1, max_length=1500)
     approval_required: bool = True
 
+    @field_validator("suggested_name", "customisation_notes", mode="before")
+    @classmethod
+    def _clean_item_text(cls, value):
+        return quotation_text(value)
+
 
 class QuotationAIDraft(BaseModel):
     summary: str = Field(min_length=1, max_length=1000)
@@ -120,7 +152,12 @@ class QuotationAIDraft(BaseModel):
     @field_validator("summary", mode="before")
     @classmethod
     def _clean_ai_summary(cls, value):
-        return str(value or "").strip()
+        return quotation_text(value)
+
+    @field_validator("warnings", mode="before")
+    @classmethod
+    def _clean_warnings(cls, value):
+        return [quotation_text(item) for item in (value or [])]
 
     def validate_for(self, request: QuotationAIAssistRequest):
         known = {item.line_id for item in request.items}
@@ -129,6 +166,10 @@ class QuotationAIDraft(BaseModel):
         update_ids = [item.line_id for item in self.item_updates]
         if len(update_ids) != len(set(update_ids)) or any(line_id not in known for line_id in update_ids):
             raise ValueError("AI returned invalid quotation item mappings.")
+        if update_ids != [request.target_line_id]:
+            raise ValueError("AI must update only the selected quotation item.")
+        if self.reference.applies_to != [request.target_line_id]:
+            raise ValueError("AI reference must apply only to the selected quotation item.")
         for item in self.item_updates:
             if item.body_basis == "match_item" and (
                 not item.body_reference_line_id
@@ -244,6 +285,11 @@ def build_quotation(
             "matching_components": list(raw.matching_components),
             "customisation_notes": raw.customisation_notes,
             "approval_required": raw.approval_required,
+            "customisation_instruction": raw.customisation_instruction,
+            "customisation_reference_image": raw.customisation_reference_image,
+            "customisation_ai_summary": raw.customisation_ai_summary,
+            "customisation_ai_prepared": raw.customisation_ai_prepared,
+            "customisation_reference_id": raw.customisation_reference_id,
         })
 
     discount = quote_money(payload.discount)
