@@ -36,7 +36,7 @@ from product_history import editable_product_snapshot, product_changes  # noqa: 
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
 from collection_index import build_collection_detail, build_collection_index  # noqa: E402
-from quotation import QuotationCreate, build_quotation, format_quotation_number  # noqa: E402
+from quotation import QuotationAIAssistRequest, QuotationAIDraft, QuotationCreate, build_quotation, format_quotation_number  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -3649,6 +3649,85 @@ async def _resolve_product_image(payload: AIRegenerateRequest) -> tuple[bytes, s
     if not image_bytes:
         raise HTTPException(400, "No image provided")
     return image_bytes, mime
+
+
+_QUOTATION_AI_SYSTEM = """You prepare precise, customer-facing custom-lighting quotation instructions for Samrat Glass Emporium.
+You receive one reference image, one plain-language instruction from the business owner, and the products already selected in the quotation.
+
+Return ONLY one JSON object with this exact shape:
+{
+  "summary": "short plain-language summary",
+  "reference": {
+    "category": "shade_design|metal_finish|crystal_arrangement|body_design|dimensions|other",
+    "title": "short customer-facing reference title",
+    "applies_to": ["quotation line IDs"],
+    "use_details": "exactly what must be used from the reference",
+    "exclude_details": "what must not be copied from the reference"
+  },
+  "item_updates": [{
+    "line_id": "quotation line ID",
+    "suggested_name": "clear customer-facing product name, or empty string",
+    "body_basis": "product|match_item|drawing|drawing_pending",
+    "body_reference_line_id": "another line ID or null",
+    "matching_components": ["glass_arms|crystal_bobeche|crystal_drops|metal_finish"],
+    "customisation_notes": "complete confirmed instruction for this product",
+    "approval_required": true
+  }],
+  "warnings": ["facts the owner still needs to confirm"]
+}
+
+Rules:
+- The owner's written instruction controls. The image is a visual reference, not permission to copy the whole pictured product.
+- Clearly separate what to use and what not to copy. If the owner says only the shade pattern is relevant, exclude the pictured body, wall plate and metalwork.
+- Map the reference only to the selected quotation products named in the instruction. If the instruction says all/both, map all.
+- Use match_item only when the instruction explicitly says one product body/construction should match another quotation item.
+- Never invent dimensions, prices, materials, wattage, holder type, quantity, finish or production feasibility.
+- Put uncertain or missing production facts in warnings. Require final approval for custom work.
+- Do not use markdown or commentary outside the JSON."""
+
+
+@api.post("/ai/quotation-customisation")
+async def ai_quotation_customisation(
+    payload: QuotationAIAssistRequest,
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Analyze a reference image and instruction, returning a reviewable draft only."""
+    import base64
+    from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY is not configured")
+    image_bytes, _mime = await _resolve_product_image(AIRegenerateRequest(image_url=payload.image_url))
+    item_context = [item.model_dump() for item in payload.items]
+    chat = configure_product_chat(LlmChat(
+        api_key=api_key,
+        session_id=f"ai-quotation-{uuid.uuid4().hex[:12]}",
+        system_message=_QUOTATION_AI_SYSTEM,
+    ))
+    message = UserMessage(
+        text=(
+            f"Owner instruction:\n{payload.instruction}\n\n"
+            f"Selected quotation products:\n{json.dumps(item_context, ensure_ascii=False)}"
+        ),
+        file_contents=[ImageContent(image_base64=base64.b64encode(image_bytes).decode("ascii"))],
+    )
+    parts = []
+    async for event in chat.stream_message(message):
+        if isinstance(event, TextDelta):
+            parts.append(event.content)
+        elif isinstance(event, StreamDone):
+            break
+    raw = "".join(parts).strip()
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not match:
+        raise HTTPException(status_code=502, detail="AI did not return a usable customisation draft")
+    try:
+        draft = QuotationAIDraft.model_validate(json.loads(match.group(0))).validate_for(payload)
+    except (ValueError, json.JSONDecodeError) as exc:
+        logger.warning("quotation_ai.invalid_response err=%s raw=%s", exc, raw[:500])
+        raise HTTPException(status_code=502, detail="AI returned an invalid customisation draft; please try again") from exc
+    return {"draft": draft.model_dump()}
 
 
 @api.post("/ai/regenerate-details")
