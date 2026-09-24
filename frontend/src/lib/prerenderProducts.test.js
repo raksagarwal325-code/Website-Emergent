@@ -26,9 +26,9 @@ const TEMPLATE = `<!doctype html><html><head><title>Default</title><meta name="d
 describe("product social prerender", () => {
   test("puts the already public price in the initial Product offer", () => {
     const html = injectProduct(TEMPLATE, PRODUCT, "https://samratglass.com");
-    const script = html.match(/<script type="application\\/ld\\+json" data-schema="prerender-product">(.*?)<\\/script>/);
-    expect(script).not.toBeNull();
-    const data = JSON.parse(script[1]);
+    const script = html.split('data-schema="prerender-product">')[1]?.split("</script>")[0];
+    expect(script).toBeDefined();
+    const data = JSON.parse(script);
     expect(data.offers).toEqual({
       "@type": "Offer",
       url: `https://samratglass.com${productPath(PRODUCT)}`,
