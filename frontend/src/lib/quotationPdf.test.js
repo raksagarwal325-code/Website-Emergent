@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { createQuotationPdf, quotationDefaultTerms, quotationSummaryRows } from "./quotationPdf";
+import { createQuotationPdf, quotationDefaultTerms, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
 
 const items = [
   ["Noorjharokha Chain-Suspended Diamond-Cut Glass Wall Lantern", "SGE-WL-089", 1, 6000],
@@ -85,5 +85,55 @@ test("renders the complete commercial quotation as a single A4 page", async () =
   expect(output.length).toBeGreaterThan(20000);
   if (process.env.QUOTATION_PDF_OUTPUT) {
     fs.writeFileSync(process.env.QUOTATION_PDF_OUTPUT, output);
+  }
+});
+
+test("adds a deterministic design-reference schedule for linked custom products", async () => {
+  const logo = fs.readFileSync(path.join(process.cwd(), "public/logo.jpeg")).toString("base64");
+  const linkedItems = [
+    {
+      line_id: "chandelier", name: "Six-Light Crystal Chandelier", quantity: 1,
+      unit_price: 28000, line_total: 28000, image: "/products/chandelier.jpeg",
+      is_custom: true, body_basis: "product", matching_components: [],
+    },
+    {
+      line_id: "wall-light", name: "Matching Crystal Glass Wall Light", quantity: 2,
+      unit_price: 9000, line_total: 18000, image: null, is_custom: true,
+      body_basis: "match_item", body_reference_line_id: "chandelier",
+      matching_components: ["glass_arms", "crystal_bobeche", "crystal_drops", "metal_finish"],
+      approval_required: true,
+    },
+  ];
+  const designReferences = [{
+    id: "shade-reference", code: "SD-01", category: "shade_design",
+    title: "Hand-cut starburst glass-shade design", image: "/references/shade.jpeg",
+    applies_to: ["chandelier", "wall-light"],
+    use_details: "Use the starburst motifs and lower radiating cuts.",
+    exclude_details: "Do not copy the swan body, wall plate or metalwork.",
+  }];
+
+  expect(quotationReferenceCodesForItem({ design_references: designReferences }, linkedItems[1])).toEqual(["SD-01"]);
+  const { doc } = await createQuotationPdf({
+    quote_number: "SGE-2026-0042", created_at: "2026-09-24T10:10:00+05:30",
+    customer_name: "Sample Client", customer_phone: "+919999999999",
+    billing_address: "Firozabad", shipping_address: "Same as Billing Address",
+    items: linkedItems, design_references: designReferences,
+    subtotal: 46000, discount: 0, shipping: 0, tax_rate: 0, tax_amount: 0,
+    total: 46000, valid_until: "2026-10-09", terms: "", notes: "",
+  }, {
+    logoDataUrl: `data:image/jpeg;base64,${logo}`,
+    productImageDataUrls: {
+      "/products/chandelier.jpeg": `data:image/jpeg;base64,${logo}`,
+      "/references/shade.jpeg": `data:image/jpeg;base64,${logo}`,
+    },
+    signatureDataUrl: null,
+    stampDataUrl: null,
+  });
+
+  expect(doc.getNumberOfPages()).toBe(2);
+  const output = Buffer.from(doc.output("arraybuffer"));
+  expect(output.length).toBeGreaterThan(20000);
+  if (process.env.QUOTATION_REFERENCE_PDF_OUTPUT) {
+    fs.writeFileSync(process.env.QUOTATION_REFERENCE_PDF_OUTPUT, output);
   }
 });
