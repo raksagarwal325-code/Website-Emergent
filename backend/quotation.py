@@ -57,6 +57,91 @@ class QuotationDesignReferenceInput(BaseModel):
         return str(value or "").strip()
 
 
+class QuotationAIAssistItem(BaseModel):
+    line_id: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=300)
+    sku: Optional[str] = Field(default=None, max_length=100)
+
+
+class QuotationAIAssistRequest(BaseModel):
+    image_url: str = Field(min_length=1, max_length=2000)
+    instruction: str = Field(min_length=3, max_length=3000)
+    items: List[QuotationAIAssistItem] = Field(min_length=1, max_length=100)
+
+    @field_validator("image_url", "instruction", mode="before")
+    @classmethod
+    def _clean_ai_request_text(cls, value):
+        return str(value or "").strip()
+
+    @field_validator("image_url")
+    @classmethod
+    def _uploaded_reference_only(cls, value):
+        if not value.startswith("/api/files/"):
+            raise ValueError("Reference image must be uploaded before AI analysis.")
+        return value
+
+    @model_validator(mode="after")
+    def _unique_ai_item_ids(self):
+        line_ids = [item.line_id for item in self.items]
+        if len(line_ids) != len(set(line_ids)):
+            raise ValueError("Quotation item line IDs must be unique.")
+        return self
+
+
+class QuotationAIReferenceDraft(BaseModel):
+    category: Literal[
+        "shade_design", "metal_finish", "crystal_arrangement",
+        "body_design", "dimensions", "other",
+    ] = "other"
+    title: str = Field(min_length=1, max_length=200)
+    applies_to: List[str] = Field(min_length=1, max_length=100)
+    use_details: str = Field(min_length=1, max_length=1500)
+    exclude_details: str = Field(default="", max_length=1500)
+
+
+class QuotationAIItemDraft(BaseModel):
+    line_id: str = Field(min_length=1, max_length=100)
+    suggested_name: str = Field(default="", max_length=300)
+    body_basis: Literal["product", "match_item", "drawing", "drawing_pending"] = "product"
+    body_reference_line_id: Optional[str] = Field(default=None, max_length=100)
+    matching_components: List[Literal[
+        "glass_arms", "crystal_bobeche", "crystal_drops", "metal_finish",
+    ]] = Field(default_factory=list, max_length=4)
+    customisation_notes: str = Field(min_length=1, max_length=1500)
+    approval_required: bool = True
+
+
+class QuotationAIDraft(BaseModel):
+    summary: str = Field(min_length=1, max_length=1000)
+    reference: QuotationAIReferenceDraft
+    item_updates: List[QuotationAIItemDraft] = Field(min_length=1, max_length=100)
+    warnings: List[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("summary", mode="before")
+    @classmethod
+    def _clean_ai_summary(cls, value):
+        return str(value or "").strip()
+
+    def validate_for(self, request: QuotationAIAssistRequest):
+        known = {item.line_id for item in request.items}
+        if any(line_id not in known for line_id in self.reference.applies_to):
+            raise ValueError("AI reference points to an unknown quotation item.")
+        update_ids = [item.line_id for item in self.item_updates]
+        if len(update_ids) != len(set(update_ids)) or any(line_id not in known for line_id in update_ids):
+            raise ValueError("AI returned invalid quotation item mappings.")
+        for item in self.item_updates:
+            if item.body_basis == "match_item" and (
+                not item.body_reference_line_id
+                or item.body_reference_line_id == item.line_id
+                or item.body_reference_line_id not in known
+            ):
+                raise ValueError("AI returned an invalid matching-product relationship.")
+            if item.body_basis != "match_item":
+                item.body_reference_line_id = None
+                item.matching_components = []
+        return self
+
+
 class QuotationCreate(BaseModel):
     customer_name: str = Field(min_length=1, max_length=200)
     customer_email: Optional[EmailStr] = None
