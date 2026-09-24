@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Download, History, LoaderCircle, MessageCircle, Save, Trash2, X } from "lucide-react";
+import { Download, History, LoaderCircle, MessageCircle, Save, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { createQuotationPdf } from "../lib/quotationPdf";
@@ -109,6 +109,10 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [saving, setSaving] = useState(false);
   const [catalogue, setCatalogue] = useState([]);
   const [search, setSearch] = useState("");
+  const [aiReferenceImage, setAiReferenceImage] = useState(null);
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiDraft, setAiDraft] = useState(null);
+  const [aiBusy, setAiBusy] = useState(false);
   useEffect(() => {
     let alive = true;
     api.adminProductsExport().then(rows => { if (alive) setCatalogue(Array.isArray(rows) ? rows : rows.items || []); }).catch(() => toast.error("Could not load catalogue; you can still add a custom item"));
@@ -281,6 +285,81 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     finally { setUploading(false); }
   };
 
+  const uploadAiReference = async (file) => {
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { toast.error("Choose a JPG, PNG or WebP image"); return; }
+    setUploading(true);
+    setAiDraft(null);
+    try {
+      const result = await api.upload(file);
+      setAiReferenceImage(result.url);
+    } catch (error) { toast.error(errorMessage(error, "Could not upload reference image")); }
+    finally { setUploading(false); }
+  };
+
+  const analyseCustomisation = async () => {
+    if (!aiReferenceImage) { toast.error("Upload the reference image first"); return; }
+    if (aiInstruction.trim().length < 3) { toast.error("Tell the assistant what to use or change"); return; }
+    if (!form.items.length || form.items.some((item) => !item.name.trim())) { toast.error("Add and name the quotation products first"); return; }
+    setAiBusy(true);
+    setAiDraft(null);
+    try {
+      const result = await api.aiQuotationCustomisation({
+        image_url: aiReferenceImage,
+        instruction: aiInstruction.trim(),
+        items: form.items.map(({ line_id, name, sku }) => ({ line_id, name, sku: sku || null })),
+      });
+      setAiDraft(result.draft);
+    } catch (error) { toast.error(errorMessage(error, "Could not analyse the reference")); }
+    finally { setAiBusy(false); }
+  };
+
+  const applyAiDraft = () => {
+    if (!aiDraft) return;
+    setSavedQuote(null);
+    setForm((current) => {
+      const known = new Set(current.items.map((item) => item.line_id));
+      const category = aiDraft.reference.category || "other";
+      const prefix = REFERENCE_CATEGORIES.find(([value]) => value === category)?.[2] || "RF";
+      const used = new Set(current.design_references.map((reference) => reference.code));
+      let sequence = 1;
+      while (used.has(`${prefix}-${String(sequence).padStart(2, "0")}`)) sequence += 1;
+      const code = `${prefix}-${String(sequence).padStart(2, "0")}`;
+      const updates = new Map(aiDraft.item_updates.map((item) => [item.line_id, item]));
+      return {
+        ...current,
+        items: current.items.map((item) => {
+          const update = updates.get(item.line_id);
+          if (!update) return item;
+          return {
+            ...item,
+            name: update.suggested_name?.trim() || item.name,
+            is_custom: true,
+            body_basis: update.body_basis,
+            body_reference_line_id: update.body_reference_line_id || null,
+            matching_components: update.matching_components || [],
+            customisation_notes: update.customisation_notes || "",
+            approval_required: Boolean(update.approval_required),
+          };
+        }),
+        design_references: [...current.design_references, {
+          id: createLocalId("reference"),
+          code,
+          category,
+          title: aiDraft.reference.title,
+          image: aiReferenceImage,
+          applies_to: aiDraft.reference.applies_to.filter((lineId) => known.has(lineId)),
+          use_details: aiDraft.reference.use_details,
+          exclude_details: aiDraft.reference.exclude_details || "",
+        }],
+      };
+    });
+    toast.success("AI customisation draft applied — please review before saving");
+    setAiDraft(null);
+    setAiReferenceImage(null);
+    setAiInstruction("");
+  };
+
   const ensureSaved = async () => savedQuote || save();
   const download = async (existingQuote = null) => {
     const quote = existingQuote || await ensureSaved();
@@ -406,7 +485,31 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
               </div>
             </section>
 
-            <section>
+            <section className="border border-[#D4AF37]/35 bg-[#D4AF37]/[0.04] p-4 md:p-5">
+              <div className="flex items-start gap-3"><Sparkles className="mt-0.5 shrink-0 text-[#D4AF37]" size={20} /><div><div className="eyebrow">AI Customisation Assistant</div><p className="mt-1 text-sm text-white/65">Upload one reference and describe the required change in your own words. The assistant will prepare the quotation details for you.</p></div></div>
+              <div className="mt-4 grid gap-4 md:grid-cols-[180px_1fr]">
+                <div>
+                  {aiReferenceImage && <img src={api.resolveImage(aiReferenceImage)} alt="AI customisation reference" className="mb-2 h-32 w-full border border-white/10 object-contain" />}
+                  <label className="block cursor-pointer border border-dashed border-[#D4AF37]/35 p-3 text-center text-xs text-[#D4AF37]">{uploading ? "Uploading…" : aiReferenceImage ? "Replace reference" : "Upload reference image"}<input type="file" accept="image/jpeg,image/png,image/webp" aria-label="AI reference image" disabled={uploading || aiBusy} onChange={(event) => uploadAiReference(event.target.files?.[0])} className="sr-only" /></label>
+                </div>
+                <div>
+                  <label className="text-xs text-white/60">What should be changed?<textarea aria-label="AI customisation instruction" rows="5" value={aiInstruction} onChange={(event) => { setAiInstruction(event.target.value); setAiDraft(null); }} placeholder="Example: Use only the frosted star-cut shade design on both products. Keep the chandelier body. Make the wall light body match the chandelier with glass arms and crystal drops. Do not copy the swan or wall plate." className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
+                  <button type="button" onClick={analyseCustomisation} disabled={aiBusy || uploading || !form.items.length} className="mt-3 flex items-center gap-2 bg-[#D4AF37] px-4 py-2.5 text-xs uppercase tracking-wider text-black disabled:opacity-40">{aiBusy ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />} {aiBusy ? "Understanding…" : "Prepare customisation"}</button>
+                </div>
+              </div>
+              {aiDraft && <div className="mt-4 border border-emerald-400/30 bg-emerald-400/[0.06] p-4 text-sm">
+                <div className="font-medium text-emerald-200">Ready to apply</div>
+                <p className="mt-1 text-white/75">{aiDraft.summary}</p>
+                <p className="mt-2 text-xs text-white/55"><span className="text-white/75">Use:</span> {aiDraft.reference.use_details}</p>
+                {aiDraft.reference.exclude_details && <p className="mt-1 text-xs text-white/55"><span className="text-white/75">Do not copy:</span> {aiDraft.reference.exclude_details}</p>}
+                {!!aiDraft.warnings?.length && <ul className="mt-2 list-disc pl-5 text-xs text-amber-200">{aiDraft.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
+                <button type="button" onClick={applyAiDraft} className="mt-3 bg-emerald-300 px-4 py-2 text-xs uppercase tracking-wider text-black">Apply to quotation</button>
+              </div>}
+            </section>
+
+            <details>
+              <summary className="cursor-pointer text-xs uppercase tracking-[0.18em] text-white/55">Advanced manual customisation</summary>
+              <section className="mt-4">
               <div className="flex items-center justify-between gap-3">
                 <div><div className="eyebrow">Design references</div><p className="mt-1 text-xs text-white/45">Upload a reference once, state what to use or exclude, and select every product it applies to.</p></div>
                 <button type="button" disabled={!form.items.length} onClick={addReference} className="border border-[#D4AF37]/40 px-3 py-2 text-xs text-[#D4AF37] disabled:opacity-40">+ Add reference</button>
@@ -430,7 +533,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                   <label className="text-xs text-white/55">Do not copy from this reference<textarea aria-label={`Exclusion details for reference ${referenceIndex + 1}`} rows="3" value={reference.exclude_details} onChange={(e) => changeReference(referenceIndex, { exclude_details: e.target.value })} placeholder="Example: Swan body, wall plate and metalwork" className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
                 </div>
               </div>)}</div>
-            </section>
+              </section>
+            </details>
 
             <section className="grid gap-3 md:grid-cols-4">
               <label className="text-xs text-white/55">Discount (₹)<input aria-label="Discount" type="number" min="0" value={form.discount} onChange={(e) => change({ discount: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>

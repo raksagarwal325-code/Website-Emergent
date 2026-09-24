@@ -240,12 +240,18 @@ export const createQuotationPdf = async (quote, options = {}) => {
     doc.setLineWidth(0.35);
     doc.rect(margin, margin, pageWidth - margin * 2, pageHeight - margin * 2);
   };
-  const addContainedImage = (data, x, y, width, height) => {
+  const addContainedImage = (data, x, y, width, height, placeholder = []) => {
     fillRect(x, y, width, height, NIGHT, 0.8);
     doc.setDrawColor(...GOLD);
     doc.setLineWidth(0.18);
     doc.roundedRect(x, y, width, height, 0.8, 0.8, "S");
-    if (!data) return;
+    if (!data) {
+      if (placeholder.length) {
+        setText(4.1, "bold", GOLD);
+        doc.text(placeholder, x + width / 2, y + height / 2 - (placeholder.length - 1) * 1.2, { align: "center", lineHeightFactor: 1.05 });
+      }
+      return;
+    }
     try {
       const properties = doc.getImageProperties(data);
       const scale = Math.min((width - 1) / properties.width, (height - 1) / properties.height);
@@ -351,13 +357,14 @@ export const createQuotationPdf = async (quote, options = {}) => {
     if (item.body_basis === "drawing") customParts.push("Body: approved drawing");
     if (item.body_basis === "drawing_pending") customParts.push("Body: drawing pending");
     if (referenceCodes.length) customParts.push(`Reference: ${referenceCodes.join(", ")}`);
+    if (item.customisation_notes) customParts.push(item.customisation_notes);
     if (item.approval_required) customParts.push("Approval required before production");
-    const customLines = customParts.length ? doc.splitTextToSize(customParts.join(" | "), 68).slice(0, 2) : [];
+    const customLines = customParts.length ? doc.splitTextToSize(customParts.join(" | "), 68).slice(0, 4) : [];
     const rowHeight = Math.max(13.5, nameLines.length * 3.1 + (item.sku ? 4 : 1) + customLines.length * 2.7 + 3);
     if (y + rowHeight > 225) startContinuationPage();
     setText(6.8, "normal", MUTED);
     doc.text(String(index + 1), cols.serial, y + 6.8, { align: "center" });
-    addContainedImage(productImageData[index], cols.image, y + 1.3, 10.5, 10.5);
+    addContainedImage(productImageData[index], cols.image, y + 1.3, 10.5, 10.5, item.is_custom ? ["CUSTOM", "DESIGN"] : ["IMAGE", "PENDING"]);
     setText(7.1, "bold", INK, "times");
     doc.text(nameLines, cols.item, y + 4.8, { lineHeightFactor: 1.03 });
     if (item.sku) {
@@ -530,10 +537,11 @@ export const createQuotationPdf = async (quote, options = {}) => {
       if (item.body_basis === "match_item" && linkedIndex >= 0) bodyParts.push(`Match Item ${linkedIndex + 1}`);
       else if (item.body_basis === "drawing") bodyParts.push("Use approved drawing");
       else if (item.body_basis === "drawing_pending") bodyParts.push("Final design drawing pending");
-      else bodyParts.push("Keep product design");
+      else bodyParts.push("Retain product body and construction");
       if ((item.matching_components || []).length) bodyParts.push(item.matching_components.map((value) => COMPONENT_LABELS[value] || value).join(", "));
+      if (item.customisation_notes) bodyParts.push(item.customisation_notes);
       if (item.approval_required) bodyParts.push("Approval required before production");
-      const detailLines = doc.splitTextToSize(bodyParts.join("; "), 83).slice(0, 3);
+      const detailLines = doc.splitTextToSize(bodyParts.join("; "), 83).slice(0, 5);
       const rowHeight = Math.max(11, detailLines.length * 3 + 3);
       if (applicationIndex % 2 === 0) fillRect(inner, mapY, usable, rowHeight, [248, 243, 235]);
       setText(6, "normal", INK);

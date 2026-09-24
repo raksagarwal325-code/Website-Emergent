@@ -11,6 +11,7 @@ const mockApi = {
   listStandaloneQuotations: jest.fn().mockResolvedValue([]),
   createStandaloneQuotation: jest.fn(),
   createInquiryQuotation: jest.fn(),
+  aiQuotationCustomisation: jest.fn(),
 };
 const mockPdfSave = jest.fn();
 const mockPdfDocument = () => ({
@@ -237,6 +238,39 @@ test("maps one shade reference to a chandelier and its matching custom wall ligh
     applies_to: [saved.items[0].line_id, saved.items[1].line_id],
     exclude_details: "Do not copy the swan body, wall plate or metalwork.",
   })]);
+});
+
+test("turns one reference image and plain-language instruction into quotation customisation fields", async () => {
+  mockApi.upload.mockResolvedValue({ url: "/api/files/ai-shade.webp" });
+  mockApi.aiQuotationCustomisation.mockResolvedValue({ draft: {
+    summary: "Use the star-cut shade on both items and make the wall light match the chandelier.",
+    reference: { category: "shade_design", title: "Frosted star-cut glass shade", applies_to: ["line-one", "line-two"], use_details: "Use the frosted star-cut shade pattern on both items.", exclude_details: "Do not copy the swan body or wall plate." },
+    item_updates: [
+      { line_id: "line-one", suggested_name: "Six-Light Chandelier with Custom Star-Cut Shades", body_basis: "product", body_reference_line_id: null, matching_components: [], customisation_notes: "Retain chandelier construction and apply the reference shade pattern.", approval_required: true },
+      { line_id: "line-two", suggested_name: "Matching Two-Light Crystal Glass Wall Light", body_basis: "match_item", body_reference_line_id: "line-one", matching_components: ["glass_arms", "crystal_drops"], customisation_notes: "Match Item 1 construction and apply the reference shade pattern.", approval_required: true },
+    ],
+    warnings: ["Final drawing approval required."],
+  } });
+  render(<InquiryQuotationBuilder inquiry={{ customer_name: "Client", items: [
+    { line_id: "line-one", name: "Chandelier", price: 28000 },
+    { line_id: "line-two", name: "Wall Light", price: 9000 },
+  ] }} />);
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
+  fireEvent.change(screen.getByLabelText("AI reference image"), { target: { files: [new File(["image"], "shade.webp", { type: "image/webp" })] } });
+  await screen.findByAltText("AI customisation reference");
+  fireEvent.change(screen.getByLabelText("AI customisation instruction"), { target: { value: "Use this shade on both. Make wall light match chandelier." } });
+  fireEvent.click(screen.getByRole("button", { name: /Prepare customisation/i }));
+
+  expect(await screen.findByText("Ready to apply")).toBeInTheDocument();
+  expect(mockApi.aiQuotationCustomisation).toHaveBeenCalledWith(expect.objectContaining({
+    image_url: "/api/files/ai-shade.webp",
+    items: [expect.objectContaining({ line_id: "line-one" }), expect.objectContaining({ line_id: "line-two" })],
+  }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply to quotation" }));
+  expect(screen.getByLabelText("Product 1")).toHaveValue("Six-Light Chandelier with Custom Star-Cut Shades");
+  expect(screen.getByLabelText("Body design for product 2")).toHaveValue("match_item");
+  fireEvent.click(screen.getByText("Advanced manual customisation"));
+  expect(screen.getByLabelText("Use details for reference 1")).toHaveValue("Use the frosted star-cut shade pattern on both items.");
 });
 
 test("opens quotation history from the sticky header and deletes a saved quotation", async () => {
