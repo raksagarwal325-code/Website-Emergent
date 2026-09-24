@@ -181,13 +181,16 @@ export default function ProductDetail() {
   const availabilityUrl = product ? schemaAvailabilityFor(product) : null;
   const visiblePrice = formatProductPrice(product);
   const hasPublicOfferPrice = !visiblePrice.onRequest && Number(product.price) > 0;
+  const hasVerifiedAggregateRating = Number(product?.rating) > 0 && Number(product?.review_count) > 0;
   // Site origin — used inside Offer.shippingDetails / hasMerchantReturnPolicy
   // links. Falls back to samratglass.com so the JSON-LD is complete even
   // in SSR/prerender contexts where `window` is not defined.
   const siteOrigin =
     (typeof window !== "undefined" && window.location?.origin) ||
     "https://samratglass.com";
-  const productSchema = product && availabilityUrl ? {
+  // A price-on-request item without genuine reviews has no eligible Product
+  // snippet. An Offer without a public price creates invalid merchant markup.
+  const productSchema = product && availabilityUrl && (hasPublicOfferPrice || hasVerifiedAggregateRating) ? {
     "@context": "https://schema.org",
     "@type": "Product",
     "@id": `${siteOrigin}${productPath(product)}#product`,
@@ -198,19 +201,17 @@ export default function ProductDetail() {
     "image": (product.images || []).map((u) => api.resolveImage(u)).filter(Boolean),
     "brand": { "@type": "Brand", "name": "Samrat Glass Emporium" },
     "category": product.category,
-    ...(product.rating > 0 ? {
+    ...(hasVerifiedAggregateRating ? {
       "aggregateRating": {
         "@type": "AggregateRating",
         "ratingValue": String(product.rating.toFixed(1)),
         "reviewCount": String(product.review_count || 0),
       },
     } : {}),
-    "offers": {
+    ...(hasPublicOfferPrice ? { "offers": {
       "@type": "Offer",
-      ...(hasPublicOfferPrice ? {
-        "price": String(product.price),
-        "priceCurrency": "INR",
-      } : {}),
+      "price": String(product.price),
+      "priceCurrency": "INR",
       "availability": availabilityUrl,
       "url": `${siteOrigin}${productPath(product)}`,
       "seller": { "@type": "Organization", "name": "Samrat Glass Emporium" },
@@ -246,7 +247,7 @@ export default function ProductDetail() {
           }
         }
       }
-    }
+    } } : {})
   } : null;
 
   return (

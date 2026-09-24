@@ -1,8 +1,8 @@
 /**
  * Regression: Product JSON-LD must include Merchant listing fields
  * `hasMerchantReturnPolicy` and `shippingDetails` (Google Search Console
- * previously flagged these as missing), while never exposing a price for
- * products whose visible pricing state is "Price on request".
+ * previously flagged these as missing), while avoiding ineligible Product
+ * offers for items whose visible pricing state is "Price on request".
  *
  * These tests exercise the exact structured-data emitted by
  * `<ProductDetail>`. We render the page with a fixture product and grab
@@ -120,7 +120,7 @@ beforeEach(() => {
   );
 });
 
-async function renderAndGetProductJsonLd() {
+async function renderAndGetProductJsonLd({ requireProduct = true } = {}) {
   await act(async () => {
     render(
       <MemoryRouter initialEntries={["/product/p-1"]}>
@@ -134,7 +134,7 @@ async function renderAndGetProductJsonLd() {
     expect(screen.getByTestId("page-product-detail")).toBeInTheDocument(),
   );
   // Locate the JSON-LD emitted by SchemaLD (id begins with "product-").
-  await waitFor(() => {
+  if (requireProduct) await waitFor(() => {
     const scripts = document.querySelectorAll(
       'script[type="application/ld+json"]',
     );
@@ -155,7 +155,7 @@ async function renderAndGetProductJsonLd() {
   const ld = Array.from(scripts)
     .map((s) => JSON.parse(s.textContent))
     .find((j) => j["@type"] === "Product");
-  return ld;
+  return ld || null;
 }
 
 describe("Product JSON-LD — merchant listing fields", () => {
@@ -182,22 +182,30 @@ describe("Product JSON-LD — merchant listing fields", () => {
     expect(ld.offers.availability).toMatch(/^https:\/\/schema\.org\/(InStock|PreOrder|BackOrder|OutOfStock)$/);
   });
 
-  test("omits price and currency when the visible price is zero/missing", async () => {
+  test("omits Product markup when the public price is zero and there are no reviews", async () => {
     api.getProduct.mockResolvedValueOnce({ ...fixtureProduct, price: 0 });
-    const ld = await renderAndGetProductJsonLd();
-    expect(ld.offers.price).toBeUndefined();
-    expect(ld.offers.priceCurrency).toBeUndefined();
+    const ld = await renderAndGetProductJsonLd({ requireProduct: false });
+    expect(ld).toBeNull();
   });
 
-  test("does not expose an internal price when price_display is on_request", async () => {
+  test("does not emit an incomplete Offer or expose internal price on request", async () => {
     api.getProduct.mockResolvedValueOnce({
       ...fixtureProduct,
       price: 42000,
       price_display: "on_request",
     });
+    const ld = await renderAndGetProductJsonLd({ requireProduct: false });
+    expect(ld).toBeNull();
+    expect(document.head.innerHTML).not.toContain('"price":"42000"');
+  });
+
+  test("retains genuine review-based Product markup without an Offer", async () => {
+    api.getProduct.mockResolvedValueOnce({
+      ...fixtureProduct, price_display: "on_request", rating: 4.5, review_count: 2,
+    });
     const ld = await renderAndGetProductJsonLd();
-    expect(ld.offers.price).toBeUndefined();
-    expect(ld.offers.priceCurrency).toBeUndefined();
+    expect(ld.aggregateRating).toEqual({ "@type": "AggregateRating", ratingValue: "4.5", reviewCount: "2" });
+    expect(ld.offers).toBeUndefined();
   });
 
   test("Offer includes a valid hasMerchantReturnPolicy", async () => {
