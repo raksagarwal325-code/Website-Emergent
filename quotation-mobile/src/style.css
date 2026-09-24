@@ -2,12 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
-html { background: #12080b; color: #f8f2e9; }
-body { margin: 0; font-family: Arial, sans-serif; }
+html, body, #root {
+  background: radial-gradient(ellipse at 12% -10%, rgba(163, 99, 80, 0.28), transparent 55%),
+    radial-gradient(ellipse at 92% 105%, rgba(174, 118, 92, 0.22), transparent 60%), #16070f;
+  background-attachment: fixed;
+  color: #fff;
+  font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 300;
+  min-height: 100vh;
+}
+body { margin: 0; }
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
-.font-serif { font-family: Georgia, serif; }
-.eyebrow { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: #d4af37; }
+.font-serif { font-family: 'Playfair Display', ui-serif, Georgia, serif; font-weight: 400; letter-spacing: -0.01em; }
+.eyebrow { font-size: .7rem; letter-spacing: .28em; text-transform: uppercase; color: #c9b3a0; font-weight: 500; }
 @media (max-width: 767px) {
   [data-testid="quotation-builder"] { padding: 0; }
   [data-testid="quotation-builder"] > div { min-height: 100dvh; border: 0; padding-bottom: env(safe-area-inset-bottom); }
