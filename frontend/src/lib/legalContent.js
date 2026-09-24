@@ -301,6 +301,15 @@ export const LEGAL_PAGES = {
 
 export const LEGAL_ORDER = ["privacy", "terms", "shipping", "returns", "payment", "handcrafted-disclaimer"];
 
+export const LEGAL_META_DESCRIPTIONS = {
+  privacy: "How Samrat Glass Emporium collects, uses, and protects information from website visitors, product inquiries, catalogue downloads, and WhatsApp conversations.",
+  terms: "Terms & Conditions for using the Samrat Glass Emporium website, catalogue, and inquiry services — pricing, orders, product variations, and intellectual property.",
+  shipping: "Pan-India shipping and delivery information for Samrat Glass Emporium — delivery timelines, packaging, charges, and transit damage handling.",
+  returns: "Return and replacement policy for Samrat Glass Emporium — eligible cases, damage reporting timelines, and handling of handcrafted glass products.",
+  payment: "Accepted payment methods, order confirmation, custom-order advances, and GST invoicing at Samrat Glass Emporium.",
+  "handcrafted-disclaimer": "How natural variations in handcrafted Samrat Glass lighting affect dimensions, colour, glass, metalwork and finish.",
+};
+
 // Fixed default "Last updated" date associated with the currently shipped
 // default policy wording. The public page falls back to this constant when
 // an admin has not entered a value in Admin → Legal / Policies → Last updated.
