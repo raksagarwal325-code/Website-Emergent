@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { createQuotationPdf, quotationDefaultTerms, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
+import { createQuotationPdf, quotationDefaultTerms, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
 
 const items = [
   ["Noorjharokha Chain-Suspended Diamond-Cut Glass Wall Lantern", "SGE-WL-089", 1, 6000],
@@ -47,6 +47,11 @@ test("describes the actual GST treatment in default terms", () => {
     .toBe("GST is charged separately at 18.00% as shown above.");
   expect(quotationDefaultTerms({ tax_rate: 0, tax_amount: 0 })[0])
     .toBe("No GST has been added to this quotation.");
+});
+
+test("normalises PDF-incompatible dash characters without joining words", () => {
+  expect(quotationPdfText("Six\u2011Light Star\u2011Etched globe\u2011to\u2011teardrop"))
+    .toBe("Six-Light Star-Etched globe-to-teardrop");
 });
 
 test("renders the complete commercial quotation as a single A4 page", async () => {
