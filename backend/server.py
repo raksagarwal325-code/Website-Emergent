@@ -3652,7 +3652,7 @@ async def _resolve_product_image(payload: AIRegenerateRequest) -> tuple[bytes, s
 
 
 _QUOTATION_AI_SYSTEM = """You prepare precise, customer-facing custom-lighting quotation instructions for Samrat Glass Emporium.
-You receive one reference image, one plain-language instruction from the business owner, and the products already selected in the quotation.
+You receive one selected quotation item, one plain-language instruction from the business owner, the other quotation items for context, and sometimes a reference image.
 
 Return ONLY one JSON object with this exact shape:
 {
@@ -3678,11 +3678,15 @@ Return ONLY one JSON object with this exact shape:
 
 Rules:
 - The owner's written instruction controls. The image is a visual reference, not permission to copy the whole pictured product.
+- Update ONLY the selected target line. Return exactly one item_updates entry for that line and set reference.applies_to to exactly that line ID.
+- Other quotation items are context only. They may be used as a construction reference when the owner explicitly asks the target product to match one of them.
+- If no reference image is supplied, convert the written instruction into complete product-specific quotation wording without inventing visual facts.
 - Clearly separate what to use and what not to copy. If the owner says only the shade pattern is relevant, exclude the pictured body, wall plate and metalwork.
-- Map the reference only to the selected quotation products named in the instruction. If the instruction says all/both, map all.
 - Use match_item only when the instruction explicitly says one product body/construction should match another quotation item.
+- Never combine contradictory instructions. For example, if the target wall light must match a chandelier body, do not also say to retain the original wall-light body or finish.
 - Never invent dimensions, prices, materials, wattage, holder type, quantity, finish or production feasibility.
 - Put uncertain or missing production facts in warnings. Require final approval for custom work.
+- Use ordinary ASCII hyphens (-), not typographic or non-breaking dashes.
 - Do not use markdown or commentary outside the JSON."""
 
 
@@ -3691,26 +3695,30 @@ async def ai_quotation_customisation(
     payload: QuotationAIAssistRequest,
     admin: _AdminUser = Depends(require_admin),
 ):
-    """Analyze a reference image and instruction, returning a reviewable draft only."""
+    """Analyze one product's instruction and optional reference image."""
     import base64
     from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
 
     api_key = os.environ.get("EMERGENT_LLM_KEY", "")
     if not api_key:
         raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY is not configured")
-    image_bytes, _mime = await _resolve_product_image(AIRegenerateRequest(image_url=payload.image_url))
     item_context = [item.model_dump() for item in payload.items]
     chat = configure_product_chat(LlmChat(
         api_key=api_key,
         session_id=f"ai-quotation-{uuid.uuid4().hex[:12]}",
         system_message=_QUOTATION_AI_SYSTEM,
     ))
+    file_contents = []
+    if payload.image_url:
+        image_bytes, _mime = await _resolve_product_image(AIRegenerateRequest(image_url=payload.image_url))
+        file_contents = [ImageContent(image_base64=base64.b64encode(image_bytes).decode("ascii"))]
     message = UserMessage(
         text=(
+            f"Target quotation line ID: {payload.target_line_id}\n\n"
             f"Owner instruction:\n{payload.instruction}\n\n"
             f"Selected quotation products:\n{json.dumps(item_context, ensure_ascii=False)}"
         ),
-        file_contents=[ImageContent(image_base64=base64.b64encode(image_bytes).decode("ascii"))],
+        file_contents=file_contents,
     )
     parts = []
     async for event in chat.stream_message(message):
