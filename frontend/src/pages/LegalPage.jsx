@@ -1,23 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
-import { LEGAL_PAGES, LEGAL_ORDER, LEGAL_DEFAULT_UPDATED_AT } from "../lib/legalContent";
+import { LEGAL_PAGES, LEGAL_ORDER, LEGAL_DEFAULT_UPDATED_AT, LEGAL_META_DESCRIPTIONS } from "../lib/legalContent";
+import { parseLegalBody } from "../lib/legalPolicyBody";
 import { normalizePublicLegalPage } from "../lib/publicClaimNormalization";
 import { api } from "../lib/api";
 import SEO from "../components/SEO";
-
-const LEGAL_META_DESCRIPTIONS = {
-  privacy:
-    "How Samrat Glass Emporium collects, uses, and protects information from website visitors, product inquiries, catalogue downloads, and WhatsApp conversations.",
-  terms:
-    "Terms & Conditions for using the Samrat Glass Emporium website, catalogue, and inquiry services — pricing, orders, product variations, and intellectual property.",
-  shipping:
-    "Pan-India shipping and delivery information for Samrat Glass Emporium — delivery timelines, packaging, charges, and transit damage handling.",
-  returns:
-    "Return and replacement policy for Samrat Glass Emporium — eligible cases, damage reporting timelines, and handling of handcrafted glass products.",
-  payment:
-    "Accepted payment methods, order confirmation, custom-order advances, and GST invoicing at Samrat Glass Emporium.",
-};
 
 /**
  * Parse an admin-authored plain-text policy body into the same
@@ -35,61 +23,7 @@ const LEGAL_META_DESCRIPTIONS = {
  * Returns null when the body is missing/blank so the caller can fall
  * back to the code default.
  */
-export function parseLegalBody(body) {
-  if (typeof body !== "string") return null;
-  const trimmed = body.replace(/\r\n/g, "\n").trim();
-  if (!trimmed) return null;
-
-  const lines = trimmed.split("\n");
-  const intro = [];
-  const sections = [];
-  let current = null;
-  let seenHeading = false;
-
-  const pushIntro = (line) => intro.push(line);
-  const ensureSection = () => {
-    if (!current) {
-      current = { heading: "", text: "", bullets: [] };
-      sections.push(current);
-    }
-    return current;
-  };
-
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
-
-    if (/^##\s+/.test(line)) {
-      current = { heading: line.replace(/^##\s+/, "").trim(), text: "", bullets: [] };
-      sections.push(current);
-      seenHeading = true;
-      continue;
-    }
-    if (/^-\s+/.test(line)) {
-      ensureSection().bullets.push(line.replace(/^-\s+/, "").trim());
-      continue;
-    }
-    if (!seenHeading) {
-      pushIntro(line);
-      continue;
-    }
-    // paragraph line — append to current section's text, preserving blank lines
-    const s = ensureSection();
-    s.text = s.text ? `${s.text}\n${line}` : line;
-  }
-
-  // Clean up trailing/leading blank lines in text blocks
-  const clean = (s) => (s || "").replace(/^\n+/, "").replace(/\n+$/, "");
-  const outSections = sections.map((s) => ({
-    heading: s.heading,
-    text: clean(s.text),
-    bullets: s.bullets.length ? s.bullets : undefined,
-  }));
-
-  return {
-    intro: clean(intro.join("\n")),
-    sections: outSections,
-  };
-}
+export { parseLegalBody };
 
 function Section({ section }) {
   return (
