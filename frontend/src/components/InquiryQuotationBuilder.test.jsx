@@ -192,6 +192,53 @@ test("uploads a custom item image and saves it in the quotation", async () => {
   await waitFor(() => expect(mockApi.createStandaloneQuotation).toHaveBeenCalledWith(expect.objectContaining({ items: [expect.objectContaining({ image: "/api/files/custom.webp" })] })));
 });
 
+test("maps one shade reference to a chandelier and its matching custom wall light", async () => {
+  mockApi.upload.mockResolvedValue({ url: "/api/files/shade-reference.webp" });
+  mockApi.createStandaloneQuotation.mockImplementation(async (data) => ({
+    ...savedQuote, ...data, id: "custom-reference-quote", quote_number: "SGE-2026-0002",
+    items: data.items.map((item) => ({ ...item, line_total: item.quantity * item.unit_price })),
+    design_references: data.design_references,
+  }));
+  render(<InquiryQuotationBuilder />);
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
+  fireEvent.change(screen.getByLabelText("Customer name"), { target: { value: "Custom project client" } });
+  fireEvent.click(screen.getByText("+ Add custom item"));
+  fireEvent.click(screen.getByText("+ Add custom item"));
+  fireEvent.change(screen.getByLabelText("Product 1"), { target: { value: "Six-Light Crystal Chandelier" } });
+  fireEvent.change(screen.getByLabelText("Unit price 1"), { target: { value: "28000" } });
+  fireEvent.change(screen.getByLabelText("Product 2"), { target: { value: "Matching Crystal Glass Wall Light" } });
+  fireEvent.change(screen.getByLabelText("Unit price 2"), { target: { value: "9000" } });
+  fireEvent.click(screen.getByLabelText("Customized product 2"));
+  fireEvent.change(screen.getByLabelText("Body design for product 2"), { target: { value: "match_item" } });
+  fireEvent.change(screen.getByLabelText("Body reference for product 2"), { target: { value: screen.getByLabelText("Body reference for product 2").querySelectorAll("option")[1].value } });
+  fireEvent.click(screen.getByLabelText("Glass arm(s) for product 2"));
+  fireEvent.click(screen.getByLabelText("Crystal bobeche for product 2"));
+  fireEvent.click(screen.getByLabelText("Crystal drops for product 2"));
+  fireEvent.click(screen.getByLabelText("Coordinated metal finish for product 2"));
+  fireEvent.click(screen.getByLabelText("Final drawing approval for product 2"));
+  fireEvent.click(screen.getByText("+ Add reference"));
+  fireEvent.change(screen.getByLabelText("Image for reference 1"), { target: { files: [new File(["image"], "shade.webp", { type: "image/webp" })] } });
+  await screen.findByAltText("SD-01 reference");
+  fireEvent.change(screen.getByLabelText("Use details for reference 1"), { target: { value: "Use the starburst motifs and lower radiating cuts." } });
+  fireEvent.change(screen.getByLabelText("Exclusion details for reference 1"), { target: { value: "Do not copy the swan body, wall plate or metalwork." } });
+  fireEvent.click(screen.getByTestId("quotation-save"));
+
+  await waitFor(() => expect(mockApi.createStandaloneQuotation).toHaveBeenCalledTimes(1));
+  const saved = mockApi.createStandaloneQuotation.mock.calls[0][0];
+  expect(saved.items[1]).toEqual(expect.objectContaining({
+    body_basis: "match_item",
+    body_reference_line_id: saved.items[0].line_id,
+    matching_components: ["glass_arms", "crystal_bobeche", "crystal_drops", "metal_finish"],
+    approval_required: true,
+  }));
+  expect(saved.design_references).toEqual([expect.objectContaining({
+    code: "SD-01",
+    image: "/api/files/shade-reference.webp",
+    applies_to: [saved.items[0].line_id, saved.items[1].line_id],
+    exclude_details: "Do not copy the swan body, wall plate or metalwork.",
+  })]);
+});
+
 test("opens quotation history from the sticky header and deletes a saved quotation", async () => {
   mockApi.listStandaloneQuotations.mockResolvedValue([savedQuote]);
   const confirm = jest.spyOn(window, "confirm").mockReturnValue(true);
