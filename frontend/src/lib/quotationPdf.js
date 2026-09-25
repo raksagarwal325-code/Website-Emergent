@@ -151,6 +151,16 @@ export const clientFacingQuotationText = (quote, value) => {
   return text;
 };
 
+export const clientFacingItemCustomisationText = (quote, item) => {
+  let text = clientFacingQuotationText(quote, item.customisation_notes);
+  const quantity = Number(item.quantity) || 1;
+  if (quantity > 1 && /\bproduce one\b/i.test(text)) {
+    text = text.replace(/\bproduce one\b/i, "Produce a");
+    text = `Quantity: ${quantity} identical units. ${text}`;
+  }
+  return text;
+};
+
 const moreDetailedText = (current, candidate) => (
   quotationPdfText(candidate).trim().length > quotationPdfText(current).trim().length ? candidate : current
 );
@@ -583,7 +593,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
     applicableItems.forEach(({ item, itemIndex }, applicationIndex) => {
       const bodyParts = [];
       if (item.customisation_notes) {
-        bodyParts.push(clientFacingQuotationText(quote, item.customisation_notes));
+        bodyParts.push(clientFacingItemCustomisationText(quote, item));
       } else {
         const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
         if (item.body_basis === "match_item" && linkedIndex >= 0) bodyParts.push(`Match Item ${linkedIndex + 1}`);
