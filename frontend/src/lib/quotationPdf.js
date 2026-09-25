@@ -166,15 +166,28 @@ export const CUSTOM_PRODUCT_NOTE = "Customer approval of this quotation confirms
 export const quotationItemCustomParts = (quote, item, designReferences = []) => {
   const referenceCodes = quotationReferenceCodesForItem({ design_references: designReferences }, item);
   const linkedIndex = (quote.items || []).findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
-  const parts = [];
-  if (item.customisation_notes && !referenceCodes.length) {
-    parts.push(clientFacingItemCustomisationText(quote, item));
-  } else {
-    if (item.body_basis === "match_item" && linkedIndex >= 0) parts.push(`Body: match Item ${linkedIndex + 1}`);
-    if (item.body_basis === "drawing") parts.push("Body: approved drawing");
-    if (referenceCodes.length) parts.push(`Reference: ${referenceCodes.join(", ")}`);
-  }
+  if (!item.is_custom) return [];
+  const parts = ["Customised - see Customisation Schedule"];
+  if (item.body_basis === "match_item" && linkedIndex >= 0) parts.push(`Matches Item ${linkedIndex + 1}`);
+  if (referenceCodes.length) parts.push(`Reference: ${referenceCodes.join(", ")}`);
   return parts;
+};
+
+export const quotationCustomisationScheduleText = (quote, item) => {
+  if (item.customisation_notes) return clientFacingItemCustomisationText(quote, item);
+  const linkedIndex = (quote.items || []).findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
+  const parts = [];
+  if (item.body_basis === "match_item" && linkedIndex >= 0) {
+    parts.push(`Prepare this product to coordinate with Item ${linkedIndex + 1}.`);
+  } else if (item.body_basis === "drawing") {
+    parts.push("Prepare this product according to the confirmed drawing and written specifications.");
+  } else {
+    parts.push("Retain the overall design shown in the product image, subject to the confirmed custom requirements for this item.");
+  }
+  if ((item.matching_components || []).length) {
+    parts.push(`Coordinate ${item.matching_components.map((value) => COMPONENT_LABELS[value] || value).join(", ")}.`);
+  }
+  return parts.join(" ");
 };
 
 const moreDetailedText = (current, candidate) => (
@@ -453,10 +466,11 @@ export const createQuotationPdf = async (quote, options = {}) => {
   const summaryRows = quotationSummaryRows(quote);
   const totalsHeight = summaryRows.length * 6.2 + 9;
   const footerHeight = 45;
-  const hasCustomItems = quote.items.some((item) => item.is_custom);
-  const customNoteHeight = hasCustomItems ? 21 : 0;
+  const customItems = quote.items
+    .map((item, itemIndex) => ({ item, itemIndex }))
+    .filter(({ item }) => item.is_custom);
   const closingHeight = quote.notes ? 17 : 11;
-  if (y + 4 + totalsHeight + 4 + customNoteHeight + footerHeight + closingHeight > pageHeight - 11) startContinuationPage(false);
+  if (y + 4 + totalsHeight + 4 + footerHeight + closingHeight > pageHeight - 11) startContinuationPage(false);
 
   y += 4;
   const totalsX = 112;
@@ -479,15 +493,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
   setText(8.2, "bold", GOLD, "times");
   doc.text(`INR ${quoteMoney(quote.total)}`, totalsX + totalsWidth - 4, payableY + 5.8, { align: "right" });
 
-  let footerTop = y + totalsHeight + 4;
-  if (hasCustomItems) {
-    fillRect(inner, footerTop, usable, 17, CREAM, 1.2);
-    setText(6.2, "bold", MAROON);
-    doc.text("CUSTOM PRODUCT NOTE", inner + 4, footerTop + 5.5);
-    setText(6, "normal", INK);
-    doc.text(doc.splitTextToSize(CUSTOM_PRODUCT_NOTE, usable - 8), inner + 4, footerTop + 10.2, { lineHeightFactor: 1.06 });
-    footerTop += customNoteHeight;
-  }
+  const footerTop = y + totalsHeight + 4;
   fillRect(inner, footerTop, usable, footerHeight, CREAM, 1.5);
   const footerGap = 3;
   const bankWidth = 57;
@@ -547,6 +553,66 @@ export const createQuotationPdf = async (quote, options = {}) => {
   }
   pageFooter();
 
+  if (customItems.length) {
+    const drawCustomisationScheduleHeader = (continued = false) => {
+      drawPageBase();
+      drawContinuationHeader();
+      setText(14, "bold", INK, "times");
+      doc.text(continued ? "Customisation Schedule - Continued" : "Customisation Schedule", inner + 4, 39);
+      setText(6.2, "normal", MUTED);
+      doc.text("The specifications below form part of this quotation and are listed separately from the commercial particulars.", inner + 4, 45);
+      fillRect(inner, 50, usable, 8.5, WINE);
+      setText(6.2, "bold", [255, 255, 255]);
+      doc.text("Item", inner + 5, 55.7);
+      doc.text("Product and agreed customisation", inner + 22, 55.7);
+      doc.text("Qty", pageWidth - inner - 6, 55.7, { align: "right" });
+    };
+    const startCustomisationSchedulePage = (continued = false) => {
+      doc.addPage();
+      drawCustomisationScheduleHeader(continued);
+      return 58.5;
+    };
+
+    let scheduleY = startCustomisationSchedulePage(false);
+    customItems.forEach(({ item, itemIndex }) => {
+      const nameLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 145);
+      const specificationLines = doc.splitTextToSize(quotationCustomisationScheduleText(quote, item), 145);
+      const referenceCodes = quotationReferenceCodesForItem({ design_references: designReferences }, item);
+      const referenceLines = referenceCodes.length
+        ? doc.splitTextToSize(`Design reference: ${referenceCodes.join(", ")}`, 145)
+        : [];
+      const rowHeight = Math.max(20, 7 + nameLines.length * 3.3 + specificationLines.length * 3.15 + referenceLines.length * 3 + 4);
+      if (scheduleY + rowHeight > 247) scheduleY = startCustomisationSchedulePage(true);
+      fillRect(inner, scheduleY, usable, rowHeight, (itemIndex % 2 === 0) ? [248, 243, 235] : IVORY);
+      setText(7, "bold", MAROON);
+      doc.text(String(itemIndex + 1), inner + 6, scheduleY + 7);
+      setText(7.2, "bold", INK, "times");
+      doc.text(nameLines, inner + 22, scheduleY + 6, { lineHeightFactor: 1.03 });
+      setText(6.2, "normal", INK);
+      const specificationY = scheduleY + 7 + nameLines.length * 3.3;
+      doc.text(specificationLines, inner + 22, specificationY, { lineHeightFactor: 1.08 });
+      if (referenceLines.length) {
+        setText(5.8, "bold", MAROON);
+        doc.text(referenceLines, inner + 22, specificationY + specificationLines.length * 3.15 + 1.5, { lineHeightFactor: 1.05 });
+      }
+      setText(7, "normal", INK);
+      doc.text(String(item.quantity), pageWidth - inner - 6, scheduleY + 7, { align: "right" });
+      scheduleY += rowHeight;
+      line(inner, scheduleY, inner + usable, scheduleY, LINE, 0.15);
+    });
+
+    const noteLines = doc.splitTextToSize(CUSTOM_PRODUCT_NOTE, usable - 10);
+    const noteHeight = 12 + noteLines.length * 3;
+    if (scheduleY + noteHeight + 7 > 270) scheduleY = startCustomisationSchedulePage(true);
+    scheduleY += 7;
+    fillRect(inner, scheduleY, usable, noteHeight, CREAM, 1.2);
+    setText(6.3, "bold", MAROON);
+    doc.text("CUSTOM PRODUCT NOTE", inner + 5, scheduleY + 6);
+    setText(5.8, "normal", INK);
+    doc.text(noteLines, inner + 5, scheduleY + 11, { lineHeightFactor: 1.08 });
+    pageFooter();
+  }
+
   designReferences.forEach((reference, referenceIndex) => {
     doc.addPage();
     drawPageBase();
@@ -599,65 +665,10 @@ export const createQuotationPdf = async (quote, options = {}) => {
     setText(5.7, "bold", INK);
     doc.text(`Applies to ${applicableItems.length} product${applicableItems.length === 1 ? "" : "s"} in this quotation.`, scopeX, Math.min(scopeY + 1, panelTop + 94));
 
-    const drawApplicationHeader = (titleY, headerY, continued = false) => {
-      setText(6.5, "bold", MAROON);
-      doc.text(continued ? "PRODUCT CUSTOMISATION - CONTINUED" : "PRODUCT CUSTOMISATION", inner + 4, titleY);
-      fillRect(inner, headerY, usable, 8.5, WINE);
-      setText(6.1, "bold", [255, 255, 255]);
-      doc.text("Item", inner + 5, headerY + 5.5);
-      doc.text("Product", inner + 22, headerY + 5.5);
-      doc.text("Agreed customisation", inner + 98, headerY + 5.5);
-    };
-    drawApplicationHeader(182, 187);
-    let mapY = 195.5;
-    applicableItems.forEach(({ item, itemIndex }, applicationIndex) => {
-      const bodyParts = [];
-      if (item.customisation_notes) {
-        bodyParts.push(clientFacingItemCustomisationText(quote, item));
-      } else {
-        const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
-        if (item.body_basis === "match_item" && linkedIndex >= 0) bodyParts.push(`Match Item ${linkedIndex + 1}`);
-        else if (item.body_basis === "drawing") bodyParts.push("Use the approved drawing");
-        else if (item.body_basis === "drawing_pending") bodyParts.push("Production follows the written custom specifications");
-        else bodyParts.push("Retain the product body and construction");
-        if ((item.matching_components || []).length) bodyParts.push(item.matching_components.map((value) => COMPONENT_LABELS[value] || value).join(", "));
-      }
-      const detailLines = doc.splitTextToSize(bodyParts.join("; "), 83);
-      const productLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 69);
-      const rowHeight = Math.max(11, detailLines.length * 3 + 3, productLines.length * 3 + 3);
-      if (mapY + rowHeight > 263) {
-        pageFooter();
-        doc.addPage();
-        drawPageBase();
-        drawContinuationHeader();
-        drawApplicationHeader(39, 44, true);
-        mapY = 52.5;
-      }
-      if (applicationIndex % 2 === 0) fillRect(inner, mapY, usable, rowHeight, [248, 243, 235]);
-      setText(6, "normal", INK);
-      doc.text(String(itemIndex + 1), inner + 5, mapY + 6.5);
-      setText(6, "bold", INK);
-      doc.text(productLines, inner + 22, mapY + 5.2, { lineHeightFactor: 1.03 });
-      setText(5.6, "normal", INK);
-      doc.text(detailLines, inner + 98, mapY + 5.2, { lineHeightFactor: 1.05 });
-      mapY += rowHeight;
-      line(inner, mapY, inner + usable, mapY, LINE, 0.15);
-    });
-
-    let confirmationTop = Math.max(230, mapY + 8);
-    if (confirmationTop + 27 > 269) {
-      pageFooter();
-      doc.addPage();
-      drawPageBase();
-      drawContinuationHeader();
-      confirmationTop = 39;
-    }
-    fillRect(inner, confirmationTop, usable, 27, CREAM, 1.2);
-    setText(6.3, "bold", MAROON);
-    doc.text("CUSTOM PRODUCTION NOTE", inner + 5, confirmationTop + 7);
-    const confirmation = CUSTOM_PRODUCT_NOTE;
-    setText(5.7, "normal", INK);
-    doc.text(doc.splitTextToSize(confirmation, usable - 10), inner + 5, confirmationTop + 14, { lineHeightFactor: 1.08 });
+    setText(6.1, "bold", MAROON);
+    doc.text("ITEM SPECIFICATIONS", inner + 4, 184);
+    setText(5.8, "normal", INK);
+    doc.text("See the Customisation Schedule for the complete written specifications for each linked item.", inner + 4, 190);
     pageFooter();
   });
 
