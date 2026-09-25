@@ -89,11 +89,12 @@ test("prefills the inquiry and saves edited quotation values", async () => {
   await screen.findByRole("button", { name: "Saved quotations (0)" });
   expect(screen.getByLabelText("Customer name")).toHaveValue("Kishor A Lalwani");
   expect(screen.getByLabelText("Product 1")).toHaveValue(inquiry.items[0].name);
-  expect(screen.getByTestId("quotation-grand-total")).toHaveTextContent("₹6,000");
+  expect(screen.getByTestId("quotation-grand-total")).toHaveTextContent("₹7,080");
 
   fireEvent.change(screen.getByLabelText("Quantity 1"), { target: { value: "2" } });
   fireEvent.change(screen.getByLabelText("Unit price 1"), { target: { value: "6500" } });
   fireEvent.change(screen.getByLabelText("Discount"), { target: { value: "500" } });
+  fireEvent.change(screen.getByLabelText("Freight arrangement"), { target: { value: "added_to_bill" } });
   fireEvent.change(screen.getByLabelText("Freight or other charges"), { target: { value: "1000" } });
   fireEvent.change(screen.getByLabelText("Billing address"), { target: { value: "Raniwala Market, Firozabad" } });
   fireEvent.change(screen.getByLabelText("Customer GSTIN"), { target: { value: "09adcfS9258d1zs" } });
@@ -108,6 +109,31 @@ test("prefills the inquiry and saves edited quotation values", async () => {
     items: [expect.objectContaining({ quantity: 2, unit_price: 6500, sku: "SGE-WL-089" })],
   }));
   expect(await screen.findByRole("button", { name: "Saved quotations (1)" })).toBeInTheDocument();
+});
+
+test("supports all freight modes and removes tax from a without-tax quotation", async () => {
+  mockApi.createInquiryQuotation.mockImplementation(async (_id, data) => ({ ...savedQuote, ...data }));
+  render(<InquiryQuotationBuilder inquiry={inquiry} />);
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
+
+  fireEvent.change(screen.getByLabelText("Freight arrangement"), { target: { value: "added_to_bill" } });
+  fireEvent.change(screen.getByLabelText("Freight or other charges"), { target: { value: "1000" } });
+  expect(screen.getByText("Freight (taxable)")).toBeInTheDocument();
+  expect(screen.getByTestId("quotation-grand-total")).toHaveTextContent("₹8,260");
+
+  fireEvent.change(screen.getByLabelText("Tax treatment"), { target: { value: "no_tax" } });
+  expect(screen.queryByLabelText("GST or tax rate")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Freight arrangement")).toHaveValue("");
+  expect(screen.getByText(/alternate payment account/i)).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("Freight arrangement"), { target: { value: "included_in_price" } });
+  fireEvent.click(screen.getByTestId("quotation-save"));
+  await waitFor(() => expect(mockApi.createInquiryQuotation).toHaveBeenCalledWith("inq-kishor", expect.objectContaining({
+    freight_mode: "included_in_price",
+    shipping: 0,
+    tax_mode: "no_tax",
+    tax_rate: 0,
+  })));
 });
 
 test("downloads a branded PDF from the saved quotation snapshot", async () => {
@@ -129,6 +155,7 @@ test("creates a standalone quotation with a custom item without creating an inqu
   fireEvent.click(screen.getByText("+ Add custom item"));
   fireEvent.change(screen.getByLabelText("Product 1"), { target: { value: "Custom glass shade" } });
   fireEvent.change(screen.getByLabelText("Unit price 1"), { target: { value: "200" } });
+  fireEvent.change(screen.getByLabelText("Freight arrangement"), { target: { value: "payable_by_client" } });
   fireEvent.click(screen.getByTestId("quotation-save"));
   await waitFor(() => expect(mockApi.createStandaloneQuotation).toHaveBeenCalledWith(expect.objectContaining({
     customer_name: "Walk-in customer", items: [expect.objectContaining({ name: "Custom glass shade", unit_price: 200 })],
@@ -180,6 +207,7 @@ test("validation errors show readable text and preserve the form after refresh",
   const view = render(<InquiryQuotationBuilder inquiry={inquiry} />);
   await screen.findByRole("button", { name: "Saved quotations (0)" });
   fireEvent.change(screen.getByLabelText("Customer name"), { target: { value: "Retained customer" } });
+  fireEvent.change(screen.getByLabelText("Freight arrangement"), { target: { value: "payable_by_client" } });
   fireEvent.click(screen.getByTestId("quotation-save"));
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith("customer_email: Invalid email"));
   expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -214,6 +242,7 @@ test("uploads a custom item image and saves it in the quotation", async () => {
   fireEvent.click(screen.getByText("+ Add custom item"));
   fireEvent.change(screen.getByLabelText("Product 1"), { target: { value: "Custom chandelier" } });
   fireEvent.change(screen.getByLabelText("Unit price 1"), { target: { value: "1000" } });
+  fireEvent.change(screen.getByLabelText("Freight arrangement"), { target: { value: "payable_by_client" } });
   fireEvent.change(screen.getByLabelText("Image for product 1"), { target: { files: [new File(["image"], "custom.webp", { type: "image/webp" })] } });
   await screen.findByAltText("Custom chandelier");
   fireEvent.click(screen.getByTestId("quotation-save"));
@@ -240,6 +269,7 @@ test("harmonises related custom variant names before saving", async () => {
   ] }} />);
 
   await screen.findByRole("button", { name: "Saved quotations (0)" });
+  fireEvent.change(screen.getByLabelText("Freight arrangement"), { target: { value: "payable_by_client" } });
   fireEvent.click(screen.getByTestId("quotation-save"));
 
   await waitFor(() => expect(mockApi.createStandaloneQuotation).toHaveBeenCalledTimes(1));
@@ -298,6 +328,7 @@ test("lets AI prepare each customised product from one instruction and an option
   }));
 
   expect(screen.getByLabelText("Product 1")).toHaveValue("Owner-approved Shahi chandelier");
+  fireEvent.change(screen.getByLabelText("Freight arrangement"), { target: { value: "payable_by_client" } });
   fireEvent.click(screen.getByTestId("quotation-save"));
   await waitFor(() => expect(mockApi.createStandaloneQuotation).toHaveBeenCalledTimes(1));
   const saved = mockApi.createStandaloneQuotation.mock.calls[0][0];
