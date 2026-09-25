@@ -5,6 +5,7 @@ import { api } from "../../lib/api";
 import DEFAULT_BUSINESS from "../../constants/quotationBusiness.json";
 
 const BUSINESS_LABELS = { name: "Company / account name", address: "Company address", gstin: "GSTIN", whatsapp: "WhatsApp number", email: "Email", bank: "Bank name", branch: "Branch", accountType: "Account type", accountNumber: "Account number", ifsc: "IFSC", signatory: "Authorised signatory" };
+const PAYMENT_ACCOUNT_LABELS = { name: "Account holder name", bank: "Bank name", branch: "Branch", accountType: "Account type", accountNumber: "Account number", ifsc: "IFSC", signatory: "Authorised signatory" };
 
 const ASSETS = [
   { kind: "signature", label: "Authorised signature", hint: "Transparent PNG preferred; a wide handwritten signature works best." },
@@ -15,6 +16,7 @@ export default function QuotationBrandingAdmin({ settings, onSave }) {
   const [branding, setBranding] = useState(settings?.quotation_branding || {});
   const [busy, setBusy] = useState("");
   const [business, setBusiness] = useState({ ...DEFAULT_BUSINESS, ...settings?.quotation_business });
+  const [nonTaxBusiness, setNonTaxBusiness] = useState(settings?.quotation_non_tax_business || {});
   const saveBusiness = async () => {
     setBusy("business");
     try {
@@ -24,10 +26,20 @@ export default function QuotationBrandingAdmin({ settings, onSave }) {
     } catch (_) { toast.error("Could not save business details"); }
     finally { setBusy(""); }
   };
+  const saveNonTaxBusiness = async () => {
+    setBusy("non-tax-business");
+    try {
+      await api.updateSettings({ quotation_non_tax_business: nonTaxBusiness });
+      toast.success("Alternate payment account saved");
+      onSave?.();
+    } catch (_) { toast.error("Could not save alternate payment account"); }
+    finally { setBusy(""); }
+  };
 
   useEffect(() => {
     setBranding(settings?.quotation_branding || {});
     setBusiness({ ...DEFAULT_BUSINESS, ...settings?.quotation_business });
+    setNonTaxBusiness(settings?.quotation_non_tax_business || {});
   }, [settings]);
 
   const upload = async (kind, file) => {
@@ -65,6 +77,13 @@ export default function QuotationBrandingAdmin({ settings, onSave }) {
       <p className="mt-2 text-sm text-white/55">Edit the company and payment details used on new quotations. Previously saved quotations retain their saved details.</p>
       <div className="my-5 grid gap-3 md:grid-cols-2">{Object.entries(BUSINESS_LABELS).map(([key, label]) => <label key={key} className="text-xs text-white/65">{label}<input aria-label={label} value={business[key] || ""} onChange={e => setBusiness(current => ({ ...current, [key]: e.target.value }))} className="mt-1 w-full border border-white/15 bg-black/40 p-3 text-white" /></label>)}</div>
       <button type="button" disabled={Boolean(busy)} onClick={saveBusiness} className="mb-8 bg-[#D4AF37] px-4 py-3 text-black disabled:opacity-50">Save business details</button>
+      <div className="border-t border-white/10 pt-7">
+        <div className="eyebrow">Quotation without tax</div>
+        <h3 className="mt-1 font-serif text-2xl">Alternate payment account</h3>
+        <p className="mt-2 text-sm leading-relaxed text-white/55">Used automatically only when Tax treatment is set to Quotation without tax. Complete the required account holder, bank, account number and IFSC fields before using that mode.</p>
+        <div className="my-5 grid gap-3 md:grid-cols-2">{Object.entries(PAYMENT_ACCOUNT_LABELS).map(([key, label]) => <label key={key} className="text-xs text-white/65">{label}<input aria-label={`Alternate ${label}`} value={nonTaxBusiness[key] || ""} onChange={e => setNonTaxBusiness(current => ({ ...current, [key]: e.target.value }))} className="mt-1 w-full border border-white/15 bg-black/40 p-3 text-white" /></label>)}</div>
+        <button type="button" disabled={Boolean(busy)} onClick={saveNonTaxBusiness} className="mb-8 bg-[#D4AF37] px-4 py-3 text-black disabled:opacity-50">Save alternate account</button>
+      </div>
       <div className="eyebrow">Quotation branding</div>
       <h3 className="mt-1 font-serif text-2xl">Signature & company stamp</h3>
       <p className="mt-2 text-sm leading-relaxed text-white/55">
