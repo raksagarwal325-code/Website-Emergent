@@ -62,6 +62,51 @@ def test_build_quotation_recomputes_every_amount_server_side():
     assert result["stamp_url"] == "/api/files/stamp.png"
 
 
+def test_freight_modes_control_billing_and_gst_base():
+    billed = build_quotation(
+        None,
+        payload(discount=0, freight_mode="added_to_bill", shipping=1000, tax_mode="gst", tax_rate=18),
+        "owner@example.com",
+    )
+    assert billed["shipping"] == 1000
+    assert billed["tax_amount"] == 1872
+    assert billed["total"] == 12272
+
+    for mode in ("included_in_price", "payable_by_client"):
+        quote = build_quotation(
+            None,
+            payload(discount=0, freight_mode=mode, shipping=0, tax_mode="gst", tax_rate=18),
+            "owner@example.com",
+        )
+        assert quote["shipping"] == 0
+        assert quote["tax_amount"] == 1692
+        assert quote["total"] == 11092
+
+
+def test_without_tax_omits_tax_and_cannot_bill_freight():
+    quote = build_quotation(
+        None,
+        payload(discount=0, freight_mode="payable_by_client", shipping=0, tax_mode="no_tax", tax_rate=0),
+        "owner@example.com",
+        business={"name": "Alternate account holder", "bank": "Alternate Bank", "accountNumber": "123", "ifsc": "ALT0001"},
+    )
+    assert quote["tax_mode"] == "no_tax"
+    assert quote["tax_rate"] == 0
+    assert quote["tax_amount"] == 0
+    assert quote["total"] == 9400
+    assert quote["business"]["accountNumber"] == "123"
+
+    with pytest.raises(ValidationError, match="requires a GST quotation"):
+        payload(freight_mode="added_to_bill", shipping=1000, tax_mode="no_tax", tax_rate=0)
+
+
+def test_freight_mode_rejects_conflicting_amounts():
+    with pytest.raises(ValidationError, match="separate freight amount"):
+        payload(freight_mode="included_in_price", shipping=1000)
+    with pytest.raises(ValidationError, match="Enter the freight amount"):
+        payload(freight_mode="added_to_bill", shipping=0)
+
+
 def test_yearly_quotation_number_has_four_digit_sequence():
     assert format_quotation_number(2026, 1) == "SGE-2026-0001"
     assert format_quotation_number(2026, 41) == "SGE-2026-0041"
