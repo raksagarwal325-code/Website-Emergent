@@ -199,8 +199,8 @@ test("harmonises related custom variant names before saving", async () => {
     {
       line_id: "two-step", image: "/api/files/basket-large.webp", is_custom: true,
       name: "Crystal Basket Chandelier with Glass Shades - Gold Finish - Approx. 3 ft Dia x 3-3.5 ft H",
-      price: 54000, customisation_instruction: "Keep two arm tiers at this size.",
-      customisation_notes: "Retain the same two arm tiers. Diameter 3 ft and height 3-3.5 ft.",
+      price: 54000, customisation_instruction: "Keep everything else the same.",
+      customisation_notes: "Make the chandelier exactly as shown in the attached base image, keeping the same crystal basket body, arm layout with glass shades, crystal detailing and gold metal finish. Resize only the overall chandelier to approx. 3 ft diameter x 3-3.5 ft height. No other design or finish changes.",
       customisation_ai_prepared: true,
     },
     {

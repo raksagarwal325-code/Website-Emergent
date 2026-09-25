@@ -5,7 +5,7 @@ test("harmonises related custom products using the shared family and only varian
     {
       line_id: "two-step", image: "/api/files/basket-large.webp", is_custom: true,
       name: "Crystal Basket Chandelier with Glass Shades - Gold Finish - Approx. 3 ft Dia x 3-3.5 ft H",
-      customisation_notes: "Retain the same two arm tiers and keep the diameter fixed at 3 ft. Overall height approximately 3-3.5 ft.",
+      customisation_notes: "Make the chandelier exactly as shown in the attached base image, keeping the same crystal basket body, arm layout with glass shades, crystal detailing and gold metal finish. Resize only the overall chandelier to approx. 3 ft diameter x 3-3.5 ft height. No other design or finish changes.",
     },
     {
       line_id: "one-step", image: "/api/files/basket-small.webp", is_custom: true,
@@ -18,6 +18,20 @@ test("harmonises related custom products using the shared family and only varian
     "Crystal Basket Chandelier with Glass Shades - 2-Step - Gold Finish - Approx. 3 ft Dia x 3-3.5 ft H",
     "Crystal Basket Chandelier with Glass Shades - 1-Step - Gold Finish - Approx. 3 ft Dia x 2-2.5 ft H",
   ]);
+});
+
+test("does not invent a step count without an explicit related variant anchor", () => {
+  const items = [
+    {
+      image: "/large.webp", is_custom: true,
+      name: "Crystal Basket Chandelier with Glass Shades - Gold Finish - Approx. 3 ft Dia x 3-3.5 ft H",
+    },
+    {
+      image: "/small.webp", is_custom: true,
+      name: "Crystal Basket Chandelier with Glass Shades - Gold Finish - Approx. 3 ft Dia x 2-2.5 ft H",
+    },
+  ];
+  expect(harmoniseCustomVariantNames(items)).toEqual(items);
 });
 
 test("does not group products with different images", () => {
