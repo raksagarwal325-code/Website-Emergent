@@ -276,10 +276,11 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
         image_url: target.customisation_reference_image || null,
         instruction: target.customisation_instruction.trim(),
         target_line_id: target.line_id,
-        items: form.items.map(({ line_id, name, sku }, itemIndex) => ({
+        items: form.items.map(({ line_id, name, sku, quantity }, itemIndex) => ({
           line_id,
           name: name.trim() || `Custom product Item ${itemIndex + 1}`,
           sku: sku || null,
+          quantity: Number(quantity) || 1,
         })),
       });
       const draft = result.draft;

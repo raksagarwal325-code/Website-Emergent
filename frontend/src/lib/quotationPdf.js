@@ -141,6 +141,44 @@ const dateText = (value) => new Date(value).toLocaleDateString("en-IN");
 export const quotationPdfText = (value) => String(value || "")
   .replace(/[\u2010-\u2015\u2212\u00ad]/g, "-")
   .replace(/\u00a0/g, " ");
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export const clientFacingQuotationText = (quote, value) => {
+  let text = quotationPdfText(value);
+  (quote.items || []).forEach((item, index) => {
+    if (!item.line_id) return;
+    text = text.replace(new RegExp(escapeRegExp(item.line_id), "gi"), `Item ${index + 1}`);
+  });
+  return text;
+};
+
+const moreDetailedText = (current, candidate) => (
+  quotationPdfText(candidate).trim().length > quotationPdfText(current).trim().length ? candidate : current
+);
+
+export const mergeDesignReferencesForPdf = (references, imageData) => {
+  const merged = [];
+  references.forEach((reference, index) => {
+    const image = imageData[index] || null;
+    const imageKey = image || reference.image || `reference-${index}`;
+    const key = `${reference.category || "other"}|${imageKey}`;
+    const existing = merged.find((entry) => entry.key === key);
+    if (!existing) {
+      merged.push({ key, reference: { ...reference, applies_to: [...(reference.applies_to || [])] }, image });
+      return;
+    }
+    existing.reference.applies_to = [...new Set([
+      ...(existing.reference.applies_to || []),
+      ...(reference.applies_to || []),
+    ])];
+    existing.reference.title = moreDetailedText(existing.reference.title, reference.title);
+    existing.reference.use_details = moreDetailedText(existing.reference.use_details, reference.use_details);
+    existing.reference.exclude_details = moreDetailedText(existing.reference.exclude_details, reference.exclude_details);
+  });
+  return {
+    references: merged.map(({ reference }) => reference),
+    imageData: merged.map(({ image }) => image),
+  };
+};
 const COMPONENT_LABELS = {
   glass_arms: "glass arm(s)",
   crystal_bobeche: "crystal bobeche",
@@ -209,13 +247,16 @@ export const createQuotationPdf = async (quote, options = {}) => {
     }
     return loadProductImageData(item.image);
   }));
-  const designReferences = Array.isArray(quote.design_references) ? quote.design_references : [];
-  const referenceImageData = await Promise.all(designReferences.map((reference) => {
+  const rawDesignReferences = Array.isArray(quote.design_references) ? quote.design_references : [];
+  const rawReferenceImageData = await Promise.all(rawDesignReferences.map((reference) => {
     if (options.productImageDataUrls && Object.prototype.hasOwnProperty.call(options.productImageDataUrls, reference.image)) {
       return options.productImageDataUrls[reference.image];
     }
     return loadProductImageData(reference.image);
   }));
+  const mergedReferences = mergeDesignReferencesForPdf(rawDesignReferences, rawReferenceImageData);
+  const designReferences = mergedReferences.references;
+  const referenceImageData = mergedReferences.imageData;
   const [signatureData, stampData] = await Promise.all([
     options.signatureDataUrl === undefined ? loadRawImageData(quote.signature_url) : options.signatureDataUrl,
     options.stampDataUrl === undefined ? loadRawImageData(quote.stamp_url) : options.stampDataUrl,
@@ -352,8 +393,8 @@ export const createQuotationPdf = async (quote, options = {}) => {
   drawTableHeader();
 
   quote.items.forEach((item, index) => {
-    const nameLines = doc.splitTextToSize(quotationPdfText(item.name), 68).slice(0, 3);
-    const referenceCodes = quotationReferenceCodesForItem(quote, item);
+    const nameLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 68).slice(0, 3);
+    const referenceCodes = quotationReferenceCodesForItem({ design_references: designReferences }, item);
     const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
     const customParts = [];
     if (item.body_basis === "match_item" && linkedIndex >= 0) customParts.push(`Body: match Item ${linkedIndex + 1}`);
@@ -366,7 +407,10 @@ export const createQuotationPdf = async (quote, options = {}) => {
     if (y + rowHeight > 225) startContinuationPage();
     setText(6.8, "normal", MUTED);
     doc.text(String(index + 1), cols.serial, y + 6.8, { align: "center" });
-    addContainedImage(productImageData[index], cols.image, y + 1.3, 10.5, 10.5, item.is_custom ? ["CUSTOM", "DESIGN"] : ["IMAGE", "PENDING"]);
+    const placeholder = item.is_custom && linkedIndex >= 0
+      ? ["MATCHING", `ITEM ${linkedIndex + 1}`]
+      : item.is_custom ? ["CUSTOM", "DESIGN"] : ["IMAGE", "PENDING"];
+    addContainedImage(productImageData[index], cols.image, y + 1.3, 10.5, 10.5, placeholder);
     setText(7.1, "bold", INK, "times");
     doc.text(nameLines, cols.item, y + 4.8, { lineHeightFactor: 1.03 });
     if (item.sku) {
@@ -482,15 +526,15 @@ export const createQuotationPdf = async (quote, options = {}) => {
       .filter(({ item }) => (reference.applies_to || []).includes(item.line_id));
 
     setText(14, "bold", INK, "times");
-    doc.text("Design Reference Schedule", inner + 4, 39);
+    doc.text("Design Reference", inner + 4, 39);
     setText(6.2, "normal", MUTED);
-    doc.text("Each reference is shown once and linked to every applicable quotation item.", inner + 4, 45);
+    doc.text("The image below records the agreed design detail for the listed products.", inner + 4, 45);
 
     fillRect(inner, 50, usable, 12, WINE, 1.2);
     setText(8.2, "bold", GOLD);
     doc.text(reference.code, inner + 5, 57.8);
     setText(7.2, "bold", [255, 255, 255]);
-    doc.text(doc.splitTextToSize(quotationPdfText(reference.title), 110).slice(0, 1), inner + 27, 57.8);
+    doc.text(doc.splitTextToSize(clientFacingQuotationText(quote, reference.title), 110).slice(0, 1), inner + 27, 57.8);
     setText(5.5, "bold", [226, 216, 207]);
     doc.text(`${CATEGORY_LABELS[reference.category] || CATEGORY_LABELS.other} | Items ${applicableItems.map(({ itemIndex }) => itemIndex + 1).join(", ")}`, pageWidth - inner - 5, 57.8, { align: "right" });
 
@@ -509,45 +553,47 @@ export const createQuotationPdf = async (quote, options = {}) => {
     const scopeX = inner + 63;
     const scopeWidth = usable - 70;
     setText(6.5, "bold", MAROON);
-    doc.text("REFERENCE SCOPE", scopeX, panelTop + 9);
+    doc.text("AGREED DESIGN DETAILS", scopeX, panelTop + 9);
     let scopeY = panelTop + 16;
     const drawScope = (label, value, colour = INK) => {
       if (!value) return;
       setText(5.6, "bold", MAROON);
       doc.text(label, scopeX, scopeY);
       setText(5.7, "normal", colour);
-      const lines = doc.splitTextToSize(quotationPdfText(value), scopeWidth - 1).slice(0, 6);
+      const lines = doc.splitTextToSize(clientFacingQuotationText(quote, value), scopeWidth - 1).slice(0, 6);
       doc.text(lines, scopeX, scopeY + 4, { lineHeightFactor: 1.08 });
       scopeY += 5 + lines.length * 3 + 4;
     };
-    drawScope("USE FROM THIS REFERENCE", reference.use_details || "Use the confirmed design details shown in this reference image.");
-    drawScope("DO NOT COPY", reference.exclude_details);
+    drawScope("USE", reference.use_details || "Use the confirmed design details shown in this reference image.");
+    drawScope("EXCLUDE", reference.exclude_details);
     setText(5.7, "bold", INK);
     doc.text(`Applies to ${applicableItems.length} product${applicableItems.length === 1 ? "" : "s"} in this quotation.`, scopeX, Math.min(scopeY + 1, panelTop + 94));
 
     const drawApplicationHeader = (titleY, headerY, continued = false) => {
       setText(6.5, "bold", MAROON);
-      doc.text(continued ? "APPLICATION MAP - CONTINUED" : "APPLICATION MAP", inner + 4, titleY);
+      doc.text(continued ? "PRODUCT CUSTOMISATION - CONTINUED" : "PRODUCT CUSTOMISATION", inner + 4, titleY);
       fillRect(inner, headerY, usable, 8.5, WINE);
       setText(6.1, "bold", [255, 255, 255]);
       doc.text("Item", inner + 5, headerY + 5.5);
       doc.text("Product", inner + 22, headerY + 5.5);
-      doc.text("Body / construction instruction", inner + 98, headerY + 5.5);
+      doc.text("Agreed customisation", inner + 98, headerY + 5.5);
     };
     drawApplicationHeader(182, 187);
     let mapY = 195.5;
     applicableItems.forEach(({ item, itemIndex }, applicationIndex) => {
-      const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
       const bodyParts = [];
-      if (item.body_basis === "match_item" && linkedIndex >= 0) bodyParts.push(`Match Item ${linkedIndex + 1}`);
-      else if (item.body_basis === "drawing") bodyParts.push("Use approved drawing");
-      else if (item.body_basis === "drawing_pending") bodyParts.push("Final design drawing pending");
-      else bodyParts.push("Retain product body and construction");
-      if ((item.matching_components || []).length) bodyParts.push(item.matching_components.map((value) => COMPONENT_LABELS[value] || value).join(", "));
-      if (item.customisation_notes) bodyParts.push(quotationPdfText(item.customisation_notes));
-      if (item.approval_required) bodyParts.push("Approval required before production");
+      if (item.customisation_notes) {
+        bodyParts.push(clientFacingQuotationText(quote, item.customisation_notes));
+      } else {
+        const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
+        if (item.body_basis === "match_item" && linkedIndex >= 0) bodyParts.push(`Match Item ${linkedIndex + 1}`);
+        else if (item.body_basis === "drawing") bodyParts.push("Use the approved drawing");
+        else if (item.body_basis === "drawing_pending") bodyParts.push("Final design drawing pending");
+        else bodyParts.push("Retain the product body and construction");
+        if ((item.matching_components || []).length) bodyParts.push(item.matching_components.map((value) => COMPONENT_LABELS[value] || value).join(", "));
+      }
       const detailLines = doc.splitTextToSize(bodyParts.join("; "), 83);
-      const productLines = doc.splitTextToSize(quotationPdfText(item.name), 69);
+      const productLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 69);
       const rowHeight = Math.max(11, detailLines.length * 3 + 3, productLines.length * 3 + 3);
       if (mapY + rowHeight > 263) {
         pageFooter();
@@ -578,7 +624,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
     }
     fillRect(inner, confirmationTop, usable, 27, CREAM, 1.2);
     setText(6.3, "bold", MAROON);
-    doc.text("PRODUCTION CONFIRMATION", inner + 5, confirmationTop + 7);
+    doc.text("DESIGN APPROVAL", inner + 5, confirmationTop + 7);
     const approvalItems = applicableItems.filter(({ item }) => item.approval_required);
     const confirmation = approvalItems.length
       ? `Final drawing / design approval is required before production for Item${approvalItems.length === 1 ? "" : "s"} ${approvalItems.map(({ itemIndex }) => itemIndex + 1).join(", ")}.`
