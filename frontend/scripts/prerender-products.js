@@ -86,7 +86,32 @@ function safeJson(value) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
-function productSchema(product, canonical, image, description) {
+function imageObject(url, product, canonical, index = 0) {
+  if (!url) return null;
+  return {
+    "@type": "ImageObject",
+    "@id": `${canonical}#image-${index + 1}`,
+    url,
+    contentUrl: url,
+    name: product.name,
+    caption: product.name,
+    ...(index === 0 ? { representativeOfPage: true } : {}),
+    creator: {
+      "@type": "Organization",
+      name: "Samrat Glass Emporium",
+      url: SITE_ORIGIN,
+    },
+    copyrightHolder: {
+      "@type": "Organization",
+      name: "Samrat Glass Emporium",
+      url: SITE_ORIGIN,
+    },
+    creditText: "Samrat Glass Emporium",
+    copyrightNotice: "© Samrat Glass Emporium. All rights reserved.",
+  };
+}
+
+function productSchema(product, canonical, images, description) {
   const price = Number(product.price);
   // Price on Request must never expose the stored internal price. A Product
   // snippet without a public offer or genuine reviews is not eligible, so do
@@ -100,7 +125,7 @@ function productSchema(product, canonical, image, description) {
     name: product.name,
     ...(product.sku ? { sku: product.sku } : {}),
     description,
-    image: [image],
+    image: images.map((url, index) => imageObject(url, product, canonical, index)).filter(Boolean),
     brand: { "@type": "Brand", name: "Samrat Glass Emporium" },
     ...(product.category ? { category: product.category } : {}),
     offers: {
@@ -125,8 +150,11 @@ function injectProduct(template, product, apiBase) {
   const title = `${product.name} · Samrat Glass Emporium`;
   const description = metaDescription(product);
   const shareImage = socialPreviewUrl((product.images || [])[0], apiBase);
-  const image = shareImage.url;
-  const schema = productSchema(product, canonical, image, description);
+  const originalImages = (product.images || [])
+    .map((value) => absoluteUrl(value, apiBase, ""))
+    .filter(Boolean);
+  const primaryOriginalImage = originalImages[0] || DEFAULT_SHARE_IMAGE;
+  const schema = productSchema(product, canonical, originalImages, description);
 
   let html = template
     .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
@@ -141,14 +169,14 @@ function injectProduct(template, product, apiBase) {
     `<meta property="og:description" content="${escapeHtml(description)}" />`,
     `<meta property="og:type" content="product" />`,
     `<meta property="og:url" content="${canonical}" />`,
-    `<meta property="og:image" content="${escapeHtml(image)}" />`,
-    `<meta property="og:image:secure_url" content="${escapeHtml(image)}" />`,
+    `<meta property="og:image" content="${escapeHtml(shareImage.url)}" />`,
+    `<meta property="og:image:secure_url" content="${escapeHtml(shareImage.url)}" />`,
     ...(shareImage.type ? [`<meta property="og:image:type" content="${shareImage.type}" />`] : []),
     `<meta property="og:image:alt" content="${escapeHtml(product.name)}" />`,
     `<meta name="twitter:card" content="summary_large_image" />`,
     `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
     `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
-    `<meta name="twitter:image" content="${escapeHtml(image)}" />`,
+    `<meta name="twitter:image" content="${escapeHtml(shareImage.url)}" />`,
     `<link rel="canonical" href="${canonical}" />`,
   ].join("\n");
 
@@ -157,7 +185,34 @@ function injectProduct(template, product, apiBase) {
     `${shareMetadata}${schema ? `\n<script type="application/ld+json" data-schema="prerender-product">${safeJson(schema)}</script>` : ""}\n</head>`,
   );
 
-  const body = `<main class="prerender-shell"><article><p class="prerender-eyebrow">${escapeHtml(product.category || "Handcrafted lighting")}</p><h1>${escapeHtml(product.name)}</h1><img src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}"/><p>${escapeHtml(description)}</p>${product.sku ? `<p>Reference Code: ${escapeHtml(product.sku)}</p>` : ""}</article></main>`;
+  const body = `<main class="prerender-shell"><article><p class="prerender-eyebrow">${escapeHtml(product.category || "Handcrafted lighting")}</p><h1>${escapeHtml(product.name)}</h1><img src="${escapeHtml(primaryOriginalImage)}" alt="${escapeHtml(product.name)}"/><p>${escapeHtml(description)}</p>${product.sku ? `<p>Reference Code: ${escapeHtml(product.sku)}</p>` : ""}</article></main>`;
+  return html.replace(/<div id="root">[\s\S]*?<\/div>/i, `<div id="root">${body}</div>`);
+}
+
+function legacyProductPath(product) {
+  const id = String(product?.id || "").trim();
+  if (!id || id.includes("/") || id.includes("?") || id.includes("#")) return "";
+  return `/product/${id}`;
+}
+
+function injectLegacyRedirect(template, product) {
+  const destination = productPath(product);
+  const canonical = `${SITE_ORIGIN}${destination}`;
+  const title = `${product.name} · Samrat Glass Emporium`;
+  const description = metaDescription(product);
+
+  let html = template
+    .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
+    .replace(
+      /<meta\s+name="description"[^>]*>/i,
+      `<meta name="description" content="${escapeHtml(description)}" />`,
+    );
+  html = removeShareMetadata(html);
+  html = html.replace(
+    /<\/head>/i,
+    `<link rel="canonical" href="${canonical}" />\n<meta http-equiv="refresh" content="0;url=${canonical}" />\n<script>window.location.replace(${safeJson(destination)});</script>\n</head>`,
+  );
+  const body = `<main class="prerender-shell"><article><h1>${escapeHtml(product.name)}</h1><p>This product has moved to its permanent address.</p><p><a href="${canonical}">View ${escapeHtml(product.name)}</a></p></article></main>`;
   return html.replace(/<div id="root">[\s\S]*?<\/div>/i, `<div id="root">${body}</div>`);
 }
 
@@ -193,6 +248,7 @@ async function runPrerenderProducts(options = {}) {
   const template = fs.readFileSync(templatePath, "utf8");
   const products = await fetchPublishedProducts(apiBase, fetcher);
   const writtenRoutes = new Set();
+  const redirects = [];
 
   for (const product of products) {
     const route = productPath(product);
@@ -201,10 +257,31 @@ async function runPrerenderProducts(options = {}) {
     const outDir = path.join(buildDir, route.replace(/^\//, ""));
     fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(path.join(outDir, "index.html"), injectProduct(template, product, apiBase), "utf8");
+
+    const legacyRoute = legacyProductPath(product);
+    if (legacyRoute && legacyRoute !== route) {
+      const legacyDir = path.join(buildDir, legacyRoute.replace(/^\//, ""));
+      fs.mkdirSync(legacyDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(legacyDir, "index.html"),
+        injectLegacyRedirect(template, product),
+        "utf8",
+      );
+      redirects.push(`${legacyRoute} ${route} 301`);
+    }
   }
 
-  logger.log(`[prerender-products] Done. ${products.length} product pages written.`);
-  return { count: products.length, routes: [...writtenRoutes] };
+  // Cloudflare Pages reads `_redirects` from the deployed build directory.
+  // The generated HTML at each legacy route remains a canonical/meta-refresh
+  // fallback for preview or alternate hosts that do not support this manifest.
+  fs.writeFileSync(
+    path.join(buildDir, "_redirects"),
+    `# Generated product permalink migrations — do not edit manually.\n${redirects.join("\n")}\n`,
+    "utf8",
+  );
+
+  logger.log(`[prerender-products] Done. ${products.length} product pages and ${redirects.length} legacy redirects written.`);
+  return { count: products.length, routes: [...writtenRoutes], redirectCount: redirects.length };
 }
 
 if (require.main === module) {
@@ -221,6 +298,9 @@ module.exports = {
   socialPreviewUrl,
   fetchPublishedProducts,
   injectProduct,
+  injectLegacyRedirect,
+  legacyProductPath,
+  imageObject,
   metaDescription,
   productSchema,
   runPrerenderProducts,
