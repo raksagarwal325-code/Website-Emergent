@@ -238,6 +238,37 @@ test("lets AI prepare each customised product from one instruction and an option
   expect(saved.design_references).toEqual([expect.objectContaining({ image: "/api/files/ai-shade.webp", applies_to: ["line-one"] })]);
 });
 
+test("AI names a blank custom product from its instruction", async () => {
+  mockApi.aiQuotationCustomisation.mockResolvedValue({ draft: {
+    summary: "A matching single-light wall light has been prepared.",
+    reference: { category: "other", title: "Written matching instruction", applies_to: ["line-two"], use_details: "Match Item 1 construction.", exclude_details: "" },
+    item_updates: [{
+      line_id: "line-two",
+      suggested_name: "Matching Single-Light Crystal Glass Wall Light",
+      body_basis: "match_item",
+      body_reference_line_id: "line-one",
+      matching_components: ["glass_arms", "crystal_bobeche", "crystal_drops", "metal_finish"],
+      customisation_notes: "Match Item 1 and use the specified shade design.",
+      approval_required: true,
+    }],
+    warnings: [],
+  } });
+  render(<InquiryQuotationBuilder inquiry={{ customer_name: "Client", items: [
+    { line_id: "line-one", name: "Six-Light Crystal Chandelier", price: 28000 },
+    { line_id: "line-two", name: "", price: 6500 },
+  ] }} />);
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
+  fireEvent.click(screen.getByLabelText("Customise product 2"));
+  fireEvent.change(screen.getByLabelText("Customisation instruction for product 2"), { target: { value: "Create a matching single wall light based on Item 1." } });
+  fireEvent.click(screen.getByRole("button", { name: "Prepare with AI" }));
+
+  await waitFor(() => expect(mockApi.aiQuotationCustomisation).toHaveBeenCalledWith(expect.objectContaining({
+    target_line_id: "line-two",
+    items: expect.arrayContaining([expect.objectContaining({ line_id: "line-two", name: "Custom product Item 2" })]),
+  })));
+  expect(await screen.findByLabelText("Product 2")).toHaveValue("Matching Single-Light Crystal Glass Wall Light");
+});
+
 test("opens quotation history from the sticky header and deletes a saved quotation", async () => {
   mockApi.listStandaloneQuotations.mockResolvedValue([savedQuote]);
   const confirm = jest.spyOn(window, "confirm").mockReturnValue(true);
