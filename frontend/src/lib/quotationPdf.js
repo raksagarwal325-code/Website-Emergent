@@ -240,18 +240,38 @@ export const quotationReferenceCodesForItem = (quote, item) => (quote.design_ref
 
 export const quotationDefaultTerms = (quote) => {
   const hasTax = Number(quote.tax_rate) > 0 && Number(quote.tax_amount) > 0;
-  const taxTerm = hasTax
-    ? `GST is charged separately at ${quoteMoney(quote.tax_rate)}% as shown above.`
-    : "No GST has been added to this quotation.";
+  const taxTerms = quote.tax_mode === "no_tax"
+    ? []
+    : [hasTax
+      ? `GST is charged separately at ${quoteMoney(quote.tax_rate)}% as shown above.`
+      : "No GST has been added to this quotation."];
+  const freightMode = quote.freight_mode || "legacy";
+  const freightTerm = freightMode === "included_in_price"
+    ? "Freight is included in the quoted product prices; no separate freight amount is payable."
+    : freightMode === "payable_by_client"
+      ? "Freight is payable separately by the client directly to the transporter and is not included in the quotation total."
+      : freightMode === "added_to_bill"
+        ? `Freight of INR ${quoteMoney(quote.shipping)} is added separately to this quotation and included in the taxable value for GST.`
+        : Number(quote.shipping) > 0
+          ? `Freight / other charges of INR ${quoteMoney(quote.shipping)} are included in the quotation total.`
+          : "Freight, if applicable, will be confirmed before order confirmation.";
   return [
-    taxTerm,
+    ...taxTerms,
     "Delivery timeline will be confirmed upon order confirmation.",
-    Number(quote.shipping) > 0
-      ? `Freight / other charges of INR ${quoteMoney(quote.shipping)} are included in the quotation total.`
-      : "Freight, if applicable, will be confirmed before order confirmation.",
+    freightTerm,
+    "Replacement for transit breakage is accepted only when a continuous unboxing video is provided within 48 hours of delivery.",
     "Goods once sold will not be taken back.",
     "Subject to Firozabad jurisdiction only.",
   ];
+};
+
+export const quotationTermsForPdf = (quote) => {
+  if (!quote.terms) return quotationDefaultTerms(quote);
+  const customTerms = quote.terms.split(/\n+/).map((term) => term.trim()).filter(Boolean);
+  const hasUnboxingRule = customTerms.some((term) => /unboxing\s+video/i.test(term));
+  return hasUnboxingRule
+    ? customTerms
+    : ["Replacement for transit breakage is accepted only when a continuous unboxing video is provided within 48 hours of delivery.", ...customTerms];
 };
 
 export const quotationSummaryRows = (quote) => {
@@ -260,8 +280,8 @@ export const quotationSummaryRows = (quote) => {
   const rows = [];
   if (discount > 0 || shipping > 0) rows.push({ label: "Products Subtotal", value: quote.subtotal });
   if (discount > 0) rows.push({ label: "Discount", value: -discount });
-  if (shipping > 0) rows.push({ label: "Freight / Other Charges", value: shipping });
-  rows.push({ label: "Taxable Amount", value: quote.subtotal - discount + shipping, bold: true });
+  if (shipping > 0) rows.push({ label: quote.freight_mode === "added_to_bill" ? "Freight (Taxable)" : "Freight / Other Charges", value: shipping });
+  rows.push({ label: quote.tax_mode === "no_tax" ? "Quotation Amount" : "Taxable Amount", value: quote.subtotal - discount + shipping, bold: true });
   if (Number(quote.tax_rate) > 0 && Number(quote.tax_amount) > 0) {
     rows.push({ label: `Taxes (${quoteMoney(quote.tax_rate)}%)`, value: quote.tax_amount });
   }
@@ -574,13 +594,13 @@ export const createQuotationPdf = async (quote, options = {}) => {
 
   setText(6.4, "bold", MAROON);
   doc.text("TERMS & CONDITIONS", termsX, footerTop + 6);
-  const terms = quote.terms ? quote.terms.split(/\n+/).filter(Boolean) : quotationDefaultTerms(quote);
-  setText(5.15, "normal", INK);
+  const terms = quotationTermsForPdf(quote);
+  setText(4.7, "normal", INK);
   let termsY = footerTop + 11.5;
-  terms.slice(0, 5).forEach((term) => {
+  terms.slice(0, 6).forEach((term) => {
     const lines = doc.splitTextToSize(`- ${term}`, termsWidth - 8);
     doc.text(lines, termsX, termsY, { lineHeightFactor: 1.02 });
-    termsY += lines.length * 2.5 + 1.2;
+    termsY += lines.length * 2.2 + 1;
   });
 
   const signCenter = signX + signWidth / 2;
