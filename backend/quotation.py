@@ -20,6 +20,35 @@ def quotation_text(value) -> str:
     })).strip()
 
 
+def normalise_quotation_product_name(value: str) -> str:
+    """Keep AI-written variant names in one predictable customer-facing order."""
+    name = quotation_text(value)
+    if not name:
+        return ""
+    name = re.sub(r"\b(\d+)\s*[- ]?\s*(?:step|tier|layer)s?\b", r"\1-Step", name, flags=re.IGNORECASE)
+    measurement = r"(\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)"
+    diameter_match = re.search(
+        rf"(?:approx(?:imately)?\.?\s*)?{measurement}\s*(?:ft|feet|foot)\s*(?:dia(?:meter)?\.?)",
+        name,
+        flags=re.IGNORECASE,
+    )
+    height_match = re.search(
+        rf"(?:approx(?:imately)?\.?\s*)?{measurement}\s*(?:ft|feet|foot)\s*(?:h(?:eight)?\.?)",
+        name,
+        flags=re.IGNORECASE,
+    )
+    if not diameter_match or not height_match:
+        return name
+    diameter = re.sub(r"\s+", "", diameter_match.group(1))
+    height = re.sub(r"\s+", "", height_match.group(1))
+    for match in sorted((diameter_match, height_match), key=lambda item: item.start(), reverse=True):
+        name = f"{name[:match.start()]} {name[match.end():]}"
+    name = re.sub(r"\s*[,xX]\s*(?=-|$)", " ", name)
+    name = re.sub(r"(?:\s*-\s*){2,}", " - ", name)
+    name = re.sub(r"\s{2,}", " ", name).strip(" ,-xX")
+    return f"{name} - Approx. {diameter} ft Dia x {height} ft H"
+
+
 class QuotationItemInput(BaseModel):
     line_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     image: Optional[str] = Field(default=None, max_length=2000)
@@ -205,7 +234,7 @@ class QuotationAIDraft(BaseModel):
         self.warnings = [customer_text(warning) for warning in self.warnings]
         target = next(item for item in request.items if item.line_id == request.target_line_id)
         for item in self.item_updates:
-            item.suggested_name = customer_text(item.suggested_name)
+            item.suggested_name = normalise_quotation_product_name(customer_text(item.suggested_name))
             item.customisation_notes = customer_text(item.customisation_notes)
             if target.quantity > 1 and re.search(r"\bproduce one\b", item.customisation_notes, flags=re.IGNORECASE):
                 item.customisation_notes = re.sub(

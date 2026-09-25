@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from quotation import QuotationAIAssistRequest, QuotationAIDraft, QuotationCreate, build_quotation, format_quotation_number
+from quotation import QuotationAIAssistRequest, QuotationAIDraft, QuotationCreate, build_quotation, format_quotation_number, normalise_quotation_product_name
 
 
 def payload(**overrides):
@@ -161,6 +161,24 @@ def test_ai_customisation_normalises_non_breaking_hyphens_for_pdf_output():
     assert draft.summary == "Six-Light chandelier"
     assert draft.reference.title == "Star-Etched shade"
     assert draft.item_updates[0].suggested_name == "Six-Light Chandelier"
+
+
+@pytest.mark.parametrize(("name", "expected"), [
+    (
+        "Crystal Basket Chandelier with Glass Shades - Gold Finish - 3 ft Dia, approx 3-3.5 ft Height",
+        "Crystal Basket Chandelier with Glass Shades - Gold Finish - Approx. 3 ft Dia x 3-3.5 ft H",
+    ),
+    (
+        "Crystal Basket Chandelier with Glass Shades - 1 Step - Gold Finish - Approx. 3 ft Dia x 2-2.5 ft H",
+        "Crystal Basket Chandelier with Glass Shades - 1-Step - Gold Finish - Approx. 3 ft Dia x 2-2.5 ft H",
+    ),
+    (
+        "Crystal Basket Chandelier - 3.5 ft Height x 4 ft Diameter - 2 Layer - Antique Finish",
+        "Crystal Basket Chandelier - 2-Step - Antique Finish - Approx. 4 ft Dia x 3.5 ft H",
+    ),
+])
+def test_ai_customisation_uses_consistent_layer_and_dimension_name_order(name, expected):
+    assert normalise_quotation_product_name(name) == expected
 
 
 def test_discount_cannot_exceed_product_subtotal():
