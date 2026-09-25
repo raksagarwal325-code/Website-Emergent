@@ -54,7 +54,7 @@ const familyName = (name) => clean(name)
 const variantFamilyKey = (item) => {
   const name = familyName(item?.name);
   const source = `${item?.name || ""} ${item?.customisation_notes || ""} ${item?.customisation_instruction || ""}`;
-  if (!stepCount(source) || !firstValue(source, diameterPatterns) || !firstValue(source, heightPatterns)) return "";
+  if (!firstValue(source, diameterPatterns) || !firstValue(source, heightPatterns) || !finishName(source)) return "";
   const base = name.split(/\s+with\s+/i)[0]
     .replace(/[^a-z0-9]+/gi, " ")
     .trim()
@@ -77,6 +77,40 @@ const preferredFamilyName = (items) => {
   return [...(descriptive.length ? descriptive : candidates)].sort((left, right) => left.length - right.length)[0] || "";
 };
 
+const upperMeasurement = (value) => {
+  const parts = String(value || "").split("-").map(Number).filter(Number.isFinite);
+  return parts.length ? Math.max(...parts) : 0;
+};
+
+const inferredSteps = (members) => {
+  const facts = members.map((item) => {
+    const source = `${item.name} ${item.customisation_notes || ""} ${item.customisation_instruction || ""}`;
+    return {
+      item,
+      step: stepCount(source),
+      height: firstValue(source, heightPatterns),
+    };
+  });
+  const heights = [...new Set(facts.map(({ height }) => upperMeasurement(height)).filter(Boolean))].sort((a, b) => a - b);
+  const anchors = facts.filter(({ step, height }) => step && upperMeasurement(height));
+  const result = new Map();
+  facts.forEach((fact) => {
+    if (fact.step) {
+      result.set(fact.item, fact.step);
+      return;
+    }
+    const heightIndex = heights.indexOf(upperMeasurement(fact.height));
+    if (heightIndex < 0 || !anchors.length) return;
+    const predictions = anchors.map((anchor) => (
+      anchor.step + heightIndex - heights.indexOf(upperMeasurement(anchor.height))
+    ));
+    if (predictions.every((prediction) => prediction === predictions[0]) && predictions[0] > 0 && predictions[0] < 10) {
+      result.set(fact.item, predictions[0]);
+    }
+  });
+  return result;
+};
+
 export const harmoniseCustomVariantNames = (items = []) => {
   const groups = new Map();
   items.forEach((item) => {
@@ -84,16 +118,17 @@ export const harmoniseCustomVariantNames = (items = []) => {
     if (!key) return;
     groups.set(key, [...(groups.get(key) || []), item]);
   });
-  const canonicalByKey = new Map(
-    [...groups.entries()]
-      .filter(([, members]) => members.length > 1)
-      .map(([key, members]) => [key, preferredFamilyName(members)]),
-  );
+  const relatedGroups = [...groups.entries()].filter(([, members]) => members.length > 1);
+  const canonicalByKey = new Map(relatedGroups.map(([key, members]) => [key, preferredFamilyName(members)]));
+  const stepsByItem = new Map();
+  relatedGroups.forEach(([, members]) => {
+    inferredSteps(members).forEach((step, item) => stepsByItem.set(item, step));
+  });
   return items.map((item) => {
     const canonicalFamily = canonicalByKey.get(groupKey(item));
     if (!canonicalFamily) return item;
     const source = `${item.name} ${item.customisation_notes || ""} ${item.customisation_instruction || ""}`;
-    const step = stepCount(source);
+    const step = stepsByItem.get(item) || stepCount(source);
     const diameter = firstValue(source, diameterPatterns);
     const height = firstValue(source, heightPatterns);
     const finish = finishName(source);
