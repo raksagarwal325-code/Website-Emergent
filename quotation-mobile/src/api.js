@@ -15,6 +15,7 @@ export const api = {
   deleteQuotation: (id) => data(client.delete(`/admin/quotations/${encodeURIComponent(id)}`)),
   createStandaloneQuotation: (body) => data(client.post("/admin/quotations", body)),
   createInquiryQuotation: (id, body) => data(client.post(`/admin/inquiries/${encodeURIComponent(id)}/quotations`, body)),
+  aiQuotationCustomisation: (body) => data(client.post("/ai/quotation-customisation", body)),
   upload: (file) => {
     if (file.size > 4 * 1024 * 1024) return Promise.reject(new Error("Choose an image under 4 MB for the mobile quotation app."));
     const form = new FormData(); form.append("file", file);

@@ -16,7 +16,7 @@ def payload(**overrides):
         "shipping_address": "Same as billing address",
         "customer_gstin": "09ADCFS9258D1ZS",
         "items": [
-            {"product_id": "wall", "name": "Wall Lantern", "sku": "SGE-WL-089", "quantity": 1, "unit_price": 6000},
+            {"product_id": "wall", "name": "Wall Lantern", "name_user_edited": True, "sku": "SGE-WL-089", "quantity": 1, "unit_price": 6000},
             {"product_id": "candle", "name": "Candle Stand", "sku": "SGE-CS-013", "quantity": 2, "unit_price": 1700},
         ],
         "discount": 400,
@@ -52,6 +52,7 @@ def test_build_quotation_recomputes_every_amount_server_side():
     assert result["valid_until"] == "2026-10-01"
     assert result["items"][1]["line_total"] == 3400
     assert result["items"][0]["image"] == "https://cdn.example/wall.webp"
+    assert result["items"][0]["name_user_edited"] is True
     assert result["items"][1]["image"] is None
     assert result["created_by"] == "owner@samratglass.com"
     assert result["billing_address"] == "Raniwala Market, Firozabad"
@@ -84,6 +85,21 @@ def test_ai_customisation_draft_accepts_known_items_and_valid_match():
     }).validate_for(request)
     assert draft.reference.applies_to == ["wall"]
     assert draft.item_updates[0].body_reference_line_id == "chandelier"
+    assert draft.item_updates[0].customisation_notes.endswith(
+        "Match Item 1 using clear glass arm construction."
+    )
+
+
+def test_quotation_rejects_zero_price_and_unresolved_ai_warnings():
+    with pytest.raises(ValidationError, match="price greater than zero"):
+        payload(items=[{"name": "Unpriced side table", "quantity": 1, "unit_price": 0}])
+
+    with pytest.raises(ValidationError, match="Resolve the AI specification questions"):
+        payload(items=[{
+            "name": "Fabric Shade Wall Light", "quantity": 1, "unit_price": 2000,
+            "is_custom": True,
+            "customisation_ai_warnings": ["Confirm the fabric shade dimensions."],
+        }])
 
 
 def test_ai_customisation_removes_internal_ids_and_respects_multi_unit_quantity():
@@ -250,6 +266,7 @@ def test_custom_product_references_survive_as_structured_snapshot():
                 "customisation_instruction": "Keep the body and change the shades.",
                 "customisation_reference_image": "/api/files/shade-reference.webp",
                 "customisation_ai_summary": "Shade change prepared.",
+                "customisation_ai_warnings": [],
                 "customisation_ai_prepared": True,
                 },
             {
@@ -277,6 +294,7 @@ def test_custom_product_references_survive_as_structured_snapshot():
     assert result["items"][1]["approval_required"] is True
     assert result["items"][0]["customisation_instruction"] == "Keep the body and change the shades."
     assert result["items"][0]["customisation_ai_prepared"] is True
+    assert result["items"][0]["customisation_ai_warnings"] == []
     assert result["design_references"][0]["code"] == "SD-01"
     assert result["design_references"][0]["applies_to"] == ["chandelier", "wall-light"]
 

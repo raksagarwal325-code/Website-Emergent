@@ -1,11 +1,11 @@
 // Same-origin, narrowly scoped gateway to the existing quotation API. Never
 // expose the backend's bearer token or make this a general-purpose proxy.
 const ORIGIN = "https://samratglass.com";
-const endpoint = /^\/(?:auth\/(?:me|session|logout)|admin\/(?:quotations(?:\/[a-zA-Z0-9_-]+)?|inquiries\/[a-zA-Z0-9_-]+\/quotations|products\/export)|upload|files\/[a-zA-Z0-9_./-]+)$/;
+const endpoint = /^\/(?:auth\/(?:me|session|logout)|admin\/(?:quotations(?:\/[a-zA-Z0-9_-]+)?|inquiries\/[a-zA-Z0-9_-]+\/quotations|products\/export)|ai\/quotation-customisation|upload|files\/[a-zA-Z0-9_./-]+)$/;
 const allowed = (path, method) => {
   if (!endpoint.test(path) || path.includes("..") || path.includes("/originals/")) return false;
   if (path === "/auth/me" || path === "/admin/products/export" || path.startsWith("/files/")) return method === "GET";
-  if (path === "/auth/session" || path === "/auth/logout" || path === "/upload") return method === "POST";
+  if (path === "/auth/session" || path === "/auth/logout" || path === "/ai/quotation-customisation" || path === "/upload") return method === "POST";
   if (/^\/admin\/inquiries\/[a-zA-Z0-9_-]+\/quotations$/.test(path)) return ["GET", "POST"].includes(method);
   if (path === "/admin/quotations") return ["GET", "POST"].includes(method);
   if (/^\/admin\/quotations\/[a-zA-Z0-9_-]+$/.test(path)) return ["PUT", "DELETE"].includes(method);

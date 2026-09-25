@@ -17,6 +17,29 @@ test("requires both same origin and CSRF header on writes", async () => {
   assert.equal((await gateway(request("/admin/quotations", "POST", { origin }))).status, 403);
 });
 
+test("allows only POST for the quotation AI endpoint", async t => {
+  assert.equal((await gateway(request("/ai/quotation-customisation"))).status, 404);
+
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async (url, init) => {
+    assert.equal(url, "https://samratglass.com/api/ai/quotation-customisation");
+    assert.equal(init.method, "POST");
+    return new Response(JSON.stringify({ item_name: "Prepared item" }), {
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const result = await gateway(request(
+    "/ai/quotation-customisation",
+    "POST",
+    { origin, "x-requested-with": "fetch", "content-type": "application/json" },
+    "{}",
+  ));
+  assert.equal(result.status, 200);
+  assert.deepEqual(await result.json(), { item_name: "Prepared item" });
+});
+
 test("forwards only session cookie and rewrites set-cookie to this host", async t => {
   const original = globalThis.fetch;
   t.after(() => { globalThis.fetch = original; });

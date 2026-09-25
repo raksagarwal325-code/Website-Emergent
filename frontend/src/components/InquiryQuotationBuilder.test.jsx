@@ -25,7 +25,7 @@ const mockPdfDocument = () => ({
 });
 
 jest.mock("../lib/api", () => ({ api: mockApi }));
-jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn(), warning: jest.fn() } }));
 jest.mock("jspdf", () => ({
   __esModule: true,
   default: jest.fn(),
@@ -145,6 +145,32 @@ test("adds a catalogue SKU to a standalone quote", async () => {
   expect(screen.getByLabelText("Unit price 1")).toHaveValue(900);
 });
 
+test("adds another catalogue or custom item from the bottom product control", async () => {
+  mockApi.adminProductsExport.mockResolvedValue([{ id: "shade", sku: "SGE-HL-001", name: "Glass shade", price: 900 }]);
+  render(<InquiryQuotationBuilder inquiry={inquiry} />);
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
+
+  fireEvent.change(screen.getByLabelText("Search catalogue to add another product"), { target: { value: "SGE-HL-001" } });
+  fireEvent.click(await screen.findByRole("button", { name: "SGE-HL-001 · Glass shade" }));
+  expect(screen.getByLabelText("Product 2")).toHaveValue("Glass shade");
+
+  fireEvent.click(screen.getByRole("button", { name: "+ Add another custom item" }));
+  expect(screen.getByLabelText("Product 3")).toHaveValue("");
+});
+
+test("blocks zero-price lines before saving", async () => {
+  const { toast } = require("sonner");
+  render(<InquiryQuotationBuilder />);
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
+  fireEvent.change(screen.getByLabelText("Customer name"), { target: { value: "Client" } });
+  fireEvent.click(screen.getByText("+ Add custom item"));
+  fireEvent.change(screen.getByLabelText("Product 1"), { target: { value: "Side table" } });
+  fireEvent.click(screen.getByTestId("quotation-save"));
+
+  expect(toast.error).toHaveBeenCalledWith("Enter a price greater than ₹0 for Item 1: Side table");
+  expect(mockApi.createStandaloneQuotation).not.toHaveBeenCalled();
+});
+
 
 test("validation errors show readable text and preserve the form after refresh", async () => {
   const { toast } = require("sonner");
@@ -187,6 +213,7 @@ test("uploads a custom item image and saves it in the quotation", async () => {
   fireEvent.change(screen.getByLabelText("Customer name"), { target: { value: "Customer" } });
   fireEvent.click(screen.getByText("+ Add custom item"));
   fireEvent.change(screen.getByLabelText("Product 1"), { target: { value: "Custom chandelier" } });
+  fireEvent.change(screen.getByLabelText("Unit price 1"), { target: { value: "1000" } });
   fireEvent.change(screen.getByLabelText("Image for product 1"), { target: { files: [new File(["image"], "custom.webp", { type: "image/webp" })] } });
   await screen.findByAltText("Custom chandelier");
   fireEvent.click(screen.getByTestId("quotation-save"));
@@ -246,7 +273,13 @@ test("lets AI prepare each customised product from one instruction and an option
   await screen.findByAltText("Customisation reference for product 1");
   fireEvent.change(screen.getByLabelText("Customisation instruction for product 1"), { target: { value: "Keep this chandelier body and use the reference shade on every light." } });
   fireEvent.click(screen.getByRole("button", { name: "Prepare with AI" }));
-  expect(await screen.findByText("Chandelier body retained with the requested star-cut shades.")).toBeInTheDocument();
+  expect(await screen.findByText("AI draft ready - review and edit before saving")).toBeInTheDocument();
+  expect(screen.getByLabelText("AI summary for product 1")).toHaveValue("Chandelier body retained with the requested star-cut shades.");
+  fireEvent.change(screen.getByLabelText("Product 1"), { target: { value: "Owner-approved Shahi chandelier" } });
+  fireEvent.change(screen.getByLabelText("Detailed customisation wording for product 1"), { target: { value: "Use the confirmed shade pattern and retain the remaining base design." } });
+  fireEvent.change(screen.getByLabelText("Reference title for product 1"), { target: { value: "Owner-approved frosted star-cut shade" } });
+  fireEvent.change(screen.getByLabelText("Use from reference for product 1"), { target: { value: "Use only the confirmed frosted star-cut shade pattern." } });
+  fireEvent.change(screen.getByLabelText("Exclude from reference for product 1"), { target: { value: "Do not copy the reference body, plate or metalwork." } });
   expect(mockApi.aiQuotationCustomisation).toHaveBeenCalledWith(expect.objectContaining({
     product_image_url: "/api/files/chandelier.webp",
     reference_image_url: "/api/files/ai-shade.webp",
@@ -257,19 +290,30 @@ test("lets AI prepare each customised product from one instruction and an option
   fireEvent.click(screen.getByLabelText("Customise product 2"));
   fireEvent.change(screen.getByLabelText("Customisation instruction for product 2"), { target: { value: "Make this wall light match Item 1 with glass arms, bobeches, drops and finish." } });
   fireEvent.click(screen.getAllByRole("button", { name: "Prepare with AI" })[0]);
-  expect(await screen.findByText("Wall light construction matched to Item 1.")).toBeInTheDocument();
+  expect(await screen.findByLabelText("AI summary for product 2")).toHaveValue("Wall light construction matched to Item 1.");
   expect(mockApi.aiQuotationCustomisation).toHaveBeenLastCalledWith(expect.objectContaining({
     product_image_url: "/api/files/wall.webp",
     reference_image_url: null,
     target_line_id: "line-two",
   }));
 
-  expect(screen.getByLabelText("Product 1")).toHaveValue("Six-Light Chandelier with Custom Star-Cut Shades");
+  expect(screen.getByLabelText("Product 1")).toHaveValue("Owner-approved Shahi chandelier");
   fireEvent.click(screen.getByTestId("quotation-save"));
   await waitFor(() => expect(mockApi.createStandaloneQuotation).toHaveBeenCalledTimes(1));
   const saved = mockApi.createStandaloneQuotation.mock.calls[0][0];
+  expect(saved.items[0]).toEqual(expect.objectContaining({
+    name: "Owner-approved Shahi chandelier",
+    name_user_edited: true,
+    customisation_notes: "Use the confirmed shade pattern and retain the remaining base design.",
+  }));
   expect(saved.items[1]).toEqual(expect.objectContaining({ body_basis: "match_item", body_reference_line_id: "line-one", customisation_ai_prepared: true }));
-  expect(saved.design_references).toEqual([expect.objectContaining({ image: "/api/files/ai-shade.webp", applies_to: ["line-one"] })]);
+  expect(saved.design_references).toEqual([expect.objectContaining({
+    image: "/api/files/ai-shade.webp",
+    applies_to: ["line-one"],
+    title: "Owner-approved frosted star-cut shade",
+    use_details: "Use only the confirmed frosted star-cut shade pattern.",
+    exclude_details: "Do not copy the reference body, plate or metalwork.",
+  })]);
 });
 
 test("AI names a blank custom product from its instruction", async () => {
@@ -301,6 +345,27 @@ test("AI names a blank custom product from its instruction", async () => {
     items: expect.arrayContaining([expect.objectContaining({ line_id: "line-two", name: "Custom product Item 2", quantity: 1 })]),
   })));
   expect(await screen.findByLabelText("Product 2")).toHaveValue("Matching Single-Light Crystal Glass Wall Light");
+});
+
+test("shows AI specification questions and blocks saving until they are resolved", async () => {
+  const { toast } = require("sonner");
+  mockApi.aiQuotationCustomisation.mockResolvedValue({ draft: {
+    summary: "The fabric-shade change is understood, but production details are incomplete.",
+    reference: { category: "other", title: "Written customisation", applies_to: ["line-one"], use_details: "Replace the glass shade with fabric.", exclude_details: "" },
+    item_updates: [{ line_id: "line-one", suggested_name: "Single Wall Light with Fabric Shade", body_basis: "product", body_reference_line_id: null, matching_components: [], customisation_notes: "Retain the body and replace the glass shade with a fabric shade.", approval_required: false }],
+    warnings: ["Confirm the fabric shade shape, colour, material, dimensions and fitting method."],
+  } });
+  render(<InquiryQuotationBuilder inquiry={{ customer_name: "Client", items: [{ line_id: "line-one", name: "Wall Light", price: 2000 }] }} />);
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
+  fireEvent.click(screen.getByLabelText("Customise product 1"));
+  fireEvent.change(screen.getByLabelText("Customisation instruction for product 1"), { target: { value: "Replace the glass shade with a fabric shade." } });
+  fireEvent.click(screen.getByRole("button", { name: "Prepare with AI" }));
+
+  expect(await screen.findByText("More information required")).toBeInTheDocument();
+  expect(screen.getByText(/Confirm the fabric shade shape/)).toBeInTheDocument();
+  fireEvent.click(screen.getByTestId("quotation-save"));
+  expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Item 1 needs more information"));
+  expect(mockApi.createStandaloneQuotation).not.toHaveBeenCalled();
 });
 
 test("opens quotation history from the sticky header and deletes a saved quotation", async () => {

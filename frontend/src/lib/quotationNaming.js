@@ -125,6 +125,7 @@ export const harmoniseCustomVariantNames = (items = []) => {
     inferredSteps(members).forEach((step, item) => stepsByItem.set(item, step));
   });
   return items.map((item) => {
+    if (item.name_user_edited) return item;
     const canonicalFamily = canonicalByKey.get(groupKey(item));
     if (!canonicalFamily) return item;
     const source = `${item.name} ${item.customisation_notes || ""} ${item.customisation_instruction || ""}`;
