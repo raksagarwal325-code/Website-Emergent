@@ -52,6 +52,7 @@ test("describes the actual GST treatment in default terms", () => {
 test("normalises PDF-incompatible dash characters without joining words", () => {
   expect(quotationPdfText("Six\u2011Light Star\u2011Etched globe\u2011to\u2011teardrop"))
     .toBe("Six-Light Star-Etched globe-to-teardrop");
+  expect(quotationPdfText("Firozabad -283203")).toBe("Firozabad - 283203");
 });
 
 test("replaces internal line IDs with customer-facing item numbers", () => {
@@ -118,6 +119,30 @@ test("renders written custom specifications without requiring a reference image"
   const output = Buffer.from(doc.output("arraybuffer"));
   expect(output.length).toBeGreaterThan(20000);
   if (process.env.QUOTATION_CUSTOM_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_CUSTOM_PDF_OUTPUT, output);
+});
+
+test("balances a dense eight-item customisation schedule across two readable pages", async () => {
+  const denseItems = Array.from({ length: 8 }, (_, index) => ({
+    line_id: `custom-${index + 1}`,
+    name: `Custom Product ${index + 1} with Confirmed Construction and Finish`,
+    quantity: 1,
+    unit_price: 10000,
+    line_total: 10000,
+    is_custom: true,
+    customisation_notes: `Produce one unit of Item ${index + 1}. Retain the confirmed body construction, decorative details and finish shown in the selected product image. Apply only the explicitly requested custom change for this item.`,
+  }));
+  const { doc } = await createQuotationPdf({
+    quote_number: "SGE-2026-DENSE", created_at: "2026-09-25T10:10:00+05:30",
+    customer_name: "Sample Client", customer_phone: "+919999999999",
+    billing_address: "Firozabad -283203", shipping_address: "Same as Billing Address",
+    items: denseItems, design_references: [], subtotal: 80000, discount: 0, shipping: 0,
+    tax_rate: 18, tax_amount: 14400, total: 94400, valid_until: "2026-10-10", terms: "", notes: "",
+  }, { signatureDataUrl: null, stampDataUrl: null });
+
+  expect(doc.getNumberOfPages()).toBe(3);
+  const output = Buffer.from(doc.output("arraybuffer"));
+  expect(output.length).toBeGreaterThan(10000);
+  if (process.env.QUOTATION_DENSE_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_DENSE_PDF_OUTPUT, output);
 });
 
 test("merges repeated copies of the same design-reference image", () => {

@@ -140,7 +140,8 @@ const imageFormat = (dataUrl) => {
 const dateText = (value) => new Date(value).toLocaleDateString("en-IN");
 export const quotationPdfText = (value) => String(value || "")
   .replace(/[\u2010-\u2015\u2212\u00ad]/g, "-")
-  .replace(/\u00a0/g, " ");
+  .replace(/\u00a0/g, " ")
+  .replace(/\s*-\s*(\d{6})\b/g, " - $1");
 const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export const clientFacingQuotationText = (quote, value) => {
   let text = quotationPdfText(value);
@@ -432,10 +433,10 @@ export const createQuotationPdf = async (quote, options = {}) => {
   drawTableHeader();
 
   quote.items.forEach((item, index) => {
-    const nameLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 68).slice(0, 3);
+    const nameLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 82).slice(0, 3);
     const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
     const customParts = quotationItemCustomParts(quote, item, designReferences);
-    const customLines = customParts.length ? doc.splitTextToSize(customParts.join(" | "), 68) : [];
+    const customLines = customParts.length ? doc.splitTextToSize(customParts.join(" | "), 82) : [];
     const rowHeight = Math.max(13.5, nameLines.length * 3.1 + (item.sku ? 4 : 1) + customLines.length * 3.35 + 3);
     if (y + rowHeight > 225) startContinuationPage();
     setText(6.8, "normal", MUTED);
@@ -568,12 +569,14 @@ export const createQuotationPdf = async (quote, options = {}) => {
       doc.text("Qty", pageWidth - inner - 6, 55.7, { align: "right" });
     };
     const startCustomisationSchedulePage = (continued = false) => {
+      if (continued) pageFooter();
       doc.addPage();
       drawCustomisationScheduleHeader(continued);
       return 58.5;
     };
 
     let scheduleY = startCustomisationSchedulePage(false);
+    let scheduleItemsOnPage = 0;
     customItems.forEach(({ item, itemIndex }) => {
       const nameLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 145);
       const specificationLines = doc.splitTextToSize(quotationCustomisationScheduleText(quote, item), 145);
@@ -581,29 +584,35 @@ export const createQuotationPdf = async (quote, options = {}) => {
       const referenceLines = referenceCodes.length
         ? doc.splitTextToSize(`Design reference: ${referenceCodes.join(", ")}`, 145)
         : [];
-      const rowHeight = Math.max(20, 7 + nameLines.length * 3.3 + specificationLines.length * 3.15 + referenceLines.length * 3 + 4);
-      if (scheduleY + rowHeight > 247) scheduleY = startCustomisationSchedulePage(true);
+      const rowHeight = Math.max(22, 7 + nameLines.length * 3.5 + specificationLines.length * 3.45 + referenceLines.length * 3.2 + 4);
+      if (scheduleItemsOnPage >= 4 || scheduleY + rowHeight > 247) {
+        scheduleY = startCustomisationSchedulePage(true);
+        scheduleItemsOnPage = 0;
+      }
       fillRect(inner, scheduleY, usable, rowHeight, (itemIndex % 2 === 0) ? [248, 243, 235] : IVORY);
       setText(7, "bold", MAROON);
       doc.text(String(itemIndex + 1), inner + 6, scheduleY + 7);
-      setText(7.2, "bold", INK, "times");
+      setText(7.6, "bold", INK, "times");
       doc.text(nameLines, inner + 22, scheduleY + 6, { lineHeightFactor: 1.03 });
-      setText(6.2, "normal", INK);
-      const specificationY = scheduleY + 7 + nameLines.length * 3.3;
+      setText(6.8, "normal", INK);
+      const specificationY = scheduleY + 7 + nameLines.length * 3.5;
       doc.text(specificationLines, inner + 22, specificationY, { lineHeightFactor: 1.08 });
       if (referenceLines.length) {
-        setText(5.8, "bold", MAROON);
-        doc.text(referenceLines, inner + 22, specificationY + specificationLines.length * 3.15 + 1.5, { lineHeightFactor: 1.05 });
+        setText(6.2, "bold", MAROON);
+        doc.text(referenceLines, inner + 22, specificationY + specificationLines.length * 3.45 + 1.5, { lineHeightFactor: 1.05 });
       }
       setText(7, "normal", INK);
       doc.text(String(item.quantity), pageWidth - inner - 6, scheduleY + 7, { align: "right" });
       scheduleY += rowHeight;
+      scheduleItemsOnPage += 1;
       line(inner, scheduleY, inner + usable, scheduleY, LINE, 0.15);
     });
 
     const noteLines = doc.splitTextToSize(CUSTOM_PRODUCT_NOTE, usable - 10);
     const noteHeight = 12 + noteLines.length * 3;
-    if (scheduleY + noteHeight + 7 > 270) scheduleY = startCustomisationSchedulePage(true);
+    if (scheduleY + noteHeight + 7 > 270) {
+      scheduleY = startCustomisationSchedulePage(true);
+    }
     scheduleY += 7;
     fillRect(inner, scheduleY, usable, noteHeight, CREAM, 1.2);
     setText(6.3, "bold", MAROON);
