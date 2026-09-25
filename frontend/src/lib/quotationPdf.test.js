@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { clientFacingItemCustomisationText, clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationDefaultTerms, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
+import { CUSTOM_PRODUCT_NOTE, clientFacingItemCustomisationText, clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationDefaultTerms, quotationItemCustomParts, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
 
 const items = [
   ["Noorjharokha Chain-Suspended Diamond-Cut Glass Wall Lantern", "SGE-WL-089", 1, 6000],
@@ -65,6 +65,56 @@ test("repairs an older multi-unit customisation that says produce one", () => {
   const item = { line_id: "line-wall", quantity: 2, customisation_notes: "Produce one wall light to match line-chandelier." };
   expect(clientFacingItemCustomisationText(quote, item))
     .toBe("Quantity: 2 identical units. Produce a wall light to match Item 1.");
+});
+
+test("prints AI-prepared specifications when a custom item has no separate reference image", () => {
+  const quote = { items: [{ line_id: "basket", quantity: 2 }] };
+  const item = {
+    line_id: "basket", quantity: 2, is_custom: true, body_basis: "drawing_pending",
+    customisation_notes: "Quantity: 2 identical units. Each approximately 3 ft diameter x 2-2.5 ft high with single-step construction.",
+  };
+  expect(quotationItemCustomParts(quote, item, [])).toEqual([
+    "Quantity: 2 identical units. Each approximately 3 ft diameter x 2-2.5 ft high with single-step construction.",
+  ]);
+  expect(quotationItemCustomParts(quote, { ...item, customisation_notes: "" }, [])).toEqual([]);
+  expect(CUSTOM_PRODUCT_NOTE).toContain("Finished product photographs will be shared after completion and before dispatch.");
+  expect(CUSTOM_PRODUCT_NOTE).not.toMatch(/approval.*before production|drawing pending/i);
+});
+
+test("renders written custom specifications without requiring a reference image", async () => {
+  const logo = fs.readFileSync(path.join(process.cwd(), "public/logo.jpeg")).toString("base64");
+  const customItems = [
+    {
+      line_id: "line-a7f1", name: "Crystal Basket Chandelier - Approx. 6 ft Diameter x 8 ft Height",
+      quantity: 1, unit_price: 250000, line_total: 250000, image: "/api/files/large.webp",
+    },
+    {
+      line_id: "line-b8e2", name: "Crystal Basket Chandelier - Two-Step, Approx. 3 ft Diameter x 3-3.5 ft Height",
+      quantity: 1, unit_price: 54000, line_total: 54000, image: "/api/files/two-step.webp", is_custom: true,
+      customisation_notes: "Custom size: approximately 3 ft diameter x 3-3.5 ft overall height. Retain the two-step basket profile, crystal arrangement, finish and overall design character shown in the product image.",
+    },
+    {
+      line_id: "line-c9d3", name: "Single-Step Crystal Basket Chandelier - Approx. 3 ft Diameter x 2-2.5 ft Height",
+      quantity: 2, unit_price: 42000, line_total: 84000, image: "/api/files/single-step.webp", is_custom: true,
+      customisation_notes: "Quantity: 2 identical units. Each approximately 3 ft diameter x 2-2.5 ft overall height with single-step construction. Retain the basket profile, crystal arrangement, finish and overall design character shown in the product image.",
+    },
+  ];
+  const { doc } = await createQuotationPdf({
+    quote_number: "SGE-2026-TEST", created_at: "2026-09-25T10:10:00+05:30",
+    customer_name: "Sample Client", customer_phone: "+919999999999",
+    billing_address: "Kamptee, Maharashtra", shipping_address: "Same as Billing Address",
+    items: customItems, design_references: [], subtotal: 388000, discount: 0, shipping: 0,
+    tax_rate: 18, tax_amount: 69840, total: 457840, valid_until: "2026-10-10", terms: "", notes: "",
+  }, {
+    logoDataUrl: `data:image/jpeg;base64,${logo}`,
+    productImageDataUrls: Object.fromEntries(customItems.map((item) => [item.image, `data:image/jpeg;base64,${logo}`])),
+    signatureDataUrl: null,
+    stampDataUrl: null,
+  });
+  expect(doc.getNumberOfPages()).toBe(1);
+  const output = Buffer.from(doc.output("arraybuffer"));
+  expect(output.length).toBeGreaterThan(20000);
+  if (process.env.QUOTATION_CUSTOM_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_CUSTOM_PDF_OUTPUT, output);
 });
 
 test("merges repeated copies of the same design-reference image", () => {

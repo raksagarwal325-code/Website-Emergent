@@ -77,29 +77,33 @@ class QuotationDesignReferenceInput(BaseModel):
 
 class QuotationAIAssistItem(BaseModel):
     line_id: str = Field(min_length=1, max_length=100)
+    product_id: Optional[str] = Field(default=None, max_length=100)
     name: str = Field(min_length=1, max_length=300)
     sku: Optional[str] = Field(default=None, max_length=100)
     quantity: int = Field(default=1, ge=1, le=1000)
 
 
 class QuotationAIAssistRequest(BaseModel):
+    product_image_url: Optional[str] = Field(default=None, max_length=2000)
+    reference_image_url: Optional[str] = Field(default=None, max_length=2000)
+    # Kept for older mobile clients. It is treated as a reference image.
     image_url: Optional[str] = Field(default=None, max_length=2000)
     instruction: str = Field(min_length=3, max_length=3000)
     target_line_id: str = Field(min_length=1, max_length=100)
     items: List[QuotationAIAssistItem] = Field(min_length=1, max_length=100)
 
-    @field_validator("image_url", "instruction", mode="before")
+    @field_validator("product_image_url", "reference_image_url", "image_url", "instruction", mode="before")
     @classmethod
     def _clean_ai_request_text(cls, value):
         return str(value or "").strip()
 
-    @field_validator("image_url")
+    @field_validator("product_image_url", "reference_image_url", "image_url")
     @classmethod
-    def _uploaded_reference_only(cls, value):
+    def _uploaded_ai_image_only(cls, value):
         if value is None or not str(value).strip():
             return None
         if not value.startswith("/api/files/"):
-            raise ValueError("Reference image must be uploaded before AI analysis.")
+            raise ValueError("Quotation AI images must be uploaded before analysis.")
         return value
 
     @model_validator(mode="after")
@@ -137,7 +141,7 @@ class QuotationAIItemDraft(BaseModel):
         "glass_arms", "crystal_bobeche", "crystal_drops", "metal_finish",
     ]] = Field(default_factory=list, max_length=4)
     customisation_notes: str = Field(min_length=1, max_length=1500)
-    approval_required: bool = True
+    approval_required: bool = False
 
     @field_validator("suggested_name", "customisation_notes", mode="before")
     @classmethod

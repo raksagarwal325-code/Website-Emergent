@@ -148,7 +148,14 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
         ...current,
         items: current.items.filter((_, itemIndex) => itemIndex !== index).map((item) => (
           item.body_reference_line_id === removed?.line_id
-            ? { ...item, body_basis: "drawing_pending", body_reference_line_id: null, approval_required: true }
+            ? {
+              ...item,
+              body_basis: "product",
+              body_reference_line_id: null,
+              approval_required: false,
+              customisation_ai_prepared: false,
+              customisation_ai_summary: "",
+            }
             : item
         )),
         design_references: current.design_references.map((reference) => ({
@@ -273,11 +280,13 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setAiBusyLineId(target.line_id);
     try {
       const result = await api.aiQuotationCustomisation({
-        image_url: target.customisation_reference_image || null,
+        product_image_url: String(target.image || "").startsWith("/api/files/") ? target.image : null,
+        reference_image_url: target.customisation_reference_image || null,
         instruction: target.customisation_instruction.trim(),
         target_line_id: target.line_id,
-        items: form.items.map(({ line_id, name, sku, quantity }, itemIndex) => ({
+        items: form.items.map(({ line_id, product_id, name, sku, quantity }, itemIndex) => ({
           line_id,
+          product_id: product_id || null,
           name: name.trim() || `Custom product Item ${itemIndex + 1}`,
           sku: sku || null,
           quantity: Number(quantity) || 1,
@@ -434,7 +443,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                     </div>
 
                     {item.is_custom && <div className="mt-4 border-t border-[#D4AF37]/20 pt-4">
-                      <div className="flex items-start gap-2"><Sparkles className="mt-0.5 shrink-0 text-[#D4AF37]" size={17} /><div><div className="text-sm text-white">Describe this product’s customisation</div><p className="mt-1 text-xs text-white/50">Add a reference image only if needed. AI will prepare the product name, construction details, exclusions and approval wording.</p></div></div>
+                      <div className="flex items-start gap-2"><Sparkles className="mt-0.5 shrink-0 text-[#D4AF37]" size={17} /><div><div className="text-sm text-white">Describe this product’s customisation</div><p className="mt-1 text-xs text-white/50">The product image is used automatically as the base design. Add a separate reference image only if needed. AI will prepare the name, construction details and exclusions.</p></div></div>
                       <div className="mt-3 grid gap-4 md:grid-cols-[160px_1fr]">
                         <div>
                           {item.customisation_reference_image && <img src={api.resolveImage(item.customisation_reference_image)} alt={`Customisation reference for product ${index + 1}`} className="mb-2 h-28 w-full border border-white/10 object-contain" />}

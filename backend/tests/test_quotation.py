@@ -70,7 +70,8 @@ def test_yearly_quotation_number_has_four_digit_sequence():
 
 def test_ai_customisation_draft_accepts_known_items_and_valid_match():
     request = QuotationAIAssistRequest(
-        image_url="/api/files/reference.webp",
+        product_image_url="/api/files/wall.webp",
+        reference_image_url="/api/files/reference.webp",
         instruction="Use the shade on both; make the wall light match the chandelier.",
         target_line_id="wall",
         items=[{"line_id": "chandelier", "name": "Chandelier"}, {"line_id": "wall", "name": "Wall light"}],
@@ -130,13 +131,25 @@ def test_ai_customisation_draft_rejects_unknown_item_mapping():
 
 def test_ai_customisation_allows_written_instruction_without_reference_image():
     request = QuotationAIAssistRequest(
-        image_url=None,
+        product_image_url="/api/files/wall.webp",
+        reference_image_url=None,
         instruction="Make this wall light match the chandelier with glass arms and crystal drops.",
         target_line_id="wall",
         items=[{"line_id": "chandelier", "name": "Chandelier"}, {"line_id": "wall", "name": "Wall light"}],
     )
-    assert request.image_url is None
+    assert request.product_image_url == "/api/files/wall.webp"
+    assert request.reference_image_url is None
     assert request.target_line_id == "wall"
+
+
+def test_ai_customisation_keeps_legacy_reference_image_field():
+    request = QuotationAIAssistRequest(
+        image_url="/api/files/legacy-reference.webp",
+        instruction="Use this shade pattern.",
+        target_line_id="item",
+        items=[{"line_id": "item", "name": "Chandelier"}],
+    )
+    assert request.image_url == "/api/files/legacy-reference.webp"
 
 
 def test_ai_customisation_normalises_non_breaking_hyphens_for_pdf_output():

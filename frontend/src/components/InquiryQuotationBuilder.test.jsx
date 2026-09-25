@@ -208,8 +208,8 @@ test("lets AI prepare each customised product from one instruction and an option
   } }));
   mockApi.createStandaloneQuotation.mockImplementation(async (data) => ({ ...savedQuote, ...data, id: "custom-reference-quote" }));
   render(<InquiryQuotationBuilder inquiry={{ customer_name: "Client", items: [
-    { line_id: "line-one", name: "Chandelier", price: 28000 },
-    { line_id: "line-two", name: "Wall Light", price: 9000 },
+    { line_id: "line-one", product_id: "product-one", name: "Chandelier", price: 28000, image: "/api/files/chandelier.webp" },
+    { line_id: "line-two", name: "Wall Light", price: 9000, image: "/api/files/wall.webp" },
   ] }} />);
   await screen.findByRole("button", { name: "Saved quotations (0)" });
   fireEvent.click(screen.getByLabelText("Customise product 1"));
@@ -219,16 +219,21 @@ test("lets AI prepare each customised product from one instruction and an option
   fireEvent.click(screen.getByRole("button", { name: "Prepare with AI" }));
   expect(await screen.findByText("Chandelier body retained with the requested star-cut shades.")).toBeInTheDocument();
   expect(mockApi.aiQuotationCustomisation).toHaveBeenCalledWith(expect.objectContaining({
-    image_url: "/api/files/ai-shade.webp",
+    product_image_url: "/api/files/chandelier.webp",
+    reference_image_url: "/api/files/ai-shade.webp",
     target_line_id: "line-one",
-    items: [expect.objectContaining({ line_id: "line-one" }), expect.objectContaining({ line_id: "line-two" })],
+    items: [expect.objectContaining({ line_id: "line-one", product_id: "product-one" }), expect.objectContaining({ line_id: "line-two" })],
   }));
 
   fireEvent.click(screen.getByLabelText("Customise product 2"));
   fireEvent.change(screen.getByLabelText("Customisation instruction for product 2"), { target: { value: "Make this wall light match Item 1 with glass arms, bobeches, drops and finish." } });
   fireEvent.click(screen.getAllByRole("button", { name: "Prepare with AI" })[0]);
   expect(await screen.findByText("Wall light construction matched to Item 1.")).toBeInTheDocument();
-  expect(mockApi.aiQuotationCustomisation).toHaveBeenLastCalledWith(expect.objectContaining({ image_url: null, target_line_id: "line-two" }));
+  expect(mockApi.aiQuotationCustomisation).toHaveBeenLastCalledWith(expect.objectContaining({
+    product_image_url: "/api/files/wall.webp",
+    reference_image_url: null,
+    target_line_id: "line-two",
+  }));
 
   expect(screen.getByLabelText("Product 1")).toHaveValue("Six-Light Chandelier with Custom Star-Cut Shades");
   fireEvent.click(screen.getByTestId("quotation-save"));
