@@ -470,12 +470,12 @@ export const createQuotationPdf = async (quote, options = {}) => {
 
   const summaryRows = quotationSummaryRows(quote);
   const totalsHeight = summaryRows.length * 6.2 + 9;
-  const footerHeight = 42;
+  const footerHeight = 40;
   const customItems = quote.items
     .map((item, itemIndex) => ({ item, itemIndex }))
     .filter(({ item }) => item.is_custom);
   const closingHeight = quote.notes ? 17 : 11;
-  const closingBlockHeight = 4 + totalsHeight + 4 + footerHeight + closingHeight;
+  const closingBlockHeight = 3 + totalsHeight + 3 + footerHeight + closingHeight;
   const rowData = quote.items.map((item) => {
     const nameLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 82).slice(0, 3);
     const customParts = quotationItemCustomParts(quote, item, designReferences);
@@ -520,9 +520,9 @@ export const createQuotationPdf = async (quote, options = {}) => {
     line(inner, y, inner + usable, y, LINE, 0.16);
   });
 
-  if (y + 4 + totalsHeight + 4 + footerHeight + closingHeight > pageHeight - 11) startContinuationPage(false);
+  if (y + 3 + totalsHeight + 3 + footerHeight + closingHeight > pageHeight - 11) startContinuationPage(false);
 
-  y += 4;
+  y += 3;
   const totalsX = 112;
   const totalsWidth = pageWidth - inner - totalsX;
   fillRect(totalsX, y, totalsWidth, totalsHeight, CREAM, 1);
@@ -543,7 +543,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
   setText(8.2, "bold", GOLD, "times");
   doc.text(`INR ${quoteMoney(quote.total)}`, totalsX + totalsWidth - 4, payableY + 5.8, { align: "right" });
 
-  const footerTop = y + totalsHeight + 4;
+  const footerTop = y + totalsHeight + 3;
   fillRect(inner, footerTop, usable, footerHeight, CREAM, 1.5);
   const footerGap = 3;
   const bankWidth = 57;
