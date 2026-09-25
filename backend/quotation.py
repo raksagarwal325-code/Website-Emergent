@@ -54,6 +54,7 @@ class QuotationItemInput(BaseModel):
     image: Optional[str] = Field(default=None, max_length=2000)
     product_id: Optional[str] = None
     name: str = Field(min_length=1, max_length=300)
+    name_user_edited: bool = False
     sku: Optional[str] = Field(default=None, max_length=100)
     quantity: int = Field(default=1, ge=1, le=1000)
     unit_price: float = Field(default=0, ge=0, le=100_000_000)
@@ -371,6 +372,7 @@ def build_quotation(
             "line_id": line_id,
             "product_id": raw.product_id,
             "name": raw.name.strip(),
+            "name_user_edited": raw.name_user_edited,
             "sku": (raw.sku or "").strip() or None,
             "quantity": raw.quantity,
             "unit_price": quote_money(raw.unit_price),

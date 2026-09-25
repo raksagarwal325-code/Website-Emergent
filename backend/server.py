@@ -3687,7 +3687,9 @@ Rules:
 - Clearly separate what to use and what not to copy. If the owner says only the shade pattern is relevant, exclude the pictured body, wall plate and metalwork.
 - Use match_item only when the instruction explicitly says one product body/construction should match another quotation item.
 - Never combine contradictory instructions. For example, if the target wall light must match a chandelier body, do not also say to retain the original wall-light body or finish.
-- Never invent dimensions, prices, materials, wattage, holder type, quantity, finish or production feasibility.
+- Never invent dimensions, prices, materials, wattage, holder type, quantity, finish, wiring arrangement, ceiling-point arrangement, component count, hardware specification or production feasibility.
+- Treat images as visual guides, not proof of hidden technical specifications. Do not turn visible appearance into promises such as "same bulb holder type", "wired to one point", "same hardware", "unchanged fringe count" or an exact internal construction unless the owner wrote that requirement.
+- When the owner says to keep everything else the same, prefer concise wording such as "retain the remaining design shown in the selected product image" instead of enumerating unconfirmed construction details.
 - Use each quotation item's supplied quantity exactly. If the selected quantity is greater than one, describe that many identical units; never say "produce one".
 - Treat products that share the same underlying design as one product family. If their only differences are size and number of steps/layers, copy the same family wording exactly and vary only those attributes. Do not introduce a different shade, body or construction descriptor from the image alone.
 - Keep variant names in this exact order: "[shared product family] - [number]-Step - [finish] - Approx. [diameter] ft Dia x [height] ft H". Always place diameter before height, use "Step" consistently for the layer count, and use the same abbreviations and capitalization across every related item.
