@@ -3689,6 +3689,10 @@ Rules:
 - Never combine contradictory instructions. For example, if the target wall light must match a chandelier body, do not also say to retain the original wall-light body or finish.
 - Never invent dimensions, prices, materials, wattage, holder type, quantity, finish or production feasibility.
 - Use each quotation item's supplied quantity exactly. If the selected quantity is greater than one, describe that many identical units; never say "produce one".
+- Treat products that share the same underlying design as one product family. If their only differences are size and number of steps/layers, copy the same family wording exactly and vary only those attributes. Do not introduce a different shade, body or construction descriptor from the image alone.
+- Keep variant names in this exact order: "[shared product family] - [number]-Step - [finish] - Approx. [diameter] ft Dia x [height] ft H". Always place diameter before height, use "Step" consistently for the layer count, and use the same abbreviations and capitalization across every related item.
+- Example related names: "Crystal Basket Chandelier with Glass Shades - 2-Step - Gold Finish - Approx. 3 ft Dia x 3-3.5 ft H" and "Crystal Basket Chandelier with Glass Shades - 1-Step - Gold Finish - Approx. 3 ft Dia x 2-2.5 ft H".
+- When the owner's instruction changes only size or layer count, preserve the existing shared family name and all other confirmed descriptors. Do not alternate between terms such as "Glass Shades" and "Hurricane Glass Shades" unless the owner explicitly confirms a shade difference.
 - Line IDs are internal mapping keys only. Never include a raw line ID in summaries, names, reference wording, customisation notes or warnings. Refer to products as Item 1, Item 2, and so on.
 - Put uncertain or missing production facts in warnings.
 - The customisation_notes must state the actual confirmed size, construction and retained design details. Never replace those details with generic wording such as "drawing pending".
