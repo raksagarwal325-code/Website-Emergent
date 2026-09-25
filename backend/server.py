@@ -3652,7 +3652,7 @@ async def _resolve_product_image(payload: AIRegenerateRequest) -> tuple[bytes, s
 
 
 _QUOTATION_AI_SYSTEM = """You prepare precise, customer-facing custom-lighting quotation instructions for Samrat Glass Emporium.
-You receive one selected quotation item, one plain-language instruction from the business owner, the other quotation items for context, and sometimes a reference image.
+You receive one selected quotation item, one plain-language instruction from the business owner, the other quotation items for context, the selected product image when available, and sometimes a separate design-reference image.
 
 Return ONLY one JSON object with this exact shape:
 {
@@ -3671,23 +3671,29 @@ Return ONLY one JSON object with this exact shape:
     "body_reference_line_id": "another line ID or null",
     "matching_components": ["glass_arms|crystal_bobeche|crystal_drops|metal_finish"],
     "customisation_notes": "complete confirmed instruction for this product",
-    "approval_required": true
+    "approval_required": false
   }],
   "warnings": ["facts the owner still needs to confirm"]
 }
 
 Rules:
-- The owner's written instruction controls. The image is a visual reference, not permission to copy the whole pictured product.
+- The owner's written instruction controls.
+- The selected product image is the base product being quoted. When the owner says to keep the design, retain everything visible in that product image except the changes explicitly requested.
+- A separate design-reference image supplies only the feature explicitly requested by the owner. It is not permission to copy that reference product's complete body, wall plate, metalwork or other unrelated features.
 - Update ONLY the selected target line. Return exactly one item_updates entry for that line and set reference.applies_to to exactly that line ID.
 - Other quotation items are context only. They may be used as a construction reference when the owner explicitly asks the target product to match one of them.
-- If no reference image is supplied, convert the written instruction into complete product-specific quotation wording without inventing visual facts.
+- If no separate reference image is supplied but a product image is attached, use the product image as the visual base and convert the written instruction into complete product-specific quotation wording.
+- If no image is supplied at all, convert the written instruction into complete product-specific quotation wording without inventing visual facts.
 - Clearly separate what to use and what not to copy. If the owner says only the shade pattern is relevant, exclude the pictured body, wall plate and metalwork.
 - Use match_item only when the instruction explicitly says one product body/construction should match another quotation item.
 - Never combine contradictory instructions. For example, if the target wall light must match a chandelier body, do not also say to retain the original wall-light body or finish.
 - Never invent dimensions, prices, materials, wattage, holder type, quantity, finish or production feasibility.
 - Use each quotation item's supplied quantity exactly. If the selected quantity is greater than one, describe that many identical units; never say "produce one".
 - Line IDs are internal mapping keys only. Never include a raw line ID in summaries, names, reference wording, customisation notes or warnings. Refer to products as Item 1, Item 2, and so on.
-- Put uncertain or missing production facts in warnings. Require final approval for custom work.
+- Put uncertain or missing production facts in warnings.
+- The customisation_notes must state the actual confirmed size, construction and retained design details. Never replace those details with generic wording such as "drawing pending".
+- Do not promise or require a pre-production drawing, render or final image unless the owner explicitly says one will be supplied before production. Set approval_required to true only for that explicit case; otherwise set it to false.
+- For normal custom work, customer approval of the quotation confirms the written specifications. Finished product photographs are shared after completion and before dispatch.
 - Use ordinary ASCII hyphens (-), not typographic or non-breaking dashes.
 - Do not use markdown or commentary outside the JSON."""
 
@@ -3697,7 +3703,7 @@ async def ai_quotation_customisation(
     payload: QuotationAIAssistRequest,
     admin: _AdminUser = Depends(require_admin),
 ):
-    """Analyze one product's instruction and optional reference image."""
+    """Analyze one product using its base image and optional design reference."""
     import base64
     from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
 
@@ -3711,13 +3717,28 @@ async def ai_quotation_customisation(
         system_message=_QUOTATION_AI_SYSTEM,
     ))
     file_contents = []
-    if payload.image_url:
-        image_bytes, _mime = await _resolve_product_image(AIRegenerateRequest(image_url=payload.image_url))
-        file_contents = [ImageContent(image_base64=base64.b64encode(image_bytes).decode("ascii"))]
+    image_roles = []
+    reference_image_url = payload.reference_image_url or payload.image_url
+    target_item = next(item for item in payload.items if item.line_id == payload.target_line_id)
+    product_image_request = (
+        AIRegenerateRequest(image_url=payload.product_image_url)
+        if payload.product_image_url
+        else AIRegenerateRequest(product_id=target_item.product_id) if target_item.product_id else None
+    )
+    for image_request, role in (
+        (product_image_request, "selected product/base design"),
+        (AIRegenerateRequest(image_url=reference_image_url) if reference_image_url else None, "optional design reference"),
+    ):
+        if not image_request:
+            continue
+        image_bytes, _mime = await _resolve_product_image(image_request)
+        file_contents.append(ImageContent(image_base64=base64.b64encode(image_bytes).decode("ascii")))
+        image_roles.append(f"Image {len(file_contents)}: {role}")
     message = UserMessage(
         text=(
             f"Target quotation line ID: {payload.target_line_id}\n\n"
             f"Owner instruction:\n{payload.instruction}\n\n"
+            f"Attached image roles (in order):\n{chr(10).join(image_roles) if image_roles else 'No images attached'}\n\n"
             f"Selected quotation products:\n{json.dumps(item_context, ensure_ascii=False)}"
         ),
         file_contents=file_contents,
