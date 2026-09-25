@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { CUSTOM_PRODUCT_NOTE, clientFacingItemCustomisationText, clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationCustomisationScheduleText, quotationDefaultTerms, quotationItemCustomParts, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
+import { CUSTOM_PRODUCT_NOTE, clientFacingItemCustomisationText, clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationCustomisationScheduleText, quotationDefaultTerms, quotationItemCustomParts, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows, planQuotationRowPages } from "./quotationPdf";
 
 const items = [
   ["Noorjharokha Chain-Suspended Diamond-Cut Glass Wall Lantern", "SGE-WL-089", 1, 6000],
@@ -121,6 +121,26 @@ test("renders written custom specifications without requiring a reference image"
   if (process.env.QUOTATION_CUSTOM_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_CUSTOM_PDF_OUTPUT, output);
 });
 
+test("keeps all commercial rows on the first page when their measured height fits", () => {
+  expect(planQuotationRowPages({
+    rowHeights: Array(8).fill(14),
+    firstPageStart: 86.5,
+    continuationStart: 40.5,
+    closingHeight: 84,
+    pageBottom: 286,
+  })).toEqual([[0, 1, 2, 3, 4, 5, 6, 7]]);
+});
+
+test("moves only the smallest necessary commercial suffix to a continuation page", () => {
+  expect(planQuotationRowPages({
+    rowHeights: Array(8).fill(15),
+    firstPageStart: 86.5,
+    continuationStart: 40.5,
+    closingHeight: 84,
+    pageBottom: 286,
+  })).toEqual([[0, 1, 2, 3, 4, 5, 6], [7]]);
+});
+
 test("balances eight custom items across two schedule pages without adding a reference-only page", async () => {
   const denseItems = Array.from({ length: 8 }, (_, index) => ({
     line_id: `custom-${index + 1}`,
@@ -153,7 +173,7 @@ test("balances eight custom items across two schedule pages without adding a ref
   if (process.env.QUOTATION_DENSE_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_DENSE_PDF_OUTPUT, output);
 });
 
-test("keeps a detailed eight-item quotation with one design reference to four balanced pages", async () => {
+test("fits the detailed eight-item quotation into one commercial page and two measured schedule pages", async () => {
   const names = [
     "Shahi Six-Light Crystal Chandelier with Frosted Starburst Globe Glass Shades",
     "Single Wall Light Matching Shahi Chandelier - Custom Frosted Starburst Globe Shade",
@@ -190,7 +210,7 @@ test("keeps a detailed eight-item quotation with one design reference to four ba
     total: 574660, valid_until: "2026-10-10", terms: "", notes: "",
   }, { signatureDataUrl: null, stampDataUrl: null });
 
-  expect(doc.getNumberOfPages()).toBe(4);
+  expect(doc.getNumberOfPages()).toBe(3);
   const output = Buffer.from(doc.output("arraybuffer"));
   expect(output.length).toBeGreaterThan(10000);
   if (process.env.QUOTATION_COMPACT_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_COMPACT_PDF_OUTPUT, output);
