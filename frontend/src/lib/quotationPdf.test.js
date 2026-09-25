@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { CUSTOM_PRODUCT_NOTE, clientFacingItemCustomisationText, clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationCustomisationScheduleText, quotationDefaultTerms, quotationItemCustomParts, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows, planQuotationRowPages } from "./quotationPdf";
+import { CUSTOM_PRODUCT_NOTE, clientFacingItemCustomisationText, clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationCustomisationScheduleText, quotationDefaultTerms, quotationItemCustomParts, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows, quotationTermsForPdf, planQuotationRowPages } from "./quotationPdf";
 
 const items = [
   ["Noorjharokha Chain-Suspended Diamond-Cut Glass Wall Lantern", "SGE-WL-089", 1, 6000],
@@ -47,6 +47,29 @@ test("describes the actual GST treatment in default terms", () => {
     .toBe("GST is charged separately at 18.00% as shown above.");
   expect(quotationDefaultTerms({ tax_rate: 0, tax_amount: 0 })[0])
     .toBe("No GST has been added to this quotation.");
+});
+
+test("uses freight wording that matches each commercial case", () => {
+  expect(quotationDefaultTerms({ freight_mode: "included_in_price", shipping: 0, tax_mode: "gst", tax_rate: 18, tax_amount: 1800 }))
+    .toContain("Freight is included in the quoted product prices; no separate freight amount is payable.");
+  expect(quotationDefaultTerms({ freight_mode: "payable_by_client", shipping: 0, tax_mode: "gst", tax_rate: 18, tax_amount: 1800 }))
+    .toContain("Freight is payable separately by the client directly to the transporter and is not included in the quotation total.");
+  const billed = { freight_mode: "added_to_bill", shipping: 750, tax_mode: "gst", subtotal: 10000, discount: 0, tax_rate: 18, tax_amount: 1935 };
+  expect(quotationDefaultTerms(billed)).toContain("Freight of INR 750.00 is added separately to this quotation and included in the taxable value for GST.");
+  expect(quotationSummaryRows(billed).map((row) => row.label)).toEqual(["Products Subtotal", "Freight (Taxable)", "Taxable Amount", "Taxes (18.00%)"]);
+});
+
+test("without-tax quotations omit tax wording and use a neutral amount label", () => {
+  const quote = { freight_mode: "payable_by_client", shipping: 0, tax_mode: "no_tax", subtotal: 10000, discount: 0, tax_rate: 0, tax_amount: 0 };
+  expect(quotationDefaultTerms(quote).join(" ")).not.toMatch(/GST|tax rate|No GST/i);
+  expect(quotationSummaryRows(quote).map((row) => row.label)).toEqual(["Quotation Amount"]);
+});
+
+test("always adds the unboxing-video breakage condition, including custom terms", () => {
+  const required = /continuous unboxing video.*48 hours/i;
+  expect(quotationDefaultTerms({}).join(" ")).toMatch(required);
+  expect(quotationTermsForPdf({ terms: "50% advance.\nDispatch after balance payment." }).join(" ")).toMatch(required);
+  expect(quotationTermsForPdf({ terms: "Replacement only with unboxing video." }).filter((term) => /unboxing video/i.test(term))).toHaveLength(1);
 });
 
 test("normalises PDF-incompatible dash characters without joining words", () => {
