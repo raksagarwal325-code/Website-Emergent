@@ -68,6 +68,7 @@ class QuotationItemInput(BaseModel):
     customisation_instruction: str = Field(default="", max_length=3000)
     customisation_reference_image: Optional[str] = Field(default=None, max_length=2000)
     customisation_ai_summary: str = Field(default="", max_length=1000)
+    customisation_ai_warnings: List[str] = Field(default_factory=list, max_length=20)
     customisation_ai_prepared: bool = False
     customisation_reference_id: Optional[str] = Field(default=None, max_length=100)
 
@@ -78,6 +79,11 @@ class QuotationItemInput(BaseModel):
     @classmethod
     def _clean_item_text(cls, value):
         return quotation_text(value)
+
+    @field_validator("customisation_ai_warnings", mode="before")
+    @classmethod
+    def _clean_item_warnings(cls, value):
+        return [quotation_text(item) for item in (value or []) if quotation_text(item)]
 
 
 class QuotationDesignReferenceInput(BaseModel):
@@ -236,6 +242,29 @@ class QuotationAIDraft(BaseModel):
         for item in self.item_updates:
             item.suggested_name = normalise_quotation_product_name(customer_text(item.suggested_name))
             item.customisation_notes = customer_text(item.customisation_notes)
+            if item.body_basis == "match_item" and item.body_reference_line_id:
+                reference_number = next(
+                    index + 1
+                    for index, request_item in enumerate(request.items)
+                    if request_item.line_id == item.body_reference_line_id
+                )
+                component_rules = {
+                    "glass_arms": (r"\bglass[- ]arms?\b", "clear glass arm construction"),
+                    "crystal_bobeche": (r"\bbobeches?\b", "matching crystal bobeche"),
+                    "crystal_drops": (r"\b(?:crystal\s+)?drops?\b", "matching crystal drops"),
+                    "metal_finish": (r"\b(?:metal\s+)?finish\b", "the same metal finish"),
+                }
+                missing_components = [
+                    label
+                    for component in item.matching_components
+                    for pattern, label in [component_rules[component]]
+                    if not re.search(pattern, item.customisation_notes, flags=re.IGNORECASE)
+                ]
+                if missing_components:
+                    item.customisation_notes = (
+                        f"{item.customisation_notes.rstrip('.')}"
+                        f". Match Item {reference_number} using {', '.join(missing_components)}."
+                    )
             if target.quantity > 1 and re.search(r"\bproduce one\b", item.customisation_notes, flags=re.IGNORECASE):
                 item.customisation_notes = re.sub(
                     r"\bproduce one\b",
@@ -288,6 +317,10 @@ class QuotationCreate(BaseModel):
             raise ValueError("Design reference codes must be unique.")
         known = set(line_ids)
         for item in self.items:
+            if item.unit_price <= 0:
+                raise ValueError(f"Enter a price greater than zero for {item.name}.")
+            if item.is_custom and item.customisation_ai_warnings:
+                raise ValueError(f"Resolve the AI specification questions for {item.name} before saving.")
             if item.body_basis == "match_item" and (
                 not item.body_reference_line_id
                 or item.body_reference_line_id == item.line_id
@@ -352,6 +385,7 @@ def build_quotation(
             "customisation_instruction": raw.customisation_instruction,
             "customisation_reference_image": raw.customisation_reference_image,
             "customisation_ai_summary": raw.customisation_ai_summary,
+            "customisation_ai_warnings": list(raw.customisation_ai_warnings),
             "customisation_ai_prepared": raw.customisation_ai_prepared,
             "customisation_reference_id": raw.customisation_reference_id,
         })

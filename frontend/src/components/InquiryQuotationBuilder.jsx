@@ -50,6 +50,7 @@ const normaliseItem = (item = {}) => ({
   customisation_instruction: item.customisation_instruction || "",
   customisation_reference_image: item.customisation_reference_image || null,
   customisation_ai_summary: item.customisation_ai_summary || "",
+  customisation_ai_warnings: Array.isArray(item.customisation_ai_warnings) ? item.customisation_ai_warnings : [],
   customisation_ai_prepared: Boolean(item.customisation_ai_prepared ?? (item.is_custom && item.customisation_notes)),
   customisation_reference_id: item.customisation_reference_id || null,
 });
@@ -109,6 +110,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [saving, setSaving] = useState(false);
   const [catalogue, setCatalogue] = useState([]);
   const [search, setSearch] = useState("");
+  const [bottomSearch, setBottomSearch] = useState("");
   const [aiBusyLineId, setAiBusyLineId] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -172,6 +174,12 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       toast.error("Customer name and at least one complete product are required");
       return null;
     }
+    const zeroPriceIndex = form.items.findIndex((item) => numberValue(item.unit_price) <= 0);
+    if (zeroPriceIndex >= 0) {
+      const item = form.items[zeroPriceIndex];
+      toast.error(`Enter a price greater than ₹0 for Item ${zeroPriceIndex + 1}: ${item.name || "Unnamed product"}`);
+      return null;
+    }
     const invalidMatch = form.items.find((item) => item.is_custom && item.body_basis === "match_item" && !item.body_reference_line_id);
     if (invalidMatch) {
       toast.error(`Choose the product body that ${invalidMatch.name || "the custom item"} should match`);
@@ -180,6 +188,12 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     const invalidReference = form.design_references.find((reference) => !reference.code.trim() || !reference.title.trim() || !reference.applies_to.length);
     if (invalidReference) {
       toast.error("Every design reference needs a code, title and at least one applicable product");
+      return null;
+    }
+    const unresolvedWarningIndex = form.items.findIndex((item) => item.is_custom && item.customisation_ai_warnings?.length);
+    if (unresolvedWarningIndex >= 0) {
+      const item = form.items[unresolvedWarningIndex];
+      toast.error(`Item ${unresolvedWarningIndex + 1} needs more information: ${item.customisation_ai_warnings[0]}`);
       return null;
     }
     const unpreparedCustomItem = form.items.find((item) => item.is_custom && (
@@ -269,6 +283,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
         customisation_reference_image: result.url,
         customisation_ai_prepared: false,
         customisation_ai_summary: "",
+        customisation_ai_warnings: [],
       });
     } catch (error) { toast.error(errorMessage(error, "Could not upload reference image")); }
     finally { setUploading(false); }
@@ -323,6 +338,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
             exclude_details: draft.reference.exclude_details || "",
           }];
         }
+        const warnings = Array.isArray(draft.warnings) ? draft.warnings.filter(Boolean) : [];
         const updatedItems = current.items.map((item) => item.line_id === target.line_id ? {
           ...item,
           name: update.suggested_name?.trim() || item.name,
@@ -333,7 +349,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
           customisation_notes: update.customisation_notes || "",
           approval_required: Boolean(update.approval_required),
           customisation_ai_summary: draft.summary,
-          customisation_ai_prepared: true,
+          customisation_ai_warnings: warnings,
+          customisation_ai_prepared: warnings.length === 0,
           customisation_reference_id: referenceId,
         } : item);
         return {
@@ -342,7 +359,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
           items: harmoniseCustomVariantNames(updatedItems),
         };
       });
-      toast.success(`AI prepared the customisation for Item ${index + 1}`);
+      if (draft.warnings?.length) toast.warning(`AI needs more information for Item ${index + 1}`);
+      else toast.success(`AI prepared the customisation for Item ${index + 1}`);
     } catch (error) { toast.error(errorMessage(error, "Could not analyse the reference")); }
     finally { setAiBusyLineId(null); }
   };
@@ -437,7 +455,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                     <div className="grid gap-2 md:grid-cols-[1fr_90px_130px_40px] md:items-end">
                       <label className="text-xs text-white/55">Product<input aria-label={`Product ${index + 1}`} value={item.name} onChange={(e) => changeItem(index, { name: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /><span className="mt-1 block text-[10px] uppercase tracking-wider text-[#BF9972]">{item.sku ? `SKU ${item.sku}` : "Custom line"}</span></label>
                       <label className="text-xs text-white/55">Quantity<input aria-label={`Quantity ${index + 1}`} type="number" min="1" value={item.quantity} onChange={(e) => changeItem(index, { quantity: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
-                      <label className="text-xs text-white/55">Unit price (₹)<input aria-label={`Unit price ${index + 1}`} type="number" min="0" value={item.unit_price} onChange={(e) => changeItem(index, { unit_price: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
+                      <label className="text-xs text-white/55">Unit price (₹)<input aria-label={`Unit price ${index + 1}`} type="number" min="0.01" step="0.01" value={item.unit_price} onChange={(e) => changeItem(index, { unit_price: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
                       <button type="button" disabled={uploading} aria-label={`Remove product ${index + 1}`} onClick={() => removeItem(index)} className="mb-0.5 p-2 text-white/45 hover:text-red-300"><Trash2 size={15} /></button>
                       <div className="md:col-span-4 flex flex-wrap items-center gap-3">
                         {item.image && <img src={api.resolveImage(item.image)} alt={item.name || "Item image"} className="h-16 w-16 object-contain" />}
@@ -453,18 +471,25 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                         <div>
                           {item.customisation_reference_image && <img src={api.resolveImage(item.customisation_reference_image)} alt={`Customisation reference for product ${index + 1}`} className="mb-2 h-28 w-full border border-white/10 object-contain" />}
                           <label className="block cursor-pointer border border-dashed border-[#D4AF37]/35 p-3 text-center text-xs text-[#D4AF37]">{uploading ? "Uploading…" : item.customisation_reference_image ? "Replace reference image" : "Upload reference image (optional)"}<input type="file" accept="image/jpeg,image/png,image/webp" aria-label={`Reference image for product ${index + 1}`} disabled={uploading || aiBusyLineId === item.line_id} onChange={(event) => uploadItemReference(index, event.target.files?.[0])} className="sr-only" /></label>
-                          {item.customisation_reference_image && <button type="button" onClick={() => changeItem(index, { customisation_reference_image: null, customisation_ai_prepared: false, customisation_ai_summary: "" })} className="mt-2 text-xs text-white/55">Remove reference</button>}
+                          {item.customisation_reference_image && <button type="button" onClick={() => changeItem(index, { customisation_reference_image: null, customisation_ai_prepared: false, customisation_ai_summary: "", customisation_ai_warnings: [] })} className="mt-2 text-xs text-white/55">Remove reference</button>}
                         </div>
                         <div>
                           <label className="text-xs text-white/60">Instructions for AI<textarea aria-label={`Customisation instruction for product ${index + 1}`} rows="5" value={item.customisation_instruction} onChange={(event) => changeItem(index, { customisation_instruction: event.target.value, customisation_ai_prepared: false, customisation_ai_summary: "" })} placeholder={index ? "Example: Make this wall light match Item 1 with glass arms, crystal bobeches, crystal drops and the same metal finish. Use only the shade design from the reference image." : "Example: Keep this chandelier body exactly the same. Replace every shade with the frosted star-cut shade shown in the reference image."} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
-                          <button type="button" onClick={() => analyseItemCustomisation(index)} disabled={aiBusyLineId !== null || uploading || item.customisation_instruction.trim().length < 3} className="mt-3 flex items-center gap-2 bg-[#D4AF37] px-4 py-2.5 text-xs uppercase tracking-wider text-black disabled:opacity-40">{aiBusyLineId === item.line_id ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />} {aiBusyLineId === item.line_id ? "Preparing…" : item.customisation_ai_prepared ? "Prepare again with AI" : "Prepare with AI"}</button>
+                          <button type="button" onClick={() => analyseItemCustomisation(index)} disabled={aiBusyLineId !== null || uploading || item.customisation_instruction.trim().length < 3} className="mt-3 flex items-center gap-2 bg-[#D4AF37] px-4 py-2.5 text-xs uppercase tracking-wider text-black disabled:opacity-40">{aiBusyLineId === item.line_id ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />} {aiBusyLineId === item.line_id ? "Preparing…" : item.customisation_ai_prepared || item.customisation_ai_warnings?.length ? "Prepare again with AI" : "Prepare with AI"}</button>
                         </div>
                       </div>
                       {item.customisation_ai_prepared && <div className="mt-3 border border-emerald-400/30 bg-emerald-400/[0.06] p-3 text-xs text-emerald-100"><div className="font-medium">AI preparation complete</div><p className="mt-1 text-white/65">{item.customisation_ai_summary}</p><p className="mt-1 text-white/45">The detailed production wording will be included automatically in the quotation PDF.</p></div>}
+                      {!!item.customisation_ai_warnings?.length && <div className="mt-3 border border-amber-300/35 bg-amber-300/[0.06] p-3 text-xs text-amber-100"><div className="font-medium">More information required</div><ul className="mt-2 list-disc space-y-1 pl-4 text-white/70">{item.customisation_ai_warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul><p className="mt-2 text-white/50">Add these answers to the instruction above, then select Prepare again with AI.</p></div>}
                       {!item.customisation_ai_prepared && item.customisation_instruction.trim().length >= 3 && <p className="mt-2 text-xs text-amber-200">Prepare this item with AI before saving the quotation.</p>}
                     </div>}
                   </div>
                 ))}
+              </div>
+              <div className="mt-4 border border-[#D4AF37]/25 bg-[#D4AF37]/[0.03] p-4">
+                <div className="mb-2 text-sm text-white">Add another product</div>
+                <input aria-label="Search catalogue to add another product" value={bottomSearch} onChange={(event) => setBottomSearch(event.target.value)} placeholder="Search product name or SKU" className="w-full border border-white/15 bg-black/40 p-3" />
+                {bottomSearch.trim() && <div className="max-h-48 overflow-auto">{catalogue.filter((product) => `${product.name} ${product.sku}`.toLowerCase().includes(bottomSearch.toLowerCase())).slice(0, 30).map((product) => <button type="button" key={product.id} onClick={() => { addItem(product); setBottomSearch(""); }} className="block w-full border-b border-white/10 p-2 text-left text-sm">{product.sku} · {product.name}</button>)}</div>}
+                <button type="button" onClick={() => addItem()} className="mt-3 text-sm text-[#D4AF37]">+ Add another custom item</button>
               </div>
             </section>
 
