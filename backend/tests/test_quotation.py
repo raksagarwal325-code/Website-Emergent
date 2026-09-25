@@ -16,7 +16,7 @@ def payload(**overrides):
         "shipping_address": "Same as billing address",
         "customer_gstin": "09ADCFS9258D1ZS",
         "items": [
-            {"product_id": "wall", "name": "Wall Lantern", "sku": "SGE-WL-089", "quantity": 1, "unit_price": 6000},
+            {"product_id": "wall", "name": "Wall Lantern", "name_user_edited": True, "sku": "SGE-WL-089", "quantity": 1, "unit_price": 6000},
             {"product_id": "candle", "name": "Candle Stand", "sku": "SGE-CS-013", "quantity": 2, "unit_price": 1700},
         ],
         "discount": 400,
@@ -52,6 +52,7 @@ def test_build_quotation_recomputes_every_amount_server_side():
     assert result["valid_until"] == "2026-10-01"
     assert result["items"][1]["line_total"] == 3400
     assert result["items"][0]["image"] == "https://cdn.example/wall.webp"
+    assert result["items"][0]["name_user_edited"] is True
     assert result["items"][1]["image"] is None
     assert result["created_by"] == "owner@samratglass.com"
     assert result["billing_address"] == "Raniwala Market, Firozabad"

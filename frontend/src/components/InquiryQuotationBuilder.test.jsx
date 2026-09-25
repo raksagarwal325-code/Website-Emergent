@@ -273,7 +273,13 @@ test("lets AI prepare each customised product from one instruction and an option
   await screen.findByAltText("Customisation reference for product 1");
   fireEvent.change(screen.getByLabelText("Customisation instruction for product 1"), { target: { value: "Keep this chandelier body and use the reference shade on every light." } });
   fireEvent.click(screen.getByRole("button", { name: "Prepare with AI" }));
-  expect(await screen.findByText("Chandelier body retained with the requested star-cut shades.")).toBeInTheDocument();
+  expect(await screen.findByText("AI draft ready - review and edit before saving")).toBeInTheDocument();
+  expect(screen.getByLabelText("AI summary for product 1")).toHaveValue("Chandelier body retained with the requested star-cut shades.");
+  fireEvent.change(screen.getByLabelText("Product 1"), { target: { value: "Owner-approved Shahi chandelier" } });
+  fireEvent.change(screen.getByLabelText("Detailed customisation wording for product 1"), { target: { value: "Use the confirmed shade pattern and retain the remaining base design." } });
+  fireEvent.change(screen.getByLabelText("Reference title for product 1"), { target: { value: "Owner-approved frosted star-cut shade" } });
+  fireEvent.change(screen.getByLabelText("Use from reference for product 1"), { target: { value: "Use only the confirmed frosted star-cut shade pattern." } });
+  fireEvent.change(screen.getByLabelText("Exclude from reference for product 1"), { target: { value: "Do not copy the reference body, plate or metalwork." } });
   expect(mockApi.aiQuotationCustomisation).toHaveBeenCalledWith(expect.objectContaining({
     product_image_url: "/api/files/chandelier.webp",
     reference_image_url: "/api/files/ai-shade.webp",
@@ -284,19 +290,30 @@ test("lets AI prepare each customised product from one instruction and an option
   fireEvent.click(screen.getByLabelText("Customise product 2"));
   fireEvent.change(screen.getByLabelText("Customisation instruction for product 2"), { target: { value: "Make this wall light match Item 1 with glass arms, bobeches, drops and finish." } });
   fireEvent.click(screen.getAllByRole("button", { name: "Prepare with AI" })[0]);
-  expect(await screen.findByText("Wall light construction matched to Item 1.")).toBeInTheDocument();
+  expect(await screen.findByLabelText("AI summary for product 2")).toHaveValue("Wall light construction matched to Item 1.");
   expect(mockApi.aiQuotationCustomisation).toHaveBeenLastCalledWith(expect.objectContaining({
     product_image_url: "/api/files/wall.webp",
     reference_image_url: null,
     target_line_id: "line-two",
   }));
 
-  expect(screen.getByLabelText("Product 1")).toHaveValue("Six-Light Chandelier with Custom Star-Cut Shades");
+  expect(screen.getByLabelText("Product 1")).toHaveValue("Owner-approved Shahi chandelier");
   fireEvent.click(screen.getByTestId("quotation-save"));
   await waitFor(() => expect(mockApi.createStandaloneQuotation).toHaveBeenCalledTimes(1));
   const saved = mockApi.createStandaloneQuotation.mock.calls[0][0];
+  expect(saved.items[0]).toEqual(expect.objectContaining({
+    name: "Owner-approved Shahi chandelier",
+    name_user_edited: true,
+    customisation_notes: "Use the confirmed shade pattern and retain the remaining base design.",
+  }));
   expect(saved.items[1]).toEqual(expect.objectContaining({ body_basis: "match_item", body_reference_line_id: "line-one", customisation_ai_prepared: true }));
-  expect(saved.design_references).toEqual([expect.objectContaining({ image: "/api/files/ai-shade.webp", applies_to: ["line-one"] })]);
+  expect(saved.design_references).toEqual([expect.objectContaining({
+    image: "/api/files/ai-shade.webp",
+    applies_to: ["line-one"],
+    title: "Owner-approved frosted star-cut shade",
+    use_details: "Use only the confirmed frosted star-cut shade pattern.",
+    exclude_details: "Do not copy the reference body, plate or metalwork.",
+  })]);
 });
 
 test("AI names a blank custom product from its instruction", async () => {

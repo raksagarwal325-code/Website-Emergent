@@ -634,7 +634,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
         ? doc.splitTextToSize(`Design reference: ${referenceCodes.join(", ")}`, 145)
         : [];
       const rowHeight = Math.max(22, 7 + nameLines.length * 3.5 + specificationLines.length * 3.45 + referenceLines.length * 3.2 + 4);
-      if (scheduleY + rowHeight > 247) scheduleY = startCustomisationSchedulePage(true);
+      if (scheduleY + rowHeight > 270) scheduleY = startCustomisationSchedulePage(true);
       fillRect(inner, scheduleY, usable, rowHeight, (itemIndex % 2 === 0) ? [248, 243, 235] : IVORY);
       setText(7, "bold", MAROON);
       doc.text(String(itemIndex + 1), inner + 6, scheduleY + 7);

@@ -37,6 +37,7 @@ const normaliseItem = (item = {}) => ({
   product_id: item.product_id || null,
   line_id: item.line_id || createLocalId("line"),
   name: item.name || "",
+  name_user_edited: Boolean(item.name_user_edited),
   sku: item.sku || "",
   quantity: item.quantity || 1,
   unit_price: item.unit_price ?? item.price ?? 0,
@@ -141,6 +142,15 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setForm((current) => ({
       ...current,
       items: current.items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item),
+    }));
+  };
+  const changeDesignReference = (referenceId, patch) => {
+    setSavedQuote(null);
+    setForm((current) => ({
+      ...current,
+      design_references: current.design_references.map((reference) => (
+        reference.id === referenceId ? { ...reference, ...patch } : reference
+      )),
     }));
   };
   const removeItem = (index) => {
@@ -342,6 +352,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
         const updatedItems = current.items.map((item) => item.line_id === target.line_id ? {
           ...item,
           name: update.suggested_name?.trim() || item.name,
+          name_user_edited: false,
           is_custom: true,
           body_basis: update.body_basis,
           body_reference_line_id: update.body_reference_line_id || null,
@@ -453,7 +464,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                 {form.items.map((item, index) => (
                   <div key={item.line_id} className="border border-white/10 p-3">
                     <div className="grid gap-2 md:grid-cols-[1fr_90px_130px_40px] md:items-end">
-                      <label className="text-xs text-white/55">Product<input aria-label={`Product ${index + 1}`} value={item.name} onChange={(e) => changeItem(index, { name: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /><span className="mt-1 block text-[10px] uppercase tracking-wider text-[#BF9972]">{item.sku ? `SKU ${item.sku}` : "Custom line"}</span></label>
+                      <label className="text-xs text-white/55">Product<input aria-label={`Product ${index + 1}`} value={item.name} onChange={(e) => changeItem(index, { name: e.target.value, name_user_edited: true })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /><span className="mt-1 block text-[10px] uppercase tracking-wider text-[#BF9972]">{item.sku ? `SKU ${item.sku}` : "Custom line"}</span></label>
                       <label className="text-xs text-white/55">Quantity<input aria-label={`Quantity ${index + 1}`} type="number" min="1" value={item.quantity} onChange={(e) => changeItem(index, { quantity: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
                       <label className="text-xs text-white/55">Unit price (₹)<input aria-label={`Unit price ${index + 1}`} type="number" min="0.01" step="0.01" value={item.unit_price} onChange={(e) => changeItem(index, { unit_price: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
                       <button type="button" disabled={uploading} aria-label={`Remove product ${index + 1}`} onClick={() => removeItem(index)} className="mb-0.5 p-2 text-white/45 hover:text-red-300"><Trash2 size={15} /></button>
@@ -478,7 +489,20 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                           <button type="button" onClick={() => analyseItemCustomisation(index)} disabled={aiBusyLineId !== null || uploading || item.customisation_instruction.trim().length < 3} className="mt-3 flex items-center gap-2 bg-[#D4AF37] px-4 py-2.5 text-xs uppercase tracking-wider text-black disabled:opacity-40">{aiBusyLineId === item.line_id ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />} {aiBusyLineId === item.line_id ? "Preparing…" : item.customisation_ai_prepared || item.customisation_ai_warnings?.length ? "Prepare again with AI" : "Prepare with AI"}</button>
                         </div>
                       </div>
-                      {item.customisation_ai_prepared && <div className="mt-3 border border-emerald-400/30 bg-emerald-400/[0.06] p-3 text-xs text-emerald-100"><div className="font-medium">AI preparation complete</div><p className="mt-1 text-white/65">{item.customisation_ai_summary}</p><p className="mt-1 text-white/45">The detailed production wording will be included automatically in the quotation PDF.</p></div>}
+                      {item.customisation_ai_prepared && (() => {
+                        const reference = form.design_references.find((candidate) => candidate.id === item.customisation_reference_id);
+                        return <div className="mt-3 space-y-3 border border-emerald-400/30 bg-emerald-400/[0.06] p-3 text-xs text-emerald-100">
+                          <div><div className="font-medium">AI draft ready - review and edit before saving</div><p className="mt-1 text-white/50">The Product field above and every customer-facing AI detail below remain editable.</p></div>
+                          <label className="block text-white/60">AI summary (internal)<textarea aria-label={`AI summary for product ${index + 1}`} rows="2" value={item.customisation_ai_summary} onChange={(event) => changeItem(index, { customisation_ai_summary: event.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
+                          <label className="block text-white/60">Detailed customisation wording for PDF<textarea aria-label={`Detailed customisation wording for product ${index + 1}`} rows="6" value={item.customisation_notes} onChange={(event) => changeItem(index, { customisation_notes: event.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
+                          {reference && <div className="space-y-2 border-t border-white/10 pt-3">
+                            <div className="font-medium text-white/75">Reference interpretation</div>
+                            <label className="block text-white/60">Reference title<input aria-label={`Reference title for product ${index + 1}`} value={reference.title} onChange={(event) => changeDesignReference(reference.id, { title: event.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
+                            <label className="block text-white/60">Use from reference<textarea aria-label={`Use from reference for product ${index + 1}`} rows="3" value={reference.use_details} onChange={(event) => changeDesignReference(reference.id, { use_details: event.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
+                            <label className="block text-white/60">Do not copy from reference<textarea aria-label={`Exclude from reference for product ${index + 1}`} rows="3" value={reference.exclude_details} onChange={(event) => changeDesignReference(reference.id, { exclude_details: event.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2 text-white" /></label>
+                          </div>}
+                        </div>;
+                      })()}
                       {!!item.customisation_ai_warnings?.length && <div className="mt-3 border border-amber-300/35 bg-amber-300/[0.06] p-3 text-xs text-amber-100"><div className="font-medium">More information required</div><ul className="mt-2 list-disc space-y-1 pl-4 text-white/70">{item.customisation_ai_warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul><p className="mt-2 text-white/50">Add these answers to the instruction above, then select Prepare again with AI.</p></div>}
                       {!item.customisation_ai_prepared && item.customisation_instruction.trim().length >= 3 && <p className="mt-2 text-xs text-amber-200">Prepare this item with AI before saving the quotation.</p>}
                     </div>}

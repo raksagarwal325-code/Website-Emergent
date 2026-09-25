@@ -41,3 +41,21 @@ test("does not group products with different images", () => {
   ];
   expect(harmoniseCustomVariantNames(items)).toEqual(items);
 });
+
+
+test("preserves a product name after the owner edits the AI draft", () => {
+  const ownerName = "Owner-approved compact basket chandelier";
+  const items = harmoniseCustomVariantNames([
+    {
+      image: "/same.webp", is_custom: true, name_user_edited: true,
+      name: ownerName,
+      customisation_notes: "Gold finish, 3 ft diameter and 3-3.5 ft height, two-step version.",
+    },
+    {
+      image: "/same.webp", is_custom: true,
+      name: "Crystal Basket Chandelier - 1-Step - Gold Finish - Approx. 3 ft Dia x 2-2.5 ft H",
+      customisation_notes: "Gold finish, 3 ft diameter and 2-2.5 ft height.",
+    },
+  ]);
+  expect(items[0].name).toBe(ownerName);
+});
