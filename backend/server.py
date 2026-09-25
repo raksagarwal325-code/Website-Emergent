@@ -721,6 +721,7 @@ class Settings(BaseModel):
         "adaptive_tone": True,
     })
     quotation_business: dict = Field(default_factory=dict)
+    quotation_non_tax_business: dict = Field(default_factory=dict)
     quotation_branding: dict = Field(default_factory=lambda: {
         "signature_url": "",
         "stamp_url": "",
@@ -795,6 +796,7 @@ class SettingsUpdate(BaseModel):
     google_maps_url: Optional[str] = None
     watermark: Optional[dict] = None
     quotation_business: Optional[dict[str, str]] = None
+    quotation_non_tax_business: Optional[dict[str, str]] = None
     quotation_branding: Optional[dict] = None
 
 
@@ -1653,7 +1655,7 @@ async def _list_quotations(inquiry_id, all_quotes=False):
             if not item.get("image"):
                 item["image"] = image_by_product_id.get(item.get("product_id"))
     settings = await db.settings.find_one(
-        {"id": "settings"}, {"_id": 0, "quotation_branding": 1, "quotation_business": 1}
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1, "quotation_business": 1, "quotation_non_tax_business": 1}
     ) or {}
     branding = settings.get("quotation_branding") or {}
     for quotation in quotations:
@@ -1712,8 +1714,12 @@ async def _create_quotation(inquiry_id, payload, admin):
     created_at = datetime.now(timezone.utc)
     quote_number = await _next_quotation_number(created_at)
     settings = await db.settings.find_one(
-        {"id": "settings"}, {"_id": 0, "quotation_branding": 1, "quotation_business": 1}
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1, "quotation_business": 1, "quotation_non_tax_business": 1}
     ) or {}
+    business_key = "quotation_non_tax_business" if payload.tax_mode == "no_tax" else "quotation_business"
+    business = settings.get(business_key) or {}
+    if payload.tax_mode == "no_tax" and not all(str(business.get(key) or "").strip() for key in ("name", "bank", "accountNumber", "ifsc")):
+        raise HTTPException(422, "Configure the alternate payment account under Admin quotation settings before creating a quotation without tax.")
     quotation = build_quotation(
         inquiry_id,
         payload,
@@ -1722,7 +1728,7 @@ async def _create_quotation(inquiry_id, payload, admin):
         quote_number=quote_number,
         product_images=image_by_product_id,
         branding=settings.get("quotation_branding") or {},
-        business=settings.get("quotation_business") or {},
+        business=business,
     )
     await db.quotations.insert_one(dict(quotation))
     if inquiry_id is not None:
@@ -1742,11 +1748,21 @@ async def update_quotation(quote_id: str, payload: QuotationCreate, admin: _Admi
     existing = await db.quotations.find_one({"id": quote_id}, {"_id": 0})
     if not existing:
         raise HTTPException(404, "Quotation not found")
+    previous_tax_mode = existing.get("tax_mode") or ("gst" if existing.get("tax_rate", 0) > 0 else "no_tax")
+    business = existing.get("business") or {}
+    if payload.tax_mode != "legacy" and payload.tax_mode != previous_tax_mode:
+        settings = await db.settings.find_one(
+            {"id": "settings"}, {"_id": 0, "quotation_business": 1, "quotation_non_tax_business": 1}
+        ) or {}
+        business_key = "quotation_non_tax_business" if payload.tax_mode == "no_tax" else "quotation_business"
+        business = settings.get(business_key) or {}
+        if payload.tax_mode == "no_tax" and not all(str(business.get(key) or "").strip() for key in ("name", "bank", "accountNumber", "ifsc")):
+            raise HTTPException(422, "Configure the alternate payment account under Admin quotation settings before switching this quotation to without tax.")
     quotation = build_quotation(
         existing.get("inquiry_id"), payload, existing.get("created_by", admin.email),
         quote_id=existing["id"], quote_number=existing["quote_number"],
         created_at=datetime.fromisoformat(existing["created_at"]),
-        business=existing.get("business") or {},
+        business=business,
         branding={key: existing.get(key) for key in ("signature_url", "stamp_url")},
     )
     quotation["status"] = existing.get("status", "draft")
