@@ -76,19 +76,24 @@ const initialForm = (inquiry) => ({
   })),
   discount: 0,
   shipping: 0,
-  tax_rate: 0,
+  freight_mode: "",
+  tax_mode: "gst",
+  tax_rate: 18,
   validity_days: 15,
   terms: "",
   notes: "",
 });
 const quotationForm = (source = {}) => {
   const base = initialForm(source);
+  const savedQuotation = Boolean(source.quote_number);
   return {
     ...base,
     ...source,
     items: harmoniseCustomVariantNames(base.items),
     design_references: base.design_references,
     customer_email: source.customer_email || "",
+    freight_mode: source.freight_mode || (savedQuotation && numberValue(source.shipping) > 0 ? "added_to_bill" : savedQuotation ? "legacy" : ""),
+    tax_mode: source.tax_mode || (savedQuotation ? "legacy" : "gst"),
   };
 };
 
@@ -131,9 +136,10 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
 
   const totals = useMemo(() => {
     const subtotal = form.items.reduce((sum, item) => sum + numberValue(item.quantity) * numberValue(item.unit_price), 0);
-    const taxable = Math.max(0, subtotal - numberValue(form.discount) + numberValue(form.shipping));
-    const tax = taxable * numberValue(form.tax_rate) / 100;
-    return { subtotal, tax, total: taxable + tax };
+    const freight = form.freight_mode === "added_to_bill" ? numberValue(form.shipping) : 0;
+    const taxable = Math.max(0, subtotal - numberValue(form.discount) + freight);
+    const tax = form.tax_mode === "no_tax" ? 0 : taxable * numberValue(form.tax_rate) / 100;
+    return { subtotal, freight, tax, total: taxable + tax };
   }, [form]);
 
   const change = (patch) => { setSavedQuote(null); setForm((current) => ({ ...current, ...patch })); };
@@ -218,6 +224,18 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       toast.error("Discount cannot exceed the product subtotal");
       return null;
     }
+    if (!form.freight_mode || form.freight_mode === "legacy") {
+      toast.error("Select how freight will be handled for this quotation");
+      return null;
+    }
+    if (form.freight_mode === "added_to_bill" && numberValue(form.shipping) <= 0) {
+      toast.error("Enter the freight amount to add to the bill");
+      return null;
+    }
+    if (form.tax_mode === "gst" && numberValue(form.tax_rate) <= 0) {
+      toast.error("Enter the GST rate for this quotation");
+      return null;
+    }
     setSaving(true);
     try {
       const harmonisedItems = harmoniseCustomVariantNames(form.items);
@@ -230,8 +248,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
           unit_price: numberValue(item.unit_price),
         })),
         discount: numberValue(form.discount),
-        shipping: numberValue(form.shipping),
-        tax_rate: numberValue(form.tax_rate),
+        shipping: form.freight_mode === "added_to_bill" ? numberValue(form.shipping) : 0,
+        tax_rate: form.tax_mode === "no_tax" ? 0 : numberValue(form.tax_rate),
         validity_days: Math.max(1, Math.round(numberValue(form.validity_days))),
       });
       setForm(quotationForm(quote));
@@ -519,8 +537,10 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
 
             <section className="grid gap-3 md:grid-cols-4">
               <label className="text-xs text-white/55">Discount (₹)<input aria-label="Discount" type="number" min="0" value={form.discount} onChange={(e) => change({ discount: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
-              <label className="text-xs text-white/55">Freight / charges (₹)<input aria-label="Freight or other charges" type="number" min="0" value={form.shipping} onChange={(e) => change({ shipping: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
-              <label className="text-xs text-white/55">GST / tax (%)<input aria-label="GST or tax rate" type="number" min="0" max="100" value={form.tax_rate} onChange={(e) => change({ tax_rate: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
+              <label className="text-xs text-white/55">Freight arrangement<select aria-label="Freight arrangement" value={form.freight_mode} onChange={(e) => change({ freight_mode: e.target.value, shipping: e.target.value === "added_to_bill" ? form.shipping : 0 })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white"><option value="">Select freight treatment</option><option value="included_in_price">Included in product prices</option><option value="payable_by_client">Payable separately by client</option><option value="added_to_bill" disabled={form.tax_mode === "no_tax"}>Add freight to bill — GST applies</option></select></label>
+              {form.freight_mode === "added_to_bill" ? <label className="text-xs text-white/55">Freight added to bill (₹)<input aria-label="Freight or other charges" type="number" min="0" value={form.shipping} onChange={(e) => change({ shipping: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /><span className="mt-1 block text-[10px] text-white/40">This amount is included in the GST taxable value.</span></label> : <div className="hidden md:block" />}
+              <label className="text-xs text-white/55">Tax treatment<select aria-label="Tax treatment" value={form.tax_mode} onChange={(e) => change({ tax_mode: e.target.value, tax_rate: e.target.value === "no_tax" ? 0 : (numberValue(form.tax_rate) || 18), ...(e.target.value === "no_tax" && form.freight_mode === "added_to_bill" ? { freight_mode: "", shipping: 0 } : {}) })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white">{form.tax_mode === "legacy" && <option value="legacy">Legacy saved treatment</option>}<option value="gst">GST quotation</option><option value="no_tax">Quotation without tax</option></select>{form.tax_mode === "no_tax" && <span className="mt-1 block text-[10px] text-white/40">The PDF will omit tax wording and use the alternate payment account. Billed freight is unavailable because freight added to a bill must be taxed.</span>}</label>
+              {form.tax_mode !== "no_tax" && <label className="text-xs text-white/55">GST rate (%)<input aria-label="GST or tax rate" type="number" min="0" max="100" value={form.tax_rate} onChange={(e) => change({ tax_rate: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>}
               <label className="text-xs text-white/55">Validity (days)<input aria-label="Validity in days" type="number" min="1" max="365" value={form.validity_days} onChange={(e) => change({ validity_days: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
             </section>
             <section className="grid gap-3 md:grid-cols-2">
@@ -532,7 +552,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
           <aside className="space-y-5">
             <div className="border border-[#D4AF37]/30 bg-[#D4AF37]/[0.04] p-5">
               <div className="eyebrow mb-4">Quotation total</div>
-              <div className="space-y-2 text-sm"><div className="flex justify-between"><span className="text-white/55">Subtotal</span><span>₹{money(totals.subtotal)}</span></div><div className="flex justify-between"><span className="text-white/55">Tax</span><span>₹{money(totals.tax)}</span></div><div className="mt-3 flex justify-between border-t border-white/10 pt-3 font-serif text-xl text-[#D4AF37]"><span>Total</span><span data-testid="quotation-grand-total">₹{money(totals.total)}</span></div></div>
+              <div className="space-y-2 text-sm"><div className="flex justify-between"><span className="text-white/55">Subtotal</span><span>₹{money(totals.subtotal)}</span></div>{totals.freight > 0 && <div className="flex justify-between"><span className="text-white/55">Freight (taxable)</span><span>₹{money(totals.freight)}</span></div>}{form.tax_mode !== "no_tax" && numberValue(form.tax_rate) > 0 && <div className="flex justify-between"><span className="text-white/55">GST</span><span>₹{money(totals.tax)}</span></div>}<div className="mt-3 flex justify-between border-t border-white/10 pt-3 font-serif text-xl text-[#D4AF37]"><span>Total</span><span data-testid="quotation-grand-total">₹{money(totals.total)}</span></div></div>
             </div>
             {editingId && <button type="button" disabled={saving || uploading} onClick={() => { setForm(quotationForm(inquiry)); setEditingId(null); setSavedQuote(null); }} className="text-sm text-[#D4AF37]">+ New quotation</button>}
             <button type="button" onClick={save} disabled={saving || uploading || !form.items.length} data-testid="quotation-save" className="flex w-full items-center justify-center gap-2 bg-[#D4AF37] px-4 py-3 text-xs uppercase tracking-[0.2em] text-black disabled:opacity-40">{saving ? <LoaderCircle size={15} className="animate-spin" /> : <Save size={15} />} {editingId ? "Save changes" : "Save quotation"}</button>
