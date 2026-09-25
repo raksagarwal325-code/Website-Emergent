@@ -182,6 +182,21 @@ describe("Product JSON-LD — merchant listing fields", () => {
     expect(ld.offers.availability).toMatch(/^https:\/\/schema\.org\/(InStock|PreOrder|BackOrder|OutOfStock)$/);
   });
 
+  test("connects original product images to Samrat with ImageObject metadata", async () => {
+    api.getProduct.mockResolvedValueOnce({
+      ...fixtureProduct,
+      images: ["https://samratglass.com/api/files/lumiere-catalog/products/original.jpg"],
+    });
+    const ld = await renderAndGetProductJsonLd();
+    expect(ld.image[0]).toMatchObject({
+      "@type": "ImageObject",
+      contentUrl: "https://samratglass.com/api/files/lumiere-catalog/products/original.jpg",
+      representativeOfPage: true,
+      creditText: "Samrat Glass Emporium",
+      copyrightNotice: "© Samrat Glass Emporium. All rights reserved.",
+    });
+  });
+
   test("omits Product markup when the public price is zero and there are no reviews", async () => {
     api.getProduct.mockResolvedValueOnce({ ...fixtureProduct, price: 0 });
     const ld = await renderAndGetProductJsonLd({ requireProduct: false });

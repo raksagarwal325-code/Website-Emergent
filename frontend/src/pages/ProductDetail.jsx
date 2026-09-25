@@ -188,6 +188,30 @@ export default function ProductDetail() {
   const siteOrigin =
     (typeof window !== "undefined" && window.location?.origin) ||
     "https://samratglass.com";
+  const structuredProductImages = (product.images || [])
+    .map((url) => api.resolveImage(url))
+    .filter(Boolean)
+    .map((url, index) => ({
+      "@type": "ImageObject",
+      "@id": `${siteOrigin}${productPath(product)}#image-${index + 1}`,
+      "url": url,
+      "contentUrl": url,
+      "name": product.name,
+      "caption": product.name,
+      ...(index === 0 ? { "representativeOfPage": true } : {}),
+      "creator": {
+        "@type": "Organization",
+        "name": "Samrat Glass Emporium",
+        "url": siteOrigin,
+      },
+      "copyrightHolder": {
+        "@type": "Organization",
+        "name": "Samrat Glass Emporium",
+        "url": siteOrigin,
+      },
+      "creditText": "Samrat Glass Emporium",
+      "copyrightNotice": "© Samrat Glass Emporium. All rights reserved.",
+    }));
   // A price-on-request item without genuine reviews has no eligible Product
   // snippet. An Offer without a public price creates invalid merchant markup.
   const productSchema = product && availabilityUrl && (hasPublicOfferPrice || hasVerifiedAggregateRating) ? {
@@ -198,7 +222,7 @@ export default function ProductDetail() {
     "name": product.name,
     "sku": product.sku,
     "description": product.short_description || product.description || "",
-    "image": (product.images || []).map((u) => api.resolveImage(u)).filter(Boolean),
+    "image": structuredProductImages,
     "brand": { "@type": "Brand", "name": "Samrat Glass Emporium" },
     "category": product.category,
     ...(hasVerifiedAggregateRating ? {

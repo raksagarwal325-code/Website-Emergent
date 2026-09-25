@@ -5,6 +5,7 @@ const {
   DEFAULT_SHARE_IMAGE,
   fetchPublishedProducts,
   injectProduct,
+  injectLegacyRedirect,
   runPrerenderProducts,
 } = require("../../scripts/prerender-products");
 const { productPath } = require("../../scripts/prerender-categories");
@@ -61,6 +62,29 @@ describe("product social prerender", () => {
     expect((html.match(/property="og:image"/g) || [])).toHaveLength(1);
   });
 
+  test("uses original images in crawler HTML and Product schema, not the resized social preview", () => {
+    const html = injectProduct(TEMPLATE, PRODUCT, "https://samratglass.com");
+    const original = "https://samratglass.com/api/files/lumiere-catalog/products/rajdarbar.webp";
+    const script = html.split('data-schema="prerender-product">')[1]?.split("</script>")[0];
+    const data = JSON.parse(script);
+    expect(html).toContain(`<img src="${original}" alt="${PRODUCT.name}"/>`);
+    expect(data.image[0]).toMatchObject({
+      "@type": "ImageObject",
+      contentUrl: original,
+      representativeOfPage: true,
+      creditText: "Samrat Glass Emporium",
+    });
+    expect(data.image[0].contentUrl).not.toContain("/api/social-preview/");
+  });
+
+  test("builds a canonical fallback page for a legacy UUID route", () => {
+    const html = injectLegacyRedirect(TEMPLATE, PRODUCT);
+    const destination = `https://samratglass.com${productPath(PRODUCT)}`;
+    expect(html).toContain(`<link rel="canonical" href="${destination}" />`);
+    expect(html).toContain(`<meta http-equiv="refresh" content="0;url=${destination}" />`);
+    expect(html).toContain(`window.location.replace("${productPath(PRODUCT)}")`);
+  });
+
   test("uses the absolute logo when a product has no image", () => {
     const html = injectProduct(TEMPLATE, { ...PRODUCT, images: [] }, "https://api.example.com");
     expect(html).toContain(`<meta property="og:image" content="${DEFAULT_SHARE_IMAGE}" />`);
@@ -93,7 +117,13 @@ describe("product social prerender", () => {
     });
     const output = path.join(buildDir, productPath(PRODUCT), "index.html");
     expect(result.count).toBe(1);
+    expect(result.redirectCount).toBe(1);
     expect(fs.readFileSync(output, "utf8")).toContain(PRODUCT.name);
+    const legacyOutput = path.join(buildDir, "product", PRODUCT.id, "index.html");
+    expect(fs.readFileSync(legacyOutput, "utf8")).toContain("http-equiv=\"refresh\"");
+    expect(fs.readFileSync(path.join(buildDir, "_redirects"), "utf8")).toContain(
+      `/product/${PRODUCT.id} ${productPath(PRODUCT)} 301`,
+    );
   });
 
   test("fails rather than publishing an incomplete catalogue", async () => {
