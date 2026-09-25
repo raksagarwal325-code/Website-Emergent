@@ -1,6 +1,7 @@
 """Validated, deterministic quotation snapshots for Admin enquiries."""
 from datetime import datetime, timedelta, timezone
 from typing import List, Literal, Optional
+import re
 import uuid
 
 from fastapi import HTTPException
@@ -78,6 +79,7 @@ class QuotationAIAssistItem(BaseModel):
     line_id: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=300)
     sku: Optional[str] = Field(default=None, max_length=100)
+    quantity: int = Field(default=1, ge=1, le=1000)
 
 
 class QuotationAIAssistRequest(BaseModel):
@@ -180,6 +182,35 @@ class QuotationAIDraft(BaseModel):
             if item.body_basis != "match_item":
                 item.body_reference_line_id = None
                 item.matching_components = []
+
+        def customer_text(value: str) -> str:
+            text = quotation_text(value)
+            for index, request_item in enumerate(request.items):
+                text = re.sub(
+                    re.escape(request_item.line_id),
+                    f"Item {index + 1}",
+                    text,
+                    flags=re.IGNORECASE,
+                )
+            return text
+
+        self.summary = customer_text(self.summary)
+        self.reference.title = customer_text(self.reference.title)
+        self.reference.use_details = customer_text(self.reference.use_details)
+        self.reference.exclude_details = customer_text(self.reference.exclude_details)
+        self.warnings = [customer_text(warning) for warning in self.warnings]
+        target = next(item for item in request.items if item.line_id == request.target_line_id)
+        for item in self.item_updates:
+            item.suggested_name = customer_text(item.suggested_name)
+            item.customisation_notes = customer_text(item.customisation_notes)
+            if target.quantity > 1 and re.search(r"\bproduce one\b", item.customisation_notes, flags=re.IGNORECASE):
+                item.customisation_notes = re.sub(
+                    r"\bproduce one\b",
+                    "Produce a",
+                    item.customisation_notes,
+                    flags=re.IGNORECASE,
+                )
+                item.customisation_notes = f"Quantity: {target.quantity} identical units. {item.customisation_notes}"
         return self
 
 
