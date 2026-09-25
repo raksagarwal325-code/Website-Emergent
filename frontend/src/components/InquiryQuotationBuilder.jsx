@@ -268,14 +268,19 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const analyseItemCustomisation = async (index) => {
     const target = form.items[index];
     if (!target || target.customisation_instruction.trim().length < 3) { toast.error("Type what should be changed for this product"); return; }
-    if (!form.items.length || form.items.some((item) => !item.name.trim())) { toast.error("Add and name the quotation products first"); return; }
+    const unnamedContextItem = form.items.find((item) => item.line_id !== target.line_id && !item.name.trim());
+    if (!form.items.length || unnamedContextItem) { toast.error("Name the other quotation products first so AI can understand what this item should match"); return; }
     setAiBusyLineId(target.line_id);
     try {
       const result = await api.aiQuotationCustomisation({
         image_url: target.customisation_reference_image || null,
         instruction: target.customisation_instruction.trim(),
         target_line_id: target.line_id,
-        items: form.items.map(({ line_id, name, sku }) => ({ line_id, name, sku: sku || null })),
+        items: form.items.map(({ line_id, name, sku }, itemIndex) => ({
+          line_id,
+          name: name.trim() || `Custom product Item ${itemIndex + 1}`,
+          sku: sku || null,
+        })),
       });
       const draft = result.draft;
       const update = draft.item_updates.find((row) => row.line_id === target.line_id);
