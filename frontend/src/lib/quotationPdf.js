@@ -268,6 +268,42 @@ export const quotationSummaryRows = (quote) => {
   return rows;
 };
 
+export const planQuotationRowPages = ({ rowHeights, firstPageStart, continuationStart, closingHeight, pageBottom }) => {
+  if (!rowHeights.length) return [[]];
+  const pages = [];
+  let rowIndex = 0;
+  let pageStart = firstPageStart;
+
+  while (rowIndex < rowHeights.length) {
+    const remainingHeight = rowHeights.slice(rowIndex).reduce((total, height) => total + height, 0);
+    if (pageStart + remainingHeight + closingHeight <= pageBottom) {
+      pages.push(rowHeights.map((_, index) => index).slice(rowIndex));
+      break;
+    }
+
+    const pageRows = [];
+    let pageY = pageStart;
+    while (rowIndex < rowHeights.length && pageY + rowHeights[rowIndex] <= pageBottom) {
+      pageRows.push(rowIndex);
+      pageY += rowHeights[rowIndex];
+      rowIndex += 1;
+    }
+
+    if (rowIndex === rowHeights.length && pageRows.length > 1) {
+      rowIndex -= 1;
+      pageRows.pop();
+    }
+    if (!pageRows.length) {
+      pageRows.push(rowIndex);
+      rowIndex += 1;
+    }
+    pages.push(pageRows);
+    pageStart = continuationStart;
+  }
+
+  return pages;
+};
+
 export const createQuotationPdf = async (quote, options = {}) => {
   const company = { ...COMPANY, ...(quote.business || {}) };
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
@@ -434,7 +470,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
 
   const summaryRows = quotationSummaryRows(quote);
   const totalsHeight = summaryRows.length * 6.2 + 9;
-  const footerHeight = 45;
+  const footerHeight = 42;
   const customItems = quote.items
     .map((item, itemIndex) => ({ item, itemIndex }))
     .filter(({ item }) => item.is_custom);
@@ -447,13 +483,17 @@ export const createQuotationPdf = async (quote, options = {}) => {
     const rowHeight = Math.max(13.5, nameLines.length * 3.1 + (item.sku ? 4 : 1) + customLines.length * 3.35 + 3);
     return { item, nameLines, customLines, rowHeight };
   });
-  const allRowsEnd = y + rowData.reduce((total, row) => total + row.rowHeight, 0);
-  const needsClosingPage = allRowsEnd + closingBlockHeight > pageHeight - 11;
-  const balanceAt = needsClosingPage && rowData.length >= 6 ? rowData.length - 2 : -1;
+  const commercialPages = planQuotationRowPages({
+    rowHeights: rowData.map(({ rowHeight }) => rowHeight),
+    firstPageStart: y,
+    continuationStart: 40.5,
+    closingHeight: closingBlockHeight,
+    pageBottom: pageHeight - 11,
+  });
+  const commercialPageStarts = new Set(commercialPages.slice(1).map(([firstRow]) => firstRow));
 
   rowData.forEach(({ item, nameLines, customLines, rowHeight }, index) => {
-    if (index === balanceAt) startContinuationPage();
-    if (y + rowHeight > 225) startContinuationPage();
+    if (commercialPageStarts.has(index)) startContinuationPage();
     const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
     setText(6.8, "normal", MUTED);
     doc.text(String(index + 1), cols.serial, y + 6.8, { align: "center" });
@@ -586,7 +626,6 @@ export const createQuotationPdf = async (quote, options = {}) => {
     };
 
     scheduleY = startCustomisationSchedulePage(false);
-    let scheduleItemsOnPage = 0;
     customItems.forEach(({ item, itemIndex }) => {
       const nameLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 145);
       const specificationLines = doc.splitTextToSize(quotationCustomisationScheduleText(quote, item), 145);
@@ -595,10 +634,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
         ? doc.splitTextToSize(`Design reference: ${referenceCodes.join(", ")}`, 145)
         : [];
       const rowHeight = Math.max(22, 7 + nameLines.length * 3.5 + specificationLines.length * 3.45 + referenceLines.length * 3.2 + 4);
-      if (scheduleItemsOnPage >= 4 || scheduleY + rowHeight > 247) {
-        scheduleY = startCustomisationSchedulePage(true);
-        scheduleItemsOnPage = 0;
-      }
+      if (scheduleY + rowHeight > 247) scheduleY = startCustomisationSchedulePage(true);
       fillRect(inner, scheduleY, usable, rowHeight, (itemIndex % 2 === 0) ? [248, 243, 235] : IVORY);
       setText(7, "bold", MAROON);
       doc.text(String(itemIndex + 1), inner + 6, scheduleY + 7);
@@ -614,7 +650,6 @@ export const createQuotationPdf = async (quote, options = {}) => {
       setText(7, "normal", INK);
       doc.text(String(item.quantity), pageWidth - inner - 6, scheduleY + 7, { align: "right" });
       scheduleY += rowHeight;
-      scheduleItemsOnPage += 1;
       line(inner, scheduleY, inner + usable, scheduleY, LINE, 0.15);
     });
 
