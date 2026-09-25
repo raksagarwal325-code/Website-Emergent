@@ -161,6 +161,22 @@ export const clientFacingItemCustomisationText = (quote, item) => {
   return text;
 };
 
+export const CUSTOM_PRODUCT_NOTE = "Customer approval of this quotation confirms the written custom specifications. Product and reference images are visual guides. As each piece is handcrafted, minor variations may occur. Finished product photographs will be shared after completion and before dispatch.";
+
+export const quotationItemCustomParts = (quote, item, designReferences = []) => {
+  const referenceCodes = quotationReferenceCodesForItem({ design_references: designReferences }, item);
+  const linkedIndex = (quote.items || []).findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
+  const parts = [];
+  if (item.customisation_notes && !referenceCodes.length) {
+    parts.push(clientFacingItemCustomisationText(quote, item));
+  } else {
+    if (item.body_basis === "match_item" && linkedIndex >= 0) parts.push(`Body: match Item ${linkedIndex + 1}`);
+    if (item.body_basis === "drawing") parts.push("Body: approved drawing");
+    if (referenceCodes.length) parts.push(`Reference: ${referenceCodes.join(", ")}`);
+  }
+  return parts;
+};
+
 const moreDetailedText = (current, candidate) => (
   quotationPdfText(candidate).trim().length > quotationPdfText(current).trim().length ? candidate : current
 );
@@ -404,16 +420,10 @@ export const createQuotationPdf = async (quote, options = {}) => {
 
   quote.items.forEach((item, index) => {
     const nameLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 68).slice(0, 3);
-    const referenceCodes = quotationReferenceCodesForItem({ design_references: designReferences }, item);
     const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
-    const customParts = [];
-    if (item.body_basis === "match_item" && linkedIndex >= 0) customParts.push(`Body: match Item ${linkedIndex + 1}`);
-    if (item.body_basis === "drawing") customParts.push("Body: approved drawing");
-    if (item.body_basis === "drawing_pending") customParts.push("Body: drawing pending");
-    if (referenceCodes.length) customParts.push(`Reference: ${referenceCodes.join(", ")}`);
-    if (item.approval_required) customParts.push("Approval required before production");
+    const customParts = quotationItemCustomParts(quote, item, designReferences);
     const customLines = customParts.length ? doc.splitTextToSize(customParts.join(" | "), 68) : [];
-    const rowHeight = Math.max(13.5, nameLines.length * 3.1 + (item.sku ? 4 : 1) + customLines.length * 2.7 + 3);
+    const rowHeight = Math.max(13.5, nameLines.length * 3.1 + (item.sku ? 4 : 1) + customLines.length * 3.35 + 3);
     if (y + rowHeight > 225) startContinuationPage();
     setText(6.8, "normal", MUTED);
     doc.text(String(index + 1), cols.serial, y + 6.8, { align: "center" });
@@ -428,7 +438,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
       doc.text(`SKU ${item.sku}`, cols.item, y + 5 + nameLines.length * 3.1);
     }
     if (customLines.length) {
-      setText(5.1, "bold", MAROON);
+      setText(6.1, "bold", MAROON);
       doc.text(customLines, cols.item, y + 5 + nameLines.length * 3.1 + (item.sku ? 3.3 : 0), { lineHeightFactor: 1.02 });
     }
     setText(7, "normal", INK);
@@ -443,8 +453,10 @@ export const createQuotationPdf = async (quote, options = {}) => {
   const summaryRows = quotationSummaryRows(quote);
   const totalsHeight = summaryRows.length * 6.2 + 9;
   const footerHeight = 45;
+  const hasCustomItems = quote.items.some((item) => item.is_custom);
+  const customNoteHeight = hasCustomItems ? 21 : 0;
   const closingHeight = quote.notes ? 17 : 11;
-  if (y + 4 + totalsHeight + 4 + footerHeight + closingHeight > pageHeight - 11) startContinuationPage(false);
+  if (y + 4 + totalsHeight + 4 + customNoteHeight + footerHeight + closingHeight > pageHeight - 11) startContinuationPage(false);
 
   y += 4;
   const totalsX = 112;
@@ -467,7 +479,15 @@ export const createQuotationPdf = async (quote, options = {}) => {
   setText(8.2, "bold", GOLD, "times");
   doc.text(`INR ${quoteMoney(quote.total)}`, totalsX + totalsWidth - 4, payableY + 5.8, { align: "right" });
 
-  const footerTop = y + totalsHeight + 4;
+  let footerTop = y + totalsHeight + 4;
+  if (hasCustomItems) {
+    fillRect(inner, footerTop, usable, 17, CREAM, 1.2);
+    setText(6.2, "bold", MAROON);
+    doc.text("CUSTOM PRODUCT NOTE", inner + 4, footerTop + 5.5);
+    setText(6, "normal", INK);
+    doc.text(doc.splitTextToSize(CUSTOM_PRODUCT_NOTE, usable - 8), inner + 4, footerTop + 10.2, { lineHeightFactor: 1.06 });
+    footerTop += customNoteHeight;
+  }
   fillRect(inner, footerTop, usable, footerHeight, CREAM, 1.5);
   const footerGap = 3;
   const bankWidth = 57;
@@ -598,7 +618,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
         const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
         if (item.body_basis === "match_item" && linkedIndex >= 0) bodyParts.push(`Match Item ${linkedIndex + 1}`);
         else if (item.body_basis === "drawing") bodyParts.push("Use the approved drawing");
-        else if (item.body_basis === "drawing_pending") bodyParts.push("Final design drawing pending");
+        else if (item.body_basis === "drawing_pending") bodyParts.push("Production follows the written custom specifications");
         else bodyParts.push("Retain the product body and construction");
         if ((item.matching_components || []).length) bodyParts.push(item.matching_components.map((value) => COMPONENT_LABELS[value] || value).join(", "));
       }
@@ -634,11 +654,8 @@ export const createQuotationPdf = async (quote, options = {}) => {
     }
     fillRect(inner, confirmationTop, usable, 27, CREAM, 1.2);
     setText(6.3, "bold", MAROON);
-    doc.text("DESIGN APPROVAL", inner + 5, confirmationTop + 7);
-    const approvalItems = applicableItems.filter(({ item }) => item.approval_required);
-    const confirmation = approvalItems.length
-      ? `Final drawing / design approval is required before production for Item${approvalItems.length === 1 ? "" : "s"} ${approvalItems.map(({ itemIndex }) => itemIndex + 1).join(", ")}.`
-      : "The approved quotation and this reference schedule form the production instruction.";
+    doc.text("CUSTOM PRODUCTION NOTE", inner + 5, confirmationTop + 7);
+    const confirmation = CUSTOM_PRODUCT_NOTE;
     setText(5.7, "normal", INK);
     doc.text(doc.splitTextToSize(confirmation, usable - 10), inner + 5, confirmationTop + 14, { lineHeightFactor: 1.08 });
     pageFooter();
