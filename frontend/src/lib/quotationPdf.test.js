@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationDefaultTerms, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
+import { clientFacingItemCustomisationText, clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationDefaultTerms, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
 
 const items = [
   ["Noorjharokha Chain-Suspended Diamond-Cut Glass Wall Lantern", "SGE-WL-089", 1, 6000],
@@ -58,6 +58,13 @@ test("replaces internal line IDs with customer-facing item numbers", () => {
   const quote = { items: [{ line_id: "line-secret-one" }, { line_id: "line-secret-two" }] };
   expect(clientFacingQuotationText(quote, "Match line-secret-one; prepare line-secret-two."))
     .toBe("Match Item 1; prepare Item 2.");
+});
+
+test("repairs an older multi-unit customisation that says produce one", () => {
+  const quote = { items: [{ line_id: "line-chandelier" }, { line_id: "line-wall", quantity: 2 }] };
+  const item = { line_id: "line-wall", quantity: 2, customisation_notes: "Produce one wall light to match line-chandelier." };
+  expect(clientFacingItemCustomisationText(quote, item))
+    .toBe("Quantity: 2 identical units. Produce a wall light to match Item 1.");
 });
 
 test("merges repeated copies of the same design-reference image", () => {
