@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { CUSTOM_PRODUCT_NOTE, clientFacingItemCustomisationText, clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationDefaultTerms, quotationItemCustomParts, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
+import { CUSTOM_PRODUCT_NOTE, clientFacingItemCustomisationText, clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationCustomisationScheduleText, quotationDefaultTerms, quotationItemCustomParts, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
 
 const items = [
   ["Noorjharokha Chain-Suspended Diamond-Cut Glass Wall Lantern", "SGE-WL-089", 1, 6000],
@@ -67,16 +67,19 @@ test("repairs an older multi-unit customisation that says produce one", () => {
     .toBe("Quantity: 2 identical units. Produce a wall light to match Item 1.");
 });
 
-test("prints AI-prepared specifications when a custom item has no separate reference image", () => {
+test("keeps commercial particulars compact and reserves full specifications for the schedule", () => {
   const quote = { items: [{ line_id: "basket", quantity: 2 }] };
   const item = {
     line_id: "basket", quantity: 2, is_custom: true, body_basis: "drawing_pending",
     customisation_notes: "Quantity: 2 identical units. Each approximately 3 ft diameter x 2-2.5 ft high with single-step construction.",
   };
-  expect(quotationItemCustomParts(quote, item, [])).toEqual([
+  expect(quotationItemCustomParts(quote, item, [])).toEqual(["Customised - see Customisation Schedule"]);
+  expect(quotationCustomisationScheduleText(quote, item)).toBe(
     "Quantity: 2 identical units. Each approximately 3 ft diameter x 2-2.5 ft high with single-step construction.",
+  );
+  expect(quotationItemCustomParts(quote, { ...item, customisation_notes: "" }, [])).toEqual([
+    "Customised - see Customisation Schedule",
   ]);
-  expect(quotationItemCustomParts(quote, { ...item, customisation_notes: "" }, [])).toEqual([]);
   expect(CUSTOM_PRODUCT_NOTE).toContain("Finished product photographs will be shared after completion and before dispatch.");
   expect(CUSTOM_PRODUCT_NOTE).not.toMatch(/approval.*before production|drawing pending/i);
 });
@@ -111,7 +114,7 @@ test("renders written custom specifications without requiring a reference image"
     signatureDataUrl: null,
     stampDataUrl: null,
   });
-  expect(doc.getNumberOfPages()).toBe(1);
+  expect(doc.getNumberOfPages()).toBe(2);
   const output = Buffer.from(doc.output("arraybuffer"));
   expect(output.length).toBeGreaterThan(20000);
   if (process.env.QUOTATION_CUSTOM_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_CUSTOM_PDF_OUTPUT, output);
@@ -211,7 +214,7 @@ test("adds a deterministic design-reference schedule for linked custom products"
     stampDataUrl: null,
   });
 
-  expect(doc.getNumberOfPages()).toBe(2);
+  expect(doc.getNumberOfPages()).toBe(3);
   const output = Buffer.from(doc.output("arraybuffer"));
   expect(output.length).toBeGreaterThan(20000);
   if (process.env.QUOTATION_REFERENCE_PDF_OUTPUT) {
