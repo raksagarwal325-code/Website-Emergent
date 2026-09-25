@@ -193,6 +193,35 @@ test("uploads a custom item image and saves it in the quotation", async () => {
   await waitFor(() => expect(mockApi.createStandaloneQuotation).toHaveBeenCalledWith(expect.objectContaining({ items: [expect.objectContaining({ image: "/api/files/custom.webp" })] })));
 });
 
+test("harmonises related custom variant names before saving", async () => {
+  mockApi.createStandaloneQuotation.mockImplementation(async (data) => ({ ...savedQuote, ...data }));
+  render(<InquiryQuotationBuilder inquiry={{ customer_name: "Client", items: [
+    {
+      line_id: "two-step", image: "/api/files/basket-large.webp", is_custom: true,
+      name: "Crystal Basket Chandelier with Glass Shades - Gold Finish - Approx. 3 ft Dia x 3-3.5 ft H",
+      price: 54000, customisation_instruction: "Keep two arm tiers at this size.",
+      customisation_notes: "Retain the same two arm tiers. Diameter 3 ft and height 3-3.5 ft.",
+      customisation_ai_prepared: true,
+    },
+    {
+      line_id: "one-step", image: "/api/files/basket-small.webp", is_custom: true,
+      name: "Crystal Basket Chandelier with Hurricane Glass Shades - 1-Step - Gold Finish - Approx. 3 ft Dia x 2-2.5 ft H",
+      price: 42000, customisation_instruction: "Use a single ring at this size.",
+      customisation_notes: "Use a single ring of arms. Diameter 3 ft and height 2-2.5 ft.",
+      customisation_ai_prepared: true,
+    },
+  ] }} />);
+
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
+  fireEvent.click(screen.getByTestId("quotation-save"));
+
+  await waitFor(() => expect(mockApi.createStandaloneQuotation).toHaveBeenCalledTimes(1));
+  expect(mockApi.createStandaloneQuotation.mock.calls[0][0].items.map((item) => item.name)).toEqual([
+    "Crystal Basket Chandelier with Glass Shades - 2-Step - Gold Finish - Approx. 3 ft Dia x 3-3.5 ft H",
+    "Crystal Basket Chandelier with Glass Shades - 1-Step - Gold Finish - Approx. 3 ft Dia x 2-2.5 ft H",
+  ]);
+});
+
 test("lets AI prepare each customised product from one instruction and an optional image", async () => {
   mockApi.upload.mockResolvedValue({ url: "/api/files/ai-shade.webp" });
   mockApi.aiQuotationCustomisation.mockImplementation(async ({ target_line_id }) => ({ draft: target_line_id === "line-one" ? {
