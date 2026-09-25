@@ -121,7 +121,7 @@ test("renders written custom specifications without requiring a reference image"
   if (process.env.QUOTATION_CUSTOM_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_CUSTOM_PDF_OUTPUT, output);
 });
 
-test("balances a dense eight-item customisation schedule across two readable pages", async () => {
+test("balances eight custom items across two schedule pages without adding a reference-only page", async () => {
   const denseItems = Array.from({ length: 8 }, (_, index) => ({
     line_id: `custom-${index + 1}`,
     name: `Custom Product ${index + 1} with Confirmed Construction and Finish`,
@@ -135,7 +135,15 @@ test("balances a dense eight-item customisation schedule across two readable pag
     quote_number: "SGE-2026-DENSE", created_at: "2026-09-25T10:10:00+05:30",
     customer_name: "Sample Client", customer_phone: "+919999999999",
     billing_address: "Firozabad -283203", shipping_address: "Same as Billing Address",
-    items: denseItems, design_references: [], subtotal: 80000, discount: 0, shipping: 0,
+    items: denseItems,
+    design_references: [{
+      id: "shade-reference", code: "SD-01", category: "shade_design",
+      title: "Frosted star-cut shade", image: "/references/shade.jpeg",
+      applies_to: ["custom-1", "custom-2"],
+      use_details: "Use the confirmed frosted star-cut shade pattern.",
+      exclude_details: "Do not copy the reference body or metalwork.",
+    }],
+    subtotal: 80000, discount: 0, shipping: 0,
     tax_rate: 18, tax_amount: 14400, total: 94400, valid_until: "2026-10-10", terms: "", notes: "",
   }, { signatureDataUrl: null, stampDataUrl: null });
 
@@ -143,6 +151,49 @@ test("balances a dense eight-item customisation schedule across two readable pag
   const output = Buffer.from(doc.output("arraybuffer"));
   expect(output.length).toBeGreaterThan(10000);
   if (process.env.QUOTATION_DENSE_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_DENSE_PDF_OUTPUT, output);
+});
+
+test("keeps a detailed eight-item quotation with one design reference to four balanced pages", async () => {
+  const names = [
+    "Shahi Six-Light Crystal Chandelier with Frosted Starburst Globe Glass Shades",
+    "Single Wall Light Matching Shahi Chandelier - Custom Frosted Starburst Globe Shade",
+    "Single Wall Light - Fabric Shade - Existing Metal Finish Retained",
+    "Crystal Basket Chandelier with Glass Shades - Approx. 6 ft Dia x 8 ft H",
+    "Himkamal Crystal Basket Chandelier with Frosted Tulip Glass Shades - 2-Step - Gold Finish - Approx. 3 ft Dia x 3-3.5 ft H",
+    "Himkamal Crystal Basket Chandelier with Frosted Tulip Glass Shades - 1-Step - Gold Finish - Approx. 3 ft Dia x 2-2.5 ft H",
+    "Ring Globe Pendant - 3-Light Cluster",
+    "Crystal Pedestal Side Table with Fringe - Gold Finish",
+  ];
+  const detailedItems = names.map((name, index) => ({
+    line_id: `item-${index + 1}`, name, quantity: index === 1 ? 2 : index === 2 ? 4 : 1,
+    sku: index === 0 ? "SGE-CH-015" : [4, 5].includes(index) ? "SGE-CH-046" : "",
+    unit_price: [36000, 6500, 2000, 250000, 54000, 42000, 9000, 75000][index],
+    line_total: [36000, 13000, 8000, 250000, 54000, 42000, 9000, 75000][index],
+    is_custom: true,
+    body_basis: index === 1 ? "match_item" : "product",
+    body_reference_line_id: index === 1 ? "item-1" : null,
+    customisation_notes: `Retain the selected product image as the complete base design for Item ${index + 1}. Apply only the confirmed custom change written for this item, while preserving every unspecified visible construction, finish and decorative detail without inventing measurements or materials.`,
+  }));
+  const { doc } = await createQuotationPdf({
+    quote_number: "SGE-2026-COMPACT", created_at: "2026-09-25T15:30:00+05:30",
+    customer_name: "Sample Client", customer_phone: "+919999999999",
+    billing_address: "Firozabad", shipping_address: "Raniwala Market\nFirozabad -283203",
+    items: detailedItems,
+    design_references: [{
+      id: "shade-reference", code: "SD-01", category: "shade_design",
+      title: "Frosted globe shade with etched starbursts and bottom fan cut",
+      image: "/references/shade.jpeg", applies_to: ["item-1", "item-2"],
+      use_details: "Use the frosted globe and confirmed etched starburst and bottom fan/leaf cut pattern.",
+      exclude_details: "Do not copy the reference body, wall plate, arm, hanging hardware, holder or finish.",
+    }],
+    subtotal: 487000, discount: 0, shipping: 0, tax_rate: 18, tax_amount: 87660,
+    total: 574660, valid_until: "2026-10-10", terms: "", notes: "",
+  }, { signatureDataUrl: null, stampDataUrl: null });
+
+  expect(doc.getNumberOfPages()).toBe(4);
+  const output = Buffer.from(doc.output("arraybuffer"));
+  expect(output.length).toBeGreaterThan(10000);
+  if (process.env.QUOTATION_COMPACT_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_COMPACT_PDF_OUTPUT, output);
 });
 
 test("merges repeated copies of the same design-reference image", () => {
@@ -239,7 +290,7 @@ test("adds a deterministic design-reference schedule for linked custom products"
     stampDataUrl: null,
   });
 
-  expect(doc.getNumberOfPages()).toBe(3);
+  expect(doc.getNumberOfPages()).toBe(2);
   const output = Buffer.from(doc.output("arraybuffer"));
   expect(output.length).toBeGreaterThan(20000);
   if (process.env.QUOTATION_REFERENCE_PDF_OUTPUT) {
