@@ -264,7 +264,7 @@ test("AI names a blank custom product from its instruction", async () => {
 
   await waitFor(() => expect(mockApi.aiQuotationCustomisation).toHaveBeenCalledWith(expect.objectContaining({
     target_line_id: "line-two",
-    items: expect.arrayContaining([expect.objectContaining({ line_id: "line-two", name: "Custom product Item 2" })]),
+    items: expect.arrayContaining([expect.objectContaining({ line_id: "line-two", name: "Custom product Item 2", quantity: 1 })]),
   })));
   expect(await screen.findByLabelText("Product 2")).toHaveValue("Matching Single-Light Crystal Glass Wall Light");
 });

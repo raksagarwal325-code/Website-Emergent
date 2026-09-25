@@ -85,6 +85,33 @@ def test_ai_customisation_draft_accepts_known_items_and_valid_match():
     assert draft.item_updates[0].body_reference_line_id == "chandelier"
 
 
+def test_ai_customisation_removes_internal_ids_and_respects_multi_unit_quantity():
+    request = QuotationAIAssistRequest(
+        instruction="Make a matching wall light.",
+        target_line_id="line-wall-private",
+        items=[
+            {"line_id": "line-chandelier-private", "name": "Chandelier", "quantity": 1},
+            {"line_id": "line-wall-private", "name": "Wall light", "quantity": 2},
+        ],
+    )
+    draft = QuotationAIDraft.model_validate({
+        "summary": "Match line-chandelier-private.",
+        "reference": {
+            "category": "shade_design", "title": "Matching shade",
+            "applies_to": ["line-wall-private"], "use_details": "Use line-chandelier-private as context.",
+        },
+        "item_updates": [{
+            "line_id": "line-wall-private", "body_basis": "match_item",
+            "body_reference_line_id": "line-chandelier-private",
+            "customisation_notes": "Produce one single-light wall sconce to match line-chandelier-private.",
+        }],
+    }).validate_for(request)
+
+    assert draft.summary == "Match Item 1."
+    assert draft.reference.use_details == "Use Item 1 as context."
+    assert draft.item_updates[0].customisation_notes == "Quantity: 2 identical units. Produce a single-light wall sconce to match Item 1."
+
+
 def test_ai_customisation_draft_rejects_unknown_item_mapping():
     request = QuotationAIAssistRequest(
         image_url="/api/files/reference.webp",

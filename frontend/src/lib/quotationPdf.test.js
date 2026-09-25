@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { createQuotationPdf, quotationDefaultTerms, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
+import { clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationDefaultTerms, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows } from "./quotationPdf";
 
 const items = [
   ["Noorjharokha Chain-Suspended Diamond-Cut Glass Wall Lantern", "SGE-WL-089", 1, 6000],
@@ -52,6 +52,25 @@ test("describes the actual GST treatment in default terms", () => {
 test("normalises PDF-incompatible dash characters without joining words", () => {
   expect(quotationPdfText("Six\u2011Light Star\u2011Etched globe\u2011to\u2011teardrop"))
     .toBe("Six-Light Star-Etched globe-to-teardrop");
+});
+
+test("replaces internal line IDs with customer-facing item numbers", () => {
+  const quote = { items: [{ line_id: "line-secret-one" }, { line_id: "line-secret-two" }] };
+  expect(clientFacingQuotationText(quote, "Match line-secret-one; prepare line-secret-two."))
+    .toBe("Match Item 1; prepare Item 2.");
+});
+
+test("merges repeated copies of the same design-reference image", () => {
+  const result = mergeDesignReferencesForPdf([
+    { code: "SD-01", category: "shade_design", image: "/a.jpeg", applies_to: ["one"], title: "Shade", use_details: "Use stars." },
+    { code: "SD-02", category: "shade_design", image: "/b.jpeg", applies_to: ["two"], title: "Detailed star-cut shade", use_details: "Use frosted glass with scattered star cuts." },
+  ], ["data:image/jpeg;base64,SAME", "data:image/jpeg;base64,SAME"]);
+
+  expect(result.references).toHaveLength(1);
+  expect(result.references[0]).toEqual(expect.objectContaining({
+    code: "SD-01", title: "Detailed star-cut shade",
+    applies_to: ["one", "two"], use_details: "Use frosted glass with scattered star cuts.",
+  }));
 });
 
 test("renders the complete commercial quotation as a single A4 page", async () => {

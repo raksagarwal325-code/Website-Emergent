@@ -3685,6 +3685,8 @@ Rules:
 - Use match_item only when the instruction explicitly says one product body/construction should match another quotation item.
 - Never combine contradictory instructions. For example, if the target wall light must match a chandelier body, do not also say to retain the original wall-light body or finish.
 - Never invent dimensions, prices, materials, wattage, holder type, quantity, finish or production feasibility.
+- Use each quotation item's supplied quantity exactly. If the selected quantity is greater than one, describe that many identical units; never say "produce one".
+- Line IDs are internal mapping keys only. Never include a raw line ID in summaries, names, reference wording, customisation notes or warnings. Refer to products as Item 1, Item 2, and so on.
 - Put uncertain or missing production facts in warnings. Require final approval for custom work.
 - Use ordinary ASCII hyphens (-), not typographic or non-breaking dashes.
 - Do not use markdown or commentary outside the JSON."""
