@@ -288,6 +288,10 @@ class QuotationCreate(BaseModel):
     design_references: List[QuotationDesignReferenceInput] = Field(default_factory=list, max_length=30)
     discount: float = Field(default=0, ge=0, le=100_000_000)
     shipping: float = Field(default=0, ge=0, le=100_000_000)
+    freight_mode: Literal[
+        "legacy", "included_in_price", "payable_by_client", "added_to_bill",
+    ] = "legacy"
+    tax_mode: Literal["legacy", "gst", "no_tax"] = "legacy"
     tax_rate: float = Field(default=0, ge=0, le=100)
     validity_days: int = Field(default=15, ge=1, le=365)
     terms: str = Field(default="", max_length=3000)
@@ -310,6 +314,16 @@ class QuotationCreate(BaseModel):
 
     @model_validator(mode="after")
     def _validate_customisation_links(self):
+        if self.freight_mode == "added_to_bill" and self.shipping <= 0:
+            raise ValueError("Enter the freight amount that must be added to the bill.")
+        if self.freight_mode in {"included_in_price", "payable_by_client"} and self.shipping != 0:
+            raise ValueError("A separate freight amount is allowed only when freight is added to the bill.")
+        if self.tax_mode == "gst" and self.tax_rate <= 0:
+            raise ValueError("Enter the GST rate for a GST quotation.")
+        if self.tax_mode == "no_tax" and self.tax_rate != 0:
+            raise ValueError("A quotation without tax must use a zero tax rate.")
+        if self.tax_mode == "no_tax" and self.freight_mode == "added_to_bill":
+            raise ValueError("Freight added to the bill requires a GST quotation so tax is charged on the freight amount.")
         line_ids = [item.line_id for item in self.items if item.line_id]
         if len(line_ids) != len(set(line_ids)):
             raise ValueError("Quotation item line IDs must be unique.")
@@ -396,8 +410,10 @@ def build_quotation(
     shipping = quote_money(payload.shipping)
     if discount > subtotal:
         raise HTTPException(422, "Discount cannot exceed the product subtotal.")
-    taxable_amount = quote_money(subtotal - discount + shipping)
-    tax_amount = quote_money(taxable_amount * payload.tax_rate / 100)
+    billed_freight = shipping if payload.freight_mode in {"legacy", "added_to_bill"} else 0
+    taxable_amount = quote_money(subtotal - discount + billed_freight)
+    tax_rate = 0 if payload.tax_mode == "no_tax" else quote_money(payload.tax_rate)
+    tax_amount = quote_money(taxable_amount * tax_rate / 100)
     created = created_at or datetime.now(timezone.utc)
     identifier = quote_id or str(uuid.uuid4())
     return {
@@ -414,8 +430,10 @@ def build_quotation(
         "design_references": [reference.model_dump() for reference in payload.design_references],
         "subtotal": subtotal,
         "discount": discount,
-        "shipping": shipping,
-        "tax_rate": quote_money(payload.tax_rate),
+        "shipping": billed_freight,
+        "freight_mode": payload.freight_mode,
+        "tax_mode": payload.tax_mode,
+        "tax_rate": tax_rate,
         "tax_amount": tax_amount,
         "total": quote_money(taxable_amount + tax_amount),
         "validity_days": payload.validity_days,
