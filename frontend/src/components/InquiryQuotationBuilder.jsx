@@ -3,6 +3,7 @@ import { Download, History, LoaderCircle, MessageCircle, Save, Sparkles, Trash2,
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { createQuotationPdf } from "../lib/quotationPdf";
+import { harmoniseCustomVariantNames } from "../lib/quotationNaming";
 
 export { createQuotationPdf } from "../lib/quotationPdf";
 
@@ -83,7 +84,7 @@ const quotationForm = (source = {}) => {
   return {
     ...base,
     ...source,
-    items: base.items,
+    items: harmoniseCustomVariantNames(base.items),
     design_references: base.design_references,
     customer_email: source.customer_email || "",
   };
@@ -195,10 +196,11 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     }
     setSaving(true);
     try {
+      const harmonisedItems = harmoniseCustomVariantNames(form.items);
       const create = editingId ? (data) => api.updateQuotation(editingId, data) : inquiry.id ? (data) => api.createInquiryQuotation(inquiry.id, data) : api.createStandaloneQuotation;
       const quote = await create({
         ...form,
-        items: form.items.map((item) => ({
+        items: harmonisedItems.map((item) => ({
           ...item,
           quantity: Math.max(1, Math.round(numberValue(item.quantity))),
           unit_price: numberValue(item.unit_price),
@@ -321,22 +323,23 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
             exclude_details: draft.reference.exclude_details || "",
           }];
         }
+        const updatedItems = current.items.map((item) => item.line_id === target.line_id ? {
+          ...item,
+          name: update.suggested_name?.trim() || item.name,
+          is_custom: true,
+          body_basis: update.body_basis,
+          body_reference_line_id: update.body_reference_line_id || null,
+          matching_components: update.matching_components || [],
+          customisation_notes: update.customisation_notes || "",
+          approval_required: Boolean(update.approval_required),
+          customisation_ai_summary: draft.summary,
+          customisation_ai_prepared: true,
+          customisation_reference_id: referenceId,
+        } : item);
         return {
           ...current,
           design_references: designReferences,
-          items: current.items.map((item) => item.line_id === target.line_id ? {
-            ...item,
-            name: update.suggested_name?.trim() || item.name,
-            is_custom: true,
-            body_basis: update.body_basis,
-            body_reference_line_id: update.body_reference_line_id || null,
-            matching_components: update.matching_components || [],
-            customisation_notes: update.customisation_notes || "",
-            approval_required: Boolean(update.approval_required),
-            customisation_ai_summary: draft.summary,
-            customisation_ai_prepared: true,
-            customisation_reference_id: referenceId,
-          } : item),
+          items: harmoniseCustomVariantNames(updatedItems),
         };
       });
       toast.success(`AI prepared the customisation for Item ${index + 1}`);
@@ -348,13 +351,15 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const download = async (existingQuote = null) => {
     const quote = existingQuote || await ensureSaved();
     if (!quote) return;
-    const { doc, filename } = await createQuotationPdf(quote);
+    const pdfQuote = { ...quote, items: harmoniseCustomVariantNames(quote.items || []) };
+    const { doc, filename } = await createQuotationPdf(pdfQuote);
     doc.save(filename);
   };
   const shareOnWhatsApp = async (existingQuote = null) => {
     const quote = existingQuote || await ensureSaved();
     if (!quote) return;
-    const { doc, filename } = await createQuotationPdf(quote);
+    const pdfQuote = { ...quote, items: harmoniseCustomVariantNames(quote.items || []) };
+    const { doc, filename } = await createQuotationPdf(pdfQuote);
     const blob = doc.output("blob");
     const file = typeof File === "function" ? new File([blob], filename, { type: "application/pdf" }) : null;
     if (file && navigator.share && navigator.canShare?.({ files: [file] })) {
