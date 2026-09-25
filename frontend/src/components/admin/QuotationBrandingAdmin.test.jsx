@@ -44,8 +44,22 @@ test("uploads, previews and removes reusable quotation branding", async () => {
 test("saves owner-edited bank details as strings preserving leading zeroes", async () => {
   mockApi.updateSettings.mockResolvedValue({});
   render(<QuotationBrandingAdmin settings={{}} />);
-  expect(screen.getByLabelText("Account number")).toHaveValue("097405000031");
-  fireEvent.change(screen.getByLabelText("Account number"), { target: { value: "001234567890" } });
+  expect(screen.getByRole("textbox", { name: /^Account number$/ })).toHaveValue("097405000031");
+  fireEvent.change(screen.getByRole("textbox", { name: /^Account number$/ }), { target: { value: "001234567890" } });
   fireEvent.click(screen.getByText("Save business details"));
   await waitFor(() => expect(mockApi.updateSettings).toHaveBeenCalledWith({ quotation_business: expect.objectContaining({ accountNumber: "001234567890" }) }));
+});
+
+test("saves a separate payment account for quotations without tax", async () => {
+  mockApi.updateSettings.mockResolvedValue({});
+  render(<QuotationBrandingAdmin settings={{ quotation_non_tax_business: { name: "Rakshit Agarwal" } }} />);
+  fireEvent.change(screen.getByLabelText("Alternate Bank name"), { target: { value: "Alternate Bank" } });
+  fireEvent.change(screen.getByLabelText("Alternate Account number"), { target: { value: "00112233" } });
+  fireEvent.change(screen.getByLabelText("Alternate IFSC"), { target: { value: "ALT0001234" } });
+  fireEvent.click(screen.getByText("Save alternate account"));
+  await waitFor(() => expect(mockApi.updateSettings).toHaveBeenCalledWith({
+    quotation_non_tax_business: expect.objectContaining({
+      name: "Rakshit Agarwal", bank: "Alternate Bank", accountNumber: "00112233", ifsc: "ALT0001234",
+    }),
+  }));
 });
