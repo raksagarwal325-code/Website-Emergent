@@ -4967,7 +4967,7 @@ async def image_protection_registry(
             "height": row.get("height"),
             "content_type": row.get("content_type"),
             "watermarked": bool(row.get("watermarked")),
-            "in_use": in_use if False else bool(uses),
+            "in_use": bool(uses),
             "usage_types": sorted(use_types),
             "products": product_refs,
             "projects": project_refs,
