@@ -117,6 +117,12 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [catalogue, setCatalogue] = useState([]);
   const [search, setSearch] = useState("");
   const [bottomSearch, setBottomSearch] = useState("");
+  const [productSearchMode, setProductSearchMode] = useState("text");
+  const [imageSearchFile, setImageSearchFile] = useState(null);
+  const [imageSearchPreview, setImageSearchPreview] = useState("");
+  const [imageMatches, setImageMatches] = useState([]);
+  const [imageMatchBusy, setImageMatchBusy] = useState(false);
+  const [imageMatchError, setImageMatchError] = useState("");
   const [aiBusyLineId, setAiBusyLineId] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -124,6 +130,59 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     return () => { alive = false; };
   }, []);
   const addItem = (product = {}) => change({ items: [...form.items, normaliseItem({ product_id: product.id || null, name: product.name || "", sku: product.sku || "", quantity: 1, unit_price: product.price || 0, image: product.images?.[0] || null })] });
+
+  useEffect(() => () => {
+    if (imageSearchPreview) URL.revokeObjectURL(imageSearchPreview);
+  }, [imageSearchPreview]);
+
+  const chooseImageSearchFile = (file) => {
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      toast.error("Choose a JPG, PNG or WebP image");
+      return;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error("Image is too large — maximum 25MB");
+      return;
+    }
+    if (imageSearchPreview) URL.revokeObjectURL(imageSearchPreview);
+    setImageSearchFile(file);
+    setImageSearchPreview(URL.createObjectURL(file));
+    setImageMatches([]);
+    setImageMatchError("");
+  };
+
+  const findImageMatches = async () => {
+    if (!imageSearchFile) {
+      toast.error("Upload the client image first");
+      return;
+    }
+    setImageMatchBusy(true);
+    setImageMatchError("");
+    try {
+      const result = await api.matchQuotationProductByImage(imageSearchFile, 5);
+      const matches = Array.isArray(result?.matches) ? result.matches : [];
+      setImageMatches(matches);
+      if (!matches.length) setImageMatchError("No reliable catalogue match found. Try the original image or search by name / SKU.");
+    } catch (error) {
+      const message = errorMessage(error, "Could not search the catalogue by image");
+      setImageMatchError(message);
+      toast.error(message);
+    } finally {
+      setImageMatchBusy(false);
+    }
+  };
+
+  const addImageMatch = (match) => {
+    addItem({
+      id: match.product_id,
+      name: match.name,
+      sku: match.sku,
+      price: match.price,
+      images: match.image_url ? [match.image_url] : [],
+    });
+    toast.success(`${match.sku ? match.sku + " · " : ""}${match.name} added to quotation`);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -475,8 +534,105 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
 
             <section>
               <div className="mb-2 eyebrow">Products</div>
-              <input aria-label="Search catalogue for quotation" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search product name or SKU to add" className="mb-2 w-full border border-white/15 bg-black/40 p-3" />
-              {search.trim() && <div className="max-h-48 overflow-auto">{catalogue.filter(p => `${p.name} ${p.sku}`.toLowerCase().includes(search.toLowerCase())).slice(0, 30).map(p => <button type="button" key={p.id} onClick={() => { addItem(p); setSearch(""); }} className="block w-full border-b border-white/10 p-2 text-left text-sm">{p.sku} · {p.name}</button>)}</div>}
+              <div className="mb-3 inline-flex border border-white/15" data-testid="quotation-product-search-tabs">
+                <button
+                  type="button"
+                  onClick={() => setProductSearchMode("text")}
+                  className={`px-4 py-2 text-[10px] uppercase tracking-[0.18em] ${productSearchMode === "text" ? "bg-[#D4AF37] text-black" : "text-white/60"}`}
+                  data-testid="quotation-search-tab-text"
+                >
+                  Name / SKU
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProductSearchMode("image")}
+                  className={`px-4 py-2 text-[10px] uppercase tracking-[0.18em] ${productSearchMode === "image" ? "bg-[#D4AF37] text-black" : "text-white/60"}`}
+                  data-testid="quotation-search-tab-image"
+                >
+                  Search by image
+                </button>
+              </div>
+
+              {productSearchMode === "text" && <>
+                <input aria-label="Search catalogue for quotation" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search product name or SKU to add" className="mb-2 w-full border border-white/15 bg-black/40 p-3" />
+                {search.trim() && <div className="max-h-48 overflow-auto">{catalogue.filter(p => `${p.name} ${p.sku}`.toLowerCase().includes(search.toLowerCase())).slice(0, 30).map(p => <button type="button" key={p.id} onClick={() => { addItem(p); setSearch(""); }} className="block w-full border-b border-white/10 p-2 text-left text-sm">{p.sku} · {p.name}</button>)}</div>}
+              </>}
+
+              {productSearchMode === "image" && (
+                <div className="mb-3 border border-[#D4AF37]/25 bg-black/20 p-4" data-testid="quotation-image-search">
+                  <div className="grid gap-4 md:grid-cols-[150px_1fr]">
+                    <div>
+                      {imageSearchPreview ? (
+                        <img src={imageSearchPreview} alt="Client reference preview" className="h-36 w-full border border-white/10 bg-black/30 object-contain" />
+                      ) : (
+                        <div className="flex h-36 items-center justify-center border border-dashed border-white/20 px-3 text-center text-xs text-white/35">
+                          Client image preview
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm text-white/75">Find the catalogue product from a client image</div>
+                      <p className="mt-1 text-xs leading-relaxed text-white/45">
+                        Best for the same Samrat catalogue photo, including WhatsApp-compressed, resized or recompressed copies.
+                      </p>
+                      <label className="mt-3 block cursor-pointer text-xs text-[#D4AF37]">
+                        {imageSearchFile ? "Replace client image" : "Upload client image"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          aria-label="Client image for catalogue search"
+                          onChange={(event) => chooseImageSearchFile(event.target.files?.[0])}
+                          className="mt-1 block max-w-full text-xs text-white/60"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={findImageMatches}
+                        disabled={!imageSearchFile || imageMatchBusy}
+                        className="mt-3 bg-[#D4AF37] px-4 py-2.5 text-[10px] uppercase tracking-[0.18em] text-black disabled:opacity-40"
+                        data-testid="quotation-image-search-submit"
+                      >
+                        {imageMatchBusy ? "Searching catalogue…" : "Find matching product"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {imageMatchError && (
+                    <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-search-empty">
+                      {imageMatchError}
+                    </div>
+                  )}
+
+                  {imageMatches.length > 0 && (
+                    <div className="mt-4 space-y-2" data-testid="quotation-image-search-results">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Best catalogue matches</div>
+                      {imageMatches.map((match) => (
+                        <div key={match.product_id} className="grid grid-cols-[64px_1fr_auto] items-center gap-3 border border-white/10 p-3">
+                          <div className="h-16 w-16 bg-black/30">
+                            {match.image_url ? <img src={api.resolveImage(match.image_url)} alt={match.name} className="h-full w-full object-contain" /> : null}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm text-white/80">{match.name}</div>
+                            <div className="mt-1 text-[10px] uppercase tracking-[0.13em] text-[#BF9972]">{match.sku || "No SKU"} · {match.category || "Catalogue product"}</div>
+                            <div className="mt-1 text-[10px] text-white/40">
+                              {match.match_label === "very_likely" ? "Very likely match" : match.match_label === "possible" ? "Possible match" : "Weak match"}
+                              {" · "}{match.visual_similarity}% visual similarity
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => addImageMatch(match)}
+                            className="border border-[#D4AF37]/50 px-3 py-2 text-[9px] uppercase tracking-[0.14em] text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button type="button" onClick={() => addItem()} className="mb-3 text-sm text-[#D4AF37]">+ Add custom item</button>
               <div className="space-y-3">
                 {form.items.map((item, index) => (
