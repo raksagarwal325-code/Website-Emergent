@@ -4832,6 +4832,52 @@ async def watermark_reprocess(admin: _AdminUser = Depends(require_admin)):
     return {"processed": processed, "skipped": skipped, "failed": failed, "total": len(files)}
 
 
+@api.get("/image-protection/status")
+async def image_protection_status(admin: _AdminUser = Depends(require_admin)):
+    """Return live ownership-protection progress for eligible uploaded images."""
+    base_filter = {
+        "$and": [
+            {"original_path": {"$exists": True, "$ne": None}},
+            {"kind": {"$ne": "video"}},
+            {"content_type": {"$regex": "^image/", "$options": "i"}},
+        ]
+    }
+    protected = await db.files.count_documents({
+        "$and": [
+            *base_filter["$and"],
+            {"ownership_protected_at": {"$exists": True}},
+        ]
+    })
+    failed = await db.files.count_documents({
+        "$and": [
+            *base_filter["$and"],
+            {"ownership_protection_failed_at": {"$exists": True}},
+        ]
+    })
+    remaining = await db.files.count_documents({
+        "$and": [
+            *base_filter["$and"],
+            {"ownership_protected_at": {"$exists": False}},
+            {"ownership_protection_failed_at": {"$exists": False}},
+        ]
+    })
+    total = protected + failed + remaining
+    status = (
+        "complete" if remaining == 0 and failed == 0
+        else "complete_with_errors" if remaining == 0
+        else "in_progress" if protected > 0
+        else "not_started"
+    )
+    return {
+        "total": total,
+        "protected": protected,
+        "remaining": remaining,
+        "failed": failed,
+        "status": status,
+        "visible_watermark_applied": False,
+    }
+
+
 @api.post("/image-protection/reprocess")
 async def image_protection_reprocess(
     limit: int = Query(10, ge=1, le=25),
