@@ -1816,8 +1816,27 @@ function WatermarkAdmin({ settings, onSave }) {
   const [previewFile, setPreviewFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [protectionStatus, setProtectionStatus] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(false);
   const debounceRef = React.useRef(null);
   const visibleWatermarkEnabled = !!wm.enabled && !!wm.explicit_opt_in;
+
+  const refreshProtectionStatus = React.useCallback(async () => {
+    setStatusLoading(true);
+    try {
+      const status = await api.adminImageProtectionStatus();
+      setProtectionStatus(status);
+      return status;
+    } catch {
+      return null;
+    } finally {
+      setStatusLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshProtectionStatus();
+  }, [refreshProtectionStatus]);
 
   const runPreview = React.useCallback(async () => {
     if (!previewFile) return;
@@ -1873,6 +1892,19 @@ function WatermarkAdmin({ settings, onSave }) {
         processed += Number(j.processed || 0);
         skipped += Number(j.skipped || 0);
         failed += Number(j.failed || 0);
+        setProtectionStatus((current) => ({
+          ...(current || {}),
+          protected: Number(j.protected_total || 0),
+          remaining: Number(j.remaining || 0),
+          failed: Number(j.failed_total || 0),
+          total: Number(j.protected_total || 0) + Number(j.remaining || 0) + Number(j.failed_total || 0),
+          status: Number(j.remaining || 0)
+            ? "in_progress"
+            : Number(j.failed_total || 0)
+              ? "complete_with_errors"
+              : "complete",
+          visible_watermark_applied: false,
+        }));
 
         if (!Number(j.remaining || 0)) {
           if (failed || Number(j.failed_total || 0)) {
@@ -1884,9 +1916,11 @@ function WatermarkAdmin({ settings, onSave }) {
               `Invisible protection complete: ${processed} images protected. No visible watermark added.`
             );
           }
+          await refreshProtectionStatus();
           return;
         }
       }
+      await refreshProtectionStatus();
       toast.error("Protection paused after the safety batch limit. Run it again to continue.");
     } catch (e) {
       toast.error(
@@ -1896,6 +1930,7 @@ function WatermarkAdmin({ settings, onSave }) {
       );
     } finally {
       setBusy(false);
+      await refreshProtectionStatus();
     }
   };
 
@@ -1940,15 +1975,56 @@ function WatermarkAdmin({ settings, onSave }) {
             so it does not add a visible watermark.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={protectExisting}
-          disabled={busy}
-          className="bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] disabled:opacity-50"
-          data-testid="protect-existing-images"
-        >
-          Protect existing images invisibly
-        </button>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="image-protection-status">
+          <div className="border border-white/10 p-3">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Protected</div>
+            <div className="font-mono text-lg text-white mt-1">{protectionStatus?.protected ?? "—"}</div>
+          </div>
+          <div className="border border-white/10 p-3">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Remaining</div>
+            <div className="font-mono text-lg text-white mt-1">{protectionStatus?.remaining ?? "—"}</div>
+          </div>
+          <div className="border border-white/10 p-3">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Failed</div>
+            <div className="font-mono text-lg text-white mt-1">{protectionStatus?.failed ?? "—"}</div>
+          </div>
+          <div className="border border-white/10 p-3">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Status</div>
+            <div className="text-xs uppercase tracking-[0.14em] text-[#D4AF37] mt-2">
+              {statusLoading
+                ? "Checking…"
+                : protectionStatus?.status === "complete"
+                  ? "Complete"
+                  : protectionStatus?.status === "complete_with_errors"
+                    ? "Complete · errors"
+                    : protectionStatus?.status === "in_progress"
+                      ? "In progress"
+                      : protectionStatus?.status === "not_started"
+                        ? "Not started"
+                        : "Unknown"}
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={protectExisting}
+            disabled={busy}
+            className="bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] disabled:opacity-50"
+            data-testid="protect-existing-images"
+          >
+            {busy ? "Protecting…" : "Protect existing images invisibly"}
+          </button>
+          <button
+            type="button"
+            onClick={refreshProtectionStatus}
+            disabled={busy || statusLoading}
+            className="border border-white/20 hover:border-[#D4AF37] hover:text-[#D4AF37] px-5 py-3 uppercase text-xs tracking-[0.22em] disabled:opacity-50"
+            data-testid="refresh-image-protection-status"
+          >
+            Refresh status
+          </button>
+        </div>
       </div>
 
       <div className="pt-2">
