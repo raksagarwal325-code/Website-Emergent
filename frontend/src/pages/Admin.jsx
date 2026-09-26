@@ -1803,7 +1803,8 @@ function LegalAdmin({ settings, onSave }) {
 }
 
 const DEFAULT_WATERMARK = {
-  enabled: true,
+  enabled: false,
+  explicit_opt_in: false,
   opacity: 0.15,
   size_pct: 0.30,
   position: "center",
@@ -1816,6 +1817,7 @@ function WatermarkAdmin({ settings, onSave }) {
   const [previewUrl, setPreviewUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const debounceRef = React.useRef(null);
+  const visibleWatermarkEnabled = !!wm.enabled && !!wm.explicit_opt_in;
 
   const runPreview = React.useCallback(async () => {
     if (!previewFile) return;
@@ -1844,22 +1846,48 @@ function WatermarkAdmin({ settings, onSave }) {
   const save = async () => {
     setBusy(true);
     try {
-      await api.updateSettings({ watermark: wm });
-      toast.success("Watermark settings saved");
+      await api.updateSettings({
+        watermark: {
+          ...wm,
+          enabled: visibleWatermarkEnabled,
+          explicit_opt_in: visibleWatermarkEnabled,
+        },
+      });
+      toast.success("Visible watermark settings saved");
       onSave();
     } catch { toast.error("Save failed"); }
     finally { setBusy(false); }
   };
 
-  const reprocess = async () => {
-    if (!window.confirm("Regenerate watermarks for every uploaded image? This may take a moment.")) return;
+  const protectExisting = async () => {
+    if (!window.confirm(
+      "Protect all eligible existing images with invisible ownership metadata and fingerprints? No visible watermark will be added."
+    )) return;
     setBusy(true);
     try {
-      const API = process.env.REACT_APP_BACKEND_URL;
-      const res = await fetch(`${API}/api/watermark/reprocess`, { method: "POST" });
-      const j = await res.json();
-      toast.success(`Reprocessed ${j.processed} / ${j.total} images (skipped ${j.skipped}, failed ${j.failed})`);
-    } catch { toast.error("Reprocess failed"); }
+      const j = await api.adminProtectExistingImages();
+      if (j.failed) {
+        toast.error(`Protected ${j.processed} / ${j.total} images; ${j.failed} failed`);
+      } else {
+        toast.success(`Protected ${j.processed} existing images invisibly (skipped ${j.skipped})`);
+      }
+    } catch { toast.error("Invisible image protection failed"); }
+    finally { setBusy(false); }
+  };
+
+  const reprocessVisible = async () => {
+    if (!visibleWatermarkEnabled) {
+      toast.error("Enable and save Visible Watermark first.");
+      return;
+    }
+    if (!window.confirm(
+      "VISIBLE WATERMARK WARNING: This will regenerate eligible public images with the centered Samrat watermark. Continue?"
+    )) return;
+    setBusy(true);
+    try {
+      const j = await api.adminReprocessVisibleWatermarks();
+      toast.success(`Visible watermark applied to ${j.processed} / ${j.total} images (skipped ${j.skipped}, failed ${j.failed})`);
+    } catch { toast.error("Visible watermark reprocess failed"); }
     finally { setBusy(false); }
   };
 
@@ -1871,25 +1899,53 @@ function WatermarkAdmin({ settings, onSave }) {
   return (
     <div className="max-w-3xl space-y-6 border border-white/10 p-8" data-testid="watermark-admin">
       <div>
-        <div className="eyebrow text-[#D4AF37]">Image watermark</div>
-        <h3 className="font-serif text-xl mt-1">Centered logo watermark for uploaded images</h3>
+        <div className="eyebrow text-[#D4AF37]">Image protection</div>
+        <h3 className="font-serif text-xl mt-1">Invisible ownership protection + optional visible watermark</h3>
         <p className="text-white/50 text-sm mt-1">
-          Applied automatically to every new product & gallery image you upload.
-          Originals are kept privately for admin use only.
+          Every new image receives invisible Samrat ownership metadata and a SHA-256 fingerprint.
+          Private originals are preserved. A visible watermark is optional and requires explicit opt-in.
         </p>
+      </div>
+
+      <div className="border border-[#D4AF37]/25 bg-[#D4AF37]/[0.04] p-5 space-y-3" data-testid="invisible-image-protection">
+        <div>
+          <div className="text-xs uppercase tracking-[0.24em] text-[#D4AF37]">Recommended · Invisible protection</div>
+          <p className="text-sm text-white/65 mt-2 leading-relaxed">
+            Adds copyright ownership metadata and a unique fingerprint without changing how the product photo looks.
+            Running this on existing uploads also rebuilds eligible public images from their clean private originals,
+            so it does not add a visible watermark.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={protectExisting}
+          disabled={busy}
+          className="bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] disabled:opacity-50"
+          data-testid="protect-existing-images"
+        >
+          Protect existing images invisibly
+        </button>
+      </div>
+
+      <div className="pt-2">
+        <div className="text-xs uppercase tracking-[0.24em] text-white/55 mb-3">Optional · Visible watermark</div>
       </div>
 
       <label className="flex items-center gap-3 text-sm text-white/85">
         <input
           type="checkbox"
-          checked={!!wm.enabled}
-          onChange={(e) => setWm({ ...wm, enabled: e.target.checked })}
+          checked={visibleWatermarkEnabled}
+          onChange={(e) => setWm({
+            ...wm,
+            enabled: e.target.checked,
+            explicit_opt_in: e.target.checked,
+          })}
           data-testid="wm-enabled"
         />
         Enable watermark on all future uploads
       </label>
 
-      <fieldset disabled={!wm.enabled} className="space-y-5 disabled:opacity-40">
+      <fieldset disabled={!visibleWatermarkEnabled} className="space-y-5 disabled:opacity-40">
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs uppercase tracking-[0.2em] text-white/60">Opacity</label>
@@ -1984,17 +2040,17 @@ function WatermarkAdmin({ settings, onSave }) {
         </button>
         <button
           type="button"
-          onClick={reprocess}
-          disabled={busy}
+          onClick={reprocessVisible}
+          disabled={busy || !visibleWatermarkEnabled}
           className="border border-white/20 hover:border-[#D4AF37] hover:text-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em] disabled:opacity-50"
           data-testid="wm-reprocess"
         >
-          Apply to all existing uploads
+          Apply visible watermark to existing uploads
         </button>
       </div>
       <p className="text-[11px] text-white/35">
-        Reprocess re-generates watermarks for images uploaded through this Admin panel (using their stored original).
-        Externally-linked images (Unsplash/CDN URLs) aren&apos;t touched — replace them by re-uploading.
+        The visible-watermark action is separate from invisible protection and is disabled unless you explicitly enable it.
+        Externally-linked images (Unsplash/CDN URLs) are not modified because no private original is stored for them.
       </p>
     </div>
   );

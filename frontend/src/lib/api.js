@@ -212,6 +212,8 @@ export const api = {
   // google_maps_api_key. Public `/settings` deliberately omits those.
   adminGetSettings: () => client.get("/admin/settings").then(r => r.data),
   updateSettings: (data) => client.put("/settings", data).then(r => r.data),
+  adminProtectExistingImages: () => client.post("/image-protection/reprocess", {}).then(r => r.data),
+  adminReprocessVisibleWatermarks: () => client.post("/watermark/reprocess", {}).then(r => r.data),
   adminUploadQuotationBrandAsset: (kind, file) => {
     const fd = new FormData();
     fd.append("file", file);
