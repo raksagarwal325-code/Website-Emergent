@@ -715,7 +715,8 @@ class Settings(BaseModel):
     business_hours: str = "Mon – Sun: 10:00 AM – 8:00 PM"
     google_maps_url: str = "https://www.google.com/maps?cid=682987565690709677"
     watermark: dict = Field(default_factory=lambda: {
-        "enabled": True,
+        "enabled": False,
+        "explicit_opt_in": False,
         "opacity": 0.15,
         "size_pct": 0.30,
         "position": "center",
@@ -2668,7 +2669,8 @@ async def google_reviews():
 
 # --- Uploads ---
 DEFAULT_WATERMARK = {
-    "enabled": True,
+    "enabled": False,
+    "explicit_opt_in": False,
     "opacity": 0.15,
     "size_pct": 0.30,
     "position": "center",
@@ -2732,7 +2734,7 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
     else:
         ownership_fp = ownership_fingerprint(data)
         wm = await _get_watermark_settings()
-        if wm.get("enabled"):
+        if wm.get("enabled") and wm.get("explicit_opt_in"):
             public_bytes = apply_watermark(
                 data,
                 opacity=wm.get("opacity", 0.15),
@@ -2748,7 +2750,7 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
             asset_id=file_id,
             fingerprint=ownership_fp,
         )
-        wm_enabled_for_record = bool(wm.get("enabled"))
+        wm_enabled_for_record = bool(wm.get("enabled") and wm.get("explicit_opt_in"))
 
     result = put_object(public_path, public_bytes, file.content_type)
     try:
@@ -4798,7 +4800,7 @@ async def watermark_reprocess(admin: _AdminUser = Depends(require_admin)):
             data, ct = get_object(orig_path)
             content_type = ct or f.get("content_type") or "image/png"
             fingerprint = ownership_fingerprint(data)
-            if wm.get("enabled"):
+            if wm.get("enabled") and wm.get("explicit_opt_in"):
                 out = apply_watermark(
                     data,
                     opacity=wm.get("opacity", 0.15),
@@ -4818,7 +4820,7 @@ async def watermark_reprocess(admin: _AdminUser = Depends(require_admin)):
             await db.files.update_one(
                 {"storage_path": public_path},
                 {"$set": {
-                    "watermarked": bool(wm.get("enabled")),
+                    "watermarked": bool(wm.get("enabled") and wm.get("explicit_opt_in")),
                     "ownership_fingerprint": fingerprint,
                 }},
             )
@@ -4828,6 +4830,71 @@ async def watermark_reprocess(admin: _AdminUser = Depends(require_admin)):
             failed += 1
 
     return {"processed": processed, "skipped": skipped, "failed": failed, "total": len(files)}
+
+
+@api.post("/image-protection/reprocess")
+async def image_protection_reprocess(admin: _AdminUser = Depends(require_admin)):
+    """Protect existing uploaded images without adding a visible watermark.
+
+    Rebuilds each public image from its untouched private original, embeds
+    invisible Samrat Glass Emporium ownership metadata, records a stable
+    SHA-256 fingerprint, and deliberately marks the public derivative as not
+    visibly watermarked. Videos and non-image records are skipped.
+    """
+    files = await db.files.find(
+        {"original_path": {"$exists": True, "$ne": None}},
+        {"_id": 0},
+    ).to_list(5000)
+
+    processed = 0
+    skipped = 0
+    failed = 0
+    for f in files:
+        try:
+            if f.get("kind") == "video" or not str(f.get("content_type") or "").lower().startswith("image/"):
+                skipped += 1
+                continue
+
+            orig_path = f.get("original_path")
+            public_path = f.get("storage_path")
+            if not orig_path or not public_path:
+                skipped += 1
+                continue
+
+            data, stored_ct = get_object(orig_path)
+            content_type = stored_ct or f.get("content_type") or "image/png"
+            if not str(content_type).lower().startswith("image/"):
+                skipped += 1
+                continue
+
+            fingerprint = ownership_fingerprint(data)
+            out = embed_ownership_metadata(
+                data,
+                content_type=content_type,
+                asset_id=f.get("id"),
+                fingerprint=fingerprint,
+            )
+            put_object(public_path, out, content_type)
+            await db.files.update_one(
+                {"storage_path": public_path},
+                {"$set": {
+                    "watermarked": False,
+                    "ownership_fingerprint": fingerprint,
+                    "ownership_protected_at": now_iso(),
+                }},
+            )
+            processed += 1
+        except Exception as e:
+            logger.error(f"Invisible protection failed for {f.get('storage_path')}: {e}")
+            failed += 1
+
+    return {
+        "processed": processed,
+        "skipped": skipped,
+        "failed": failed,
+        "total": len(files),
+        "visible_watermark_applied": False,
+    }
 
 
 # --- Export CSV ---
