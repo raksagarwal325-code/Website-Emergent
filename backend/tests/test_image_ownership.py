@@ -2,7 +2,7 @@ import io
 
 from PIL import Image
 
-from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_distance, perceptual_fingerprint
+from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants
 import security_runtime
 
 
@@ -112,3 +112,21 @@ def test_embedded_png_contains_visual_fingerprint():
     )
     with Image.open(io.BytesIO(stamped)) as image:
         assert image.info.get("SGEVisualFingerprint") == f"dhash256:{visual}"
+
+
+def test_perceptual_variants_include_full_frame_and_crops():
+    image = Image.new("RGB", (200, 200), "white")
+    for y in range(25, 95):
+        for x in range(70, 130):
+            image.putpixel((x, y), (25, 25, 25))
+    out = io.BytesIO()
+    image.save(out, format="PNG")
+    data = out.getvalue()
+
+    full = perceptual_fingerprint(data)
+    variants = perceptual_fingerprint_variants(data)
+
+    assert variants
+    assert variants[0] == full
+    assert len(variants) > 1
+    assert len(set(variants)) == len(variants)
