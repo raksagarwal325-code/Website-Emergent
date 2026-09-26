@@ -26,6 +26,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E402
 from watermark import apply_watermark  # noqa: E402
+from image_ownership import embed_ownership_metadata, ownership_fingerprint  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
@@ -2722,11 +2723,14 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
     # Always keep the untouched original (admin-only).
     put_object(original_path, data, file.content_type)
 
-    # Videos are never watermarked — only images run through the watermark helper.
+    # Videos are never watermarked. Public image derivatives receive invisible
+    # ownership metadata whether or not the visible watermark is enabled.
+    ownership_fp = None
     if is_video:
         public_bytes = data
         wm_enabled_for_record = False
     else:
+        ownership_fp = ownership_fingerprint(data)
         wm = await _get_watermark_settings()
         if wm.get("enabled"):
             public_bytes = apply_watermark(
@@ -2738,6 +2742,12 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
             )
         else:
             public_bytes = data
+        public_bytes = embed_ownership_metadata(
+            public_bytes,
+            content_type=file.content_type,
+            asset_id=file_id,
+            fingerprint=ownership_fp,
+        )
         wm_enabled_for_record = bool(wm.get("enabled"))
 
     result = put_object(public_path, public_bytes, file.content_type)
@@ -2762,6 +2772,7 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
         "watermarked": wm_enabled_for_record,
         "kind": "video" if is_video else "image",
         "sha256": media_metadata.get("sha256"),
+        "ownership_fingerprint": ownership_fp,
         "width": media_metadata.get("width"),
         "height": media_metadata.get("height"),
         "created_at": now_iso(),
@@ -4785,20 +4796,31 @@ async def watermark_reprocess(admin: _AdminUser = Depends(require_admin)):
                 skipped += 1
                 continue
             data, ct = get_object(orig_path)
+            content_type = ct or f.get("content_type") or "image/png"
+            fingerprint = ownership_fingerprint(data)
             if wm.get("enabled"):
                 out = apply_watermark(
                     data,
                     opacity=wm.get("opacity", 0.15),
                     size_pct=wm.get("size_pct", 0.30),
                     adaptive_tone=wm.get("adaptive_tone", True),
-                    content_type=ct or f.get("content_type") or "image/png",
+                    content_type=content_type,
                 )
             else:
                 out = data
-            put_object(public_path, out, ct or f.get("content_type") or "image/png")
+            out = embed_ownership_metadata(
+                out,
+                content_type=content_type,
+                asset_id=f.get("id"),
+                fingerprint=fingerprint,
+            )
+            put_object(public_path, out, content_type)
             await db.files.update_one(
                 {"storage_path": public_path},
-                {"$set": {"watermarked": bool(wm.get("enabled"))}},
+                {"$set": {
+                    "watermarked": bool(wm.get("enabled")),
+                    "ownership_fingerprint": fingerprint,
+                }},
             )
             processed += 1
         except Exception as e:
