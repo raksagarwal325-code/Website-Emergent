@@ -26,7 +26,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E402
 from watermark import apply_watermark  # noqa: E402
-from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_distance, perceptual_fingerprint  # noqa: E402
+from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
@@ -1623,11 +1623,11 @@ async def match_quotation_product_by_image(
     limit: int = Query(5, ge=1, le=10),
     admin: _AdminUser = Depends(require_admin),
 ):
-    """Find catalogue products that use the same/near-identical image.
+    """Find catalogue products from a client image.
 
-    The uploaded client image is analysed in-memory only; it is not persisted.
-    Matching uses the dHash fingerprints already stored by Image Protection and
-    searches only images linked to published catalogue products.
+    The uploaded image is analysed in-memory only. The endpoint also lazily
+    prepares missing catalogue dHashes in small batches so quotation search
+    works even when the full Image Protection backfill has not been run yet.
     """
     content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
     if content_type not in {"image/jpeg", "image/png", "image/webp"}:
@@ -1640,9 +1640,10 @@ async def match_quotation_product_by_image(
         raise HTTPException(status_code=413, detail="Image too large (25MB max).")
 
     try:
-        query_hash = await asyncio.to_thread(perceptual_fingerprint, data)
+        query_hashes = await asyncio.to_thread(perceptual_fingerprint_variants, data)
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read that image. Try a JPG, PNG or WebP file.")
+    query_hash = query_hashes[0]
 
     products = await db.products.find(
         {
@@ -1663,19 +1664,30 @@ async def match_quotation_product_by_image(
     ).to_list(5000)
 
     products_by_url = {}
+    main_image_urls = set()
     for product in products:
-        for image_index, raw_url in enumerate(product.get("images") or []):
+        images = product.get("images") or []
+        if images:
+            main_url = canonical_media_url(images[0])
+            if main_url:
+                main_image_urls.add(main_url)
+        for image_index, raw_url in enumerate(images):
             url = canonical_media_url(raw_url)
             if not url:
                 continue
             products_by_url.setdefault(url, []).append((product, image_index))
 
     if not products_by_url:
-        return {"matches": [], "searched_images": 0, "query_fingerprint": query_hash}
+        return {
+            "matches": [],
+            "searched_images": 0,
+            "query_fingerprint": query_hash,
+            "index_remaining": 0,
+            "indexed_this_request": 0,
+        }
 
     file_rows = await db.files.find(
         {
-            "perceptual_fingerprint": {"$exists": True, "$ne": None},
             "kind": {"$ne": "video"},
             "content_type": {"$regex": "^image/", "$options": "i"},
         },
@@ -1683,14 +1695,52 @@ async def match_quotation_product_by_image(
             "_id": 0,
             "id": 1,
             "storage_path": 1,
+            "original_path": 1,
             "perceptual_fingerprint": 1,
         },
     ).to_list(5000)
 
-    best_by_product = {}
-    searched_images = 0
+    catalogue_rows = []
     for row in file_rows:
         public_url = canonical_media_url(public_url_for_file(row))
+        if public_url in products_by_url:
+            catalogue_rows.append((row, public_url))
+
+    missing = [
+        (row, public_url)
+        for row, public_url in catalogue_rows
+        if not row.get("perceptual_fingerprint")
+    ]
+    missing.sort(key=lambda pair: (0 if pair[1] in main_image_urls else 1, pair[1]))
+
+    # Build a small persistent search index on demand. This only stores the
+    # visual fingerprint; it does not mark the image as fully ownership-
+    # protected and does not rewrite either the private or public image.
+    indexed_this_request = 0
+    for row, _public_url in missing[:50]:
+        source_path = row.get("original_path") or row.get("storage_path")
+        if not source_path:
+            continue
+        try:
+            original_bytes, _stored_ct = await asyncio.to_thread(get_object, source_path)
+            candidate_hash = await asyncio.to_thread(perceptual_fingerprint, original_bytes)
+            await db.files.update_one(
+                {"id": row.get("id")},
+                {"$set": {"perceptual_fingerprint": candidate_hash}},
+            )
+            row["perceptual_fingerprint"] = candidate_hash
+            indexed_this_request += 1
+        except Exception as exc:
+            logger.warning(
+                "quotation_image_index_failed id=%s path=%s err=%s",
+                row.get("id"), source_path, exc,
+            )
+
+    remaining_after_batch = max(0, len(missing) - indexed_this_request)
+
+    best_by_product = {}
+    searched_images = 0
+    for row, public_url in catalogue_rows:
         product_links = products_by_url.get(public_url)
         if not product_links:
             continue
@@ -1698,21 +1748,25 @@ async def match_quotation_product_by_image(
         candidate_hash = str(row.get("perceptual_fingerprint") or "").strip()
         if not candidate_hash:
             continue
+
         try:
-            distance = perceptual_distance(query_hash, candidate_hash)
+            distance = min(
+                perceptual_distance(query_variant, candidate_hash)
+                for query_variant in query_hashes
+            )
         except Exception:
             continue
 
         searched_images += 1
-        if distance > 24:
-            continue
 
-        if distance <= 8:
+        if distance <= 12:
             match_label = "very_likely"
-        elif distance <= 16:
+        elif distance <= 28:
             match_label = "possible"
-        else:
+        elif distance <= 48:
             match_label = "weak"
+        else:
+            match_label = "low_confidence"
 
         visual_similarity = round(max(0.0, 1.0 - (distance / 256.0)) * 100.0, 1)
 
@@ -1737,15 +1791,19 @@ async def match_quotation_product_by_image(
                 "match_label": match_label,
             }
 
-    matches = sorted(
+    ranked = sorted(
         best_by_product.values(),
         key=lambda item: (item["distance"], item["sku"], item["name"]),
-    )[:limit]
+    )
+    matches = ranked[:limit]
 
     return {
         "matches": matches,
         "searched_images": searched_images,
         "query_fingerprint": query_hash,
+        "query_variants": len(query_hashes),
+        "index_remaining": remaining_after_batch,
+        "indexed_this_request": indexed_this_request,
     }
 
 
