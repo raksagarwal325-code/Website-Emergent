@@ -2044,6 +2044,96 @@ function WatermarkAdmin({ settings, onSave }) {
             </div>
           </div>
         </div>
+        <div className="border border-white/10 bg-black/20 p-4 space-y-3" data-testid="image-protection-health">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-white/45">Protection health · in-use images</div>
+              <div className="text-sm mt-1 text-white/70">
+                {statusLoading
+                  ? "Checking protection health…"
+                  : protectionStatus?.health?.status === "healthy"
+                    ? "All referenced stored images are fully protected."
+                    : protectionStatus?.health?.status === "attention"
+                      ? "Some referenced images need attention."
+                      : protectionStatus?.health?.status === "no_in_use_images"
+                        ? "No referenced stored images were detected."
+                        : "Protection health is not available yet."}
+              </div>
+            </div>
+            <div className={
+              "text-[10px] uppercase tracking-[0.16em] px-3 py-1.5 border " +
+              (protectionStatus?.health?.status === "healthy"
+                ? "border-emerald-400/35 text-emerald-300"
+                : "border-[#D4AF37]/35 text-[#D4AF37]")
+            }>
+              {protectionStatus?.health?.status === "healthy" ? "Healthy" : "Review"}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {[
+              ["In use", protectionStatus?.health?.in_use_total],
+              ["Fully protected", protectionStatus?.health?.fully_protected],
+              ["Missing SHA", protectionStatus?.health?.missing_sha],
+              ["Missing dHash", protectionStatus?.health?.missing_dhash],
+              ["Failed in use", protectionStatus?.health?.failed_in_use],
+              ["Unused stored", protectionStatus?.health?.unused_stored],
+            ].map(([label, value]) => (
+              <div key={label} className="border border-white/10 p-3">
+                <div className="text-[9px] uppercase tracking-[0.15em] text-white/35">{label}</div>
+                <div className="font-mono text-base text-white mt-1">{value ?? "—"}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-[10px] text-white/35">
+            <span>
+              Unresolved stored-file references · {protectionStatus?.health?.unresolved_file_references ?? "—"}
+            </span>
+            <span>
+              Last protection · {protectionStatus?.health?.last_protection_at
+                ? new Date(protectionStatus.health.last_protection_at).toLocaleString()
+                : "—"}
+            </span>
+          </div>
+        </div>
+
+        {(protectionStatus?.health?.failed_items || []).length > 0 && (
+          <div className="border border-red-400/20 bg-red-400/[0.03] p-4 space-y-3" data-testid="image-protection-failures">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-red-300">Failed image diagnosis</div>
+              <p className="text-[11px] text-white/45 mt-1">
+                These are referenced images whose invisible-protection job failed. The error is shown so the problem can be fixed without disturbing the rest of the queue.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {(protectionStatus.health.failed_items || []).map((item) => (
+                <div key={item.id || item.public_url} className="grid grid-cols-[56px_1fr] gap-3 border border-white/10 p-3">
+                  <div className="h-14 bg-black/40 overflow-hidden flex items-center justify-center">
+                    {item.public_url ? (
+                      <img src={api.resolveImage(item.public_url)} alt="" className="h-full w-full object-contain" loading="lazy" />
+                    ) : null}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs text-white/75 truncate">{item.original_filename || item.id || "Unknown image"}</div>
+                    <div className="text-[10px] text-white/40 mt-1">
+                      {(item.products || []).length
+                        ? item.products.map((p) => [p.sku, p.name].filter(Boolean).join(" · ")).join(" | ")
+                        : (item.projects || []).length
+                          ? item.projects.map((p) => [p.name, p.location].filter(Boolean).join(" · ")).join(" | ")
+                          : (item.usage_types || []).join(", ") || "Referenced site image"}
+                    </div>
+                    <div className="mt-2 text-[10px] text-red-200/70 break-words">{item.error}</div>
+                    <div className="mt-1 text-[9px] text-white/30">
+                      {item.failed_at ? "Failed " + new Date(item.failed_at).toLocaleString() : ""}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
