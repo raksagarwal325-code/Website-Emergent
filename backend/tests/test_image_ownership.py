@@ -2,7 +2,7 @@ import io
 
 from PIL import Image
 
-from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants
+from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants
 import security_runtime
 
 
@@ -127,6 +127,48 @@ def test_perceptual_variants_include_full_frame_and_crops():
     variants = perceptual_fingerprint_variants(data)
 
     assert variants
+    assert variants[0] == full
+    assert len(variants) > 1
+    assert len(set(variants)) == len(variants)
+
+
+def test_phash_survives_resize_recompression_and_brightness_shift():
+    image = Image.new("RGB", (320, 240))
+    pixels = image.load()
+    for y in range(image.height):
+        for x in range(image.width):
+            pixels[x, y] = (
+                (x * 7 + y * 3) % 256,
+                (x * 2 + y * 9) % 256,
+                (x * 5 + y) % 256,
+            )
+    original = io.BytesIO()
+    image.save(original, format="PNG")
+
+    transformed = image.resize((180, 135), Image.Resampling.LANCZOS)
+    transformed = transformed.point(lambda value: min(255, int(value * 1.08 + 8)))
+    recompressed = io.BytesIO()
+    transformed.save(recompressed, format="JPEG", quality=68)
+
+    left = phash_fingerprint(original.getvalue())
+    right = phash_fingerprint(recompressed.getvalue())
+
+    assert len(left) == 16
+    assert len(right) == 16
+    assert perceptual_distance(left, right) <= 10
+
+
+def test_phash_variants_include_full_frame_and_multiple_crops():
+    image = Image.new("RGB", (240, 180), "white")
+    for y in range(30, 145):
+        for x in range(70, 175):
+            image.putpixel((x, y), ((x * 3) % 255, (y * 5) % 255, 70))
+    out = io.BytesIO()
+    image.save(out, format="PNG")
+
+    full = phash_fingerprint(out.getvalue())
+    variants = phash_fingerprint_variants(out.getvalue())
+
     assert variants[0] == full
     assert len(variants) > 1
     assert len(set(variants)) == len(variants)
