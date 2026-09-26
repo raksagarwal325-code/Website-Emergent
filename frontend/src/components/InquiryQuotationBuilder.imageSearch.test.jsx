@@ -27,3 +27,10 @@ describe("Quotation search by image", () => {
     expect(source).not.toContain("imageMatches[0]");
   });
 });
+
+
+test("image search prepares missing catalogue fingerprints before final results", () => {
+  expect(source).toContain("index_remaining");
+  expect(source).toContain("for (let batch = 0; batch < 15; batch += 1)");
+  expect(source).toContain("Closest visual candidate · verify manually");
+});
