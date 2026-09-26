@@ -1864,15 +1864,39 @@ function WatermarkAdmin({ settings, onSave }) {
       "Protect all eligible existing images with invisible ownership metadata and fingerprints? No visible watermark will be added."
     )) return;
     setBusy(true);
+    let processed = 0;
+    let skipped = 0;
+    let failed = 0;
     try {
-      const j = await api.adminProtectExistingImages();
-      if (j.failed) {
-        toast.error(`Protected ${j.processed} / ${j.total} images; ${j.failed} failed`);
-      } else {
-        toast.success(`Protected ${j.processed} existing images invisibly (skipped ${j.skipped})`);
+      for (let batch = 0; batch < 500; batch += 1) {
+        const j = await api.adminProtectExistingImages(10);
+        processed += Number(j.processed || 0);
+        skipped += Number(j.skipped || 0);
+        failed += Number(j.failed || 0);
+
+        if (!Number(j.remaining || 0)) {
+          if (failed || Number(j.failed_total || 0)) {
+            toast.error(
+              `Invisible protection finished: ${processed} processed, ${skipped} skipped, ${j.failed_total || failed} failed.`
+            );
+          } else {
+            toast.success(
+              `Invisible protection complete: ${processed} images protected. No visible watermark added.`
+            );
+          }
+          return;
+        }
       }
-    } catch { toast.error("Invisible image protection failed"); }
-    finally { setBusy(false); }
+      toast.error("Protection paused after the safety batch limit. Run it again to continue.");
+    } catch (e) {
+      toast.error(
+        processed
+          ? `Protection paused after ${processed} images. Run it again to continue.`
+          : "Invisible image protection failed"
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   const reprocessVisible = async () => {
