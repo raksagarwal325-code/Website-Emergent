@@ -11,6 +11,8 @@ from __future__ import annotations
 import hashlib
 import io
 
+import numpy as np
+
 from PIL import Image, ImageOps
 from PIL.PngImagePlugin import PngInfo
 
@@ -109,6 +111,79 @@ def perceptual_distance(left: str, right: str) -> int:
     if not left or not right or len(left) != len(right):
         raise ValueError("Perceptual fingerprints must be equal-length hex strings")
     return (int(left, 16) ^ int(right, 16)).bit_count()
+
+
+def phash_fingerprint(original_bytes: bytes, hash_size: int = 8, highfreq_factor: int = 4) -> str:
+    """Return a DCT perceptual hash (pHash) for robust near-photo matching.
+
+    Compared with dHash, pHash is more tolerant of brightness, contrast,
+    resizing and ordinary recompression. It is intended for quotation search,
+    while the existing dHash remains useful for ownership traceability.
+    """
+    if hash_size < 4 or hash_size > 16:
+        raise ValueError("hash_size must be between 4 and 16")
+    size = hash_size * highfreq_factor
+    with Image.open(io.BytesIO(original_bytes)) as opened:
+        image = ImageOps.exif_transpose(opened).convert("L").resize(
+            (size, size), Image.Resampling.LANCZOS
+        )
+        pixels = np.asarray(image, dtype=np.float32)
+
+    n = pixels.shape[0]
+    x = np.arange(n, dtype=np.float32)
+    u = x[:, None]
+    basis = np.cos((np.pi / n) * (x + 0.5) * u)
+    basis[0, :] *= 1.0 / np.sqrt(2.0)
+    dct = (2.0 / n) * basis @ pixels @ basis.T
+    low = dct[:hash_size, :hash_size]
+    flat = low.flatten()
+    median = float(np.median(flat[1:])) if flat.size > 1 else float(flat[0])
+    bits = flat > median
+    value = 0
+    for bit in bits:
+        value = (value << 1) | int(bit)
+    width = (len(bits) + 3) // 4
+    return f"{value:0{width}x}"
+
+
+def phash_fingerprint_variants(original_bytes: bytes, hash_size: int = 8) -> list[str]:
+    """Return pHash values for full-frame and crop variants of an image."""
+    with Image.open(io.BytesIO(original_bytes)) as opened:
+        image = ImageOps.exif_transpose(opened).convert("RGB")
+        width, height = image.size
+        if width < 8 or height < 8:
+            tmp = io.BytesIO()
+            image.save(tmp, format="PNG")
+            return [phash_fingerprint(tmp.getvalue(), hash_size=hash_size)]
+
+        boxes = [
+            (0, 0, width, height),
+            (int(width * 0.10), int(height * 0.10), int(width * 0.90), int(height * 0.90)),
+            (int(width * 0.20), int(height * 0.20), int(width * 0.80), int(height * 0.80)),
+            (int(width * 0.20), 0, int(width * 0.80), int(height * 0.70)),
+            (int(width * 0.20), int(height * 0.30), int(width * 0.80), height),
+            (0, int(height * 0.15), int(width * 0.70), int(height * 0.85)),
+            (int(width * 0.30), int(height * 0.15), width, int(height * 0.85)),
+            (0, 0, int(width * 0.65), int(height * 0.65)),
+            (int(width * 0.35), 0, width, int(height * 0.65)),
+            (0, int(height * 0.35), int(width * 0.65), height),
+            (int(width * 0.35), int(height * 0.35), width, height),
+        ]
+
+        hashes = []
+        seen = set()
+        for box in boxes:
+            left, top, right, bottom = box
+            if right - left < 4 or bottom - top < 4:
+                continue
+            crop = image.crop((left, top, right, bottom))
+            tmp = io.BytesIO()
+            crop.save(tmp, format="PNG")
+            fp = phash_fingerprint(tmp.getvalue(), hash_size=hash_size)
+            if fp not in seen:
+                seen.add(fp)
+                hashes.append(fp)
+        return hashes
 
 
 def _description(asset_id: str | None, fingerprint: str, visual_fingerprint: str | None = None) -> str:
