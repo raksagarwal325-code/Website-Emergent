@@ -4833,66 +4833,113 @@ async def watermark_reprocess(admin: _AdminUser = Depends(require_admin)):
 
 
 @api.post("/image-protection/reprocess")
-async def image_protection_reprocess(admin: _AdminUser = Depends(require_admin)):
-    """Protect existing uploaded images without adding a visible watermark.
+async def image_protection_reprocess(
+    limit: int = Query(10, ge=1, le=25),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Protect a small resumable batch without adding a visible watermark.
 
-    Rebuilds each public image from its untouched private original, embeds
-    invisible Samrat Glass Emporium ownership metadata, records a stable
-    SHA-256 fingerprint, and deliberately marks the public derivative as not
-    visibly watermarked. Videos and non-image records are skipped.
+    Each call handles only unprotected uploaded images. Progress is committed
+    after every file, so Cloudflare/Emergent timeouts cannot force a full
+    restart. Failed rows are marked and excluded from the automatic loop so
+    one corrupt legacy file cannot block the remaining catalogue.
     """
+    eligible_filter = {
+        "$and": [
+            {"original_path": {"$exists": True, "$ne": None}},
+            {"kind": {"$ne": "video"}},
+            {"content_type": {"$regex": "^image/", "$options": "i"}},
+            {"ownership_protected_at": {"$exists": False}},
+            {"ownership_protection_failed_at": {"$exists": False}},
+        ]
+    }
+
     files = await db.files.find(
-        {"original_path": {"$exists": True, "$ne": None}},
+        eligible_filter,
         {"_id": 0},
-    ).to_list(5000)
+    ).limit(limit).to_list(limit)
 
     processed = 0
     skipped = 0
     failed = 0
     for f in files:
         try:
-            if f.get("kind") == "video" or not str(f.get("content_type") or "").lower().startswith("image/"):
-                skipped += 1
-                continue
-
             orig_path = f.get("original_path")
             public_path = f.get("storage_path")
             if not orig_path or not public_path:
                 skipped += 1
+                await db.files.update_one(
+                    {"id": f.get("id")},
+                    {"$set": {
+                        "ownership_protection_failed_at": now_iso(),
+                        "ownership_protection_error": "Missing stored original or public path",
+                    }},
+                )
                 continue
 
-            data, stored_ct = get_object(orig_path)
+            data, stored_ct = await asyncio.to_thread(get_object, orig_path)
             content_type = stored_ct or f.get("content_type") or "image/png"
             if not str(content_type).lower().startswith("image/"):
                 skipped += 1
+                await db.files.update_one(
+                    {"id": f.get("id")},
+                    {"$set": {
+                        "ownership_protection_failed_at": now_iso(),
+                        "ownership_protection_error": "Stored original is not an image",
+                    }},
+                )
                 continue
 
             fingerprint = ownership_fingerprint(data)
-            out = embed_ownership_metadata(
+            out = await asyncio.to_thread(
+                embed_ownership_metadata,
                 data,
                 content_type=content_type,
                 asset_id=f.get("id"),
                 fingerprint=fingerprint,
             )
-            put_object(public_path, out, content_type)
+            await asyncio.to_thread(put_object, public_path, out, content_type)
             await db.files.update_one(
-                {"storage_path": public_path},
-                {"$set": {
-                    "watermarked": False,
-                    "ownership_fingerprint": fingerprint,
-                    "ownership_protected_at": now_iso(),
-                }},
+                {"id": f.get("id")},
+                {
+                    "$set": {
+                        "watermarked": False,
+                        "ownership_fingerprint": fingerprint,
+                        "ownership_protected_at": now_iso(),
+                    },
+                    "$unset": {
+                        "ownership_protection_failed_at": "",
+                        "ownership_protection_error": "",
+                    },
+                },
             )
             processed += 1
         except Exception as e:
             logger.error(f"Invisible protection failed for {f.get('storage_path')}: {e}")
+            await db.files.update_one(
+                {"id": f.get("id")},
+                {"$set": {
+                    "ownership_protection_failed_at": now_iso(),
+                    "ownership_protection_error": str(e)[:500],
+                }},
+            )
             failed += 1
+
+    remaining = await db.files.count_documents(eligible_filter)
+    failed_total = await db.files.count_documents({
+        "ownership_protection_failed_at": {"$exists": True},
+    })
+    protected_total = await db.files.count_documents({
+        "ownership_protected_at": {"$exists": True},
+    })
 
     return {
         "processed": processed,
         "skipped": skipped,
         "failed": failed,
-        "total": len(files),
+        "remaining": remaining,
+        "protected_total": protected_total,
+        "failed_total": failed_total,
         "visible_watermark_applied": False,
     }
 
