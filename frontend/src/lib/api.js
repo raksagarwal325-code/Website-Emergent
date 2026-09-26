@@ -198,6 +198,18 @@ export const api = {
   aiQuotationCustomisation: (data) => client.post(
     "/ai/quotation-customisation", data,
   ).then(r => r.data),
+  matchQuotationProductByImage: (file, limit = 5) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return client.post(
+      "/admin/quotations/product-match-by-image",
+      fd,
+      {
+        params: { limit },
+        headers: { "Content-Type": "multipart/form-data" },
+      },
+    ).then(r => r.data);
+  },
 
   createContact: (data) => client.post("/contact", data).then(r => r.data),
   listContact: () => client.get("/contact").then(r => r.data),

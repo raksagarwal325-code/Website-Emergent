@@ -26,7 +26,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E402
 from watermark import apply_watermark  # noqa: E402
-from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_fingerprint  # noqa: E402
+from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_distance, perceptual_fingerprint  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
@@ -1615,6 +1615,138 @@ async def update_inquiry_status(inquiry_id: str, status: str = Query(...), admin
     if res.matched_count == 0:
         raise HTTPException(404, "Inquiry not found")
     return {"ok": True}
+
+
+@api.post("/admin/quotations/product-match-by-image")
+async def match_quotation_product_by_image(
+    file: UploadFile = File(...),
+    limit: int = Query(5, ge=1, le=10),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Find catalogue products that use the same/near-identical image.
+
+    The uploaded client image is analysed in-memory only; it is not persisted.
+    Matching uses the dHash fingerprints already stored by Image Protection and
+    searches only images linked to published catalogue products.
+    """
+    content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+    if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=400, detail="Choose a JPG, PNG or WebP image.")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="The uploaded image is empty.")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image too large (25MB max).")
+
+    try:
+        query_hash = await asyncio.to_thread(perceptual_fingerprint, data)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read that image. Try a JPG, PNG or WebP file.")
+
+    products = await db.products.find(
+        {
+            "status": "published",
+            "images": {"$exists": True, "$ne": []},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "name": 1,
+            "sku": 1,
+            "category": 1,
+            "price": 1,
+            "price_display": 1,
+            "fixed_price": 1,
+            "images": 1,
+        },
+    ).to_list(5000)
+
+    products_by_url = {}
+    for product in products:
+        for image_index, raw_url in enumerate(product.get("images") or []):
+            url = canonical_media_url(raw_url)
+            if not url:
+                continue
+            products_by_url.setdefault(url, []).append((product, image_index))
+
+    if not products_by_url:
+        return {"matches": [], "searched_images": 0, "query_fingerprint": query_hash}
+
+    file_rows = await db.files.find(
+        {
+            "perceptual_fingerprint": {"$exists": True, "$ne": None},
+            "kind": {"$ne": "video"},
+            "content_type": {"$regex": "^image/", "$options": "i"},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "storage_path": 1,
+            "perceptual_fingerprint": 1,
+        },
+    ).to_list(5000)
+
+    best_by_product = {}
+    searched_images = 0
+    for row in file_rows:
+        public_url = canonical_media_url(public_url_for_file(row))
+        product_links = products_by_url.get(public_url)
+        if not product_links:
+            continue
+
+        candidate_hash = str(row.get("perceptual_fingerprint") or "").strip()
+        if not candidate_hash:
+            continue
+        try:
+            distance = perceptual_distance(query_hash, candidate_hash)
+        except Exception:
+            continue
+
+        searched_images += 1
+        if distance > 24:
+            continue
+
+        if distance <= 8:
+            match_label = "very_likely"
+        elif distance <= 16:
+            match_label = "possible"
+        else:
+            match_label = "weak"
+
+        visual_similarity = round(max(0.0, 1.0 - (distance / 256.0)) * 100.0, 1)
+
+        for product, image_index in product_links:
+            product_id = product.get("id")
+            previous = best_by_product.get(product_id)
+            if previous is not None and previous["distance"] <= distance:
+                continue
+            images = product.get("images") or []
+            best_by_product[product_id] = {
+                "product_id": product_id,
+                "sku": product.get("sku") or "",
+                "name": product.get("name") or "",
+                "category": product.get("category") or "",
+                "price": product.get("price") or 0,
+                "price_display": product.get("price_display") or (
+                    "fixed" if product.get("fixed_price") else "starting_from"
+                ),
+                "image_url": images[image_index] if image_index < len(images) else public_url,
+                "distance": distance,
+                "visual_similarity": visual_similarity,
+                "match_label": match_label,
+            }
+
+    matches = sorted(
+        best_by_product.values(),
+        key=lambda item: (item["distance"], item["sku"], item["name"]),
+    )[:limit]
+
+    return {
+        "matches": matches,
+        "searched_images": searched_images,
+        "query_fingerprint": query_hash,
+    }
 
 
 @api.get("/admin/inquiries/{inquiry_id}/quotations")
