@@ -4916,6 +4916,7 @@ async def image_protection_status(admin: _AdminUser = Depends(require_admin)):
         "$and": [
             *base_filter["$and"],
             {"ownership_protected_at": {"$exists": True}},
+            {"perceptual_fingerprint": {"$exists": True, "$ne": None}},
         ]
     })
     failed = await db.files.count_documents({
@@ -4969,7 +4970,11 @@ async def image_protection_reprocess(
             {"original_path": {"$exists": True, "$ne": None}},
             {"kind": {"$ne": "video"}},
             {"content_type": {"$regex": "^image/", "$options": "i"}},
-            {"ownership_protected_at": {"$exists": False}},
+            {"$or": [
+                {"ownership_protected_at": {"$exists": False}},
+                {"perceptual_fingerprint": {"$exists": False}},
+                {"perceptual_fingerprint": None},
+            ]},
             {"ownership_protection_failed_at": {"$exists": False}},
         ]
     }
@@ -5053,7 +5058,10 @@ async def image_protection_reprocess(
         "ownership_protection_failed_at": {"$exists": True},
     })
     protected_total = await db.files.count_documents({
-        "ownership_protected_at": {"$exists": True},
+        "$and": [
+            {"ownership_protected_at": {"$exists": True}},
+            {"perceptual_fingerprint": {"$exists": True, "$ne": None}},
+        ]
     })
 
     return {
