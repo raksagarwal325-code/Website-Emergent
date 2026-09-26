@@ -32,7 +32,7 @@ from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  #
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
 from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_PREFIX, apply_identity_authority, apply_owner_facts, apply_reference_family, apply_reference_model, automatic_catalogue_model, blocking_identity_notes, catalogue_manifest_row, conversation_facts, extract_catalogue_references, facts_as_notes, find_similar_product, normalize_ai_record, normalize_catalogue_matches, normalize_product_name, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_model, sop_prompt, validate_record  # noqa: E402
 from product_ai import configure_product_chat, product_ai_settings  # noqa: E402
-from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, inspect_media_bytes  # noqa: E402
+from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, canonical_media_url, collect_references, inspect_media_bytes, public_url_for_file  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
@@ -4839,45 +4839,122 @@ async def watermark_reprocess(admin: _AdminUser = Depends(require_admin)):
 @api.get("/image-protection/registry")
 async def image_protection_registry(
     q: str = Query("", max_length=200),
+    scope: Literal["in_use", "products", "projects", "site", "unused", "all"] = Query("in_use"),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     admin: _AdminUser = Depends(require_admin),
 ):
-    """Searchable evidence registry for Samrat-owned uploaded images."""
-    filters = [
-        {"original_path": {"$exists": True, "$ne": None}},
-        {"kind": {"$ne": "video"}},
-        {"content_type": {"$regex": "^image/", "$options": "i"}},
-    ]
-    needle = (q or "").strip()
-    if needle:
-        safe = re.escape(needle)
-        filters.append({"$or": [
-            {"original_filename": {"$regex": safe, "$options": "i"}},
-            {"id": {"$regex": safe, "$options": "i"}},
-            {"storage_path": {"$regex": safe, "$options": "i"}},
-            {"ownership_fingerprint": {"$regex": safe, "$options": "i"}},
-            {"perceptual_fingerprint": {"$regex": safe, "$options": "i"}},
-        ]})
-    query = {"$and": filters}
-    total = await db.files.count_documents(query)
-    rows = await db.files.find(query, {"_id": 0}).sort("created_at", -1).skip((page - 1) * limit).limit(limit).to_list(limit)
+    """Searchable evidence registry, defaulting to assets actually in use.
 
-    # Resolve product/SKU references from the public URLs without altering
-    # catalogue records. One asset may legitimately belong to multiple products.
-    products = await db.products.find({}, {"_id": 0, "id": 1, "name": 1, "sku": 1, "images": 1}).to_list(5000)
-    usage_by_url = {}
-    for product in products:
-        for url in product.get("images") or []:
-            usage_by_url.setdefault(url, []).append({
-                "product_id": product.get("id"),
-                "name": product.get("name") or "",
-                "sku": product.get("sku") or "",
-            })
+    Stored-but-unreferenced uploads remain available under scope=unused/all,
+    but are not mixed into the default ownership view.
+    """
+    products = await db.products.find(
+        {}, {"_id": 0, "id": 1, "name": 1, "sku": 1, "status": 1, "images": 1}
+    ).to_list(5000)
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    hero_slides = await db.hero_slides.find({}, {"_id": 0}).to_list(500)
+    category_rows = await db.category_featured_images.find({}, {"_id": 0}).to_list(100)
+    category_images = [_cat_out(row) for row in category_rows]
+
+    references = collect_references(
+        products,
+        settings,
+        hero_slides,
+        category_images,
+    )
+    usage_by_url = {
+        canonical_media_url(url): uses
+        for url, uses in references.items()
+    }
+
+    rows = await db.files.find(
+        {
+            "$and": [
+                {"original_path": {"$exists": True, "$ne": None}},
+                {"kind": {"$ne": "video"}},
+                {"content_type": {"$regex": "^image/", "$options": "i"}},
+            ]
+        },
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(5000)
+
+    needle = (q or "").strip().lower()
+    filtered = []
+    for row in rows:
+        public_url = public_url_for_file(row)
+        canonical_url = canonical_media_url(public_url)
+        uses = usage_by_url.get(canonical_url, [])
+        use_types = {str(use.get("type") or "") for use in uses}
+        in_use = bool(uses)
+
+        if scope == "in_use" and not in_use:
+            continue
+        if scope == "products" and "product" not in use_types:
+            continue
+        if scope == "projects" and "project" not in use_types:
+            continue
+        if scope == "site" and not (use_types & {"hero", "category"}):
+            continue
+        if scope == "unused" and in_use:
+            continue
+
+        if needle:
+            search_parts = [
+                str(row.get("original_filename") or ""),
+                str(row.get("id") or ""),
+                str(row.get("storage_path") or ""),
+                str(row.get("ownership_fingerprint") or ""),
+                str(row.get("perceptual_fingerprint") or ""),
+            ]
+            for use in uses:
+                search_parts.extend([
+                    str(use.get("name") or ""),
+                    str(use.get("sku") or ""),
+                    str(use.get("location") or ""),
+                    str(use.get("type") or ""),
+                ])
+            if needle not in " ".join(search_parts).lower():
+                continue
+
+        filtered.append((row, public_url, uses))
+
+    total = len(filtered)
+    start_index = (page - 1) * limit
+    page_rows = filtered[start_index:start_index + limit]
 
     items = []
-    for row in rows:
-        public_url = f"/api/files/{row.get('storage_path')}" if row.get("storage_path") else ""
+    for row, public_url, uses in page_rows:
+        product_refs = [
+            {
+                "product_id": use.get("id"),
+                "name": use.get("name") or "",
+                "sku": use.get("sku") or "",
+                "status": use.get("status") or "",
+                "slot": use.get("slot"),
+            }
+            for use in uses
+            if use.get("type") == "product"
+        ]
+        project_refs = [
+            {
+                "project_id": use.get("id"),
+                "name": use.get("name") or "",
+                "location": use.get("location") or "",
+                "slot": use.get("slot"),
+            }
+            for use in uses
+            if use.get("type") == "project"
+        ]
+        site_refs = [
+            {
+                "type": use.get("type"),
+                "id": use.get("id"),
+                "name": use.get("name") or "",
+            }
+            for use in uses
+            if use.get("type") in {"hero", "category"}
+        ]
         items.append({
             "id": row.get("id"),
             "original_filename": row.get("original_filename"),
@@ -4890,15 +4967,21 @@ async def image_protection_registry(
             "height": row.get("height"),
             "content_type": row.get("content_type"),
             "watermarked": bool(row.get("watermarked")),
-            "products": usage_by_url.get(public_url, []),
+            "in_use": in_use if False else bool(uses),
+            "usage_types": sorted(use_types),
+            "products": product_refs,
+            "projects": project_refs,
+            "site_refs": site_refs,
         })
 
+    total_pages = max(1, (total + limit - 1) // limit)
     return {
         "items": items,
-        "page": page,
+        "page": min(page, total_pages),
         "limit": limit,
         "total": total,
-        "total_pages": max(1, (total + limit - 1) // limit),
+        "total_pages": total_pages,
+        "scope": scope,
     }
 
 
