@@ -645,21 +645,8 @@ export const createQuotationPdf = async (quote, options = {}) => {
       return 58.5;
     };
 
-    const noteLines = doc.splitTextToSize(CUSTOM_PRODUCT_NOTE, usable - 10);
-    const noteHeight = 12 + noteLines.length * 3;
-    const firstReference = designReferences[0];
-    const firstReferenceUseLines = firstReference
-      ? doc.splitTextToSize(clientFacingQuotationText(quote, firstReference.use_details || "Use the confirmed design details shown in this reference image."), 120).slice(0, 4)
-      : [];
-    const firstReferenceExcludeLines = firstReference?.exclude_details
-      ? doc.splitTextToSize(clientFacingQuotationText(quote, firstReference.exclude_details), 120).slice(0, 4)
-      : [];
-    const firstReferenceHeight = firstReference
-      ? 12 + 10 + Math.max(42, 18 + firstReferenceUseLines.length * 3 + (firstReferenceExcludeLines.length ? 6 + firstReferenceExcludeLines.length * 3 : 0))
-      : 0;
-
     scheduleY = startCustomisationSchedulePage(false);
-    customItems.forEach(({ item, itemIndex }, customIndex) => {
+    customItems.forEach(({ item, itemIndex }) => {
       const nameLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 145);
       const specificationLines = doc.splitTextToSize(quotationCustomisationScheduleText(quote, item), 145);
       const referenceCodes = quotationReferenceCodesForItem({ design_references: designReferences }, item);
@@ -667,13 +654,7 @@ export const createQuotationPdf = async (quote, options = {}) => {
         ? doc.splitTextToSize(`Design reference: ${referenceCodes.join(", ")}`, 145)
         : [];
       const rowHeight = Math.max(22, 7 + nameLines.length * 3.5 + specificationLines.length * 3.45 + referenceLines.length * 3.2 + 4);
-      const closingHeight = noteHeight + 7 + firstReferenceHeight;
-      const closingFitsOnFreshPage = 58.5 + rowHeight + closingHeight <= 270;
-      const isLastItem = customIndex === customItems.length - 1;
-      if (scheduleY + rowHeight > 270 || (
-        isLastItem && firstReference && scheduleY > 58.5 && closingFitsOnFreshPage
-        && scheduleY + rowHeight + closingHeight > 270
-      )) scheduleY = startCustomisationSchedulePage(true);
+      if (scheduleY + rowHeight > 270) scheduleY = startCustomisationSchedulePage(true);
       fillRect(inner, scheduleY, usable, rowHeight, (itemIndex % 2 === 0) ? [248, 243, 235] : IVORY);
       setText(7, "bold", MAROON);
       doc.text(String(itemIndex + 1), inner + 6, scheduleY + 7);
@@ -692,6 +673,8 @@ export const createQuotationPdf = async (quote, options = {}) => {
       line(inner, scheduleY, inner + usable, scheduleY, LINE, 0.15);
     });
 
+    const noteLines = doc.splitTextToSize(CUSTOM_PRODUCT_NOTE, usable - 10);
+    const noteHeight = 12 + noteLines.length * 3;
     if (scheduleY + noteHeight + 7 > 270) {
       scheduleY = startCustomisationSchedulePage(true);
     }
