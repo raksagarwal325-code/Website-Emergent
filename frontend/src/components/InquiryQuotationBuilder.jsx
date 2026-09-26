@@ -160,10 +160,16 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setImageMatchBusy(true);
     setImageMatchError("");
     try {
-      const result = await api.matchQuotationProductByImage(imageSearchFile, 5);
+      let result = null;
+      for (let batch = 0; batch < 15; batch += 1) {
+        result = await api.matchQuotationProductByImage(imageSearchFile, 5);
+        if (!Number(result?.index_remaining || 0)) break;
+      }
       const matches = Array.isArray(result?.matches) ? result.matches : [];
       setImageMatches(matches);
-      if (!matches.length) setImageMatchError("No reliable catalogue match found. Try the original image or search by name / SKU.");
+      if (!matches.length) {
+        setImageMatchError("No catalogue candidate was found. Try another photo or search by name / SKU.");
+      }
     } catch (error) {
       const message = errorMessage(error, "Could not search the catalogue by image");
       setImageMatchError(message);
@@ -615,7 +621,13 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                             <div className="truncate text-sm text-white/80">{match.name}</div>
                             <div className="mt-1 text-[10px] uppercase tracking-[0.13em] text-[#BF9972]">{match.sku || "No SKU"} · {match.category || "Catalogue product"}</div>
                             <div className="mt-1 text-[10px] text-white/40">
-                              {match.match_label === "very_likely" ? "Very likely match" : match.match_label === "possible" ? "Possible match" : "Weak match"}
+                              {match.match_label === "very_likely"
+                                ? "Very likely match"
+                                : match.match_label === "possible"
+                                  ? "Possible match"
+                                  : match.match_label === "weak"
+                                    ? "Weak match"
+                                    : "Closest visual candidate · verify manually"}
                               {" · "}{match.visual_similarity}% visual similarity
                             </div>
                           </div>

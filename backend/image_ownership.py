@@ -48,6 +48,62 @@ def perceptual_fingerprint(original_bytes: bytes, hash_size: int = 16) -> str:
         return f"{value:0{width}x}"
 
 
+def perceptual_fingerprint_variants(original_bytes: bytes, hash_size: int = 16) -> list[str]:
+    """Return dHash fingerprints for the full frame plus useful crops.
+
+    This makes matching more tolerant of screenshots / room photos where the
+    catalogue product occupies only part of the uploaded frame. It is still a
+    near-image matcher, not a semantic object-recognition model.
+    """
+    if hash_size < 4 or hash_size > 32:
+        raise ValueError("hash_size must be between 4 and 32")
+
+    def _hash_image(image: Image.Image) -> str:
+        gray = image.convert("L").resize(
+            (hash_size + 1, hash_size), Image.Resampling.LANCZOS
+        )
+        bits = []
+        for y in range(hash_size):
+            for x in range(hash_size):
+                bits.append(gray.getpixel((x, y)) > gray.getpixel((x + 1, y)))
+        value = 0
+        for bit in bits:
+            value = (value << 1) | int(bit)
+        width = (len(bits) + 3) // 4
+        return f"{value:0{width}x}"
+
+    with Image.open(io.BytesIO(original_bytes)) as opened:
+        image = ImageOps.exif_transpose(opened).convert("RGB")
+        width, height = image.size
+        if width < 8 or height < 8:
+            return [_hash_image(image)]
+
+        boxes = [
+            (0, 0, width, height),  # full frame
+            (int(width * 0.15), int(height * 0.15), int(width * 0.85), int(height * 0.85)),
+            (int(width * 0.20), 0, int(width * 0.80), int(height * 0.65)),  # top-centre
+            (int(width * 0.20), int(height * 0.35), int(width * 0.80), height),  # bottom-centre
+            (0, int(height * 0.15), int(width * 0.65), int(height * 0.85)),  # left
+            (int(width * 0.35), int(height * 0.15), width, int(height * 0.85)),  # right
+            (0, 0, int(width * 0.60), int(height * 0.60)),
+            (int(width * 0.40), 0, width, int(height * 0.60)),
+            (0, int(height * 0.40), int(width * 0.60), height),
+            (int(width * 0.40), int(height * 0.40), width, height),
+        ]
+
+        hashes = []
+        seen = set()
+        for box in boxes:
+            left, top, right, bottom = box
+            if right - left < 4 or bottom - top < 4:
+                continue
+            fp = _hash_image(image.crop((left, top, right, bottom)))
+            if fp not in seen:
+                seen.add(fp)
+                hashes.append(fp)
+        return hashes
+
+
 def perceptual_distance(left: str, right: str) -> int:
     """Hamming distance between two hexadecimal perceptual fingerprints."""
     if not left or not right or len(left) != len(right):
