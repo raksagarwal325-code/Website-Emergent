@@ -4987,7 +4987,7 @@ async def image_protection_registry(
 
 @api.get("/image-protection/status")
 async def image_protection_status(admin: _AdminUser = Depends(require_admin)):
-    """Return live ownership-protection progress for eligible uploaded images."""
+    """Return live ownership-protection progress plus in-use health diagnostics."""
     base_filter = {
         "$and": [
             {"original_path": {"$exists": True, "$ne": None}},
@@ -5026,6 +5026,111 @@ async def image_protection_status(admin: _AdminUser = Depends(require_admin)):
         else "in_progress" if protected > 0
         else "not_started"
     )
+
+    # Protection Health focuses on images that are actually referenced by the
+    # catalogue/site. Stored unused uploads stay visible in the registry but do
+    # not make the operational health percentage look worse.
+    products = await db.products.find(
+        {}, {"_id": 0, "id": 1, "name": 1, "sku": 1, "status": 1, "images": 1}
+    ).to_list(5000)
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    hero_slides = await db.hero_slides.find({}, {"_id": 0}).to_list(500)
+    category_rows = await db.category_featured_images.find({}, {"_id": 0}).to_list(100)
+    category_images = [_cat_out(row) for row in category_rows]
+    references = collect_references(products, settings, hero_slides, category_images)
+
+    file_rows = await db.files.find(base_filter, {"_id": 0}).to_list(5000)
+    file_by_url = {
+        canonical_media_url(public_url_for_file(row)): row
+        for row in file_rows
+        if public_url_for_file(row)
+    }
+
+    in_use_rows = []
+    unresolved_references = 0
+    for url, uses in references.items():
+        row = file_by_url.get(canonical_media_url(url))
+        if not row:
+            # References to non-/api/files assets are outside this ownership
+            # registry; only count app-owned file URLs as missing storage rows.
+            if canonical_media_url(url).startswith("/api/files/"):
+                unresolved_references += 1
+            continue
+        in_use_rows.append((row, uses))
+
+    # One stored file may be referenced multiple times; deduplicate by id/path.
+    deduped = {}
+    for row, uses in in_use_rows:
+        key = row.get("id") or row.get("storage_path")
+        entry = deduped.setdefault(key, {"row": row, "uses": []})
+        entry["uses"].extend(uses)
+    in_use_entries = list(deduped.values())
+
+    fully_protected = 0
+    missing_sha = 0
+    missing_dhash = 0
+    failed_in_use = 0
+    last_protection_at = None
+    failed_items = []
+
+    for entry in in_use_entries:
+        row = entry["row"]
+        uses = entry["uses"]
+        has_sha = bool(row.get("ownership_fingerprint") or row.get("sha256"))
+        has_dhash = bool(row.get("perceptual_fingerprint"))
+        has_protected_at = bool(row.get("ownership_protected_at"))
+        is_failed = bool(row.get("ownership_protection_failed_at"))
+
+        if has_sha and has_dhash and has_protected_at and not is_failed:
+            fully_protected += 1
+        if not has_sha:
+            missing_sha += 1
+        if not has_dhash:
+            missing_dhash += 1
+        if is_failed:
+            failed_in_use += 1
+            if len(failed_items) < 25:
+                failed_items.append({
+                    "id": row.get("id"),
+                    "original_filename": row.get("original_filename"),
+                    "public_url": public_url_for_file(row),
+                    "failed_at": row.get("ownership_protection_failed_at"),
+                    "error": row.get("ownership_protection_error") or "Unknown protection error",
+                    "products": [
+                        {
+                            "product_id": use.get("id"),
+                            "name": use.get("name") or "",
+                            "sku": use.get("sku") or "",
+                        }
+                        for use in uses if use.get("type") == "product"
+                    ],
+                    "projects": [
+                        {
+                            "project_id": use.get("id"),
+                            "name": use.get("name") or "",
+                            "location": use.get("location") or "",
+                        }
+                        for use in uses if use.get("type") == "project"
+                    ],
+                    "usage_types": sorted({
+                        str(use.get("type") or "") for use in uses if use.get("type")
+                    }),
+                })
+
+        protected_at = row.get("ownership_protected_at")
+        if protected_at and (last_protection_at is None or protected_at > last_protection_at):
+            last_protection_at = protected_at
+
+    in_use_total = len(in_use_entries)
+    unused_stored = max(0, len(file_rows) - in_use_total)
+    health_status = (
+        "healthy"
+        if in_use_total > 0 and fully_protected == in_use_total and failed_in_use == 0 and unresolved_references == 0
+        else "attention"
+        if in_use_total > 0
+        else "no_in_use_images"
+    )
+
     return {
         "total": total,
         "protected": protected,
@@ -5033,6 +5138,18 @@ async def image_protection_status(admin: _AdminUser = Depends(require_admin)):
         "failed": failed,
         "status": status,
         "visible_watermark_applied": False,
+        "health": {
+            "status": health_status,
+            "in_use_total": in_use_total,
+            "fully_protected": fully_protected,
+            "missing_sha": missing_sha,
+            "missing_dhash": missing_dhash,
+            "failed_in_use": failed_in_use,
+            "unused_stored": unused_stored,
+            "unresolved_file_references": unresolved_references,
+            "last_protection_at": last_protection_at,
+            "failed_items": failed_items,
+        },
     }
 
 
