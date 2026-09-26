@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon, FolderOpen, RefreshCw, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon, FolderOpen, RefreshCw, AlertTriangle, ShieldCheck } from "lucide-react";
 import { api } from "../lib/api";
 import { compareBySku } from "../lib/api";
 import { gmailComposeUrl } from "../lib/gmailCompose";
@@ -57,6 +57,7 @@ export default function Admin() {
     { key: "category-images", label: "Category Images", icon: ImageIcon },
     { key: "products", label: "Products", icon: Package },
     { key: "media-library", label: "Media Library", icon: FolderOpen },
+    { key: "image-protection", label: "Image Protection", icon: ShieldCheck },
     { key: "reviews", label: "Reviews", icon: Star, badge: reviewCounts.pending },
     { key: "quotations", label: "Quotations", icon: MessageSquare },
     { key: "inquiries", label: "Inquiries", icon: MessageSquare },
@@ -118,6 +119,18 @@ export default function Admin() {
       {tab === "hero-slider" && <HeroSliderAdmin />}
       {tab === "category-images" && <CategoryImagesAdmin />}
       {tab === "media-library" && <MediaLibraryAdmin />}
+      {tab === "image-protection" && settings && (
+        <section className="space-y-5" data-testid="admin-image-protection-tab">
+          <div>
+            <div className="eyebrow mb-2">Image rights</div>
+            <h2 className="font-serif text-3xl">Image Protection</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/55">
+              Manage invisible ownership protection, fingerprints, the Ownership Registry and the optional visible watermark from one dedicated workspace.
+            </p>
+          </div>
+          <WatermarkAdmin settings={settings} onSave={refresh} />
+        </section>
+      )}
 
       {tab === "products" && (
         <ProductsAdmin products={products} categories={categories} refresh={refresh} setEditing={setEditing} editing={editing} />
@@ -141,7 +154,6 @@ export default function Admin() {
           <SettingsAdmin settings={settings} onSave={refresh} />
           <QuotationBrandingAdmin settings={settings} onSave={refresh} />
           <LegalAdmin settings={settings} onSave={refresh} />
-          <WatermarkAdmin settings={settings} onSave={refresh} />
         </div>
       )}
     </div>
