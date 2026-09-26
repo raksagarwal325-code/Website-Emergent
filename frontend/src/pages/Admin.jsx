@@ -1822,6 +1822,7 @@ function WatermarkAdmin({ settings, onSave }) {
   const [registryLoading, setRegistryLoading] = useState(false);
   const [registry, setRegistry] = useState(null);
   const [registryQuery, setRegistryQuery] = useState("");
+  const [registryScope, setRegistryScope] = useState("in_use");
   const [registryPage, setRegistryPage] = useState(1);
   const debounceRef = React.useRef(null);
   const visibleWatermarkEnabled = !!wm.enabled && !!wm.explicit_opt_in;
@@ -1843,10 +1844,10 @@ function WatermarkAdmin({ settings, onSave }) {
     refreshProtectionStatus();
   }, [refreshProtectionStatus]);
 
-  const loadRegistry = React.useCallback(async (page = registryPage, query = registryQuery) => {
+  const loadRegistry = React.useCallback(async (page = registryPage, query = registryQuery, scope = registryScope) => {
     setRegistryLoading(true);
     try {
-      const data = await api.adminImageOwnershipRegistry({ page, limit: 25, q: query.trim() });
+      const data = await api.adminImageOwnershipRegistry({ page, limit: 25, q: query.trim(), scope });
       setRegistry(data);
       setRegistryPage(data.page || page);
       return data;
@@ -1856,12 +1857,12 @@ function WatermarkAdmin({ settings, onSave }) {
     } finally {
       setRegistryLoading(false);
     }
-  }, [registryPage, registryQuery]);
+  }, [registryPage, registryQuery, registryScope]);
 
   const openRegistry = async () => {
     const next = !registryOpen;
     setRegistryOpen(next);
-    if (next && !registry) await loadRegistry(1, registryQuery);
+    if (next && !registry) await loadRegistry(1, registryQuery, registryScope);
   };
 
   const runPreview = React.useCallback(async () => {
@@ -2077,7 +2078,7 @@ function WatermarkAdmin({ settings, onSave }) {
               className="flex flex-col sm:flex-row gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                loadRegistry(1, registryQuery);
+                loadRegistry(1, registryQuery, registryScope);
               }}
             >
               <input
@@ -2096,8 +2097,47 @@ function WatermarkAdmin({ settings, onSave }) {
               </button>
             </form>
 
+            <div className="flex flex-wrap gap-2" data-testid="ownership-registry-filters">
+              {[
+                ["in_use", "In use"],
+                ["products", "Products"],
+                ["projects", "Projects"],
+                ["site", "Site content"],
+                ["unused", "Unused uploads"],
+                ["all", "All stored images"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setRegistryScope(value);
+                    setRegistryPage(1);
+                    loadRegistry(1, registryQuery, value);
+                  }}
+                  disabled={registryLoading}
+                  className={
+                    "border px-3 py-2 text-[9px] uppercase tracking-[0.16em] disabled:opacity-40 " +
+                    (registryScope === value
+                      ? "border-[#D4AF37] bg-[#D4AF37]/10 text-[#D4AF37]"
+                      : "border-white/15 text-white/50 hover:border-white/30 hover:text-white/75")
+                  }
+                  data-testid={"ownership-registry-filter-" + value}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <div className="text-[11px] text-white/40">
-              {registry ? registry.total + " image records · page " + registry.page + " of " + registry.total_pages : "Loading registry…"}
+              {registry
+                ? registry.total + " image records · " +
+                  (registry.scope === "in_use" ? "in use" :
+                   registry.scope === "products" ? "products" :
+                   registry.scope === "projects" ? "projects" :
+                   registry.scope === "site" ? "site content" :
+                   registry.scope === "unused" ? "unused uploads" : "all stored") +
+                  " · page " + registry.page + " of " + registry.total_pages
+                : "Loading registry…"}
             </div>
 
             <div className="space-y-3">
@@ -2115,7 +2155,11 @@ function WatermarkAdmin({ settings, onSave }) {
                         <div className="text-[10px] text-white/35 mt-1">
                           {(item.products || []).length
                             ? item.products.map((p) => [p.sku, p.name].filter(Boolean).join(" · ")).join(" | ")
-                            : "No product reference"}
+                            : (item.projects || []).length
+                              ? item.projects.map((p) => [p.name, p.location].filter(Boolean).join(" · ")).join(" | ")
+                              : (item.site_refs || []).length
+                                ? item.site_refs.map((ref) => [ref.type, ref.name].filter(Boolean).join(" · ")).join(" | ")
+                                : "Unused upload · no catalogue/site reference"}
                         </div>
                       </div>
                       <div className="text-[9px] uppercase tracking-[0.14em] text-[#D4AF37]">
@@ -2140,7 +2184,7 @@ function WatermarkAdmin({ settings, onSave }) {
                 <button
                   type="button"
                   disabled={registryLoading || registry.page <= 1}
-                  onClick={() => loadRegistry(registry.page - 1, registryQuery)}
+                  onClick={() => loadRegistry(registry.page - 1, registryQuery, registryScope)}
                   className="border border-white/15 px-4 py-2 text-[10px] uppercase tracking-[0.18em] disabled:opacity-35"
                 >
                   Previous
@@ -2149,7 +2193,7 @@ function WatermarkAdmin({ settings, onSave }) {
                 <button
                   type="button"
                   disabled={registryLoading || registry.page >= registry.total_pages}
-                  onClick={() => loadRegistry(registry.page + 1, registryQuery)}
+                  onClick={() => loadRegistry(registry.page + 1, registryQuery, registryScope)}
                   className="border border-white/15 px-4 py-2 text-[10px] uppercase tracking-[0.18em] disabled:opacity-35"
                 >
                   Next
