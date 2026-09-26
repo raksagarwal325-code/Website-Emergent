@@ -26,7 +26,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E402
 from watermark import apply_watermark  # noqa: E402
-from image_ownership import embed_ownership_metadata, ownership_fingerprint  # noqa: E402
+from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_fingerprint  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
@@ -2728,11 +2728,13 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
     # Videos are never watermarked. Public image derivatives receive invisible
     # ownership metadata whether or not the visible watermark is enabled.
     ownership_fp = None
+    visual_fp = None
     if is_video:
         public_bytes = data
         wm_enabled_for_record = False
     else:
         ownership_fp = ownership_fingerprint(data)
+        visual_fp = perceptual_fingerprint(data)
         wm = await _get_watermark_settings()
         if wm.get("enabled") and wm.get("explicit_opt_in"):
             public_bytes = apply_watermark(
@@ -2749,6 +2751,7 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
             content_type=file.content_type,
             asset_id=file_id,
             fingerprint=ownership_fp,
+            visual_fingerprint=visual_fp,
         )
         wm_enabled_for_record = bool(wm.get("enabled") and wm.get("explicit_opt_in"))
 
@@ -2775,6 +2778,7 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
         "kind": "video" if is_video else "image",
         "sha256": media_metadata.get("sha256"),
         "ownership_fingerprint": ownership_fp,
+        "perceptual_fingerprint": visual_fp,
         "width": media_metadata.get("width"),
         "height": media_metadata.get("height"),
         "created_at": now_iso(),
@@ -4832,6 +4836,72 @@ async def watermark_reprocess(admin: _AdminUser = Depends(require_admin)):
     return {"processed": processed, "skipped": skipped, "failed": failed, "total": len(files)}
 
 
+@api.get("/image-protection/registry")
+async def image_protection_registry(
+    q: str = Query("", max_length=200),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Searchable evidence registry for Samrat-owned uploaded images."""
+    filters = [
+        {"original_path": {"$exists": True, "$ne": None}},
+        {"kind": {"$ne": "video"}},
+        {"content_type": {"$regex": "^image/", "$options": "i"}},
+    ]
+    needle = (q or "").strip()
+    if needle:
+        safe = re.escape(needle)
+        filters.append({"$or": [
+            {"original_filename": {"$regex": safe, "$options": "i"}},
+            {"id": {"$regex": safe, "$options": "i"}},
+            {"storage_path": {"$regex": safe, "$options": "i"}},
+            {"ownership_fingerprint": {"$regex": safe, "$options": "i"}},
+            {"perceptual_fingerprint": {"$regex": safe, "$options": "i"}},
+        ]})
+    query = {"$and": filters}
+    total = await db.files.count_documents(query)
+    rows = await db.files.find(query, {"_id": 0}).sort("created_at", -1).skip((page - 1) * limit).limit(limit).to_list(limit)
+
+    # Resolve product/SKU references from the public URLs without altering
+    # catalogue records. One asset may legitimately belong to multiple products.
+    products = await db.products.find({}, {"_id": 0, "id": 1, "name": 1, "sku": 1, "images": 1}).to_list(5000)
+    usage_by_url = {}
+    for product in products:
+        for url in product.get("images") or []:
+            usage_by_url.setdefault(url, []).append({
+                "product_id": product.get("id"),
+                "name": product.get("name") or "",
+                "sku": product.get("sku") or "",
+            })
+
+    items = []
+    for row in rows:
+        public_url = f"/api/files/{row.get('storage_path')}" if row.get("storage_path") else ""
+        items.append({
+            "id": row.get("id"),
+            "original_filename": row.get("original_filename"),
+            "public_url": public_url,
+            "created_at": row.get("created_at"),
+            "protected_at": row.get("ownership_protected_at"),
+            "sha256": row.get("ownership_fingerprint") or row.get("sha256"),
+            "perceptual_hash": row.get("perceptual_fingerprint"),
+            "width": row.get("width"),
+            "height": row.get("height"),
+            "content_type": row.get("content_type"),
+            "watermarked": bool(row.get("watermarked")),
+            "products": usage_by_url.get(public_url, []),
+        })
+
+    return {
+        "items": items,
+        "page": page,
+        "limit": limit,
+        "total": total,
+        "total_pages": max(1, (total + limit - 1) // limit),
+    }
+
+
 @api.get("/image-protection/status")
 async def image_protection_status(admin: _AdminUser = Depends(require_admin)):
     """Return live ownership-protection progress for eligible uploaded images."""
@@ -4846,6 +4916,7 @@ async def image_protection_status(admin: _AdminUser = Depends(require_admin)):
         "$and": [
             *base_filter["$and"],
             {"ownership_protected_at": {"$exists": True}},
+            {"perceptual_fingerprint": {"$exists": True, "$ne": None}},
         ]
     })
     failed = await db.files.count_documents({
@@ -4857,7 +4928,11 @@ async def image_protection_status(admin: _AdminUser = Depends(require_admin)):
     remaining = await db.files.count_documents({
         "$and": [
             *base_filter["$and"],
-            {"ownership_protected_at": {"$exists": False}},
+            {"$or": [
+                {"ownership_protected_at": {"$exists": False}},
+                {"perceptual_fingerprint": {"$exists": False}},
+                {"perceptual_fingerprint": None},
+            ]},
             {"ownership_protection_failed_at": {"$exists": False}},
         ]
     })
@@ -4895,7 +4970,11 @@ async def image_protection_reprocess(
             {"original_path": {"$exists": True, "$ne": None}},
             {"kind": {"$ne": "video"}},
             {"content_type": {"$regex": "^image/", "$options": "i"}},
-            {"ownership_protected_at": {"$exists": False}},
+            {"$or": [
+                {"ownership_protected_at": {"$exists": False}},
+                {"perceptual_fingerprint": {"$exists": False}},
+                {"perceptual_fingerprint": None},
+            ]},
             {"ownership_protection_failed_at": {"$exists": False}},
         ]
     }
@@ -4937,12 +5016,14 @@ async def image_protection_reprocess(
                 continue
 
             fingerprint = ownership_fingerprint(data)
+            visual_fingerprint = await asyncio.to_thread(perceptual_fingerprint, data)
             out = await asyncio.to_thread(
                 embed_ownership_metadata,
                 data,
                 content_type=content_type,
                 asset_id=f.get("id"),
                 fingerprint=fingerprint,
+                visual_fingerprint=visual_fingerprint,
             )
             await asyncio.to_thread(put_object, public_path, out, content_type)
             await db.files.update_one(
@@ -4951,6 +5032,7 @@ async def image_protection_reprocess(
                     "$set": {
                         "watermarked": False,
                         "ownership_fingerprint": fingerprint,
+                        "perceptual_fingerprint": visual_fingerprint,
                         "ownership_protected_at": now_iso(),
                     },
                     "$unset": {
@@ -4976,7 +5058,10 @@ async def image_protection_reprocess(
         "ownership_protection_failed_at": {"$exists": True},
     })
     protected_total = await db.files.count_documents({
-        "ownership_protected_at": {"$exists": True},
+        "$and": [
+            {"ownership_protected_at": {"$exists": True}},
+            {"perceptual_fingerprint": {"$exists": True, "$ne": None}},
+        ]
     })
 
     return {

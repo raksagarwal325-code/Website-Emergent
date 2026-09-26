@@ -1818,6 +1818,11 @@ function WatermarkAdmin({ settings, onSave }) {
   const [busy, setBusy] = useState(false);
   const [protectionStatus, setProtectionStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [registryOpen, setRegistryOpen] = useState(false);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [registry, setRegistry] = useState(null);
+  const [registryQuery, setRegistryQuery] = useState("");
+  const [registryPage, setRegistryPage] = useState(1);
   const debounceRef = React.useRef(null);
   const visibleWatermarkEnabled = !!wm.enabled && !!wm.explicit_opt_in;
 
@@ -1837,6 +1842,27 @@ function WatermarkAdmin({ settings, onSave }) {
   useEffect(() => {
     refreshProtectionStatus();
   }, [refreshProtectionStatus]);
+
+  const loadRegistry = React.useCallback(async (page = registryPage, query = registryQuery) => {
+    setRegistryLoading(true);
+    try {
+      const data = await api.adminImageOwnershipRegistry({ page, limit: 25, q: query.trim() });
+      setRegistry(data);
+      setRegistryPage(data.page || page);
+      return data;
+    } catch {
+      toast.error("Ownership Registry could not be loaded");
+      return null;
+    } finally {
+      setRegistryLoading(false);
+    }
+  }, [registryPage, registryQuery]);
+
+  const openRegistry = async () => {
+    const next = !registryOpen;
+    setRegistryOpen(next);
+    if (next && !registry) await loadRegistry(1, registryQuery);
+  };
 
   const runPreview = React.useCallback(async () => {
     if (!previewFile) return;
@@ -2025,6 +2051,113 @@ function WatermarkAdmin({ settings, onSave }) {
             Refresh status
           </button>
         </div>
+      </div>
+
+      <div className="border border-white/10 p-5 space-y-4" data-testid="image-ownership-registry">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-[0.24em] text-[#D4AF37]">Ownership Registry</div>
+            <p className="text-[11px] text-white/45 mt-1 max-w-xl">
+              Search the evidence record for uploaded images. Each protected record keeps the exact SHA-256 fingerprint and a visual dHash fingerprint for resized or recompressed copies.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openRegistry}
+            className="border border-[#D4AF37]/50 px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-[#D4AF37]"
+            data-testid="ownership-registry-toggle"
+          >
+            {registryOpen ? "Close registry" : "Open registry"}
+          </button>
+        </div>
+
+        {registryOpen && (
+          <div className="space-y-4">
+            <form
+              className="flex flex-col sm:flex-row gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                loadRegistry(1, registryQuery);
+              }}
+            >
+              <input
+                value={registryQuery}
+                onChange={(e) => setRegistryQuery(e.target.value)}
+                placeholder="Search filename, asset ID, SHA or visual hash…"
+                className="flex-1 bg-[#0a0a0a] border border-white/15 px-3 py-2 text-xs outline-none focus:border-[#D4AF37]"
+                data-testid="ownership-registry-search"
+              />
+              <button
+                type="submit"
+                disabled={registryLoading}
+                className="border border-white/20 px-4 py-2 text-[10px] uppercase tracking-[0.18em] disabled:opacity-50"
+              >
+                {registryLoading ? "Searching…" : "Search"}
+              </button>
+            </form>
+
+            <div className="text-[11px] text-white/40">
+              {registry ? registry.total + " image records · page " + registry.page + " of " + registry.total_pages : "Loading registry…"}
+            </div>
+
+            <div className="space-y-3">
+              {(registry?.items || []).map((item) => (
+                <div key={item.id} className="grid grid-cols-[72px_1fr] gap-3 border border-white/10 p-3">
+                  <div className="h-[72px] bg-black/40 flex items-center justify-center overflow-hidden">
+                    {item.public_url ? (
+                      <img src={api.resolveImage(item.public_url)} alt="" className="w-full h-full object-contain" loading="lazy" />
+                    ) : null}
+                  </div>
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-xs text-white/80 truncate">{item.original_filename || item.id}</div>
+                        <div className="text-[10px] text-white/35 mt-1">
+                          {(item.products || []).length
+                            ? item.products.map((p) => [p.sku, p.name].filter(Boolean).join(" · ")).join(" | ")
+                            : "No product reference"}
+                        </div>
+                      </div>
+                      <div className="text-[9px] uppercase tracking-[0.14em] text-[#D4AF37]">
+                        {item.perceptual_hash ? "Visual fingerprint ready" : "Visual fingerprint pending"}
+                      </div>
+                    </div>
+                    <div className="grid gap-1 text-[10px] font-mono text-white/45">
+                      <div className="truncate" title={item.sha256 || ""}>SHA-256 · {item.sha256 || "Pending"}</div>
+                      <div className="truncate" title={item.perceptual_hash || ""}>dHash-256 · {item.perceptual_hash || "Pending"}</div>
+                      <div className="font-sans text-white/35">
+                        {item.width && item.height ? item.width + " × " + item.height + "px · " : ""}
+                        {item.protected_at ? "Protected " + new Date(item.protected_at).toLocaleString() : "Protection pending"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {registry && registry.total_pages > 1 && (
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  disabled={registryLoading || registry.page <= 1}
+                  onClick={() => loadRegistry(registry.page - 1, registryQuery)}
+                  className="border border-white/15 px-4 py-2 text-[10px] uppercase tracking-[0.18em] disabled:opacity-35"
+                >
+                  Previous
+                </button>
+                <span className="text-[10px] text-white/40">{registry.page} / {registry.total_pages}</span>
+                <button
+                  type="button"
+                  disabled={registryLoading || registry.page >= registry.total_pages}
+                  onClick={() => loadRegistry(registry.page + 1, registryQuery)}
+                  className="border border-white/15 px-4 py-2 text-[10px] uppercase tracking-[0.18em] disabled:opacity-35"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="pt-2">

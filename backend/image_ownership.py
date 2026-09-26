@@ -24,12 +24,45 @@ def ownership_fingerprint(original_bytes: bytes) -> str:
     return hashlib.sha256(original_bytes).hexdigest()
 
 
-def _description(asset_id: str | None, fingerprint: str) -> str:
+def perceptual_fingerprint(original_bytes: bytes, hash_size: int = 16) -> str:
+    """Return a deterministic difference-hash (dHash) for visual matching.
+
+    Unlike SHA-256, this fingerprint is based on image luminance structure and
+    therefore remains comparable after ordinary resizing or recompression.
+    The 16x16 form produces a 256-bit hash. Cropping can change more bits, so
+    callers should compare Hamming distance rather than requiring equality.
+    """
+    if hash_size < 4 or hash_size > 32:
+        raise ValueError("hash_size must be between 4 and 32")
+    with Image.open(io.BytesIO(original_bytes)) as opened:
+        image = ImageOps.exif_transpose(opened).convert("L")
+        image = image.resize((hash_size + 1, hash_size), Image.Resampling.LANCZOS)
+        bits = []
+        for y in range(hash_size):
+            for x in range(hash_size):
+                bits.append(image.getpixel((x, y)) > image.getpixel((x + 1, y)))
+        value = 0
+        for bit in bits:
+            value = (value << 1) | int(bit)
+        width = (len(bits) + 3) // 4
+        return f"{value:0{width}x}"
+
+
+def perceptual_distance(left: str, right: str) -> int:
+    """Hamming distance between two hexadecimal perceptual fingerprints."""
+    if not left or not right or len(left) != len(right):
+        raise ValueError("Perceptual fingerprints must be equal-length hex strings")
+    return (int(left, 16) ^ int(right, 16)).bit_count()
+
+
+def _description(asset_id: str | None, fingerprint: str, visual_fingerprint: str | None = None) -> str:
     parts = [
         "Original product image owned by Samrat Glass Emporium",
         f"Source: {_SITE}",
         f"SHA256: {fingerprint}",
     ]
+    if visual_fingerprint:
+        parts.append(f"dHash256: {visual_fingerprint}")
     if asset_id:
         parts.insert(1, f"Asset ID: {asset_id}")
     return " | ".join(parts)
@@ -41,6 +74,7 @@ def embed_ownership_metadata(
     content_type: str,
     asset_id: str | None = None,
     fingerprint: str | None = None,
+    visual_fingerprint: str | None = None,
 ) -> bytes:
     """Embed invisible copyright metadata in a public image derivative.
 
@@ -57,7 +91,7 @@ def embed_ownership_metadata(
     try:
         with Image.open(io.BytesIO(image_bytes)) as opened:
             image = ImageOps.exif_transpose(opened)
-            description = _description(asset_id, fp)
+            description = _description(asset_id, fp, visual_fingerprint)
             output = io.BytesIO()
 
             if ct == "image/png":
@@ -66,7 +100,7 @@ def embed_ownership_metadata(
                 for key, value in (opened.info or {}).items():
                     if isinstance(value, str) and key not in {
                         "Copyright", "Author", "Source", "Description",
-                        "SGEAssetID", "SGEFingerprint",
+                        "SGEAssetID", "SGEFingerprint", "SGEVisualFingerprint",
                     }:
                         pnginfo.add_text(str(key), value)
                 pnginfo.add_text("Copyright", _NOTICE)
@@ -76,6 +110,8 @@ def embed_ownership_metadata(
                 if asset_id:
                     pnginfo.add_text("SGEAssetID", asset_id)
                 pnginfo.add_text("SGEFingerprint", f"sha256:{fp}")
+                if visual_fingerprint:
+                    pnginfo.add_text("SGEVisualFingerprint", f"dhash256:{visual_fingerprint}")
                 image.save(output, format="PNG", pnginfo=pnginfo, optimize=True)
                 return output.getvalue()
 

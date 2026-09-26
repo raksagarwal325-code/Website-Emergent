@@ -2,7 +2,7 @@ import io
 
 from PIL import Image
 
-from image_ownership import embed_ownership_metadata, ownership_fingerprint
+from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_distance, perceptual_fingerprint
 import security_runtime
 
 
@@ -71,3 +71,44 @@ def test_hotlink_policy_blocks_unrelated_website_referrer():
     assert not security_runtime._hotlink_referrer_allowed(
         "https://copycat-lighting.example/product/123"
     )
+
+
+def test_perceptual_fingerprint_survives_resize_and_recompression():
+    image = Image.new("RGB", (320, 240))
+    pixels = image.load()
+    for y in range(image.height):
+        for x in range(image.width):
+            pixels[x, y] = (
+                (x * 5 + y * 2) % 256,
+                (x * 3 + y * 7) % 256,
+                (x + y * 4) % 256,
+            )
+
+    original = io.BytesIO()
+    image.save(original, format="PNG")
+
+    resized = image.resize((160, 120), Image.Resampling.LANCZOS)
+    recompressed = io.BytesIO()
+    resized.save(recompressed, format="JPEG", quality=72)
+
+    left = perceptual_fingerprint(original.getvalue())
+    right = perceptual_fingerprint(recompressed.getvalue())
+
+    assert len(left) == 64
+    assert len(right) == 64
+    assert perceptual_distance(left, right) <= 12
+
+
+def test_embedded_png_contains_visual_fingerprint():
+    source = _png_bytes()
+    exact = ownership_fingerprint(source)
+    visual = perceptual_fingerprint(source)
+    stamped = embed_ownership_metadata(
+        source,
+        content_type="image/png",
+        asset_id="asset-visual",
+        fingerprint=exact,
+        visual_fingerprint=visual,
+    )
+    with Image.open(io.BytesIO(stamped)) as image:
+        assert image.info.get("SGEVisualFingerprint") == f"dhash256:{visual}"
