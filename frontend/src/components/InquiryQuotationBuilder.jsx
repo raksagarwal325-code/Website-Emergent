@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Download, History, LoaderCircle, MessageCircle, Save, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
@@ -122,6 +122,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [imageSearchPreview, setImageSearchPreview] = useState("");
   const [imageMatches, setImageMatches] = useState([]);
   const [imageMatchBusy, setImageMatchBusy] = useState(false);
+  const imageSearchSequence = useRef(0);
+  const [imageRefining, setImageRefining] = useState(false);
   const [imageMatchError, setImageMatchError] = useState("");
   const [imageDiagnostic, setImageDiagnostic] = useState(null);
   const [imageDiagnosticBusy, setImageDiagnosticBusy] = useState(false);
@@ -153,6 +155,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setImageMatches([]);
     setImageMatchError("");
     setImageDiagnostic(null);
+    setImageRefining(false);
+    void findImageMatches(file);
   };
 
   const diagnoseImageSearch = async () => {
@@ -171,28 +175,53 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     }
   };
 
-  const findImageMatches = async () => {
-    if (!imageSearchFile) {
+  const findImageMatches = async (selectedFile = imageSearchFile) => {
+    if (!selectedFile) {
       toast.error("Upload the client image first");
       return;
     }
+    const requestId = ++imageSearchSequence.current;
     setImageMatchBusy(true);
     setImageMatchError("");
     setImageMatches([]);
-    setImageIndexProgress(null);
     try {
-      const result = await api.matchQuotationProductByImage(imageSearchFile, 5);
+      const result = await api.matchQuotationProductByImage(selectedFile, 5, true);
+      if (requestId !== imageSearchSequence.current) return;
       const matches = Array.isArray(result?.matches) ? result.matches : [];
       setImageMatches(matches);
       if (!matches.length) {
-        setImageMatchError("No reliable visual match found in the published catalogue.");
+        setImageMatchError("Checking the catalogue in more detail…");
       }
+      if (result?.needs_verification) void refineImageMatches(selectedFile, requestId);
     } catch (error) {
+      if (requestId !== imageSearchSequence.current) return;
       const message = errorMessage(error, "Could not search the catalogue by image");
       setImageMatchError(message);
       toast.error(message);
     } finally {
-      setImageMatchBusy(false);
+      if (requestId === imageSearchSequence.current) setImageMatchBusy(false);
+    }
+  };
+
+  const refineImageMatches = async (selectedFile = imageSearchFile, requestId = imageSearchSequence.current) => {
+    if (!selectedFile) return;
+    setImageRefining(true);
+    try {
+      const result = await api.matchQuotationProductByImage(selectedFile, 5);
+      if (requestId !== imageSearchSequence.current) return;
+      const matches = Array.isArray(result?.matches) ? result.matches : [];
+      if (matches.length) {
+        setImageMatches(matches);
+        setImageMatchError("");
+      } else {
+        setImageMatchError("Detailed comparison found no confirmed product. Review the catalogue visually or search by name / SKU.");
+      }
+    } catch (error) {
+      if (requestId === imageSearchSequence.current) {
+        setImageMatchError("Detailed comparison could not finish. You can still inspect the visual candidates below.");
+      }
+    } finally {
+      if (requestId === imageSearchSequence.current) setImageRefining(false);
     }
   };
 
@@ -586,7 +615,9 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                   <div className="grid gap-4 md:grid-cols-[150px_1fr]">
                     <div>
                       {imageSearchPreview ? (
-                        <img src={imageSearchPreview} alt="Client reference preview" className="h-36 w-full border border-white/10 bg-black/30 object-contain" />
+                        <a href={imageSearchPreview} target="_blank" rel="noreferrer" title="Open client image full size">
+                          <img src={imageSearchPreview} alt="Client reference preview" className="h-36 w-full border border-white/10 bg-black/30 object-contain" />
+                        </a>
                       ) : (
                         <div className="flex h-36 items-center justify-center border border-dashed border-white/20 px-3 text-center text-xs text-white/35">
                           Client image preview
@@ -610,12 +641,20 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                       </label>
                       <button
                         type="button"
-                        onClick={findImageMatches}
+                        onClick={() => findImageMatches()}
                         disabled={!imageSearchFile || imageMatchBusy}
                         className="mt-3 bg-[#D4AF37] px-4 py-2.5 text-[10px] uppercase tracking-[0.18em] text-black disabled:opacity-40"
                         data-testid="quotation-image-search-submit"
                       >
-                        {imageMatchBusy ? "Searching catalogue…" : "Find matching product"}
+                        {imageMatchBusy ? "Searching catalogue…" : "Search again"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => refineImageMatches()}
+                        disabled={!imageSearchFile || imageMatchBusy || imageRefining}
+                        className="ml-2 mt-3 border border-[#D4AF37]/50 px-4 py-2.5 text-[10px] uppercase tracking-[0.18em] text-[#D4AF37] disabled:opacity-40"
+                      >
+                        {imageRefining ? "Comparing designs…" : "Compare designs in detail"}
                       </button>
                       <button
                         type="button"
@@ -666,7 +705,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                       {imageMatches.map((match) => (
                         <div key={match.product_id} className="grid grid-cols-[64px_1fr_auto] items-center gap-3 border border-white/10 p-3">
                           <div className="h-16 w-16 bg-black/30">
-                            {match.image_url ? <img src={api.resolveImage(match.image_url)} alt={match.name} className="h-full w-full object-contain" /> : null}
+                            {match.image_url ? <a href={api.resolveImage(match.image_url)} target="_blank" rel="noreferrer" title="Open catalogue image full size"><img src={api.resolveImage(match.image_url)} alt={match.name} className="h-full w-full object-contain" /></a> : null}
                           </div>
                           <div className="min-w-0">
                             <div className="truncate text-sm text-white/80">{match.name}</div>
@@ -681,7 +720,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                                     : match.match_label === "possible"
                                       ? "Possible product match"
                                       : "Visual candidate · verify" }
-                              {" · "}{match.visual_similarity}% visual similarity
+                              {Number.isFinite(match.visual_similarity) ? ` · ${match.visual_similarity}% visual similarity` : ""}
                             </div>
                           </div>
                           <button
