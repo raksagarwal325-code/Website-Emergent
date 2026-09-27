@@ -39,6 +39,7 @@ from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
 from collection_index import build_collection_detail, build_collection_index  # noqa: E402
 from quotation import QuotationAIAssistRequest, QuotationAIDraft, QuotationCreate, build_quotation, format_quotation_number  # noqa: E402
+from visual_embedding import VisualEmbeddingError, cosine_similarity, embed_image, embed_images_batch, resolve_api_key as resolve_visual_embedding_api_key  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -702,6 +703,7 @@ class Settings(BaseModel):
     google_cid: str = "682987565690709677"
     google_place_id: str = "ChIJqRfIkPVHdDkRreYAh5J1egk"
     google_maps_api_key: str = ""
+    gemini_embedding_api_key: str = ""
     homepage_content: dict = Field(default_factory=dict)
     # Editable legal / policy content. Shape (all keys optional):
     #   { "<slug>": { "body": "<multiline text>", "updated_at": "YYYY-MM-DD" } }
@@ -789,6 +791,7 @@ class SettingsUpdate(BaseModel):
     google_cid: Optional[str] = None
     google_place_id: Optional[str] = None
     google_maps_api_key: Optional[str] = None
+    gemini_embedding_api_key: Optional[str] = None
     homepage_content: Optional[dict] = None
     legal_content: Optional[dict] = None
     instagram_url: Optional[str] = None
