@@ -124,6 +124,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [imageMatchBusy, setImageMatchBusy] = useState(false);
   const imageSearchSequence = useRef(0);
   const [imageRefining, setImageRefining] = useState(false);
+  const [imageIndexProgress, setImageIndexProgress] = useState(null);
   const [imageMatchError, setImageMatchError] = useState("");
   const [imageDiagnostic, setImageDiagnostic] = useState(null);
   const [imageDiagnosticBusy, setImageDiagnosticBusy] = useState(false);
@@ -156,6 +157,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setImageMatchError("");
     setImageDiagnostic(null);
     setImageRefining(false);
+    setImageIndexProgress(null);
     void findImageMatches(file);
   };
 
@@ -185,12 +187,22 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setImageMatchError("");
     setImageMatches([]);
     try {
-      const result = await api.matchQuotationProductByImage(selectedFile, 5, true);
-      if (requestId !== imageSearchSequence.current) return;
+      let result;
+      for (let batch = 0; batch < 30; batch += 1) {
+        result = await api.matchQuotationProductByImage(selectedFile, 5, true);
+        if (requestId !== imageSearchSequence.current) return;
+        setImageIndexProgress({
+          total: Number(result?.index_total || 0),
+          remaining: Number(result?.index_remaining || 0),
+        });
+        if ((result?.matches || []).length || !result?.index_remaining || !result?.indexed_this_request) break;
+      }
       const matches = Array.isArray(result?.matches) ? result.matches : [];
       setImageMatches(matches);
       if (!matches.length) {
-        setImageMatchError("Checking the catalogue in more detail…");
+        setImageMatchError(result?.index_remaining
+          ? "Catalogue images are still being prepared. Search again to continue."
+          : "No matching catalogue photograph found. Checking the design in more detail…");
       }
       if (result?.needs_verification) void refineImageMatches(selectedFile, requestId);
     } catch (error) {
@@ -218,7 +230,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       }
     } catch (error) {
       if (requestId === imageSearchSequence.current) {
-        setImageMatchError("Detailed comparison could not finish. You can still inspect the visual candidates below.");
+        setImageMatchError("Detailed comparison could not finish. Try another photo or search by name / SKU.");
       }
     } finally {
       if (requestId === imageSearchSequence.current) setImageRefining(false);
@@ -627,7 +639,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                     <div>
                       <div className="text-sm text-white/75">Find the catalogue product from a client image</div>
                       <p className="mt-1 text-xs leading-relaxed text-white/45">
-                        Visual search across the published Samrat catalogue — screenshots, WhatsApp images, background changes, room photos and alternate product photos are supported.
+                        Find a catalogue photo from a client image, including resized and WhatsApp copies. For a different angle or room photo, review the result before adding it.
                       </p>
                       <label className="mt-3 block cursor-pointer text-xs text-[#D4AF37]">
                         {imageSearchFile ? "Replace client image" : "Upload client image"}
@@ -656,6 +668,11 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                       >
                         {imageRefining ? "Comparing designs…" : "Compare designs in detail"}
                       </button>
+                      {imageIndexProgress?.total > 0 && imageIndexProgress.remaining > 0 && (
+                        <div className="mt-2 text-xs text-white/55" role="status">
+                          Checking catalogue photos: {imageIndexProgress.total - imageIndexProgress.remaining} of {imageIndexProgress.total} ready
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={diagnoseImageSearch}
@@ -677,12 +694,18 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                         <div>Product images: {imageDiagnostic.catalogue?.published_image_urls ?? 0}</div>
                         <div>db.files mapped: {imageDiagnostic.catalogue?.db_file_rows_for_product_images ?? 0}</div>
                         <div>With fingerprints: {imageDiagnostic.catalogue?.fingerprinted_db_file_rows ?? 0}</div>
+                        <div>Photo signatures ready: {imageDiagnostic.catalogue?.photo_indexed_db_file_rows ?? 0}</div>
                         <div>Legacy index rows: {imageDiagnostic.catalogue?.quotation_image_index_rows ?? 0}</div>
                         <div>AI fallback: {imageDiagnostic.would_enter_ai_fallback ? "Yes" : "No"}</div>
                       </div>
                       {imageDiagnostic.best && (
                         <div className="mt-2">
                           Best: {imageDiagnostic.best.sku || "No SKU"} · full {imageDiagnostic.best.full_distance} · crop {imageDiagnostic.best.variant_distance}
+                        </div>
+                      )}
+                      {imageDiagnostic.photo_best && (
+                        <div className="mt-1">
+                          Photo match: {imageDiagnostic.photo_best.sku} · score {imageDiagnostic.photo_best.score}
                         </div>
                       )}
                       {imageDiagnostic.runner_up && (

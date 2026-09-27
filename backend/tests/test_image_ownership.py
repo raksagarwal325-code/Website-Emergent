@@ -2,7 +2,7 @@ import io
 
 from PIL import Image
 
-from image_ownership import embed_ownership_metadata, normalized_pixel_fingerprint, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants
+from image_ownership import color_histogram, color_histogram_distance, embed_ownership_metadata, normalized_pixel_fingerprint, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants
 import security_runtime
 
 
@@ -183,3 +183,20 @@ def test_normalized_pixel_fingerprint_ignores_png_text_metadata():
         fingerprint=ownership_fingerprint(source),
     )
     assert normalized_pixel_fingerprint(source) == normalized_pixel_fingerprint(stamped)
+
+
+def test_colour_signature_survives_resizing_and_jpeg_compression():
+    image = Image.new("RGB", (160, 220), "black")
+    for y in range(35, 170):
+        for x in range(40, 120):
+            image.putpixel((x, y), (210, 162, 95))
+    original = io.BytesIO()
+    image.save(original, format="PNG")
+    altered = io.BytesIO()
+    image.resize((80, 110)).save(altered, format="JPEG", quality=78)
+    unrelated = io.BytesIO()
+    Image.new("RGB", (80, 110), "white").save(unrelated, format="JPEG")
+
+    reference = color_histogram(original.getvalue())
+    assert color_histogram_distance(reference, color_histogram(altered.getvalue())) < 0.25
+    assert color_histogram_distance(reference, color_histogram(unrelated.getvalue())) > 1.0
