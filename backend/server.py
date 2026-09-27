@@ -1627,11 +1627,12 @@ async def match_quotation_product_by_image(
     limit: int = Query(5, ge=1, le=10),
     admin: _AdminUser = Depends(require_admin),
 ):
-    """Find published catalogue products from the actual product image URLs.
+    """Search the published catalogue visually using multimodal embeddings.
 
-    products.images is the source of truth. The quotation-search index is
-    independent of the legacy db.files/media registry, so an old/broken media
-    row cannot make a product invisible to search.
+    Exact file/pixel matches remain first-class shortcuts, but ordinary product
+    recognition is driven by Gemini Embedding 2 cosine similarity. This allows
+    screenshots, WhatsApp recompression, background changes and room photos to
+    be compared against the actual product images used by published products.
     """
     content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
     if content_type not in {"image/jpeg", "image/png", "image/webp"}:
@@ -1643,10 +1644,28 @@ async def match_quotation_product_by_image(
     if len(data) > 25 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Image too large (25MB max).")
 
+    settings = await db.settings.find_one(
+        {"id": "settings"},
+        {"_id": 0, "gemini_embedding_api_key": 1},
+    ) or {}
+    embedding_api_key = resolve_visual_embedding_api_key(settings)
+    if not embedding_api_key:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Configure the Gemini Embedding API Key under Admin → Settings "
+                "before using Search by Image."
+            ),
+        )
+
     try:
         query_sha = ownership_fingerprint(data)
         query_pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, data)
-        query_phashes = await asyncio.to_thread(phash_fingerprint_variants, data)
+        query_embedding = await asyncio.to_thread(
+            embed_image, data, content_type, embedding_api_key
+        )
+    except VisualEmbeddingError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read that image. Try a JPG, PNG or WebP file.")
 
@@ -1682,8 +1701,10 @@ async def match_quotation_product_by_image(
             "index_ready": True,
             "index_total": 0,
             "index_remaining": 0,
+            "index_indexed": 0,
             "indexed_this_request": 0,
             "index_skipped": 0,
+            "engine": "gemini-embedding-2",
         }
 
     index_urls = sorted(products_by_url.keys())
@@ -1693,122 +1714,124 @@ async def match_quotation_product_by_image(
     ).to_list(len(index_urls))
     index_by_url = {row.get("url"): row for row in existing_rows if row.get("url")}
 
-    missing_urls = [
-        url
-        for url in index_urls
-        if not (
-            (index_by_url.get(url) or {}).get("public_sha256")
-            and (index_by_url.get(url) or {}).get("pixel_hash")
-            and (index_by_url.get(url) or {}).get("phash")
+    def _embedding_ready(row):
+        return (
+            row
+            and row.get("visual_embedding")
+            and row.get("visual_embedding_model") == "gemini-embedding-2"
         )
-        and not (index_by_url.get(url) or {}).get("skipped_at")
-    ]
+
+    missing_urls = [url for url in index_urls if not _embedding_ready(index_by_url.get(url))]
 
     indexed_this_request = 0
     skipped_this_request = 0
 
-    for url in missing_urls[:50]:
-        row = index_by_url.get(url) or {"url": url}
-        storage_path = None
+    # Embed a bounded resumable batch. Gemini Embedding 2 accepts up to six
+    # images per embedding call; four groups keeps one HTTP request bounded.
+    batch_urls = missing_urls[:24]
+    prepared = []
+    for url in batch_urls:
         canonical_url = canonical_media_url(url)
-        if canonical_url.startswith("/api/files/"):
-            storage_path = unquote(canonical_url.removeprefix("/api/files/"))
-
+        storage_path = (
+            unquote(canonical_url.removeprefix("/api/files/"))
+            if canonical_url.startswith("/api/files/")
+            else None
+        )
         if not storage_path:
-            skipped = {
-                "url": url,
-                "skipped_at": now_iso(),
-                "skip_reason": "Product image is not an application-owned /api/files asset",
-                "updated_at": now_iso(),
-            }
             await db.quotation_image_index.update_one(
-                {"url": url}, {"$set": skipped}, upsert=True
+                {"url": url},
+                {"$set": {
+                    "url": url,
+                    "visual_skip_reason": "Product image is not an application-owned /api/files asset",
+                    "visual_skipped_at": now_iso(),
+                    "updated_at": now_iso(),
+                }},
+                upsert=True,
             )
-            index_by_url[url] = skipped
+            index_by_url[url] = {
+                **(index_by_url.get(url) or {}),
+                "url": url,
+                "visual_skip_reason": "Product image is not an application-owned /api/files asset",
+                "visual_skipped_at": now_iso(),
+            }
             skipped_this_request += 1
             continue
 
         try:
-            public_bytes, stored_ct = await asyncio.to_thread(get_object, storage_path)
-            if not public_bytes or not str(stored_ct or "").lower().startswith("image/"):
+            image_bytes, stored_ct = await asyncio.to_thread(get_object, storage_path)
+            if not image_bytes or not str(stored_ct or "").lower().startswith("image/"):
                 raise ValueError("Stored product asset is not a readable image")
+            prepared.append((url, storage_path, image_bytes, stored_ct))
+        except Exception as exc:
+            await db.quotation_image_index.update_one(
+                {"url": url},
+                {"$set": {
+                    "url": url,
+                    "storage_path": storage_path,
+                    "visual_skip_reason": str(exc)[:500],
+                    "visual_skipped_at": now_iso(),
+                    "updated_at": now_iso(),
+                }},
+                upsert=True,
+            )
+            index_by_url[url] = {
+                **(index_by_url.get(url) or {}),
+                "url": url,
+                "storage_path": storage_path,
+                "visual_skip_reason": str(exc)[:500],
+                "visual_skipped_at": now_iso(),
+            }
+            skipped_this_request += 1
 
+    for offset in range(0, len(prepared), 6):
+        group = prepared[offset:offset + 6]
+        try:
+            vectors = await asyncio.to_thread(
+                embed_images_batch,
+                [(image_bytes, stored_ct) for _, _, image_bytes, stored_ct in group],
+                embedding_api_key,
+            )
+        except VisualEmbeddingError as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+
+        for (url, storage_path, image_bytes, _stored_ct), vector in zip(group, vectors):
             index_doc = {
                 "url": url,
                 "storage_path": storage_path,
-                "public_sha256": ownership_fingerprint(public_bytes),
+                "visual_embedding": vector,
+                "visual_embedding_model": "gemini-embedding-2",
+                "visual_embedding_dim": len(vector),
+                "public_sha256": ownership_fingerprint(image_bytes),
                 "pixel_hash": await asyncio.to_thread(
-                    normalized_pixel_fingerprint, public_bytes
+                    normalized_pixel_fingerprint, image_bytes
                 ),
-                "phash": await asyncio.to_thread(phash_fingerprint, public_bytes),
                 "updated_at": now_iso(),
             }
-
-            # If a private original is available, index it as a second exact
-            # identity source. This is optional; the product URL itself remains
-            # sufficient for the catalogue index.
-            file_row = await db.files.find_one(
-                {"storage_path": storage_path},
-                {"_id": 0, "original_path": 1},
-            )
-            original_path = (file_row or {}).get("original_path")
-            if original_path:
-                try:
-                    original_bytes, _original_ct = await asyncio.to_thread(
-                        get_object, original_path
-                    )
-                    index_doc.update({
-                        "original_sha256": ownership_fingerprint(original_bytes),
-                        "original_pixel_hash": await asyncio.to_thread(
-                            normalized_pixel_fingerprint, original_bytes
-                        ),
-                        "original_phash": await asyncio.to_thread(
-                            phash_fingerprint, original_bytes
-                        ),
-                    })
-                except Exception as exc:
-                    logger.warning(
-                        "quotation_original_index_optional_failed url=%s path=%s err=%s",
-                        url, original_path, exc,
-                    )
-
             await db.quotation_image_index.update_one(
                 {"url": url},
                 {
                     "$set": index_doc,
-                    "$unset": {"skipped_at": "", "skip_reason": ""},
+                    "$unset": {
+                        "visual_skip_reason": "",
+                        "visual_skipped_at": "",
+                    },
                 },
                 upsert=True,
             )
-            index_by_url[url] = index_doc
-            indexed_this_request += 1
-        except Exception as exc:
-            skipped = {
-                "url": url,
-                "storage_path": storage_path,
-                "skipped_at": now_iso(),
-                "skip_reason": str(exc)[:500],
-                "updated_at": now_iso(),
+            index_by_url[url] = {
+                **(index_by_url.get(url) or {}),
+                **index_doc,
             }
-            await db.quotation_image_index.update_one(
-                {"url": url}, {"$set": skipped}, upsert=True
-            )
-            index_by_url[url] = skipped
-            skipped_this_request += 1
-            logger.warning(
-                "quotation_product_image_index_failed url=%s path=%s err=%s",
-                url, storage_path, exc,
-            )
+            indexed_this_request += 1
 
-    # Refresh counts after this resumable batch.
     indexed_count = 0
     skipped_count = 0
     remaining = 0
     for url in index_urls:
         row = index_by_url.get(url) or {}
-        if row.get("public_sha256") and row.get("pixel_hash") and row.get("phash"):
+        if _embedding_ready(row):
             indexed_count += 1
-        elif row.get("skipped_at"):
+        elif row.get("visual_skipped_at"):
             skipped_count += 1
         else:
             remaining += 1
@@ -1823,6 +1846,7 @@ async def match_quotation_product_by_image(
             "index_remaining": remaining,
             "indexed_this_request": indexed_this_request,
             "index_skipped": skipped_count,
+            "engine": "gemini-embedding-2",
         }
 
     best_by_product = {}
@@ -1830,32 +1854,17 @@ async def match_quotation_product_by_image(
 
     for url in index_urls:
         row = index_by_url.get(url) or {}
-        if not (row.get("public_sha256") and row.get("pixel_hash") and row.get("phash")):
+        vector = row.get("visual_embedding")
+        if not vector:
             continue
-
         searched_images += 1
-        exact_file = query_sha in {
-            str(row.get("public_sha256") or ""),
-            str(row.get("original_sha256") or ""),
-        }
-        exact_pixels = query_pixel_hash in {
-            str(row.get("pixel_hash") or ""),
-            str(row.get("original_pixel_hash") or ""),
-        }
 
-        candidate_phashes = [
-            str(row.get("phash") or ""),
-            str(row.get("original_phash") or ""),
-        ]
-        candidate_phashes = [value for value in candidate_phashes if value]
+        exact_file = str(row.get("public_sha256") or "") == query_sha
+        exact_pixels = str(row.get("pixel_hash") or "") == query_pixel_hash
         try:
-            phash_distance = min(
-                perceptual_distance(query_variant, candidate_hash)
-                for query_variant in query_phashes
-                for candidate_hash in candidate_phashes
-            )
+            similarity = float(cosine_similarity(query_embedding, vector))
         except Exception:
-            phash_distance = 64
+            continue
 
         if exact_file:
             match_rank = 0
@@ -1865,22 +1874,22 @@ async def match_quotation_product_by_image(
             match_rank = 1
             match_label = "exact_image"
             visual_similarity = 99.9
-        elif phash_distance <= 6:
-            match_rank = 2
-            match_label = "very_likely"
-            visual_similarity = round((1.0 - phash_distance / 64.0) * 100.0, 1)
-        elif phash_distance <= 10:
-            match_rank = 3
-            match_label = "possible"
-            visual_similarity = round((1.0 - phash_distance / 64.0) * 100.0, 1)
         else:
-            # Never display an unrelated nearest neighbour merely because it
-            # is mathematically closest among bad candidates.
-            continue
+            # Gemini multimodal embeddings are the product-recognition signal.
+            # Keep low-similarity noise out of the admin workflow.
+            if similarity < 0.55:
+                continue
+            match_rank = 2
+            match_label = (
+                "very_likely" if similarity >= 0.82
+                else "possible" if similarity >= 0.68
+                else "visual_candidate"
+            )
+            visual_similarity = round(max(0.0, min(1.0, similarity)) * 100.0, 1)
 
         for product, image_index in products_by_url.get(url, []):
             product_id = product.get("id")
-            sort_key = (match_rank, phash_distance)
+            sort_key = (match_rank, -visual_similarity)
             previous = best_by_product.get(product_id)
             if previous is not None and previous["_sort_key"] <= sort_key:
                 continue
@@ -1896,9 +1905,9 @@ async def match_quotation_product_by_image(
                     "fixed" if product.get("fixed_price") else "starting_from"
                 ),
                 "image_url": images[image_index] if image_index < len(images) else url,
-                "phash_distance": phash_distance,
                 "visual_similarity": visual_similarity,
                 "match_label": match_label,
+                "engine": "gemini-embedding-2",
             }
 
     ranked = sorted(
@@ -1921,6 +1930,7 @@ async def match_quotation_product_by_image(
         "index_remaining": 0,
         "indexed_this_request": indexed_this_request,
         "index_skipped": skipped_count,
+        "engine": "gemini-embedding-2",
     }
 
 
