@@ -26,7 +26,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E402
 from watermark import apply_watermark  # noqa: E402
-from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants  # noqa: E402
+from image_ownership import embed_ownership_metadata, normalized_pixel_fingerprint, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
@@ -1623,11 +1623,11 @@ async def match_quotation_product_by_image(
     limit: int = Query(5, ge=1, le=10),
     admin: _AdminUser = Depends(require_admin),
 ):
-    """Find catalogue products from a client image using pHash + dHash.
+    """Find catalogue products from a client image using a COMPLETE image index.
 
-    The client image is analysed in-memory only. pHash is the primary
-    near-photo matcher; dHash remains a supporting signal. Missing catalogue
-    pHashes are prepared lazily in persistent batches.
+    Exact website-file and normalized-pixel matches are ranked first. pHash is
+    only used as a conservative fallback after every published catalogue image
+    has been indexed. The uploaded client image is analysed in-memory only.
     """
     content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
     if content_type not in {"image/jpeg", "image/png", "image/webp"}:
@@ -1640,8 +1640,9 @@ async def match_quotation_product_by_image(
         raise HTTPException(status_code=413, detail="Image too large (25MB max).")
 
     try:
+        query_public_sha = ownership_fingerprint(data)
+        query_pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, data)
         query_phashes = await asyncio.to_thread(phash_fingerprint_variants, data)
-        query_dhashes = await asyncio.to_thread(perceptual_fingerprint_variants, data)
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read that image. Try a JPG, PNG or WebP file.")
 
@@ -1664,21 +1665,11 @@ async def match_quotation_product_by_image(
     ).to_list(5000)
 
     products_by_url = {}
-    main_image_urls = set()
     for product in products:
-        images = product.get("images") or []
-        if images:
-            main_url = canonical_media_url(images[0])
-            if main_url:
-                main_image_urls.add(main_url)
-        for image_index, raw_url in enumerate(images):
+        for image_index, raw_url in enumerate(product.get("images") or []):
             url = canonical_media_url(raw_url)
-            if not url:
-                continue
-            products_by_url.setdefault(url, []).append((product, image_index))
-
-    if not products_by_url:
-        return {"matches": [], "searched_images": 0, "index_remaining": 0, "indexed_this_request": 0}
+            if url:
+                products_by_url.setdefault(url, []).append((product, image_index))
 
     file_rows = await db.files.find(
         {
@@ -1689,8 +1680,8 @@ async def match_quotation_product_by_image(
             "_id": 0,
             "id": 1,
             "storage_path": 1,
-            "original_path": 1,
-            "perceptual_fingerprint": 1,
+            "quotation_public_sha256": 1,
+            "quotation_pixel_hash": 1,
             "quotation_phash": 1,
         },
     ).to_list(5000)
@@ -1704,45 +1695,71 @@ async def match_quotation_product_by_image(
     missing = [
         (row, public_url)
         for row, public_url in catalogue_rows
-        if not row.get("quotation_phash")
+        if not row.get("quotation_public_sha256")
+        or not row.get("quotation_pixel_hash")
+        or not row.get("quotation_phash")
     ]
-    missing.sort(key=lambda pair: (0 if pair[1] in main_image_urls else 1, pair[1]))
 
     indexed_this_request = 0
+    index_failures = 0
+    # Keep each request small enough for Emergent/Cloudflare. The frontend
+    # resumes until this complete catalogue index reaches zero remaining.
     for row, _public_url in missing[:50]:
-        source_path = row.get("original_path") or row.get("storage_path")
-        if not source_path:
+        public_path = row.get("storage_path")
+        if not public_path:
+            index_failures += 1
             continue
         try:
-            original_bytes, _stored_ct = await asyncio.to_thread(get_object, source_path)
-            candidate_phash = await asyncio.to_thread(phash_fingerprint, original_bytes)
-            update = {"quotation_phash": candidate_phash}
-            if not row.get("perceptual_fingerprint"):
-                update["perceptual_fingerprint"] = await asyncio.to_thread(
-                    perceptual_fingerprint, original_bytes
-                )
+            public_bytes, _stored_ct = await asyncio.to_thread(get_object, public_path)
+            update = {
+                "quotation_public_sha256": ownership_fingerprint(public_bytes),
+                "quotation_pixel_hash": await asyncio.to_thread(
+                    normalized_pixel_fingerprint, public_bytes
+                ),
+                "quotation_phash": await asyncio.to_thread(
+                    phash_fingerprint, public_bytes
+                ),
+            }
             await db.files.update_one({"id": row.get("id")}, {"$set": update})
             row.update(update)
             indexed_this_request += 1
         except Exception as exc:
+            index_failures += 1
             logger.warning(
-                "quotation_image_index_failed id=%s path=%s err=%s",
-                row.get("id"), source_path, exc,
+                "quotation_complete_index_failed id=%s path=%s err=%s",
+                row.get("id"), public_path, exc,
             )
 
-    remaining_after_batch = max(0, len(missing) - indexed_this_request)
+    index_remaining = max(0, len(missing) - indexed_this_request - index_failures)
+    index_ready = index_remaining == 0 and index_failures == 0
+
+    # Do not show misleading partial results while some catalogue images have
+    # never been indexed. Exact matching is only trustworthy against a complete
+    # searchable set.
+    if not index_ready:
+        return {
+            "matches": [],
+            "searched_images": 0,
+            "index_ready": False,
+            "index_total": len(catalogue_rows),
+            "index_remaining": index_remaining,
+            "indexed_this_request": indexed_this_request,
+            "index_failures": index_failures,
+        }
 
     best_by_product = {}
     searched_images = 0
     for row, public_url in catalogue_rows:
-        product_links = products_by_url.get(public_url)
-        if not product_links:
-            continue
-
-        candidate_phash = str(row.get("quotation_phash") or "").strip()
-        candidate_dhash = str(row.get("perceptual_fingerprint") or "").strip()
+        product_links = products_by_url.get(public_url) or []
+        public_sha = str(row.get("quotation_public_sha256") or "")
+        pixel_hash = str(row.get("quotation_pixel_hash") or "")
+        candidate_phash = str(row.get("quotation_phash") or "")
         if not candidate_phash:
             continue
+        searched_images += 1
+
+        exact_file = public_sha == query_public_sha
+        exact_pixels = pixel_hash == query_pixel_hash
 
         try:
             phash_distance = min(
@@ -1750,44 +1767,35 @@ async def match_quotation_product_by_image(
                 for query_variant in query_phashes
             )
         except Exception:
+            phash_distance = 64
+
+        # pHash is intentionally strict here. If it is not a credible near-copy,
+        # return no result rather than unrelated products.
+        if not exact_file and not exact_pixels and phash_distance > 10:
             continue
 
-        if candidate_dhash:
-            try:
-                dhash_distance = min(
-                    perceptual_distance(query_variant, candidate_dhash)
-                    for query_variant in query_dhashes
-                )
-            except Exception:
-                dhash_distance = 256
+        if exact_file:
+            match_rank = 0
+            match_label = "exact_file"
+            visual_similarity = 100.0
+        elif exact_pixels:
+            match_rank = 1
+            match_label = "exact_image"
+            visual_similarity = 99.9
         else:
-            dhash_distance = 256
-
-        searched_images += 1
-
-        # pHash is 64-bit, so unrelated images cluster around ~32 bits apart.
-        # Reject those instead of displaying misleading "closest" candidates.
-        if phash_distance > 22:
-            continue
-
-        phash_similarity = max(0.0, 1.0 - (phash_distance / 64.0))
-        dhash_similarity = max(0.0, 1.0 - (dhash_distance / 256.0))
-        visual_similarity = round((0.80 * phash_similarity + 0.20 * dhash_similarity) * 100.0, 1)
-
-        if phash_distance <= 8:
-            match_label = "very_likely"
-        elif phash_distance <= 14:
-            match_label = "possible"
-        else:
-            match_label = "weak"
+            match_rank = 2
+            match_label = "very_likely" if phash_distance <= 6 else "possible"
+            visual_similarity = round(max(0.0, 1.0 - (phash_distance / 64.0)) * 100.0, 1)
 
         for product, image_index in product_links:
             product_id = product.get("id")
+            candidate_key = (match_rank, phash_distance)
             previous = best_by_product.get(product_id)
-            if previous is not None and previous["phash_distance"] <= phash_distance:
+            if previous is not None and previous["_sort_key"] <= candidate_key:
                 continue
             images = product.get("images") or []
             best_by_product[product_id] = {
+                "_sort_key": candidate_key,
                 "product_id": product_id,
                 "sku": product.get("sku") or "",
                 "name": product.get("name") or "",
@@ -1798,22 +1806,28 @@ async def match_quotation_product_by_image(
                 ),
                 "image_url": images[image_index] if image_index < len(images) else public_url,
                 "phash_distance": phash_distance,
-                "dhash_distance": dhash_distance,
                 "visual_similarity": visual_similarity,
                 "match_label": match_label,
             }
 
     ranked = sorted(
         best_by_product.values(),
-        key=lambda item: (item["phash_distance"], item["dhash_distance"], item["sku"], item["name"]),
+        key=lambda item: (item["_sort_key"], item["sku"], item["name"]),
     )
-    matches = ranked[:limit]
+    matches = []
+    for item in ranked[:limit]:
+        item = dict(item)
+        item.pop("_sort_key", None)
+        matches.append(item)
 
     return {
         "matches": matches,
         "searched_images": searched_images,
-        "index_remaining": remaining_after_batch,
+        "index_ready": True,
+        "index_total": len(catalogue_rows),
+        "index_remaining": 0,
         "indexed_this_request": indexed_this_request,
+        "index_failures": 0,
     }
 
 
