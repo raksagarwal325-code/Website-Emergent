@@ -39,7 +39,6 @@ from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
 from collection_index import build_collection_detail, build_collection_index  # noqa: E402
 from quotation import QuotationAIAssistRequest, QuotationAIDraft, QuotationCreate, build_quotation, format_quotation_number  # noqa: E402
-from quotation_vision_search import INDEX_SHEET_CAPACITY, VISUAL_INDEX_VERSION, VisionSearchError, analyze_query_signature, build_contact_sheet, describe_index_sheet, rerank_finalists, visual_signature_score  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -1619,18 +1618,201 @@ async def update_inquiry_status(inquiry_id: str, status: str = Query(...), admin
     return {"ok": True}
 
 
+
+async def _verify_quotation_catalogue_candidates(
+    query_bytes: bytes,
+    query_mime: str,
+    candidates: list[dict],
+) -> list[dict]:
+    """Visually verify only the short catalogue candidate list.
+
+    Candidate discovery is handled by the existing Product AI catalogue
+    manifest search. This second pass sees the actual client image plus actual
+    candidate product images and is deliberately conservative.
+    """
+    import base64
+    from emergentintegrations.llm.chat import (
+        ImageContent,
+        LlmChat,
+        StreamDone,
+        TextDelta,
+        UserMessage,
+    )
+
+    if not candidates:
+        return []
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "EMERGENT_LLM_KEY is not configured")
+
+    semaphore = asyncio.Semaphore(8)
+
+    async def _load_candidate(row):
+        product = row.get("product") or {}
+        image_url = next(
+            (
+                url for url in (product.get("images") or [])
+                if isinstance(url, str) and url
+            ),
+            None,
+        )
+        if not image_url:
+            return None
+        try:
+            async with semaphore:
+                image_bytes, mime = await _resolve_product_image(
+                    AIRegenerateRequest(image_url=image_url)
+                )
+            return {
+                "product": product,
+                "image_url": image_url,
+                "image_bytes": image_bytes,
+                "mime": mime or "image/jpeg",
+            }
+        except Exception:
+            return None
+
+    loaded = await asyncio.gather(
+        *[_load_candidate(row) for row in candidates],
+        return_exceptions=False,
+    )
+    loaded = [row for row in loaded if row]
+    if not loaded:
+        return []
+
+    files = [
+        ImageContent(image_base64=base64.b64encode(query_bytes).decode("ascii"))
+    ]
+    labels = []
+    for index, row in enumerate(loaded, start=1):
+        product = row["product"]
+        labels.append(
+            f"{index}. SKU={product.get('sku') or ''}; "
+            f"name={product.get('name') or ''}; "
+            f"category={product.get('category') or ''}"
+        )
+        files.append(
+            ImageContent(
+                image_base64=base64.b64encode(row["image_bytes"]).decode("ascii")
+            )
+        )
+
+    prompt = """IMAGE 1 is the client reference image.
+The remaining images are shortlisted Samrat Glass catalogue candidates in the
+same order as the numbered labels below.
+
+Your job is product identity verification, not aesthetic similarity.
+Ignore background colour, room setting, screenshot borders, WhatsApp
+compression, image crop, lighting and camera angle.
+
+Compare fixture construction: arm/light count, glass/shade shape, central body,
+frame geometry, crystal/drop arrangement, proportions and distinctive motifs.
+
+Return a candidate as same_fixture ONLY when it can reasonably be the same
+physical catalogue design. If the frame/body is the same but glass differs,
+use same_fixture_different_glass. Do not return a candidate merely because both
+are chandeliers/wall lights or share generic glass/crystal/brass features.
+
+If none is the same fixture, return an empty matches array. Never force a
+nearest neighbour.
+
+CANDIDATES:
+""" + "\n".join(labels) + """
+
+Return JSON only:
+{"matches":[{"index":1,"relation":"same_fixture|same_fixture_different_glass","confidence":0.0,"reason":"brief factual reason"}]}
+Confidence is 0 to 1."""
+
+    chat = configure_product_chat(
+        LlmChat(
+            api_key=api_key,
+            session_id=f"quotation-candidate-verify-{uuid.uuid4().hex[:12]}",
+            system_message=(
+                "You are a conservative product identity verifier for Samrat "
+                "Glass Emporium. Prefer no match over a wrong match. JSON only."
+            ),
+        )
+    )
+
+    parts = []
+    async for event in chat.stream_message(
+        UserMessage(text=prompt, file_contents=files)
+    ):
+        if isinstance(event, TextDelta):
+            parts.append(event.content)
+        elif isinstance(event, StreamDone):
+            break
+
+    raw = "".join(parts).strip()
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not match:
+        return []
+    try:
+        payload = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return []
+
+    verified = []
+    seen = set()
+    for item in payload.get("matches") or []:
+        try:
+            candidate_index = int(item.get("index") or 0) - 1
+        except (TypeError, ValueError):
+            continue
+        if candidate_index < 0 or candidate_index >= len(loaded):
+            continue
+        relation = str(item.get("relation") or "").strip()
+        if relation not in {"same_fixture", "same_fixture_different_glass"}:
+            continue
+        try:
+            confidence = max(
+                0.0, min(1.0, float(item.get("confidence") or 0))
+            )
+        except (TypeError, ValueError):
+            confidence = 0.0
+
+        # Exact fixture identity must be strong. Variant-frame matches require
+        # even more confidence because the quotation needs the correct SKU.
+        threshold = 0.84 if relation == "same_fixture" else 0.90
+        if confidence < threshold:
+            continue
+
+        row = loaded[candidate_index]
+        product = row["product"]
+        sku = str(product.get("sku") or "").upper()
+        if not sku or sku in seen:
+            continue
+        seen.add(sku)
+        verified.append({
+            "product": product,
+            "image_url": row["image_url"],
+            "relation": relation,
+            "confidence": confidence,
+            "reason": str(item.get("reason") or "").strip()[:240],
+        })
+
+    return sorted(
+        verified,
+        key=lambda row: row["confidence"],
+        reverse=True,
+    )
+
+
 @api.post("/admin/quotations/product-match-by-image")
 async def match_quotation_product_by_image(
     file: UploadFile = File(...),
     limit: int = Query(5, ge=1, le=10),
     admin: _AdminUser = Depends(require_admin),
 ):
-    """Search a persistent AI-built visual catalogue index.
+    """Find catalogue products by reusing the existing Product AI matcher.
 
-    The expensive catalogue understanding happens once per product primary
-    image and is stored in MongoDB. New client images are analysed once and
-    compared locally against those stored visual signatures. Only the strongest
-    finalists may receive one small vision-verification pass.
+    Flow:
+    1) deterministic SHA/pixel shortcut for exact stored images;
+    2) existing compact catalogue-manifest discovery over published products;
+    3) actual image-to-image verification of only the shortlisted candidates.
+
+    No full catalogue image scan, no separate visual index, no Torch runtime.
     """
     content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
     if content_type not in {"image/jpeg", "image/png", "image/webp"}:
@@ -1644,9 +1826,14 @@ async def match_quotation_product_by_image(
 
     try:
         query_sha = ownership_fingerprint(data)
-        query_pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, data)
+        query_pixel_hash = await asyncio.to_thread(
+            normalized_pixel_fingerprint, data
+        )
     except Exception:
-        raise HTTPException(status_code=400, detail="Could not read that image. Try a JPG, PNG or WebP file.")
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read that image. Try a JPG, PNG or WebP file.",
+        )
 
     products = await db.products.find(
         {
@@ -1663,416 +1850,140 @@ async def match_quotation_product_by_image(
             "price_display": 1,
             "fixed_price": 1,
             "images": 1,
+            "specs": 1,
         },
     ).to_list(5000)
-    products_by_id = {product.get("id"): product for product in products if product.get("id")}
 
     products_by_url = {}
-    primary_refs = []
+    products_by_sku = {}
     for product in products:
-        primary_ref = None
+        sku = str(product.get("sku") or "").upper()
+        if sku:
+            products_by_sku[sku] = product
         for image_index, raw_url in enumerate(product.get("images") or []):
             url = canonical_media_url(raw_url)
-            if not url:
-                continue
-            products_by_url.setdefault(url, []).append((product, image_index))
-            if primary_ref is None and url.startswith("/api/files/"):
-                primary_ref = {
-                    "product_id": product.get("id"),
-                    "image_index": image_index,
-                    "url": url,
-                }
-        if primary_ref and primary_ref.get("product_id"):
-            primary_refs.append(primary_ref)
+            if url:
+                products_by_url.setdefault(url, []).append((product, image_index))
 
-    if not products_by_url:
+    # Exact/decoded-pixel shortcut using already-built quotation hash records.
+    if products_by_url:
+        index_rows = await db.quotation_image_index.find(
+            {"url": {"$in": list(products_by_url.keys())}},
+            {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1},
+        ).to_list(len(products_by_url))
+
+        exact_urls = [
+            row.get("url")
+            for row in index_rows
+            if str(row.get("public_sha256") or "") == query_sha
+            or str(row.get("pixel_hash") or "") == query_pixel_hash
+        ]
+        exact_matches = []
+        seen_exact = set()
+        for url in exact_urls:
+            for product, image_index in products_by_url.get(url, []):
+                product_id = product.get("id")
+                if not product_id or product_id in seen_exact:
+                    continue
+                seen_exact.add(product_id)
+                images = product.get("images") or []
+                exact_matches.append({
+                    "product_id": product_id,
+                    "sku": product.get("sku") or "",
+                    "name": product.get("name") or "",
+                    "category": product.get("category") or "",
+                    "price": product.get("price") or 0,
+                    "price_display": product.get("price_display") or (
+                        "fixed" if product.get("fixed_price") else "starting_from"
+                    ),
+                    "image_url": (
+                        images[image_index]
+                        if image_index < len(images)
+                        else url
+                    ),
+                    "visual_similarity": 100.0,
+                    "match_label": "exact_image",
+                    "engine": "exact-hash",
+                    "reason": "Exact stored catalogue image",
+                })
+        if exact_matches:
+            return {
+                "matches": exact_matches[:limit],
+                "searched_images": len(exact_urls),
+                "index_ready": True,
+                "index_total": 0,
+                "index_indexed": 0,
+                "index_remaining": 0,
+                "indexed_this_request": 0,
+                "index_skipped": 0,
+                "engine": "exact-hash",
+            }
+
+    # Reuse the same complete-manifest shortlist logic already used by the
+    # Product AI upload workflow. This compares the client photo against compact
+    # factual catalogue identities without downloading every catalogue image.
+    import base64
+    from emergentintegrations.llm.chat import ImageContent
+
+    discovery_item = AISopBatchItem(
+        client_id=f"quotation-{query_sha[:12]}",
+        image_urls=[],
+        image_filenames=[file.filename or "client-image"],
+        category="",
+        notes="",
+    )
+    query_image = ImageContent(
+        image_base64=base64.b64encode(data).decode("ascii")
+    )
+
+    discovery = await _discover_catalogue_candidates(
+        discovery_item,
+        [query_image],
+        products,
+    )
+
+    candidates = []
+    seen_skus = set()
+    for row in discovery.get("matches") or []:
+        sku = str(row.get("sku") or "").upper()
+        product = products_by_sku.get(sku)
+        if not product or sku in seen_skus:
+            continue
+        seen_skus.add(sku)
+        candidates.append({
+            "product": product,
+            "discovery_relation": row.get("relation"),
+            "discovery_confidence": float(row.get("confidence") or 0),
+            "discovery_reason": row.get("reason") or "",
+        })
+        if len(candidates) >= 8:
+            break
+
+    if not candidates:
         return {
             "matches": [],
             "searched_images": 0,
             "index_ready": True,
             "index_total": 0,
-            "index_remaining": 0,
             "index_indexed": 0,
-            "indexed_this_request": 0,
-            "index_skipped": 0,
-            "engine": "persistent-visual-index-v1",
-        }
-
-    all_urls = sorted(products_by_url.keys())
-    catalogue_signature = ownership_fingerprint(
-        "\n".join(
-            sorted(
-                f"{ref.get('product_id') or ''}|{ref.get('url') or ''}"
-                for ref in primary_refs
-            )
-        ).encode("utf-8")
-    )
-
-    # Exact stored-image shortcut remains instant and deterministic.
-    exact_rows = await db.quotation_image_index.find(
-        {"url": {"$in": all_urls}},
-        {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1},
-    ).to_list(len(all_urls))
-    exact_urls = [
-        row.get("url")
-        for row in exact_rows
-        if str(row.get("public_sha256") or "") == query_sha
-        or str(row.get("pixel_hash") or "") == query_pixel_hash
-    ]
-    exact_best = {}
-    for url in exact_urls:
-        for product, image_index in products_by_url.get(url, []):
-            product_id = product.get("id")
-            if not product_id or product_id in exact_best:
-                continue
-            images = product.get("images") or []
-            exact_best[product_id] = {
-                "product_id": product_id,
-                "sku": product.get("sku") or "",
-                "name": product.get("name") or "",
-                "category": product.get("category") or "",
-                "price": product.get("price") or 0,
-                "price_display": product.get("price_display") or (
-                    "fixed" if product.get("fixed_price") else "starting_from"
-                ),
-                "image_url": images[image_index] if image_index < len(images) else url,
-                "visual_similarity": 100.0,
-                "match_label": "exact_image",
-                "engine": "exact-hash",
-            }
-    if exact_best:
-        return {
-            "matches": list(exact_best.values())[:limit],
-            "searched_images": len(exact_urls),
-            "index_ready": True,
-            "index_total": len(primary_refs),
-            "index_indexed": len(primary_refs),
             "index_remaining": 0,
             "indexed_this_request": 0,
             "index_skipped": 0,
-            "engine": "exact-hash",
+            "engine": "catalogue-manifest-plus-vision",
         }
 
-    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
-    if not api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="The site's existing AI vision integration is not configured.",
-        )
-
-    # Reusable index: one primary website image per published product.
-    current_index_keys = {
-        (ref.get("product_id"), ref.get("url"))
-        for ref in primary_refs
-    }
-    existing_index_all = await db.quotation_visual_index.find(
-        {
-            "version": VISUAL_INDEX_VERSION,
-            "product_id": {"$in": list(products_by_id.keys())},
-        },
-        {"_id": 0},
-    ).to_list(max(1, len(primary_refs) * 3))
-    existing_index = [
-        row
-        for row in existing_index_all
-        if (row.get("product_id"), row.get("image_url")) in current_index_keys
-    ]
-
-    covered_keys = {
-        (row.get("product_id"), row.get("image_url"))
-        for row in existing_index
-        if row.get("status") in {"ready", "failed"}
-    }
-    missing_refs = [
-        ref
-        for ref in primary_refs
-        if (ref.get("product_id"), ref.get("url")) not in covered_keys
-    ]
-
-    # Build ONE reusable index batch per request. The frontend already loops,
-    # so this first-time preparation is automatic and never repeats for future
-    # client images unless a product's primary image changes or a new product is added.
-    if missing_refs:
-        batch_refs = missing_refs[:INDEX_SHEET_CAPACITY]
-        semaphore = asyncio.Semaphore(12)
-
-        async def _load_index_item(ref):
-            product = products_by_id.get(ref.get("product_id"))
-            if not product:
-                return None
-            url = ref.get("url") or ""
-            storage_path = unquote(url.removeprefix("/api/files/"))
-            try:
-                async with semaphore:
-                    image_bytes, stored_ct = await asyncio.to_thread(get_object, storage_path)
-                if not image_bytes or not str(stored_ct or "").lower().startswith("image/"):
-                    raise ValueError("Unreadable catalogue image")
-                return {
-                    "product": product,
-                    "image_index": int(ref.get("image_index") or 0),
-                    "url": url,
-                    "image_bytes": image_bytes,
-                }
-            except Exception as exc:
-                await db.quotation_visual_index.update_one(
-                    {
-                        "version": VISUAL_INDEX_VERSION,
-                        "product_id": ref.get("product_id"),
-                        "image_url": url,
-                    },
-                    {"$set": {
-                        "version": VISUAL_INDEX_VERSION,
-                        "product_id": ref.get("product_id"),
-                        "image_url": url,
-                        "image_index": int(ref.get("image_index") or 0),
-                        "status": "failed",
-                        "error": str(exc)[:300],
-                        "updated_at": now_iso(),
-                    }},
-                    upsert=True,
-                )
-                return None
-
-        loaded = await asyncio.gather(*[_load_index_item(ref) for ref in batch_refs])
-        items = [item for item in loaded if item]
-        failed_count = len(loaded) - len(items)
-
-        if items:
-            try:
-                sheet, mapping = build_contact_sheet(items)
-                signatures = await describe_index_sheet(
-                    api_key, sheet, mapping.keys()
-                )
-            except VisionSearchError as exc:
-                raise HTTPException(status_code=502, detail=str(exc))
-
-            for label, item in mapping.items():
-                product = item["product"]
-                signature = signatures.get(label)
-                status = "ready" if signature else "failed"
-                payload = {
-                    "version": VISUAL_INDEX_VERSION,
-                    "product_id": product.get("id"),
-                    "sku": product.get("sku") or "",
-                    "category": product.get("category") or "",
-                    "image_url": item.get("url"),
-                    "image_index": int(item.get("image_index") or 0),
-                    "status": status,
-                    "updated_at": now_iso(),
-                }
-                if signature:
-                    payload["signature"] = signature
-                else:
-                    payload["error"] = "Vision model omitted this catalogue cell"
-                    failed_count += 1
-                await db.quotation_visual_index.update_one(
-                    {
-                        "version": VISUAL_INDEX_VERSION,
-                        "product_id": product.get("id"),
-                        "image_url": item.get("url"),
-                    },
-                    {"$set": payload},
-                    upsert=True,
-                )
-
-        covered_after = min(
-            len(primary_refs),
-            len(covered_keys) + len(batch_refs),
-        )
-        remaining_after = max(0, len(primary_refs) - covered_after)
-        return {
-            "matches": [],
-            "searched_images": 0,
-            # Even when this was the last catalogue batch, force one final
-            # automatic frontend iteration so the next short request performs
-            # the actual client-image search against the now-complete index.
-            "index_ready": False,
-            "index_total": len(primary_refs),
-            "index_indexed": covered_after,
-            "index_remaining": max(1, remaining_after),
-            "indexed_this_request": len(batch_refs),
-            "index_skipped": failed_count,
-            "engine": "persistent-visual-index-v1",
-            "index_kind": "reusable_catalogue",
-        }
-
-    # Index is ready. Reuse a cached completed query when possible.
-    cached = await db.quotation_visual_search_jobs.find_one(
-        {
-            "query_sha": query_sha,
-            "catalogue_signature": catalogue_signature,
-            "engine": "persistent-visual-index-v1",
-            "status": "complete",
-        },
-        {"_id": 0},
+    verified = await _verify_quotation_catalogue_candidates(
+        data,
+        content_type,
+        candidates,
     )
-    if cached:
-        cached_matches = []
-        for saved in cached.get("matches") or []:
-            product = products_by_id.get(saved.get("product_id"))
-            if not product:
-                continue
-            images = product.get("images") or []
-            image_index = int(saved.get("image_index") or 0)
-            cached_matches.append({
-                "product_id": product.get("id"),
-                "sku": product.get("sku") or "",
-                "name": product.get("name") or "",
-                "category": product.get("category") or "",
-                "price": product.get("price") or 0,
-                "price_display": product.get("price_display") or (
-                    "fixed" if product.get("fixed_price") else "starting_from"
-                ),
-                "image_url": (
-                    images[image_index]
-                    if image_index < len(images)
-                    else saved.get("image_url") or ""
-                ),
-                "visual_similarity": float(saved.get("visual_similarity") or 0),
-                "match_label": saved.get("match_label") or "possible",
-                "engine": "persistent-visual-index-v1",
-                "reason": saved.get("reason") or "",
-            })
-        return {
-            "matches": cached_matches[:limit],
-            "searched_images": len(primary_refs),
-            "index_ready": True,
-            "index_total": len(primary_refs),
-            "index_indexed": len(primary_refs),
-            "index_remaining": 0,
-            "indexed_this_request": 0,
-            "index_skipped": 0,
-            "engine": "persistent-visual-index-v1",
-        }
-
-    try:
-        query_signature = await analyze_query_signature(api_key, data)
-    except VisionSearchError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
-    ready_rows_all = await db.quotation_visual_index.find(
-        {
-            "version": VISUAL_INDEX_VERSION,
-            "status": "ready",
-            "product_id": {"$in": list(products_by_id.keys())},
-        },
-        {"_id": 0},
-    ).to_list(max(1, len(primary_refs) * 3))
-    ready_rows = [
-        row
-        for row in ready_rows_all
-        if (row.get("product_id"), row.get("image_url")) in current_index_keys
-    ]
-
-    ranked = []
-    for row in ready_rows:
-        product = products_by_id.get(row.get("product_id"))
-        if not product:
-            continue
-        score = visual_signature_score(query_signature, row.get("signature") or {})
-        ranked.append({
-            "row": row,
-            "product": product,
-            "score": score,
-        })
-    ranked.sort(key=lambda item: item["score"], reverse=True)
-
-    top = ranked[:16]
-    if not top:
-        return {
-            "matches": [],
-            "searched_images": len(ready_rows),
-            "index_ready": True,
-            "index_total": len(primary_refs),
-            "index_indexed": len(primary_refs),
-            "index_remaining": 0,
-            "indexed_this_request": 0,
-            "index_skipped": 0,
-            "engine": "persistent-visual-index-v1",
-        }
-
-    # A strong, well-separated structural signature is enough by itself.
-    strong_direct = (
-        top[0]["score"] >= 88
-        and (len(top) == 1 or top[0]["score"] - top[1]["score"] >= 8)
-    )
-
-    final_rows = []
-    if strong_direct:
-        for candidate in top[:limit]:
-            final_rows.append({
-                "product": candidate["product"],
-                "image_index": int(candidate["row"].get("image_index") or 0),
-                "image_url": candidate["row"].get("image_url") or "",
-                "confidence": candidate["score"],
-                "reason": "Reusable visual fingerprint match",
-            })
-    else:
-        semaphore = asyncio.Semaphore(10)
-
-        async def _load_finalist(candidate):
-            row = candidate["row"]
-            product = candidate["product"]
-            url = row.get("image_url") or ""
-            try:
-                async with semaphore:
-                    image_bytes, stored_ct = await asyncio.to_thread(
-                        get_object, unquote(url.removeprefix("/api/files/"))
-                    )
-                if not image_bytes or not str(stored_ct or "").lower().startswith("image/"):
-                    raise ValueError("Unreadable finalist")
-                return {
-                    "product": product,
-                    "image_index": int(row.get("image_index") or 0),
-                    "url": url,
-                    "image_bytes": image_bytes,
-                }
-            except Exception:
-                return None
-
-        loaded_finalists = await asyncio.gather(
-            *[_load_finalist(candidate) for candidate in top[:12]]
-        )
-        finalist_items = [item for item in loaded_finalists if item]
-        if finalist_items:
-            try:
-                verified = await rerank_finalists(api_key, data, finalist_items)
-            except VisionSearchError as exc:
-                raise HTTPException(status_code=502, detail=str(exc))
-            for result in verified:
-                item = result["item"]
-                final_rows.append({
-                    "product": item["product"],
-                    "image_index": int(item.get("image_index") or 0),
-                    "image_url": item.get("url") or "",
-                    "confidence": round(float(result.get("confidence") or 0), 1),
-                    "reason": result.get("reason") or "",
-                })
 
     matches = []
-    saved_matches = []
-    seen = set()
-    for result in final_rows:
-        product = result["product"]
-        product_id = product.get("id")
-        if not product_id or product_id in seen:
-            continue
-        seen.add(product_id)
-        confidence = round(float(result.get("confidence") or 0), 1)
-        image_index = int(result.get("image_index") or 0)
-        images = product.get("images") or []
-        image_url = (
-            images[image_index]
-            if image_index < len(images)
-            else result.get("image_url") or ""
-        )
-        match_label = (
-            "very_likely" if confidence >= 85
-            else "possible" if confidence >= 65
-            else "visual_candidate"
-        )
-        match = {
-            "product_id": product_id,
+    for row in verified[:limit]:
+        product = row["product"]
+        confidence = round(float(row["confidence"]) * 100.0, 1)
+        matches.append({
+            "product_id": product.get("id"),
             "sku": product.get("sku") or "",
             "name": product.get("name") or "",
             "category": product.get("category") or "",
@@ -2080,51 +1991,30 @@ async def match_quotation_product_by_image(
             "price_display": product.get("price_display") or (
                 "fixed" if product.get("fixed_price") else "starting_from"
             ),
-            "image_url": image_url,
+            "image_url": row.get("image_url") or (
+                (product.get("images") or [""])[0]
+            ),
             "visual_similarity": confidence,
-            "match_label": match_label,
-            "engine": "persistent-visual-index-v1",
-            "reason": result.get("reason") or "",
-        }
-        matches.append(match)
-        saved_matches.append({
-            "product_id": product_id,
-            "image_index": image_index,
-            "image_url": image_url,
-            "visual_similarity": confidence,
-            "match_label": match_label,
-            "reason": result.get("reason") or "",
+            "match_label": (
+                "very_likely"
+                if row.get("relation") == "same_fixture" and confidence >= 90
+                else "possible"
+            ),
+            "engine": "catalogue-manifest-plus-vision",
+            "reason": row.get("reason") or "",
         })
-        if len(matches) >= limit:
-            break
-
-    await db.quotation_visual_search_jobs.update_one(
-        {
-            "query_sha": query_sha,
-            "catalogue_signature": catalogue_signature,
-            "engine": "persistent-visual-index-v1",
-        },
-        {"$set": {
-            "query_sha": query_sha,
-            "catalogue_signature": catalogue_signature,
-            "engine": "persistent-visual-index-v1",
-            "status": "complete",
-            "matches": saved_matches,
-            "updated_at": now_iso(),
-        }},
-        upsert=True,
-    )
 
     return {
         "matches": matches,
-        "searched_images": len(ready_rows),
+        "searched_images": len(candidates),
         "index_ready": True,
-        "index_total": len(primary_refs),
-        "index_indexed": len(primary_refs),
+        "index_total": 0,
+        "index_indexed": 0,
         "index_remaining": 0,
         "indexed_this_request": 0,
         "index_skipped": 0,
-        "engine": "persistent-visual-index-v1",
+        "engine": "catalogue-manifest-plus-vision",
+        "category_hint": discovery.get("category") or "",
     }
 
 
