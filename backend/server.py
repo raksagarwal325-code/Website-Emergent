@@ -39,7 +39,7 @@ from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
 from collection_index import build_collection_detail, build_collection_index  # noqa: E402
 from quotation import QuotationAIAssistRequest, QuotationAIDraft, QuotationCreate, build_quotation, format_quotation_number  # noqa: E402
-from visual_embedding import VisualEmbeddingError, cosine_similarity, embed_image, embed_images_batch, resolve_api_key as resolve_visual_embedding_api_key  # noqa: E402
+from visual_embedding import MODEL as VISUAL_EMBEDDING_MODEL, VisualEmbeddingError, cosine_similarity, embed_query_variants, embed_images_batch  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -703,7 +703,6 @@ class Settings(BaseModel):
     google_cid: str = "682987565690709677"
     google_place_id: str = "ChIJqRfIkPVHdDkRreYAh5J1egk"
     google_maps_api_key: str = ""
-    gemini_embedding_api_key: str = ""
     homepage_content: dict = Field(default_factory=dict)
     # Editable legal / policy content. Shape (all keys optional):
     #   { "<slug>": { "body": "<multiline text>", "updated_at": "YYYY-MM-DD" } }
@@ -791,7 +790,6 @@ class SettingsUpdate(BaseModel):
     google_cid: Optional[str] = None
     google_place_id: Optional[str] = None
     google_maps_api_key: Optional[str] = None
-    gemini_embedding_api_key: Optional[str] = None
     homepage_content: Optional[dict] = None
     legal_content: Optional[dict] = None
     instagram_url: Optional[str] = None
@@ -1627,12 +1625,12 @@ async def match_quotation_product_by_image(
     limit: int = Query(5, ge=1, le=10),
     admin: _AdminUser = Depends(require_admin),
 ):
-    """Search the published catalogue visually using multimodal embeddings.
+    """Search the published catalogue with a local DINOv2 visual model.
 
-    Exact file/pixel matches remain first-class shortcuts, but ordinary product
-    recognition is driven by Gemini Embedding 2 cosine similarity. This allows
-    screenshots, WhatsApp recompression, background changes and room photos to
-    be compared against the actual product images used by published products.
+    No third-party inference API or API key is required. Exact file/pixel
+    matches remain zero-ambiguity shortcuts; otherwise the uploaded client
+    image and a couple of center crops are compared with persistent local
+    embeddings of every published catalogue image.
     """
     content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
     if content_type not in {"image/jpeg", "image/png", "image/webp"}:
@@ -1644,28 +1642,14 @@ async def match_quotation_product_by_image(
     if len(data) > 25 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Image too large (25MB max).")
 
-    settings = await db.settings.find_one(
-        {"id": "settings"},
-        {"_id": 0, "gemini_embedding_api_key": 1},
-    ) or {}
-    embedding_api_key = resolve_visual_embedding_api_key(settings)
-    if not embedding_api_key:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Configure the Gemini Embedding API Key under Admin → Settings "
-                "before using Search by Image."
-            ),
-        )
-
     try:
         query_sha = ownership_fingerprint(data)
         query_pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, data)
-        query_embedding = await asyncio.to_thread(
-            embed_image, data, content_type, embedding_api_key
+        query_embeddings = await asyncio.to_thread(
+            embed_query_variants, data, content_type
         )
     except VisualEmbeddingError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=503, detail=str(exc))
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read that image. Try a JPG, PNG or WebP file.")
 
@@ -1704,7 +1688,7 @@ async def match_quotation_product_by_image(
             "index_indexed": 0,
             "indexed_this_request": 0,
             "index_skipped": 0,
-            "engine": "gemini-embedding-2",
+            "engine": VISUAL_EMBEDDING_MODEL,
         }
 
     index_urls = sorted(products_by_url.keys())
@@ -1718,7 +1702,7 @@ async def match_quotation_product_by_image(
         return (
             row
             and row.get("visual_embedding")
-            and row.get("visual_embedding_model") == "gemini-embedding-2"
+            and row.get("visual_embedding_model") == VISUAL_EMBEDDING_MODEL
         )
 
     missing_urls = [
@@ -1731,8 +1715,8 @@ async def match_quotation_product_by_image(
     indexed_this_request = 0
     skipped_this_request = 0
 
-    # Embed a bounded resumable batch. Gemini Embedding 2 accepts up to six
-    # images per embedding call; four groups keeps one HTTP request bounded.
+    # Keep each request bounded on CPU. Progress is persistent, so another
+    # request resumes exactly where the previous one stopped.
     batch_urls = missing_urls[:24]
     prepared = []
     for url in batch_urls:
@@ -1788,23 +1772,23 @@ async def match_quotation_product_by_image(
             }
             skipped_this_request += 1
 
+    # DINOv2-small is intentionally batched conservatively for CPU/RAM use.
     for offset in range(0, len(prepared), 6):
         group = prepared[offset:offset + 6]
         try:
             vectors = await asyncio.to_thread(
                 embed_images_batch,
                 [(image_bytes, stored_ct) for _, _, image_bytes, stored_ct in group],
-                embedding_api_key,
             )
         except VisualEmbeddingError as exc:
-            raise HTTPException(status_code=502, detail=str(exc))
+            raise HTTPException(status_code=503, detail=str(exc))
 
         for (url, storage_path, image_bytes, _stored_ct), vector in zip(group, vectors):
             index_doc = {
                 "url": url,
                 "storage_path": storage_path,
                 "visual_embedding": vector,
-                "visual_embedding_model": "gemini-embedding-2",
+                "visual_embedding_model": VISUAL_EMBEDDING_MODEL,
                 "visual_embedding_dim": len(vector),
                 "public_sha256": ownership_fingerprint(image_bytes),
                 "pixel_hash": await asyncio.to_thread(
@@ -1851,7 +1835,7 @@ async def match_quotation_product_by_image(
             "index_remaining": remaining,
             "indexed_this_request": indexed_this_request,
             "index_skipped": skipped_count,
-            "engine": "gemini-embedding-2",
+            "engine": VISUAL_EMBEDDING_MODEL,
         }
 
     best_by_product = {}
@@ -1867,7 +1851,10 @@ async def match_quotation_product_by_image(
         exact_file = str(row.get("public_sha256") or "") == query_sha
         exact_pixels = str(row.get("pixel_hash") or "") == query_pixel_hash
         try:
-            similarity = float(cosine_similarity(query_embedding, vector))
+            similarity = max(
+                float(cosine_similarity(query_embedding, vector))
+                for query_embedding in query_embeddings
+            )
         except Exception:
             continue
 
@@ -1880,14 +1867,14 @@ async def match_quotation_product_by_image(
             match_label = "exact_image"
             visual_similarity = 99.9
         else:
-            # Gemini multimodal embeddings are the product-recognition signal.
-            # Keep low-similarity noise out of the admin workflow.
-            if similarity < 0.55:
+            # DINOv2 is used for instance-level visual similarity. Keep a
+            # moderate floor to avoid obvious unrelated catalogue noise.
+            if similarity < 0.42:
                 continue
             match_rank = 2
             match_label = (
-                "very_likely" if similarity >= 0.82
-                else "possible" if similarity >= 0.68
+                "very_likely" if similarity >= 0.78
+                else "possible" if similarity >= 0.60
                 else "visual_candidate"
             )
             visual_similarity = round(max(0.0, min(1.0, similarity)) * 100.0, 1)
@@ -1912,7 +1899,7 @@ async def match_quotation_product_by_image(
                 "image_url": images[image_index] if image_index < len(images) else url,
                 "visual_similarity": visual_similarity,
                 "match_label": match_label,
-                "engine": "gemini-embedding-2",
+                "engine": VISUAL_EMBEDDING_MODEL,
             }
 
     ranked = sorted(
@@ -1935,7 +1922,7 @@ async def match_quotation_product_by_image(
         "index_remaining": 0,
         "indexed_this_request": indexed_this_request,
         "index_skipped": skipped_count,
-        "engine": "gemini-embedding-2",
+        "engine": VISUAL_EMBEDDING_MODEL,
     }
 
 
