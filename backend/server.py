@@ -2051,63 +2051,114 @@ async def match_quotation_product_by_image(
                     "variant_distance": variant_distance,
                 })
 
-    perceptual_candidates.sort(
-        key=lambda row: (row["full_distance"], row["variant_distance"])
+    # Collapse image-level fingerprint hits to product-level scores. Multiple
+    # saved images of the same SKU must not count as competing runner-ups.
+    product_fingerprint_hits = {}
+    for row in perceptual_candidates:
+        for product, image_index in products_by_url.get(row["url"], []):
+            product_id = product.get("id")
+            if not product_id:
+                continue
+            current = product_fingerprint_hits.get(product_id)
+            candidate = {
+                "product": product,
+                "image_index": image_index,
+                "url": row["url"],
+                "full_distance": row["full_distance"],
+                "variant_distance": row["variant_distance"],
+            }
+            if current is None:
+                product_fingerprint_hits[product_id] = candidate
+                continue
+            # Keep the best saved view for this SKU independently for full-frame
+            # and crop/variant matching.
+            if (
+                candidate["full_distance"], candidate["variant_distance"]
+            ) < (
+                current["full_distance"], current["variant_distance"]
+            ):
+                product_fingerprint_hits[product_id] = candidate
+
+    full_ranked = sorted(
+        product_fingerprint_hits.values(),
+        key=lambda row: (row["full_distance"], row["variant_distance"]),
+    )
+    variant_ranked = sorted(
+        product_fingerprint_hits.values(),
+        key=lambda row: (row["variant_distance"], row["full_distance"]),
     )
 
-    # A close full-frame match with a clear runner-up gap is a near-identical
-    # copy of an existing catalogue photograph. Return it directly.
-    if perceptual_candidates:
-        best = perceptual_candidates[0]
-        second = (
-            perceptual_candidates[1]["full_distance"]
-            if len(perceptual_candidates) > 1
-            else 999
+    # Direct return can come from either an almost identical full frame OR a
+    # crop/screenshot variant. The winner must still be clearly separated from
+    # the next different SKU, which keeps this conservative.
+    direct = None
+    if full_ranked:
+        best = full_ranked[0]
+        second_distance = (
+            full_ranked[1]["full_distance"] if len(full_ranked) > 1 else 999
         )
-        if best["full_distance"] <= 18 and second - best["full_distance"] >= 5:
-            fast_matches = []
-            seen_fast = set()
-            for product, image_index in products_by_url.get(best["url"], []):
-                product_id = product.get("id")
-                if not product_id or product_id in seen_fast:
-                    continue
-                seen_fast.add(product_id)
-                images = product.get("images") or []
-                similarity = round(
-                    max(0.0, 100.0 * (1.0 - best["full_distance"] / 256.0)),
-                    1,
-                )
-                fast_matches.append({
-                    "product_id": product_id,
-                    "sku": product.get("sku") or "",
-                    "name": product.get("name") or "",
-                    "category": product.get("category") or "",
-                    "price": product.get("price") or 0,
-                    "price_display": product.get("price_display") or (
-                        "fixed" if product.get("fixed_price") else "starting_from"
-                    ),
-                    "image_url": (
-                        images[image_index]
-                        if image_index < len(images)
-                        else best["url"]
-                    ),
-                    "visual_similarity": similarity,
-                    "match_label": "very_likely",
-                    "engine": "existing-perceptual-fingerprint",
-                    "reason": "Near-identical existing catalogue photograph.",
-                })
-            if fast_matches:
-                return {
-                    "matches": fast_matches[:limit],
-                    "searched_images": 0,
-                    "index_ready": True,
-                    "index_total": 0,
-                    "index_indexed": 0,
-                    "index_remaining": 0,
-                    "indexed_this_request": 0,
-                    "index_skipped": 0,
-                    "engine": "existing-perceptual-fingerprint",
-                }
+        if (
+            best["full_distance"] <= 18
+            and second_distance - best["full_distance"] >= 5
+        ):
+            direct = {
+                **best,
+                "distance": best["full_distance"],
+                "reason": "Near-identical existing catalogue photograph.",
+            }
+
+    if direct is None and variant_ranked:
+        best = variant_ranked[0]
+        second_distance = (
+            variant_ranked[1]["variant_distance"] if len(variant_ranked) > 1 else 999
+        )
+        if (
+            best["variant_distance"] <= 18
+            and second_distance - best["variant_distance"] >= 5
+        ):
+            direct = {
+                **best,
+                "distance": best["variant_distance"],
+                "reason": "Existing catalogue photograph matched after crop/screenshot normalization.",
+            }
+
+    if direct:
+        product = direct["product"]
+        images = product.get("images") or []
+        image_index = direct["image_index"]
+        similarity = round(
+            max(0.0, 100.0 * (1.0 - direct["distance"] / 256.0)),
+            1,
+        )
+        return {
+            "matches": [{
+                "product_id": product.get("id"),
+                "sku": product.get("sku") or "",
+                "name": product.get("name") or "",
+                "category": product.get("category") or "",
+                "price": product.get("price") or 0,
+                "price_display": product.get("price_display") or (
+                    "fixed" if product.get("fixed_price") else "starting_from"
+                ),
+                "image_url": (
+                    images[image_index]
+                    if image_index < len(images)
+                    else direct["url"]
+                ),
+                "visual_similarity": similarity,
+                "match_label": "very_likely",
+                "engine": "existing-perceptual-fingerprint",
+                "reason": direct["reason"],
+            }][:limit],
+            "searched_images": 0,
+            "index_ready": True,
+            "index_total": 0,
+            "index_indexed": 0,
+            "index_remaining": 0,
+            "indexed_this_request": 0,
+            "index_skipped": 0,
+            "engine": "existing-perceptual-fingerprint",
+        }
 
     # Cache only the expensive visual fallback. The signature includes the
     # published catalogue data used for matching, so product/image/price/name
@@ -2145,25 +2196,21 @@ async def match_quotation_product_by_image(
     candidates = []
     seen_skus = set()
     nearby = [
-        row for row in perceptual_candidates
+        row for row in variant_ranked
         if row["variant_distance"] <= 34
-    ][:16]
+    ][:6]
     for row in nearby:
-        for product, _image_index in products_by_url.get(row["url"], []):
-            sku = str(product.get("sku") or "").upper()
-            if not sku or sku in seen_skus:
-                continue
-            seen_skus.add(sku)
-            candidates.append({
-                "product": product,
-                "discovery_relation": "perceptual_candidate",
-                "discovery_confidence": 0.0,
-                "discovery_reason": "Existing catalogue fingerprint candidate",
-            })
-            if len(candidates) >= 6:
-                break
-        if len(candidates) >= 6:
-            break
+        product = row["product"]
+        sku = str(product.get("sku") or "").upper()
+        if not sku or sku in seen_skus:
+            continue
+        seen_skus.add(sku)
+        candidates.append({
+            "product": product,
+            "discovery_relation": "perceptual_candidate",
+            "discovery_confidence": 0.0,
+            "discovery_reason": "Existing catalogue fingerprint candidate",
+        })
 
     discovery = {"category": "", "matches": []}
     if not candidates:
