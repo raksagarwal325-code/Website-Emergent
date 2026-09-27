@@ -211,6 +211,17 @@ export const api = {
       },
     ).then(r => r.data);
   },
+  startQuotationImageDetailJob: (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return client.post("/admin/quotations/product-match-by-image-jobs", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 45000,
+    }).then(r => r.data);
+  },
+  getQuotationImageDetailJob: (jobId) => client.get(
+    `/admin/quotations/product-match-by-image-jobs/${encodeURIComponent(jobId)}`,
+  ).then(r => r.data),
   diagnoseQuotationProductByImage: (file) => {
     const fd = new FormData();
     fd.append("file", file);

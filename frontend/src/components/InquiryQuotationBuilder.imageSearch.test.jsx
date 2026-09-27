@@ -37,10 +37,10 @@ describe("Quotation search by image", () => {
   test("upload starts local search and can refine without blocking candidate selection", () => {
     expect(source).toContain("void findImageMatches(file)");
     expect(source).toContain("await api.matchQuotationProductByImage(selectedFile, 5, true)");
-    expect(source).toContain("await api.matchQuotationProductByImage(selectedFile, 5)");
+    expect(source).toContain("await api.startQuotationImageDetailJob(selectedFile)");
+    expect(source).toContain("await api.getQuotationImageDetailJob(imageDetailJobId.current)");
     expect(source).toContain("Checking catalogue photos:");
-    expect(source).toContain("for (let batch = 0; batch < 30; batch += 1)");
-    expect(source).not.toContain("for (let batch = 0; batch < 80; batch += 1)");
+    expect(source).toContain("for (let batch = 0; batch < 60; batch += 1)");
     expect(source).toContain("requestId !== imageSearchSequence.current");
   });
 });
