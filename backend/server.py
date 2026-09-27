@@ -27,7 +27,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E402
 from watermark import apply_watermark  # noqa: E402
-from image_ownership import embed_ownership_metadata, normalized_pixel_fingerprint, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants  # noqa: E402
+from image_ownership import embed_ownership_metadata, normalized_pixel_fingerprint, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants, salvage_truncated_image  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
@@ -5600,6 +5600,7 @@ async def repair_failed_image_protection(
     unrecoverable = 0
     repaired_from_original = 0
     repaired_from_public = 0
+    repaired_salvaged = 0
     items = []
 
     for row in candidates:
@@ -5625,13 +5626,29 @@ async def repair_failed_image_protection(
                 content_type = stored_ct or declared_ct
                 if not data or not str(content_type).lower().startswith("image/"):
                     raise ValueError("stored object is not a readable image")
-                # Decode/compute the visual fingerprint now; this catches
-                # truncated legacy images before we overwrite either object.
-                await asyncio.to_thread(perceptual_fingerprint, data)
-                source_data = data
-                source_ct = content_type
-                source_kind = source_kind_try
-                break
+                try:
+                    # Strict decode first.
+                    await asyncio.to_thread(perceptual_fingerprint, data)
+                    source_data = data
+                    source_ct = content_type
+                    source_kind = source_kind_try
+                    break
+                except Exception as strict_exc:
+                    # Browser-displayable legacy files can be missing trailing
+                    # bytes/EOI while still containing all useful pixels.
+                    # Decode tolerantly once, then re-encode a clean complete
+                    # image and immediately validate it strictly.
+                    salvaged_data, salvaged_ct = await asyncio.to_thread(
+                        salvage_truncated_image, data, content_type
+                    )
+                    await asyncio.to_thread(perceptual_fingerprint, salvaged_data)
+                    source_data = salvaged_data
+                    source_ct = salvaged_ct
+                    source_kind = source_kind_try + "_salvaged"
+                    attempts.append(
+                        f"{source_kind_try}: salvaged after {str(strict_exc)[:140]}"
+                    )
+                    break
             except Exception as exc:
                 attempts.append(f"{source_kind_try}: {str(exc)[:220]}")
 
@@ -5676,7 +5693,10 @@ async def repair_failed_image_protection(
             # If we had to salvage from the public object, recreate the private
             # original too so future backfills/indexing runs have a healthy
             # source instead of repeating the same 500/truncated-file failure.
-            if source_kind == "public" and original_path:
+            if original_path and (
+                source_kind == "public"
+                or source_kind.endswith("_salvaged")
+            ):
                 await asyncio.to_thread(
                     put_object, original_path, source_data, source_ct
                 )
@@ -5698,10 +5718,12 @@ async def repair_failed_image_protection(
                 },
             )
             repaired += 1
-            if source_kind == "original":
+            if source_kind.startswith("original"):
                 repaired_from_original += 1
             else:
                 repaired_from_public += 1
+            if source_kind.endswith("_salvaged"):
+                repaired_salvaged += 1
             items.append({
                 "id": file_id,
                 "filename": row.get("original_filename"),
@@ -5730,6 +5752,7 @@ async def repair_failed_image_protection(
         "repaired": repaired,
         "repaired_from_original": repaired_from_original,
         "repaired_from_public": repaired_from_public,
+        "repaired_salvaged": repaired_salvaged,
         "unrecoverable": unrecoverable,
         "items": items,
     }
