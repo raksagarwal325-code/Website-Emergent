@@ -1680,9 +1680,13 @@ async def match_quotation_product_by_image(
             "_id": 0,
             "id": 1,
             "storage_path": 1,
+            "original_path": 1,
             "quotation_public_sha256": 1,
+            "quotation_original_sha256": 1,
             "quotation_pixel_hash": 1,
+            "quotation_original_pixel_hash": 1,
             "quotation_phash": 1,
+            "quotation_original_phash": 1,
         },
     ).to_list(5000)
 
@@ -1696,8 +1700,11 @@ async def match_quotation_product_by_image(
         (row, public_url)
         for row, public_url in catalogue_rows
         if not row.get("quotation_public_sha256")
+        or not row.get("quotation_original_sha256")
         or not row.get("quotation_pixel_hash")
+        or not row.get("quotation_original_pixel_hash")
         or not row.get("quotation_phash")
+        or not row.get("quotation_original_phash")
     ]
 
     indexed_this_request = 0
@@ -1706,18 +1713,29 @@ async def match_quotation_product_by_image(
     # resumes until this complete catalogue index reaches zero remaining.
     for row, _public_url in missing[:50]:
         public_path = row.get("storage_path")
-        if not public_path:
+        original_path = row.get("original_path") or public_path
+        if not public_path or not original_path:
             index_failures += 1
             continue
         try:
             public_bytes, _stored_ct = await asyncio.to_thread(get_object, public_path)
+            original_bytes = public_bytes
+            if original_path != public_path:
+                original_bytes, _original_ct = await asyncio.to_thread(get_object, original_path)
             update = {
                 "quotation_public_sha256": ownership_fingerprint(public_bytes),
+                "quotation_original_sha256": ownership_fingerprint(original_bytes),
                 "quotation_pixel_hash": await asyncio.to_thread(
                     normalized_pixel_fingerprint, public_bytes
                 ),
+                "quotation_original_pixel_hash": await asyncio.to_thread(
+                    normalized_pixel_fingerprint, original_bytes
+                ),
                 "quotation_phash": await asyncio.to_thread(
                     phash_fingerprint, public_bytes
+                ),
+                "quotation_original_phash": await asyncio.to_thread(
+                    phash_fingerprint, original_bytes
                 ),
             }
             await db.files.update_one({"id": row.get("id")}, {"$set": update})
@@ -1752,19 +1770,26 @@ async def match_quotation_product_by_image(
     for row, public_url in catalogue_rows:
         product_links = products_by_url.get(public_url) or []
         public_sha = str(row.get("quotation_public_sha256") or "")
+        original_sha = str(row.get("quotation_original_sha256") or "")
         pixel_hash = str(row.get("quotation_pixel_hash") or "")
-        candidate_phash = str(row.get("quotation_phash") or "")
-        if not candidate_phash:
+        original_pixel_hash = str(row.get("quotation_original_pixel_hash") or "")
+        candidate_phashes = [
+            str(row.get("quotation_phash") or ""),
+            str(row.get("quotation_original_phash") or ""),
+        ]
+        candidate_phashes = [value for value in candidate_phashes if value]
+        if not candidate_phashes:
             continue
         searched_images += 1
 
-        exact_file = public_sha == query_public_sha
-        exact_pixels = pixel_hash == query_pixel_hash
+        exact_file = query_public_sha in {public_sha, original_sha}
+        exact_pixels = query_pixel_hash in {pixel_hash, original_pixel_hash}
 
         try:
             phash_distance = min(
                 perceptual_distance(query_variant, candidate_phash)
                 for query_variant in query_phashes
+                for candidate_phash in candidate_phashes
             )
         except Exception:
             phash_distance = 64
