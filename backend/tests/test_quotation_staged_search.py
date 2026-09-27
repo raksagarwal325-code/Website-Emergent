@@ -58,3 +58,19 @@ def test_quotation_search_has_no_heavy_local_ml_runtime():
     assert "visual_embedding" not in server
     assert "torch==" not in requirements
     assert "transformers>=" not in requirements
+
+
+def test_quotation_image_diagnostic_is_local_and_reports_mapping_health():
+    source = Path(__file__).resolve().parents[1].joinpath("server.py").read_text()
+    start = source.index('@api.post("/admin/quotations/product-match-diagnostics")')
+    end = source.index('@api.post("/admin/quotations/product-match-by-image")')
+    route = source[start:end]
+
+    assert "quotation_image_index_rows" in route
+    assert "fingerprinted_db_file_rows" in route
+    assert "unmapped_app_owned_urls" in route
+    assert "full_distance" in route
+    assert "variant_distance" in route
+    assert "would_enter_ai_fallback" in route
+    assert "_discover_catalogue_candidates" not in route
+    assert "_verify_quotation_catalogue_candidates" not in route
