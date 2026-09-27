@@ -123,6 +123,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [imageMatches, setImageMatches] = useState([]);
   const [imageMatchBusy, setImageMatchBusy] = useState(false);
   const [imageMatchError, setImageMatchError] = useState("");
+  const [imageDiagnostic, setImageDiagnostic] = useState(null);
+  const [imageDiagnosticBusy, setImageDiagnosticBusy] = useState(false);
   const [aiBusyLineId, setAiBusyLineId] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -150,6 +152,23 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setImageSearchPreview(URL.createObjectURL(file));
     setImageMatches([]);
     setImageMatchError("");
+    setImageDiagnostic(null);
+  };
+
+  const diagnoseImageSearch = async () => {
+    if (!imageSearchFile) {
+      toast.error("Upload the client image first");
+      return;
+    }
+    setImageDiagnosticBusy(true);
+    setImageDiagnostic(null);
+    try {
+      setImageDiagnostic(await api.diagnoseQuotationProductByImage(imageSearchFile));
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not diagnose image search"));
+    } finally {
+      setImageDiagnosticBusy(false);
+    }
   };
 
   const findImageMatches = async () => {
@@ -598,8 +617,42 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                       >
                         {imageMatchBusy ? "Searching catalogue…" : "Find matching product"}
                       </button>
+                      <button
+                        type="button"
+                        onClick={diagnoseImageSearch}
+                        disabled={!imageSearchFile || imageDiagnosticBusy}
+                        className="ml-2 mt-3 border border-white/20 px-4 py-2.5 text-[10px] uppercase tracking-[0.18em] text-white/70 disabled:opacity-40"
+                        data-testid="quotation-image-search-diagnose"
+                      >
+                        {imageDiagnosticBusy ? "Diagnosing…" : "Diagnose search"}
+                      </button>
                     </div>
                   </div>
+
+                  {imageDiagnostic && (
+                    <div className="mt-4 border border-[#D4AF37]/30 bg-[#D4AF37]/[0.03] p-3 text-xs text-white/65" data-testid="quotation-image-search-diagnostic">
+                      <div className="font-medium text-[#D4AF37]">Search diagnosis: {imageDiagnostic.decision}</div>
+                      <div className="mt-1">{imageDiagnostic.reason}</div>
+                      <div className="mt-2 grid gap-1 md:grid-cols-2">
+                        <div>Products: {imageDiagnostic.catalogue?.published_products ?? 0}</div>
+                        <div>Product images: {imageDiagnostic.catalogue?.published_image_urls ?? 0}</div>
+                        <div>db.files mapped: {imageDiagnostic.catalogue?.db_file_rows_for_product_images ?? 0}</div>
+                        <div>With fingerprints: {imageDiagnostic.catalogue?.fingerprinted_db_file_rows ?? 0}</div>
+                        <div>Legacy index rows: {imageDiagnostic.catalogue?.quotation_image_index_rows ?? 0}</div>
+                        <div>AI fallback: {imageDiagnostic.would_enter_ai_fallback ? "Yes" : "No"}</div>
+                      </div>
+                      {imageDiagnostic.best && (
+                        <div className="mt-2">
+                          Best: {imageDiagnostic.best.sku || "No SKU"} · full {imageDiagnostic.best.full_distance} · crop {imageDiagnostic.best.variant_distance}
+                        </div>
+                      )}
+                      {imageDiagnostic.runner_up && (
+                        <div className="mt-1">
+                          Runner-up: {imageDiagnostic.runner_up.sku || "No SKU"} · full {imageDiagnostic.runner_up.full_distance} · crop {imageDiagnostic.runner_up.variant_distance}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {imageMatchError && (
                     <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-search-empty">
