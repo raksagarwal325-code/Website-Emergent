@@ -227,6 +227,7 @@ export const api = {
   adminImageProtectionStatus: () => client.get("/image-protection/status").then(r => r.data),
   adminImageOwnershipRegistry: (params = {}) => client.get("/image-protection/registry", { params }).then(r => r.data),
   adminProtectExistingImages: (limit = 10) => client.post("/image-protection/reprocess", {}, { params: { limit } }).then(r => r.data),
+  adminRepairFailedImages: (limit = 25) => client.post("/image-protection/repair-failed", {}, { params: { limit } }).then(r => r.data),
   adminReprocessVisibleWatermarks: () => client.post("/watermark/reprocess", {}).then(r => r.data),
   adminUploadQuotationBrandAsset: (kind, file) => {
     const fd = new FormData();
