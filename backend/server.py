@@ -1829,6 +1829,10 @@ async def match_quotation_product_by_image(
         query_pixel_hash = await asyncio.to_thread(
             normalized_pixel_fingerprint, data
         )
+        query_dhash_variants = await asyncio.to_thread(
+            perceptual_fingerprint_variants, data
+        )
+        query_dhash_full = query_dhash_variants[0] if query_dhash_variants else ""
     except Exception:
         raise HTTPException(
             status_code=400,
@@ -1864,6 +1868,115 @@ async def match_quotation_product_by_image(
             url = canonical_media_url(raw_url)
             if url:
                 products_by_url.setdefault(url, []).append((product, image_index))
+
+    # Fast perceptual shortcut using the fingerprints already stored by
+    # Admin -> Image Protection. This is the primary path for WhatsApp/resized/
+    # recompressed copies of catalogue photographs, so those searches do not
+    # need any AI call at all.
+    storage_paths = [
+        url.removeprefix("/api/files/")
+        for url in products_by_url
+        if url.startswith("/api/files/")
+    ]
+    perceptual_rows = []
+    if storage_paths and query_dhash_full:
+        perceptual_rows = await db.files.find(
+            {
+                "storage_path": {"$in": storage_paths},
+                "perceptual_fingerprint": {"$exists": True, "$ne": None},
+            },
+            {
+                "_id": 0,
+                "storage_path": 1,
+                "perceptual_fingerprint": 1,
+            },
+        ).to_list(len(storage_paths))
+
+    # Rank by full-frame dHash first. A normal WhatsApp resize/recompression
+    # keeps the same overall composition and should land very close here.
+    perceptual_candidates = []
+    for row in perceptual_rows:
+        stored_hash = str(row.get("perceptual_fingerprint") or "")
+        if not stored_hash:
+            continue
+        try:
+            full_distance = perceptual_distance(query_dhash_full, stored_hash)
+            variant_distance = min(
+                perceptual_distance(variant, stored_hash)
+                for variant in query_dhash_variants
+                if len(variant) == len(stored_hash)
+            )
+        except (ValueError, TypeError):
+            continue
+        url = f"/api/files/{row.get('storage_path') or ''}"
+        if url not in products_by_url:
+            continue
+        perceptual_candidates.append({
+            "url": url,
+            "full_distance": full_distance,
+            "variant_distance": variant_distance,
+        })
+
+    perceptual_candidates.sort(
+        key=lambda row: (row["full_distance"], row["variant_distance"])
+    )
+
+    # Direct return only for a very close full-frame match with separation from
+    # the runner-up. This avoids forcing unrelated fixtures into a false match.
+    if perceptual_candidates:
+        best = perceptual_candidates[0]
+        second_full = (
+            perceptual_candidates[1]["full_distance"]
+            if len(perceptual_candidates) > 1
+            else 999
+        )
+        if best["full_distance"] <= 18 and second_full - best["full_distance"] >= 5:
+            fast_matches = []
+            seen_fast = set()
+            for product, image_index in products_by_url.get(best["url"], []):
+                product_id = product.get("id")
+                if not product_id or product_id in seen_fast:
+                    continue
+                seen_fast.add(product_id)
+                images = product.get("images") or []
+                similarity = round(
+                    max(0.0, 100.0 * (1.0 - best["full_distance"] / 256.0)),
+                    1,
+                )
+                fast_matches.append({
+                    "product_id": product_id,
+                    "sku": product.get("sku") or "",
+                    "name": product.get("name") or "",
+                    "category": product.get("category") or "",
+                    "price": product.get("price") or 0,
+                    "price_display": product.get("price_display") or (
+                        "fixed" if product.get("fixed_price") else "starting_from"
+                    ),
+                    "image_url": (
+                        images[image_index]
+                        if image_index < len(images)
+                        else best["url"]
+                    ),
+                    "visual_similarity": similarity,
+                    "match_label": "very_likely",
+                    "engine": "existing-perceptual-fingerprint",
+                    "reason": (
+                        "Near-identical catalogue photograph matched from the "
+                        "existing Image Protection fingerprint."
+                    ),
+                })
+            if fast_matches:
+                return {
+                    "matches": fast_matches[:limit],
+                    "searched_images": 0,
+                    "index_ready": True,
+                    "index_total": 0,
+                    "index_indexed": 0,
+                    "index_remaining": 0,
+                    "indexed_this_request": 0,
+                    "index_skipped": 0,
+                    "engine": "existing-perceptual-fingerprint",
+                }
 
     # Exact/decoded-pixel shortcut using already-built quotation hash records.
     if products_by_url:
@@ -1936,28 +2049,58 @@ async def match_quotation_product_by_image(
         image_base64=base64.b64encode(data).decode("ascii")
     )
 
-    discovery = await _discover_catalogue_candidates(
-        discovery_item,
-        [query_image],
-        products,
-    )
+    # If perceptual fingerprints found plausible catalogue photos but not
+    # enough certainty for a direct return, skip the expensive full-manifest AI
+    # discovery and visually verify only those nearby products. This keeps
+    # screenshot/crop cases to at most one AI call.
+    nearby_urls = [
+        row["url"]
+        for row in perceptual_candidates
+        if row["variant_distance"] <= 34
+    ][:8]
 
     candidates = []
     seen_skus = set()
-    for row in discovery.get("matches") or []:
-        sku = str(row.get("sku") or "").upper()
-        product = products_by_sku.get(sku)
-        if not product or sku in seen_skus:
-            continue
-        seen_skus.add(sku)
-        candidates.append({
-            "product": product,
-            "discovery_relation": row.get("relation"),
-            "discovery_confidence": float(row.get("confidence") or 0),
-            "discovery_reason": row.get("reason") or "",
-        })
-        if len(candidates) >= 8:
-            break
+    if nearby_urls:
+        for url in nearby_urls:
+            for product, _image_index in products_by_url.get(url, []):
+                sku = str(product.get("sku") or "").upper()
+                if not product or not sku or sku in seen_skus:
+                    continue
+                seen_skus.add(sku)
+                candidates.append({
+                    "product": product,
+                    "discovery_relation": "perceptual_candidate",
+                    "discovery_confidence": 0.0,
+                    "discovery_reason": "Existing Image Protection fingerprint candidate",
+                })
+                if len(candidates) >= 8:
+                    break
+            if len(candidates) >= 8:
+                break
+        discovery = {"category": "", "matches": []}
+    else:
+        discovery = await _discover_catalogue_candidates(
+            discovery_item,
+            [query_image],
+            products,
+        )
+
+    if not candidates:
+        for row in discovery.get("matches") or []:
+            sku = str(row.get("sku") or "").upper()
+            product = products_by_sku.get(sku)
+            if not product or sku in seen_skus:
+                continue
+            seen_skus.add(sku)
+            candidates.append({
+                "product": product,
+                "discovery_relation": row.get("relation"),
+                "discovery_confidence": float(row.get("confidence") or 0),
+                "discovery_reason": row.get("reason") or "",
+            })
+            if len(candidates) >= 8:
+                break
 
     if not candidates:
         return {
