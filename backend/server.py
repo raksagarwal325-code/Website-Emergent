@@ -2109,6 +2109,19 @@ async def match_quotation_product_by_image(
                     "engine": "existing-perceptual-fingerprint",
                 }
 
+    # Cache only the expensive visual fallback. The signature includes the
+    # published catalogue data used for matching, so product/image/price/name
+    # changes automatically invalidate prior results.
+    catalogue_signature = ownership_fingerprint(
+        json.dumps(products, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")
+    )
+    cached = await db.quotation_image_search_cache.find_one(
+        {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
+        {"_id": 0, "response": 1},
+    )
+    if cached and isinstance(cached.get("response"), dict):
+        return cached["response"]
+
     # Reuse the same complete-manifest shortlist logic already used by the
     # Product AI upload workflow. This compares the client photo against compact
     # factual catalogue identities without downloading every catalogue image.
@@ -2178,7 +2191,7 @@ async def match_quotation_product_by_image(
                 break
 
     if not candidates:
-        return {
+        response = {
             "matches": [],
             "searched_images": 0,
             "index_ready": True,
@@ -2189,6 +2202,12 @@ async def match_quotation_product_by_image(
             "index_skipped": 0,
             "engine": "catalogue-manifest-plus-vision",
         }
+        await db.quotation_image_search_cache.update_one(
+            {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
+            {"$set": {"response": response, "updated_at": now_iso()}},
+            upsert=True,
+        )
+        return response
 
     verified = await _verify_quotation_catalogue_candidates(
         data,
@@ -2222,7 +2241,7 @@ async def match_quotation_product_by_image(
             "reason": row.get("reason") or "",
         })
 
-    return {
+    response = {
         "matches": matches,
         "searched_images": len(candidates),
         "index_ready": True,
@@ -2234,6 +2253,12 @@ async def match_quotation_product_by_image(
         "engine": "catalogue-manifest-plus-vision",
         "category_hint": discovery.get("category") or "",
     }
+    await db.quotation_image_search_cache.update_one(
+        {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
+        {"$set": {"response": response, "updated_at": now_iso()}},
+        upsert=True,
+    )
+    return response
 
 
 @api.get("/admin/inquiries/{inquiry_id}/quotations")
