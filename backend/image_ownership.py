@@ -10,16 +10,51 @@ from __future__ import annotations
 
 import hashlib
 import io
+import threading
 
 import numpy as np
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageFile, ImageOps
 from PIL.PngImagePlugin import PngInfo
 
 _OWNER = "Samrat Glass Emporium"
 _SITE = "https://samratglass.com"
 _NOTICE = "© Samrat Glass Emporium. All rights reserved."
+_TRUNCATED_IMAGE_LOCK = threading.Lock()
 
+
+
+def salvage_truncated_image(original_bytes: bytes, content_type: str) -> tuple[bytes, str]:
+    """Best-effort decode + clean re-encode for partially truncated legacy images.
+
+    Pillow can often display these files in browsers even though strict decode
+    operations fail. This helper temporarily enables Pillow's truncated-image
+    loader under a process lock, fully decodes the readable pixels, and writes
+    a fresh complete JPEG/PNG so future hashing/protection runs are strict-safe.
+    """
+    if not original_bytes:
+        raise ValueError("image is empty")
+    claimed = str(content_type or "").split(";", 1)[0].strip().lower()
+    if claimed == "image/jpg":
+        claimed = "image/jpeg"
+    if claimed not in {"image/jpeg", "image/png", "image/webp"}:
+        raise ValueError("unsupported image type for salvage")
+
+    with _TRUNCATED_IMAGE_LOCK:
+        previous = ImageFile.LOAD_TRUNCATED_IMAGES
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+        try:
+            with Image.open(io.BytesIO(original_bytes)) as opened:
+                image = ImageOps.exif_transpose(opened).convert("RGB")
+                image.load()
+                out = io.BytesIO()
+                if claimed == "image/png":
+                    image.save(out, format="PNG", optimize=True)
+                    return out.getvalue(), "image/png"
+                image.save(out, format="JPEG", quality=95, optimize=True)
+                return out.getvalue(), "image/jpeg"
+        finally:
+            ImageFile.LOAD_TRUNCATED_IMAGES = previous
 
 def ownership_fingerprint(original_bytes: bytes) -> str:
     """Stable fingerprint of the untouched original bytes."""
