@@ -5584,6 +5584,188 @@ async def image_protection_reprocess(
     }
 
 
+@api.post("/image-protection/repair-failed")
+async def repair_failed_image_protection(
+    limit: int = Query(25, ge=1, le=50),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Retry only failed images that are actively referenced by the site.
+
+    The repair first tries the clean private original. If that object is
+    missing/corrupt, it falls back to the currently published public image.
+    A successful public fallback also heals the private original so future
+    protection/indexing runs do not hit the same broken legacy object again.
+    """
+    products = await db.products.find(
+        {}, {"_id": 0, "id": 1, "name": 1, "sku": 1, "status": 1, "images": 1}
+    ).to_list(5000)
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    hero_slides = await db.hero_slides.find({}, {"_id": 0}).to_list(500)
+    category_rows = await db.category_featured_images.find({}, {"_id": 0}).to_list(100)
+    category_images = [_cat_out(row) for row in category_rows]
+    references = collect_references(products, settings, hero_slides, category_images)
+    referenced_urls = {
+        canonical_media_url(url)
+        for url in references.keys()
+        if canonical_media_url(url).startswith("/api/files/")
+    }
+
+    failed_rows = await db.files.find(
+        {
+            "ownership_protection_failed_at": {"$exists": True},
+            "kind": {"$ne": "video"},
+            "content_type": {"$regex": "^image/", "$options": "i"},
+        },
+        {"_id": 0},
+    ).to_list(5000)
+
+    candidates = []
+    for row in failed_rows:
+        public_url = canonical_media_url(public_url_for_file(row))
+        if public_url and public_url in referenced_urls:
+            candidates.append(row)
+        if len(candidates) >= limit:
+            break
+
+    repaired = 0
+    unrecoverable = 0
+    repaired_from_original = 0
+    repaired_from_public = 0
+    items = []
+
+    for row in candidates:
+        file_id = row.get("id")
+        original_path = row.get("original_path")
+        public_path = row.get("storage_path")
+        declared_ct = row.get("content_type") or "image/png"
+
+        source_data = None
+        source_ct = None
+        source_kind = None
+        attempts = []
+
+        for source_kind_try, source_path in (
+            ("original", original_path),
+            ("public", public_path),
+        ):
+            if not source_path:
+                attempts.append(f"{source_kind_try}: missing path")
+                continue
+            try:
+                data, stored_ct = await asyncio.to_thread(get_object, source_path)
+                content_type = stored_ct or declared_ct
+                if not data or not str(content_type).lower().startswith("image/"):
+                    raise ValueError("stored object is not a readable image")
+                # Decode/compute the visual fingerprint now; this catches
+                # truncated legacy images before we overwrite either object.
+                await asyncio.to_thread(perceptual_fingerprint, data)
+                source_data = data
+                source_ct = content_type
+                source_kind = source_kind_try
+                break
+            except Exception as exc:
+                attempts.append(f"{source_kind_try}: {str(exc)[:220]}")
+
+        if source_data is None:
+            error = "Unrecoverable legacy image; " + " | ".join(attempts)
+            await db.files.update_one(
+                {"id": file_id},
+                {"$set": {
+                    "ownership_protection_failed_at": now_iso(),
+                    "ownership_protection_error": error[:500],
+                }},
+            )
+            unrecoverable += 1
+            items.append({
+                "id": file_id,
+                "filename": row.get("original_filename"),
+                "status": "unrecoverable",
+                "error": error[:500],
+            })
+            continue
+
+        try:
+            fingerprint = ownership_fingerprint(source_data)
+            visual_fingerprint = await asyncio.to_thread(
+                perceptual_fingerprint, source_data
+            )
+            out = await asyncio.to_thread(
+                embed_ownership_metadata,
+                source_data,
+                content_type=source_ct,
+                asset_id=file_id,
+                fingerprint=fingerprint,
+                visual_fingerprint=visual_fingerprint,
+            )
+
+            if not public_path:
+                raise ValueError("Missing public storage path")
+
+            # Always repair the published object.
+            await asyncio.to_thread(put_object, public_path, out, source_ct)
+
+            # If we had to salvage from the public object, recreate the private
+            # original too so future backfills/indexing runs have a healthy
+            # source instead of repeating the same 500/truncated-file failure.
+            if source_kind == "public" and original_path:
+                await asyncio.to_thread(
+                    put_object, original_path, source_data, source_ct
+                )
+
+            await db.files.update_one(
+                {"id": file_id},
+                {
+                    "$set": {
+                        "watermarked": False,
+                        "ownership_fingerprint": fingerprint,
+                        "perceptual_fingerprint": visual_fingerprint,
+                        "ownership_protected_at": now_iso(),
+                        "content_type": source_ct,
+                    },
+                    "$unset": {
+                        "ownership_protection_failed_at": "",
+                        "ownership_protection_error": "",
+                    },
+                },
+            )
+            repaired += 1
+            if source_kind == "original":
+                repaired_from_original += 1
+            else:
+                repaired_from_public += 1
+            items.append({
+                "id": file_id,
+                "filename": row.get("original_filename"),
+                "status": "repaired",
+                "source": source_kind,
+            })
+        except Exception as exc:
+            error = f"Repair write failed: {str(exc)[:450]}"
+            await db.files.update_one(
+                {"id": file_id},
+                {"$set": {
+                    "ownership_protection_failed_at": now_iso(),
+                    "ownership_protection_error": error,
+                }},
+            )
+            unrecoverable += 1
+            items.append({
+                "id": file_id,
+                "filename": row.get("original_filename"),
+                "status": "unrecoverable",
+                "error": error,
+            })
+
+    return {
+        "attempted": len(candidates),
+        "repaired": repaired,
+        "repaired_from_original": repaired_from_original,
+        "repaired_from_public": repaired_from_public,
+        "unrecoverable": unrecoverable,
+        "items": items,
+    }
+
+
 # --- Export CSV ---
 @api.get("/export/products.csv")
 async def export_csv(admin: _AdminUser = Depends(require_admin)):

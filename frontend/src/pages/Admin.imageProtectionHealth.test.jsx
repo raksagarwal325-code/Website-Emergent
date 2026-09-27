@@ -20,4 +20,10 @@ describe("Admin image protection health", () => {
     expect(source).toContain("item.error");
     expect(source).toContain("item.failed_at");
   });
+  test("offers targeted repair for failed in-use images", () => {
+    expect(source).toContain('data-testid="repair-failed-image-protection"');
+    expect(source).toContain("repairFailedImages");
+    expect(source).toContain("adminRepairFailedImages");
+    expect(source).toContain("Repair failed in-use images");
+  });
 });
