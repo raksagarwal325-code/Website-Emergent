@@ -17,7 +17,7 @@ describe("Quotation search by image", () => {
     expect(apiSource).toContain("/admin/quotations/product-match-by-image");
     expect(source).toContain("findImageMatches");
     expect(source).toContain('data-testid="quotation-image-search-results"');
-    expect(source).toContain("Very likely match");
+    expect(source).toContain("Very likely product match");
     expect(source).toContain("visual_similarity");
   });
 
@@ -31,10 +31,11 @@ describe("Quotation search by image", () => {
     expect(source).toContain("index_ready");
     expect(source).toContain("for (let batch = 0; batch < 80; batch += 1)");
     expect(source).toContain('data-testid="quotation-image-index-progress"');
-    expect(source).toContain("directly from product images");
+    expect(source).toContain("AI visual catalogue index");
     expect(source).not.toContain('data-testid="quotation-image-index-warning"');
     expect(source).not.toContain("legacy catalogue image");
     expect(source).toContain("Exact website image");
     expect(source).toContain("Exact image content");
+    expect(source).toContain("Visual candidate · verify");
   });
 });
