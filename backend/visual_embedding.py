@@ -10,7 +10,6 @@ import math
 import os
 from typing import Iterable
 
-import requests
 from PIL import Image, ImageOps
 
 MODEL = "gemini-embedding-2"
@@ -70,66 +69,48 @@ def embed_image(
     image_bytes: bytes,
     content_type: str,
     api_key: str,
-    *,
-    timeout: float = 30.0,
-    session=requests,
 ) -> list[float]:
+    """Embed one image with Gemini Embedding 2."""
     if not api_key:
         raise VisualEmbeddingError("Gemini visual-search API key is not configured.")
     if not image_bytes:
         raise VisualEmbeddingError("Image is empty.")
 
-    prepared, mime = prepare_image(image_bytes, content_type)
-    payload = {
-        "content": {
-            "parts": [{
-                "inline_data": {
-                    "mime_type": mime,
-                    "data": base64.b64encode(prepared).decode("ascii"),
-                }
-            }]
-        },
-        "output_dimensionality": DIMENSIONS,
-    }
-
     try:
-        response = session.post(
-            ENDPOINT,
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": api_key,
-            },
-            json=payload,
-            timeout=timeout,
+        from google import genai
+        from google.genai import types
+
+        prepared, mime = prepare_image(image_bytes, content_type)
+        client = genai.Client(api_key=api_key)
+        result = client.models.embed_content(
+            model=MODEL,
+            contents=[
+                types.Part.from_bytes(
+                    data=prepared,
+                    mime_type=mime,
+                )
+            ],
+            config=types.EmbedContentConfig(output_dimensionality=DIMENSIONS),
         )
-    except Exception as exc:
-        raise VisualEmbeddingError(f"Visual embedding request failed: {exc}") from exc
-
-    if response.status_code >= 400:
-        detail = ""
-        try:
-            detail = str((response.json().get("error") or {}).get("message") or "")
-        except Exception:
-            detail = ""
-        if response.status_code in {401, 403}:
-            raise VisualEmbeddingError(
-                "Gemini visual-search API key is invalid or does not have Gemini API access."
-            )
-        if response.status_code == 429:
-            raise VisualEmbeddingError("Gemini visual-search rate limit reached. Try again shortly.")
-        raise VisualEmbeddingError(detail or f"Gemini visual-search request failed ({response.status_code}).")
-
-    try:
-        body = response.json()
-        embeddings = body.get("embeddings") or []
-        values = (embeddings[0] or {}).get("values") if embeddings else None
-        if not values:
-            values = (body.get("embedding") or {}).get("values")
-        return normalize_vector(values or [])
+        embeddings = list(result.embeddings or [])
+        if not embeddings:
+            raise VisualEmbeddingError("Gemini returned no image embedding.")
+        return normalize_vector(embeddings[0].values or [])
     except VisualEmbeddingError:
         raise
     except Exception as exc:
-        raise VisualEmbeddingError("Gemini visual-search returned an invalid embedding.") from exc
+        message = str(exc)
+        lowered = message.lower()
+        if "api key" in lowered or "permission" in lowered or "unauth" in lowered:
+            raise VisualEmbeddingError(
+                "Gemini visual-search API key is invalid or does not have Gemini API access."
+            ) from exc
+        if "429" in lowered or "rate limit" in lowered or "quota" in lowered:
+            raise VisualEmbeddingError(
+                "Gemini visual-search rate limit reached. Try again shortly."
+            ) from exc
+        raise VisualEmbeddingError(f"Visual embedding request failed: {message}") from exc
+
 
 
 def embed_images_batch(
