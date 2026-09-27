@@ -123,6 +123,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [imageMatches, setImageMatches] = useState([]);
   const [imageMatchBusy, setImageMatchBusy] = useState(false);
   const imageSearchSequence = useRef(0);
+  const imageDetailJobId = useRef(null);
   const [imageRefining, setImageRefining] = useState(false);
   const [imageIndexProgress, setImageIndexProgress] = useState(null);
   const [imageMatchError, setImageMatchError] = useState("");
@@ -152,6 +153,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     }
     if (imageSearchPreview) URL.revokeObjectURL(imageSearchPreview);
     setImageSearchFile(file);
+    imageDetailJobId.current = null;
     setImageSearchPreview(URL.createObjectURL(file));
     setImageMatches([]);
     setImageMatchError("");
@@ -188,23 +190,22 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setImageMatches([]);
     try {
       let result;
-      for (let batch = 0; batch < 30; batch += 1) {
+      for (let batch = 0; batch < 60; batch += 1) {
         result = await api.matchQuotationProductByImage(selectedFile, 5, true);
         if (requestId !== imageSearchSequence.current) return;
         setImageIndexProgress({
           total: Number(result?.index_total || 0),
           remaining: Number(result?.index_remaining || 0),
         });
-        if ((result?.matches || []).length || !result?.index_remaining || !result?.indexed_this_request) break;
+        if ((result?.matches || []).length || !result?.index_remaining) break;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
       const matches = Array.isArray(result?.matches) ? result.matches : [];
       setImageMatches(matches);
       if (!matches.length) {
-        setImageMatchError(result?.index_remaining
-          ? "Catalogue images are still being prepared. Search again to continue."
-          : "No matching catalogue photograph found. Checking the design in more detail…");
+        setImageMatchError("No confirmed catalogue photo yet. Comparing the design in more detail…");
       }
-      if (result?.needs_verification) void refineImageMatches(selectedFile, requestId);
+      if (!matches.length) void refineImageMatches(selectedFile, requestId);
     } catch (error) {
       if (requestId !== imageSearchSequence.current) return;
       const message = errorMessage(error, "Could not search the catalogue by image");
@@ -219,7 +220,27 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     if (!selectedFile) return;
     setImageRefining(true);
     try {
-      const result = await api.matchQuotationProductByImage(selectedFile, 5);
+      if (!imageDetailJobId.current) {
+        const started = await api.startQuotationImageDetailJob(selectedFile);
+        if (requestId !== imageSearchSequence.current) return;
+        imageDetailJobId.current = started.job_id;
+      }
+      let job;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        job = await api.getQuotationImageDetailJob(imageDetailJobId.current);
+        if (requestId !== imageSearchSequence.current) return;
+        if (job.status !== "running") break;
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      if (job?.status === "running") {
+        setImageMatchError("Detailed comparison is still running. Select Compare designs in detail to check its result.");
+        return;
+      }
+      if (job?.status !== "done") {
+        imageDetailJobId.current = null;
+        throw new Error("Detailed comparison failed");
+      }
+      const result = job.response;
       if (requestId !== imageSearchSequence.current) return;
       const matches = Array.isArray(result?.matches) ? result.matches : [];
       if (matches.length) {

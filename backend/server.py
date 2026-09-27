@@ -7,7 +7,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote
 from typing import List, Literal, Optional
@@ -21,6 +21,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument, UpdateOne
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from starlette.middleware.cors import CORSMiddleware
+from starlette.datastructures import Headers
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -45,6 +46,41 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 APP_NAME = os.environ.get("APP_NAME", "catalog-app")
+
+_quotation_photo_index_task = None
+_quotation_design_tasks = set()
+
+
+async def _index_quotation_photo_rows(rows):
+    """Build missing photo signatures independently of an upload request."""
+    semaphore = asyncio.Semaphore(8)
+
+    async def build(row):
+        path = row["storage_path"]
+        try:
+            async with semaphore:
+                photo_bytes, _ = await asyncio.to_thread(get_object, path)
+                phash, histogram = await asyncio.to_thread(
+                    lambda: (phash_fingerprint(photo_bytes), color_histogram(photo_bytes))
+                )
+            await db.files.update_one(
+                {"storage_path": path},
+                {
+                    "$set": {"visual_phash": phash, "visual_histogram": histogram},
+                    "$unset": {"visual_index_failed_at": ""},
+                },
+            )
+        except Exception as exc:
+            logger.warning("quotation_photo_index_failed path=%s err=%s", path, exc)
+            try:
+                await db.files.update_one(
+                    {"storage_path": path},
+                    {"$set": {"visual_index_failed_at": now_iso()}},
+                )
+            except Exception:
+                logger.exception("quotation_photo_index_failure_record_failed path=%s", path)
+
+    await asyncio.gather(*(build(row) for row in rows))
 
 app = FastAPI(title="Lumière Catalog API")
 api = APIRouter(prefix="/api")
@@ -2342,12 +2378,20 @@ async def match_quotation_product_by_image(
         ]
         rows = await db.files.find(
             {"storage_path": {"$in": storage_paths}},
-            {"_id": 0, "storage_path": 1, "visual_phash": 1, "visual_histogram": 1},
+            {"_id": 0, "storage_path": 1, "visual_phash": 1, "visual_histogram": 1,
+             "visual_index_failed_at": 1},
         ).to_list(len(storage_paths))
+        retry_cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        skipped = sum(
+            1 for row in rows
+            if row.get("visual_index_failed_at", "") > retry_cutoff
+            and (not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512)
+        )
         missing = [
             row for row in rows
-            if not row.get("visual_phash")
-            or len(row.get("visual_histogram") or []) != 512
+            if (not row.get("visual_phash")
+                or len(row.get("visual_histogram") or []) != 512)
+            and row.get("visual_index_failed_at", "") <= retry_cutoff
         ]
         missing.sort(key=lambda row: (
             0 if f"/api/files/{row['storage_path']}" in main_urls else 1,
@@ -2358,30 +2402,15 @@ async def match_quotation_product_by_image(
                 default="",
             ),
         ))
-        semaphore = asyncio.Semaphore(10)
-
-        async def index_photo(row):
-            path = row["storage_path"]
-            try:
-                async with semaphore:
-                    photo_bytes, _ = await asyncio.to_thread(get_object, path)
-                    photo_phash, histogram = await asyncio.to_thread(
-                        lambda: (phash_fingerprint(photo_bytes), color_histogram(photo_bytes))
-                    )
-                await db.files.update_one(
-                    {"storage_path": path},
-                    {"$set": {"visual_phash": photo_phash, "visual_histogram": histogram}},
-                )
-                row["visual_phash"] = photo_phash
-                row["visual_histogram"] = histogram
-                return True
-            except Exception as exc:
-                logger.warning("quotation_photo_index_failed path=%s err=%s", path, exc)
-                return False
-
-        built = await asyncio.gather(*(index_photo(row) for row in missing[:40]))
-        indexed_now = sum(built)
-        remaining = len(missing) - indexed_now
+        global _quotation_photo_index_task
+        if missing and (
+            _quotation_photo_index_task is None
+            or _quotation_photo_index_task.done()
+        ):
+            _quotation_photo_index_task = asyncio.create_task(
+                _index_quotation_photo_rows(missing)
+            )
+        remaining = len(missing)
         photo_candidates = []
         for row in rows:
             if not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512:
@@ -2440,7 +2469,12 @@ async def match_quotation_product_by_image(
             "engine": "photo-signature",
             "index_total": len(rows),
             "index_remaining": remaining,
-            "indexed_this_request": indexed_now,
+            "indexed_this_request": 0,
+            "index_skipped": skipped,
+            "index_in_progress": bool(
+                remaining and _quotation_photo_index_task
+                and not _quotation_photo_index_task.done()
+            ),
             "needs_verification": not matches and remaining == 0,
         }
 
@@ -2594,6 +2628,75 @@ async def match_quotation_product_by_image(
         upsert=True,
     )
     return response
+
+
+@api.post("/admin/quotations/product-match-by-image-jobs")
+async def start_quotation_product_match_job(
+    file: UploadFile = File(...),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Run the slower design comparison outside the browser request timeout."""
+    mime = (file.content_type or "").split(";", 1)[0].strip().lower()
+    if mime not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(400, "Choose a JPG, PNG or WebP image.")
+    data = await file.read()
+    if not data or len(data) > 25 * 1024 * 1024:
+        raise HTTPException(400, "Choose an image smaller than 25MB.")
+    job_id = uuid.uuid4().hex
+    await db.quotation_image_search_jobs.insert_one({
+        "id": job_id,
+        "admin_id": admin.user_id,
+        "status": "running",
+        "created_at": now_iso(),
+    })
+
+    async def run():
+        try:
+            upload = UploadFile(
+                file=io.BytesIO(data), filename=file.filename,
+                headers=Headers({"content-type": mime}),
+            )
+            result = await match_quotation_product_by_image(
+                file=upload, limit=5, quick=False, admin=admin
+            )
+            await db.quotation_image_search_jobs.update_one(
+                {"id": job_id},
+                {"$set": {"status": "done", "response": result, "updated_at": now_iso()}},
+            )
+        except Exception:
+            logger.exception("quotation_image_design_comparison_failed job=%s", job_id)
+            await db.quotation_image_search_jobs.update_one(
+                {"id": job_id},
+                {"$set": {"status": "failed", "updated_at": now_iso()}},
+            )
+
+    task = asyncio.create_task(run())
+    _quotation_design_tasks.add(task)
+    task.add_done_callback(_quotation_design_tasks.discard)
+    return {"job_id": job_id, "status": "running"}
+
+
+@api.get("/admin/quotations/product-match-by-image-jobs/{job_id}")
+async def get_quotation_product_match_job(
+    job_id: str, admin: _AdminUser = Depends(require_admin)
+):
+    if not re.fullmatch(r"[0-9a-f]{32}", job_id):
+        raise HTTPException(404, "Search not found")
+    job = await db.quotation_image_search_jobs.find_one(
+        {"id": job_id, "admin_id": admin.user_id},
+        {"_id": 0, "status": 1, "response": 1, "created_at": 1},
+    )
+    if not job:
+        raise HTTPException(404, "Search not found")
+    if job["status"] == "running" and (
+        datetime.now(timezone.utc) - datetime.fromisoformat(job["created_at"])
+    ).total_seconds() > 600:
+        await db.quotation_image_search_jobs.update_one(
+            {"id": job_id, "status": "running"},
+            {"$set": {"status": "failed", "updated_at": now_iso()}},
+        )
+        job["status"] = "failed"
+    return {key: job[key] for key in ("status", "response") if key in job}
 
 
 @api.get("/admin/inquiries/{inquiry_id}/quotations")
