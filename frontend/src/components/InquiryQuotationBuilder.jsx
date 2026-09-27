@@ -123,6 +123,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [imageMatches, setImageMatches] = useState([]);
   const [imageMatchBusy, setImageMatchBusy] = useState(false);
   const [imageMatchError, setImageMatchError] = useState("");
+  const [imageIndexProgress, setImageIndexProgress] = useState(null);
   const [aiBusyLineId, setAiBusyLineId] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -150,6 +151,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setImageSearchPreview(URL.createObjectURL(file));
     setImageMatches([]);
     setImageMatchError("");
+    setImageIndexProgress(null);
   };
 
   const findImageMatches = async () => {
@@ -159,16 +161,30 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     }
     setImageMatchBusy(true);
     setImageMatchError("");
+    setImageMatches([]);
+    setImageIndexProgress(null);
     try {
       let result = null;
-      for (let batch = 0; batch < 15; batch += 1) {
+      for (let batch = 0; batch < 80; batch += 1) {
         result = await api.matchQuotationProductByImage(imageSearchFile, 5);
-        if (!Number(result?.index_remaining || 0)) break;
+        const total = Number(result?.index_total || 0);
+        const remaining = Number(result?.index_remaining || 0);
+        setImageIndexProgress(total ? { total, remaining } : null);
+        if (result?.index_ready) break;
+        if (Number(result?.index_failures || 0) > 0) {
+          throw new Error("Some catalogue images could not be indexed. Check Image Protection / Media Library before retrying.");
+        }
       }
+
+      if (!result?.index_ready) {
+        setImageMatchError("Catalogue image index is still preparing. Run the search again to continue.");
+        return;
+      }
+
       const matches = Array.isArray(result?.matches) ? result.matches : [];
       setImageMatches(matches);
       if (!matches.length) {
-        setImageMatchError("No catalogue candidate was found. Try another photo or search by name / SKU.");
+        setImageMatchError("No reliable match found. The uploaded image may be a different angle / room photo; search by name or SKU instead.");
       }
     } catch (error) {
       const message = errorMessage(error, "Could not search the catalogue by image");
@@ -603,6 +619,12 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                     </div>
                   </div>
 
+                  {imageIndexProgress && imageMatchBusy && (
+                    <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-index-progress">
+                      Preparing complete catalogue image index · {Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
+                    </div>
+                  )}
+
                   {imageMatchError && (
                     <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-search-empty">
                       {imageMatchError}
@@ -621,13 +643,13 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                             <div className="truncate text-sm text-white/80">{match.name}</div>
                             <div className="mt-1 text-[10px] uppercase tracking-[0.13em] text-[#BF9972]">{match.sku || "No SKU"} · {match.category || "Catalogue product"}</div>
                             <div className="mt-1 text-[10px] text-white/40">
-                              {match.match_label === "very_likely"
-                                ? "Very likely match"
-                                : match.match_label === "possible"
-                                  ? "Possible match"
-                                  : match.match_label === "weak"
-                                    ? "Weak match"
-                                    : "Closest visual candidate · verify manually"}
+                              {match.match_label === "exact_file"
+                                ? "Exact website image"
+                                : match.match_label === "exact_image"
+                                  ? "Exact image content"
+                                  : match.match_label === "very_likely"
+                                    ? "Very likely match"
+                                    : "Possible near-copy"}
                               {" · "}{match.visual_similarity}% visual similarity
                             </div>
                           </div>
