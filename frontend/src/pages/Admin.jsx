@@ -1973,6 +1973,34 @@ function WatermarkAdmin({ settings, onSave }) {
     }
   };
 
+  const repairFailedImages = async () => {
+    const count = Number(protectionStatus?.health?.failed_in_use || 0);
+    if (!count) {
+      toast.success("No failed in-use images need repair.");
+      return;
+    }
+    if (!window.confirm(
+      `Repair ${count} failed in-use image${count === 1 ? "" : "s"} now? The repair will try the private original first, then fall back to the currently published image if needed.`
+    )) return;
+    setBusy(true);
+    try {
+      const j = await api.adminRepairFailedImages(Math.max(1, Math.min(25, count)));
+      if (Number(j.unrecoverable || 0) > 0) {
+        toast.error(
+          `Repaired ${j.repaired || 0}; ${j.unrecoverable} still need a replacement source image.`
+        );
+      } else {
+        toast.success(`Repaired ${j.repaired || 0} failed in-use images.`);
+      }
+      await refreshProtectionStatus();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e?.message || "Failed-image repair did not complete.");
+    } finally {
+      setBusy(false);
+      await refreshProtectionStatus();
+    }
+  };
+
   const reprocessVisible = async () => {
     if (!visibleWatermarkEnabled) {
       toast.error("Enable and save Visible Watermark first.");
@@ -2143,6 +2171,15 @@ function WatermarkAdmin({ settings, onSave }) {
             data-testid="protect-existing-images"
           >
             {busy ? "Protecting…" : "Protect existing images invisibly"}
+          </button>
+          <button
+            type="button"
+            onClick={repairFailedImages}
+            disabled={busy || !Number(protectionStatus?.health?.failed_in_use || 0)}
+            className="border border-red-300/35 text-red-200 hover:border-red-200 px-5 py-3 uppercase text-xs tracking-[0.22em] disabled:opacity-40"
+            data-testid="repair-failed-image-protection"
+          >
+            Repair failed in-use images
           </button>
           <button
             type="button"
