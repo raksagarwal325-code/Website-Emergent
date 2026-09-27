@@ -1753,30 +1753,41 @@ async def match_quotation_product_by_image(
     if not candidate_products:
         candidate_products = products
 
-    candidate_items = []
+    image_refs = []
     skipped_images = 0
-    searched_images = 0
     for product in candidate_products:
         for image_index, raw_url in enumerate(product.get("images") or []):
             url = canonical_media_url(raw_url)
             if not url or not url.startswith("/api/files/"):
                 skipped_images += 1
                 continue
-            storage_path = unquote(url.removeprefix("/api/files/"))
-            try:
+            image_refs.append((product, image_index, url))
+
+    semaphore = asyncio.Semaphore(12)
+
+    async def _load_candidate(ref):
+        product, image_index, url = ref
+        storage_path = unquote(url.removeprefix("/api/files/"))
+        try:
+            async with semaphore:
                 image_bytes, stored_ct = await asyncio.to_thread(get_object, storage_path)
-                if not image_bytes or not str(stored_ct or "").lower().startswith("image/"):
-                    raise ValueError("Unreadable catalogue image")
-            except Exception:
-                skipped_images += 1
-                continue
-            candidate_items.append({
+            if not image_bytes or not str(stored_ct or "").lower().startswith("image/"):
+                raise ValueError("Unreadable catalogue image")
+            return {
                 "product": product,
                 "image_index": image_index,
                 "url": url,
                 "image_bytes": image_bytes,
-            })
-            searched_images += 1
+            }
+        except Exception:
+            return None
+
+    loaded_candidates = await asyncio.gather(
+        *[_load_candidate(ref) for ref in image_refs]
+    )
+    candidate_items = [item for item in loaded_candidates if item]
+    skipped_images += len(loaded_candidates) - len(candidate_items)
+    searched_images = len(candidate_items)
 
     if not candidate_items:
         return {
