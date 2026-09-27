@@ -37,7 +37,7 @@ def prepare_pil(image_bytes: bytes, content_type: str) -> Image.Image:
     try:
         with Image.open(BytesIO(image_bytes)) as opened:
             image = ImageOps.exif_transpose(opened).convert("RGB")
-            image.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
+            image.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
             return image.copy()
     except Exception as exc:
         raise VisualEmbeddingError("Could not decode image for visual search.") from exc
