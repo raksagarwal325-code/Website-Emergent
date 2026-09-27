@@ -9,6 +9,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote
 from typing import List, Literal, Optional
 
 import mailer
@@ -1623,11 +1624,11 @@ async def match_quotation_product_by_image(
     limit: int = Query(5, ge=1, le=10),
     admin: _AdminUser = Depends(require_admin),
 ):
-    """Find catalogue products from a client image using a COMPLETE image index.
+    """Find published catalogue products from the actual product image URLs.
 
-    Exact website-file and normalized-pixel matches are ranked first. pHash is
-    only used as a conservative fallback after every published catalogue image
-    has been indexed. The uploaded client image is analysed in-memory only.
+    products.images is the source of truth. The quotation-search index is
+    independent of the legacy db.files/media registry, so an old/broken media
+    row cannot make a product invisible to search.
     """
     content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
     if content_type not in {"image/jpeg", "image/png", "image/webp"}:
@@ -1640,7 +1641,7 @@ async def match_quotation_product_by_image(
         raise HTTPException(status_code=413, detail="Image too large (25MB max).")
 
     try:
-        query_public_sha = ownership_fingerprint(data)
+        query_sha = ownership_fingerprint(data)
         query_pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, data)
         query_phashes = await asyncio.to_thread(phash_fingerprint_variants, data)
     except Exception:
@@ -1671,185 +1672,187 @@ async def match_quotation_product_by_image(
             if url:
                 products_by_url.setdefault(url, []).append((product, image_index))
 
-    file_rows = await db.files.find(
-        {
-            "kind": {"$ne": "video"},
-            "content_type": {"$regex": "^image/", "$options": "i"},
-        },
-        {
-            "_id": 0,
-            "id": 1,
-            "storage_path": 1,
-            "original_path": 1,
-            "quotation_public_sha256": 1,
-            "quotation_original_sha256": 1,
-            "quotation_pixel_hash": 1,
-            "quotation_original_pixel_hash": 1,
-            "quotation_phash": 1,
-            "quotation_original_phash": 1,
-            "quotation_index_failed_at": 1,
-            "quotation_index_error": 1,
-        },
-    ).to_list(5000)
+    if not products_by_url:
+        return {
+            "matches": [],
+            "searched_images": 0,
+            "index_ready": True,
+            "index_total": 0,
+            "index_remaining": 0,
+            "indexed_this_request": 0,
+            "index_skipped": 0,
+        }
 
-    catalogue_rows = []
-    for row in file_rows:
-        public_url = canonical_media_url(public_url_for_file(row))
-        if public_url in products_by_url:
-            catalogue_rows.append((row, public_url))
+    index_urls = sorted(products_by_url.keys())
+    existing_rows = await db.quotation_image_index.find(
+        {"url": {"$in": index_urls}},
+        {"_id": 0},
+    ).to_list(len(index_urls))
+    index_by_url = {row.get("url"): row for row in existing_rows if row.get("url")}
 
-    missing = [
-        (row, public_url)
-        for row, public_url in catalogue_rows
-        if (
-            not row.get("quotation_index_failed_at")
-            and (
-                not row.get("quotation_public_sha256")
-                or not row.get("quotation_original_sha256")
-                or not row.get("quotation_pixel_hash")
-                or not row.get("quotation_original_pixel_hash")
-                or not row.get("quotation_phash")
-                or not row.get("quotation_original_phash")
-            )
+    missing_urls = [
+        url
+        for url in index_urls
+        if not (
+            (index_by_url.get(url) or {}).get("public_sha256")
+            and (index_by_url.get(url) or {}).get("pixel_hash")
+            and (index_by_url.get(url) or {}).get("phash")
         )
+        and not (index_by_url.get(url) or {}).get("skipped_at")
     ]
 
     indexed_this_request = 0
-    index_failures = 0
-    # Keep each request small enough for Emergent/Cloudflare. The frontend
-    # resumes until this complete catalogue index reaches zero remaining.
-    for row, _public_url in missing[:50]:
-        public_path = row.get("storage_path")
-        original_path = row.get("original_path") or public_path
-        if not public_path or not original_path:
-            index_failures += 1
-            await db.files.update_one(
-                {"id": row.get("id")},
-                {"$set": {
-                    "quotation_index_failed_at": now_iso(),
-                    "quotation_index_error": "Missing public or original storage path",
-                }},
+    skipped_this_request = 0
+
+    for url in missing_urls[:50]:
+        row = index_by_url.get(url) or {"url": url}
+        storage_path = None
+        canonical_url = canonical_media_url(url)
+        if canonical_url.startswith("/api/files/"):
+            storage_path = unquote(canonical_url.removeprefix("/api/files/"))
+
+        if not storage_path:
+            skipped = {
+                "url": url,
+                "skipped_at": now_iso(),
+                "skip_reason": "Product image is not an application-owned /api/files asset",
+                "updated_at": now_iso(),
+            }
+            await db.quotation_image_index.update_one(
+                {"url": url}, {"$set": skipped}, upsert=True
             )
-            row["quotation_index_failed_at"] = now_iso()
+            index_by_url[url] = skipped
+            skipped_this_request += 1
             continue
+
         try:
-            public_bytes, _stored_ct = await asyncio.to_thread(get_object, public_path)
-            original_bytes = public_bytes
-            if original_path != public_path:
-                original_bytes, _original_ct = await asyncio.to_thread(get_object, original_path)
-            update = {
-                "quotation_public_sha256": ownership_fingerprint(public_bytes),
-                "quotation_original_sha256": ownership_fingerprint(original_bytes),
-                "quotation_pixel_hash": await asyncio.to_thread(
+            public_bytes, stored_ct = await asyncio.to_thread(get_object, storage_path)
+            if not public_bytes or not str(stored_ct or "").lower().startswith("image/"):
+                raise ValueError("Stored product asset is not a readable image")
+
+            index_doc = {
+                "url": url,
+                "storage_path": storage_path,
+                "public_sha256": ownership_fingerprint(public_bytes),
+                "pixel_hash": await asyncio.to_thread(
                     normalized_pixel_fingerprint, public_bytes
                 ),
-                "quotation_original_pixel_hash": await asyncio.to_thread(
-                    normalized_pixel_fingerprint, original_bytes
-                ),
-                "quotation_phash": await asyncio.to_thread(
-                    phash_fingerprint, public_bytes
-                ),
-                "quotation_original_phash": await asyncio.to_thread(
-                    phash_fingerprint, original_bytes
-                ),
+                "phash": await asyncio.to_thread(phash_fingerprint, public_bytes),
+                "updated_at": now_iso(),
             }
-            await db.files.update_one(
-                {"id": row.get("id")},
-                {
-                    "$set": update,
-                    "$unset": {
-                        "quotation_index_failed_at": "",
-                        "quotation_index_error": "",
-                    },
-                },
+
+            # If a private original is available, index it as a second exact
+            # identity source. This is optional; the product URL itself remains
+            # sufficient for the catalogue index.
+            file_row = await db.files.find_one(
+                {"storage_path": storage_path},
+                {"_id": 0, "original_path": 1},
             )
-            row.update(update)
-            row.pop("quotation_index_failed_at", None)
-            row.pop("quotation_index_error", None)
+            original_path = (file_row or {}).get("original_path")
+            if original_path:
+                try:
+                    original_bytes, _original_ct = await asyncio.to_thread(
+                        get_object, original_path
+                    )
+                    index_doc.update({
+                        "original_sha256": ownership_fingerprint(original_bytes),
+                        "original_pixel_hash": await asyncio.to_thread(
+                            normalized_pixel_fingerprint, original_bytes
+                        ),
+                        "original_phash": await asyncio.to_thread(
+                            phash_fingerprint, original_bytes
+                        ),
+                    })
+                except Exception as exc:
+                    logger.warning(
+                        "quotation_original_index_optional_failed url=%s path=%s err=%s",
+                        url, original_path, exc,
+                    )
+
+            await db.quotation_image_index.update_one(
+                {"url": url},
+                {
+                    "$set": index_doc,
+                    "$unset": {"skipped_at": "", "skip_reason": ""},
+                },
+                upsert=True,
+            )
+            index_by_url[url] = index_doc
             indexed_this_request += 1
         except Exception as exc:
-            index_failures += 1
-            await db.files.update_one(
-                {"id": row.get("id")},
-                {"$set": {
-                    "quotation_index_failed_at": now_iso(),
-                    "quotation_index_error": str(exc)[:500],
-                }},
+            skipped = {
+                "url": url,
+                "storage_path": storage_path,
+                "skipped_at": now_iso(),
+                "skip_reason": str(exc)[:500],
+                "updated_at": now_iso(),
+            }
+            await db.quotation_image_index.update_one(
+                {"url": url}, {"$set": skipped}, upsert=True
             )
-            row["quotation_index_failed_at"] = now_iso()
-            row["quotation_index_error"] = str(exc)[:500]
+            index_by_url[url] = skipped
+            skipped_this_request += 1
             logger.warning(
-                "quotation_complete_index_failed id=%s path=%s err=%s",
-                row.get("id"), public_path, exc,
+                "quotation_product_image_index_failed url=%s path=%s err=%s",
+                url, storage_path, exc,
             )
 
-    # Recompute the remaining healthy/unfailed indexing work. Failed legacy
-    # images are quarantined so they cannot block quotation search forever.
-    index_remaining = sum(
-        1
-        for row, _public_url in catalogue_rows
-        if not row.get("quotation_index_failed_at")
-        and (
-            not row.get("quotation_public_sha256")
-            or not row.get("quotation_original_sha256")
-            or not row.get("quotation_pixel_hash")
-            or not row.get("quotation_original_pixel_hash")
-            or not row.get("quotation_phash")
-            or not row.get("quotation_original_phash")
-        )
-    )
-    failed_total = sum(
-        1 for row, _public_url in catalogue_rows if row.get("quotation_index_failed_at")
-    )
-    index_ready = index_remaining == 0
+    # Refresh counts after this resumable batch.
+    indexed_count = 0
+    skipped_count = 0
+    remaining = 0
+    for url in index_urls:
+        row = index_by_url.get(url) or {}
+        if row.get("public_sha256") and row.get("pixel_hash") and row.get("phash"):
+            indexed_count += 1
+        elif row.get("skipped_at"):
+            skipped_count += 1
+        else:
+            remaining += 1
 
-    # Only block while healthy catalogue images are still waiting to be
-    # indexed. Quarantined legacy failures are reported but do not prevent
-    # matching against the rest of the complete healthy catalogue.
-    if not index_ready:
+    if remaining > 0:
         return {
             "matches": [],
             "searched_images": 0,
             "index_ready": False,
-            "index_total": len(catalogue_rows),
-            "index_remaining": index_remaining,
+            "index_total": len(index_urls),
+            "index_indexed": indexed_count,
+            "index_remaining": remaining,
             "indexed_this_request": indexed_this_request,
-            "index_failures": failed_total,
+            "index_skipped": skipped_count,
         }
 
     best_by_product = {}
     searched_images = 0
-    for row, public_url in catalogue_rows:
-        product_links = products_by_url.get(public_url) or []
-        public_sha = str(row.get("quotation_public_sha256") or "")
-        original_sha = str(row.get("quotation_original_sha256") or "")
-        pixel_hash = str(row.get("quotation_pixel_hash") or "")
-        original_pixel_hash = str(row.get("quotation_original_pixel_hash") or "")
+
+    for url in index_urls:
+        row = index_by_url.get(url) or {}
+        if not (row.get("public_sha256") and row.get("pixel_hash") and row.get("phash")):
+            continue
+
+        searched_images += 1
+        exact_file = query_sha in {
+            str(row.get("public_sha256") or ""),
+            str(row.get("original_sha256") or ""),
+        }
+        exact_pixels = query_pixel_hash in {
+            str(row.get("pixel_hash") or ""),
+            str(row.get("original_pixel_hash") or ""),
+        }
+
         candidate_phashes = [
-            str(row.get("quotation_phash") or ""),
-            str(row.get("quotation_original_phash") or ""),
+            str(row.get("phash") or ""),
+            str(row.get("original_phash") or ""),
         ]
         candidate_phashes = [value for value in candidate_phashes if value]
-        if not candidate_phashes:
-            continue
-        searched_images += 1
-
-        exact_file = query_public_sha in {public_sha, original_sha}
-        exact_pixels = query_pixel_hash in {pixel_hash, original_pixel_hash}
-
         try:
             phash_distance = min(
-                perceptual_distance(query_variant, candidate_phash)
+                perceptual_distance(query_variant, candidate_hash)
                 for query_variant in query_phashes
-                for candidate_phash in candidate_phashes
+                for candidate_hash in candidate_phashes
             )
         except Exception:
             phash_distance = 64
-
-        # pHash is intentionally strict here. If it is not a credible near-copy,
-        # return no result rather than unrelated products.
-        if not exact_file and not exact_pixels and phash_distance > 10:
-            continue
 
         if exact_file:
             match_rank = 0
@@ -1859,20 +1862,28 @@ async def match_quotation_product_by_image(
             match_rank = 1
             match_label = "exact_image"
             visual_similarity = 99.9
-        else:
+        elif phash_distance <= 6:
             match_rank = 2
-            match_label = "very_likely" if phash_distance <= 6 else "possible"
-            visual_similarity = round(max(0.0, 1.0 - (phash_distance / 64.0)) * 100.0, 1)
+            match_label = "very_likely"
+            visual_similarity = round((1.0 - phash_distance / 64.0) * 100.0, 1)
+        elif phash_distance <= 10:
+            match_rank = 3
+            match_label = "possible"
+            visual_similarity = round((1.0 - phash_distance / 64.0) * 100.0, 1)
+        else:
+            # Never display an unrelated nearest neighbour merely because it
+            # is mathematically closest among bad candidates.
+            continue
 
-        for product, image_index in product_links:
+        for product, image_index in products_by_url.get(url, []):
             product_id = product.get("id")
-            candidate_key = (match_rank, phash_distance)
+            sort_key = (match_rank, phash_distance)
             previous = best_by_product.get(product_id)
-            if previous is not None and previous["_sort_key"] <= candidate_key:
+            if previous is not None and previous["_sort_key"] <= sort_key:
                 continue
             images = product.get("images") or []
             best_by_product[product_id] = {
-                "_sort_key": candidate_key,
+                "_sort_key": sort_key,
                 "product_id": product_id,
                 "sku": product.get("sku") or "",
                 "name": product.get("name") or "",
@@ -1881,7 +1892,7 @@ async def match_quotation_product_by_image(
                 "price_display": product.get("price_display") or (
                     "fixed" if product.get("fixed_price") else "starting_from"
                 ),
-                "image_url": images[image_index] if image_index < len(images) else public_url,
+                "image_url": images[image_index] if image_index < len(images) else url,
                 "phash_distance": phash_distance,
                 "visual_similarity": visual_similarity,
                 "match_label": match_label,
@@ -1891,20 +1902,22 @@ async def match_quotation_product_by_image(
         best_by_product.values(),
         key=lambda item: (item["_sort_key"], item["sku"], item["name"]),
     )
+
     matches = []
     for item in ranked[:limit]:
-        item = dict(item)
-        item.pop("_sort_key", None)
-        matches.append(item)
+        clean = dict(item)
+        clean.pop("_sort_key", None)
+        matches.append(clean)
 
     return {
         "matches": matches,
         "searched_images": searched_images,
         "index_ready": True,
-        "index_total": len(catalogue_rows),
+        "index_total": len(index_urls),
+        "index_indexed": indexed_count,
         "index_remaining": 0,
         "indexed_this_request": indexed_this_request,
-        "index_failures": failed_total,
+        "index_skipped": skipped_count,
     }
 
 

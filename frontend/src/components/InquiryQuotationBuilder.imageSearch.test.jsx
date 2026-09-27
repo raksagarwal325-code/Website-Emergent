@@ -31,8 +31,9 @@ describe("Quotation search by image", () => {
     expect(source).toContain("index_ready");
     expect(source).toContain("for (let batch = 0; batch < 80; batch += 1)");
     expect(source).toContain('data-testid="quotation-image-index-progress"');
-    expect(source).toContain('data-testid="quotation-image-index-warning"');
-    expect(source).toContain("legacy catalogue image");
+    expect(source).toContain("directly from product images");
+    expect(source).not.toContain('data-testid="quotation-image-index-warning"');
+    expect(source).not.toContain("legacy catalogue image");
     expect(source).toContain("Exact website image");
     expect(source).toContain("Exact image content");
   });
