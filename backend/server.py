@@ -39,7 +39,7 @@ from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
 from collection_index import build_collection_detail, build_collection_index  # noqa: E402
 from quotation import QuotationAIAssistRequest, QuotationAIDraft, QuotationCreate, build_quotation, format_quotation_number  # noqa: E402
-from visual_embedding import MODEL as VISUAL_EMBEDDING_MODEL, VisualEmbeddingError, cosine_similarity, embed_query_variants, embed_images_batch  # noqa: E402
+from quotation_vision_search import SHEET_CAPACITY, VisionSearchError, build_contact_sheet, classify_query, match_contact_sheet, rerank_finalists  # noqa: E402
 
 # --- Setup ---
 mongo_url = os.environ["MONGO_URL"]
@@ -1625,12 +1625,12 @@ async def match_quotation_product_by_image(
     limit: int = Query(5, ge=1, le=10),
     admin: _AdminUser = Depends(require_admin),
 ):
-    """Search the published catalogue with a local DINOv2 visual model.
+    """Visually scan the published catalogue using the site's existing vision AI.
 
-    No third-party inference API or API key is required. Exact file/pixel
-    matches remain zero-ambiguity shortcuts; otherwise the uploaded client
-    image and a couple of center crops are compared with persistent local
-    embeddings of every published catalogue image.
+    No new API key or local ML dependency is required. Exact file/pixel matches
+    are used when available; otherwise the backend builds labelled contact
+    sheets from published product images and asks the already-configured
+    product-vision model to identify the same fixture/design.
     """
     content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
     if content_type not in {"image/jpeg", "image/png", "image/webp"}:
@@ -1645,11 +1645,6 @@ async def match_quotation_product_by_image(
     try:
         query_sha = ownership_fingerprint(data)
         query_pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, data)
-        query_embeddings = await asyncio.to_thread(
-            embed_query_variants, data, content_type
-        )
-    except VisualEmbeddingError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read that image. Try a JPG, PNG or WebP file.")
 
@@ -1688,206 +1683,28 @@ async def match_quotation_product_by_image(
             "index_indexed": 0,
             "indexed_this_request": 0,
             "index_skipped": 0,
-            "engine": VISUAL_EMBEDDING_MODEL,
+            "engine": "existing-site-vision",
         }
 
+    # Deterministic exact-image shortcut against the persistent catalogue index.
     index_urls = sorted(products_by_url.keys())
-    existing_rows = await db.quotation_image_index.find(
+    index_rows = await db.quotation_image_index.find(
         {"url": {"$in": index_urls}},
-        {"_id": 0},
+        {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1},
     ).to_list(len(index_urls))
-    index_by_url = {row.get("url"): row for row in existing_rows if row.get("url")}
+    exact_urls = []
+    for row in index_rows:
+        if str(row.get("public_sha256") or "") == query_sha or str(row.get("pixel_hash") or "") == query_pixel_hash:
+            exact_urls.append(row.get("url"))
 
-    def _embedding_ready(row):
-        return (
-            row
-            and row.get("visual_embedding")
-            and row.get("visual_embedding_model") == VISUAL_EMBEDDING_MODEL
-        )
-
-    missing_urls = [
-        url
-        for url in index_urls
-        if not _embedding_ready(index_by_url.get(url))
-        and not (index_by_url.get(url) or {}).get("visual_skipped_at")
-    ]
-
-    indexed_this_request = 0
-    skipped_this_request = 0
-
-    # Keep each request bounded on CPU. Progress is persistent, so another
-    # request resumes exactly where the previous one stopped.
-    batch_urls = missing_urls[:24]
-    prepared = []
-    for url in batch_urls:
-        canonical_url = canonical_media_url(url)
-        storage_path = (
-            unquote(canonical_url.removeprefix("/api/files/"))
-            if canonical_url.startswith("/api/files/")
-            else None
-        )
-        if not storage_path:
-            await db.quotation_image_index.update_one(
-                {"url": url},
-                {"$set": {
-                    "url": url,
-                    "visual_skip_reason": "Product image is not an application-owned /api/files asset",
-                    "visual_skipped_at": now_iso(),
-                    "updated_at": now_iso(),
-                }},
-                upsert=True,
-            )
-            index_by_url[url] = {
-                **(index_by_url.get(url) or {}),
-                "url": url,
-                "visual_skip_reason": "Product image is not an application-owned /api/files asset",
-                "visual_skipped_at": now_iso(),
-            }
-            skipped_this_request += 1
-            continue
-
-        try:
-            image_bytes, stored_ct = await asyncio.to_thread(get_object, storage_path)
-            if not image_bytes or not str(stored_ct or "").lower().startswith("image/"):
-                raise ValueError("Stored product asset is not a readable image")
-            prepared.append((url, storage_path, image_bytes, stored_ct))
-        except Exception as exc:
-            await db.quotation_image_index.update_one(
-                {"url": url},
-                {"$set": {
-                    "url": url,
-                    "storage_path": storage_path,
-                    "visual_skip_reason": str(exc)[:500],
-                    "visual_skipped_at": now_iso(),
-                    "updated_at": now_iso(),
-                }},
-                upsert=True,
-            )
-            index_by_url[url] = {
-                **(index_by_url.get(url) or {}),
-                "url": url,
-                "storage_path": storage_path,
-                "visual_skip_reason": str(exc)[:500],
-                "visual_skipped_at": now_iso(),
-            }
-            skipped_this_request += 1
-
-    # DINOv2-small is intentionally batched conservatively for CPU/RAM use.
-    for offset in range(0, len(prepared), 6):
-        group = prepared[offset:offset + 6]
-        try:
-            vectors = await asyncio.to_thread(
-                embed_images_batch,
-                [(image_bytes, stored_ct) for _, _, image_bytes, stored_ct in group],
-            )
-        except VisualEmbeddingError as exc:
-            raise HTTPException(status_code=503, detail=str(exc))
-
-        for (url, storage_path, image_bytes, _stored_ct), vector in zip(group, vectors):
-            index_doc = {
-                "url": url,
-                "storage_path": storage_path,
-                "visual_embedding": vector,
-                "visual_embedding_model": VISUAL_EMBEDDING_MODEL,
-                "visual_embedding_dim": len(vector),
-                "public_sha256": ownership_fingerprint(image_bytes),
-                "pixel_hash": await asyncio.to_thread(
-                    normalized_pixel_fingerprint, image_bytes
-                ),
-                "updated_at": now_iso(),
-            }
-            await db.quotation_image_index.update_one(
-                {"url": url},
-                {
-                    "$set": index_doc,
-                    "$unset": {
-                        "visual_skip_reason": "",
-                        "visual_skipped_at": "",
-                    },
-                },
-                upsert=True,
-            )
-            index_by_url[url] = {
-                **(index_by_url.get(url) or {}),
-                **index_doc,
-            }
-            indexed_this_request += 1
-
-    indexed_count = 0
-    skipped_count = 0
-    remaining = 0
-    for url in index_urls:
-        row = index_by_url.get(url) or {}
-        if _embedding_ready(row):
-            indexed_count += 1
-        elif row.get("visual_skipped_at"):
-            skipped_count += 1
-        else:
-            remaining += 1
-
-    if remaining > 0:
-        return {
-            "matches": [],
-            "searched_images": 0,
-            "index_ready": False,
-            "index_total": len(index_urls),
-            "index_indexed": indexed_count,
-            "index_remaining": remaining,
-            "indexed_this_request": indexed_this_request,
-            "index_skipped": skipped_count,
-            "engine": VISUAL_EMBEDDING_MODEL,
-        }
-
-    best_by_product = {}
-    searched_images = 0
-
-    for url in index_urls:
-        row = index_by_url.get(url) or {}
-        vector = row.get("visual_embedding")
-        if not vector:
-            continue
-        searched_images += 1
-
-        exact_file = str(row.get("public_sha256") or "") == query_sha
-        exact_pixels = str(row.get("pixel_hash") or "") == query_pixel_hash
-        try:
-            similarity = max(
-                float(cosine_similarity(query_embedding, vector))
-                for query_embedding in query_embeddings
-            )
-        except Exception:
-            continue
-
-        if exact_file:
-            match_rank = 0
-            match_label = "exact_file"
-            visual_similarity = 100.0
-        elif exact_pixels:
-            match_rank = 1
-            match_label = "exact_image"
-            visual_similarity = 99.9
-        else:
-            # DINOv2 is used for instance-level visual similarity. Keep a
-            # moderate floor to avoid obvious unrelated catalogue noise.
-            if similarity < 0.42:
-                continue
-            match_rank = 2
-            match_label = (
-                "very_likely" if similarity >= 0.78
-                else "possible" if similarity >= 0.60
-                else "visual_candidate"
-            )
-            visual_similarity = round(max(0.0, min(1.0, similarity)) * 100.0, 1)
-
+    exact_best = {}
+    for url in exact_urls:
         for product, image_index in products_by_url.get(url, []):
             product_id = product.get("id")
-            sort_key = (match_rank, -visual_similarity)
-            previous = best_by_product.get(product_id)
-            if previous is not None and previous["_sort_key"] <= sort_key:
+            if product_id in exact_best:
                 continue
             images = product.get("images") or []
-            best_by_product[product_id] = {
-                "_sort_key": sort_key,
+            exact_best[product_id] = {
                 "product_id": product_id,
                 "sku": product.get("sku") or "",
                 "name": product.get("name") or "",
@@ -1897,32 +1714,184 @@ async def match_quotation_product_by_image(
                     "fixed" if product.get("fixed_price") else "starting_from"
                 ),
                 "image_url": images[image_index] if image_index < len(images) else url,
-                "visual_similarity": visual_similarity,
-                "match_label": match_label,
-                "engine": VISUAL_EMBEDDING_MODEL,
+                "visual_similarity": 100.0,
+                "match_label": "exact_image",
+                "engine": "exact-hash",
             }
+    if exact_best:
+        return {
+            "matches": list(exact_best.values())[:limit],
+            "searched_images": len(exact_urls),
+            "index_ready": True,
+            "index_total": len(index_urls),
+            "index_indexed": len(index_rows),
+            "index_remaining": 0,
+            "indexed_this_request": 0,
+            "index_skipped": 0,
+            "engine": "exact-hash",
+        }
 
-    ranked = sorted(
-        best_by_product.values(),
-        key=lambda item: (item["_sort_key"], item["sku"], item["name"]),
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="The site's existing AI vision integration is not configured.",
+        )
+
+    try:
+        categories = await classify_query(api_key, data)
+    except VisionSearchError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    # Prefer the visually inferred product types, but never end with an empty
+    # search pool if the classifier is uncertain.
+    category_set = set(categories)
+    candidate_products = [
+        product for product in products
+        if not category_set or product.get("category") in category_set
+    ]
+    if not candidate_products:
+        candidate_products = products
+
+    image_refs = []
+    skipped_images = 0
+    for product in candidate_products:
+        for image_index, raw_url in enumerate(product.get("images") or []):
+            url = canonical_media_url(raw_url)
+            if not url or not url.startswith("/api/files/"):
+                skipped_images += 1
+                continue
+            image_refs.append((product, image_index, url))
+
+    semaphore = asyncio.Semaphore(12)
+
+    async def _load_candidate(ref):
+        product, image_index, url = ref
+        storage_path = unquote(url.removeprefix("/api/files/"))
+        try:
+            async with semaphore:
+                image_bytes, stored_ct = await asyncio.to_thread(get_object, storage_path)
+            if not image_bytes or not str(stored_ct or "").lower().startswith("image/"):
+                raise ValueError("Unreadable catalogue image")
+            return {
+                "product": product,
+                "image_index": image_index,
+                "url": url,
+                "image_bytes": image_bytes,
+            }
+        except Exception:
+            return None
+
+    loaded_candidates = await asyncio.gather(
+        *[_load_candidate(ref) for ref in image_refs]
     )
+    candidate_items = [item for item in loaded_candidates if item]
+    skipped_images += len(loaded_candidates) - len(candidate_items)
+    searched_images = len(candidate_items)
+
+    if not candidate_items:
+        return {
+            "matches": [],
+            "searched_images": 0,
+            "index_ready": True,
+            "index_total": len(index_urls),
+            "index_indexed": len(index_rows),
+            "index_remaining": 0,
+            "indexed_this_request": 0,
+            "index_skipped": skipped_images,
+            "engine": "existing-site-vision",
+        }
+
+    first_pass = []
+    for offset in range(0, len(candidate_items), SHEET_CAPACITY):
+        group = candidate_items[offset:offset + SHEET_CAPACITY]
+        try:
+            sheet, mapping = build_contact_sheet(group)
+            sheet_matches = await match_contact_sheet(
+                api_key,
+                data,
+                sheet,
+                mapping.keys(),
+            )
+        except VisionSearchError as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+        for match in sheet_matches:
+            item = mapping.get(match["id"])
+            if not item:
+                continue
+            first_pass.append({
+                "item": item,
+                "confidence": float(match.get("confidence") or 0),
+                "reason": match.get("reason") or "",
+            })
+
+    # Keep only the strongest image per product before the final vision rerank.
+    best_by_product = {}
+    for row in sorted(first_pass, key=lambda item: item["confidence"], reverse=True):
+        product_id = row["item"]["product"].get("id")
+        if product_id and product_id not in best_by_product:
+            best_by_product[product_id] = row
+
+    finalists = [row["item"] for row in list(best_by_product.values())[:24]]
+    if not finalists:
+        return {
+            "matches": [],
+            "searched_images": searched_images,
+            "index_ready": True,
+            "index_total": len(index_urls),
+            "index_indexed": len(index_rows),
+            "index_remaining": 0,
+            "indexed_this_request": 0,
+            "index_skipped": skipped_images,
+            "engine": "existing-site-vision",
+            "categories_searched": categories,
+        }
+
+    try:
+        reranked = await rerank_finalists(api_key, data, finalists)
+    except VisionSearchError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
     matches = []
-    for item in ranked[:limit]:
-        clean = dict(item)
-        clean.pop("_sort_key", None)
-        matches.append(clean)
+    seen_products = set()
+    for row in reranked:
+        item = row["item"]
+        product = item["product"]
+        product_id = product.get("id")
+        if not product_id or product_id in seen_products:
+            continue
+        seen_products.add(product_id)
+        confidence = round(float(row.get("confidence") or 0), 1)
+        images = product.get("images") or []
+        matches.append({
+            "product_id": product_id,
+            "sku": product.get("sku") or "",
+            "name": product.get("name") or "",
+            "category": product.get("category") or "",
+            "price": product.get("price") or 0,
+            "price_display": product.get("price_display") or (
+                "fixed" if product.get("fixed_price") else "starting_from"
+            ),
+            "image_url": images[item["image_index"]] if item["image_index"] < len(images) else item["url"],
+            "visual_similarity": confidence,
+            "match_label": "very_likely" if confidence >= 85 else "possible",
+            "engine": "existing-site-vision",
+            "reason": row.get("reason") or "",
+        })
+        if len(matches) >= limit:
+            break
 
     return {
         "matches": matches,
         "searched_images": searched_images,
         "index_ready": True,
         "index_total": len(index_urls),
-        "index_indexed": indexed_count,
+        "index_indexed": len(index_rows),
         "index_remaining": 0,
-        "indexed_this_request": indexed_this_request,
-        "index_skipped": skipped_count,
-        "engine": VISUAL_EMBEDDING_MODEL,
+        "indexed_this_request": 0,
+        "index_skipped": skipped_images,
+        "engine": "existing-site-vision",
+        "categories_searched": categories,
     }
 
 
