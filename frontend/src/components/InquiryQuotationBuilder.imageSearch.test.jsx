@@ -39,7 +39,7 @@ describe("Quotation search by image", () => {
     expect(source).toContain("await api.matchQuotationProductByImage(selectedFile, 5, true)");
     expect(source).toContain("await api.startQuotationImageDetailJob(selectedFile)");
     expect(source).toContain("await api.getQuotationImageDetailJob(imageDetailJobId.current)");
-    expect(source).toContain("Checking catalogue photos:");
+    expect(source).toContain("Checking catalogue and project photos:");
     expect(source).toContain("for (let batch = 0; batch < 60; batch += 1)");
     expect(source).toContain("requestId !== imageSearchSequence.current");
   });

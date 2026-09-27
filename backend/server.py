@@ -35,6 +35,7 @@ from catalogue_search import catalogue_search_filter, resolve_catalogue_query  #
 from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_PREFIX, apply_identity_authority, apply_owner_facts, apply_reference_family, apply_reference_model, automatic_catalogue_model, blocking_identity_notes, catalogue_manifest_row, conversation_facts, extract_catalogue_references, facts_as_notes, find_similar_product, normalize_ai_record, normalize_catalogue_matches, normalize_product_name, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_model, sop_prompt, validate_record  # noqa: E402
 from product_ai import configure_product_chat, product_ai_settings  # noqa: E402
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, canonical_media_url, collect_references, inspect_media_bytes, public_url_for_file  # noqa: E402
+from quotation_gallery import linked_project_photos  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
@@ -1920,6 +1921,14 @@ Confidence is 0 to 1."""
 
 
 
+async def _quotation_project_photos(products):
+    settings = await db.settings.find_one(
+        {"id": "settings"}, {"_id": 0, "homepage_content.gallery.items": 1}
+    )
+    projects = (((settings or {}).get("homepage_content") or {}).get("gallery") or {}).get("items") or []
+    return linked_project_photos(projects, products)
+
+
 @api.post("/admin/quotations/product-match-diagnostics")
 async def diagnose_quotation_product_match(
     file: UploadFile = File(...),
@@ -1963,6 +1972,12 @@ async def diagnose_quotation_product_match(
             url = canonical_media_url(raw_url)
             if url:
                 products_by_url.setdefault(url, []).append((product, image_index))
+
+    project_photos = await _quotation_project_photos(products)
+    for url, linked in project_photos.items():
+        existing = products_by_url.setdefault(url, [])
+        seen = {product["id"] for product, _ in existing}
+        existing.extend((product, -1) for product in linked if product["id"] not in seen)
 
     all_urls = list(products_by_url)
     app_urls = [url for url in all_urls if url.startswith("/api/files/")]
@@ -2110,6 +2125,7 @@ async def diagnose_quotation_product_match(
         "catalogue": {
             "published_products": len(products),
             "published_image_urls": len(all_urls),
+            "linked_project_image_urls": len(project_photos),
             "app_owned_image_urls": len(app_urls),
             "db_file_rows_for_product_images": len(file_rows),
             "fingerprinted_db_file_rows": len(fingerprinted),
@@ -2203,6 +2219,12 @@ async def match_quotation_product_by_image(
             if url:
                 products_by_url.setdefault(url, []).append((product, image_index))
 
+    project_photos = await _quotation_project_photos(products)
+    for url, linked in project_photos.items():
+        existing = products_by_url.setdefault(url, [])
+        seen = {product["id"] for product, _ in existing}
+        existing.extend((product, -1) for product in linked if product["id"] not in seen)
+
     # Exact/decoded-pixel shortcut using already-built quotation hash records.
     if products_by_url:
         index_rows = await db.quotation_image_index.find(
@@ -2236,13 +2258,13 @@ async def match_quotation_product_by_image(
                     ),
                     "image_url": (
                         images[image_index]
-                        if image_index < len(images)
-                        else url
+                        if 0 <= image_index < len(images)
+                        else images[0] if images else url
                     ),
                     "visual_similarity": 100.0,
                     "match_label": "exact_image",
                     "engine": "exact-hash",
-                    "reason": "Exact stored catalogue image",
+                    "reason": "Exact linked project photograph" if image_index < 0 else "Exact stored catalogue image",
                 })
         if exact_matches:
             return {
@@ -2341,13 +2363,13 @@ async def match_quotation_product_by_image(
                     ),
                     "image_url": (
                         images[image_index]
-                        if image_index < len(images)
-                        else best["url"]
+                        if 0 <= image_index < len(images)
+                        else images[0] if images else best["url"]
                     ),
                     "visual_similarity": similarity,
                     "match_label": "very_likely",
                     "engine": "existing-perceptual-fingerprint",
-                    "reason": "Near-identical existing catalogue photograph.",
+                    "reason": "Near-identical linked project photograph." if image_index < 0 else "Near-identical existing catalogue photograph.",
                 })
             if fast_matches:
                 return {
@@ -2365,7 +2387,7 @@ async def match_quotation_product_by_image(
     # Prepare a persistent, compact photo index in bounded batches. The old
     # dHash-only candidate list put unrelated gate lights above an identical
     # chandelier photo; its low-confidence scores must not be shown as matches.
-    # Main images are indexed first. Subsequent searches reuse these signatures.
+    # Linked project and main product images are indexed first. Subsequent searches reuse these signatures.
     if quick:
         main_urls = {
             canonical_media_url((product.get("images") or [""])[0])
@@ -2394,7 +2416,8 @@ async def match_quotation_product_by_image(
             and row.get("visual_index_failed_at", "") <= retry_cutoff
         ]
         missing.sort(key=lambda row: (
-            0 if f"/api/files/{row['storage_path']}" in main_urls else 1,
+            0 if f"/api/files/{row['storage_path']}" in project_photos
+            else 1 if f"/api/files/{row['storage_path']}" in main_urls else 2,
             min(
                 (str(p.get("sku") or "") for p, _ in products_by_url.get(
                     f"/api/files/{row['storage_path']}", []
@@ -2453,10 +2476,10 @@ async def match_quotation_product_by_image(
                     "price_display": product.get("price_display") or (
                         "fixed" if product.get("fixed_price") else "starting_from"
                     ),
-                    "image_url": images[image_index],
+                    "image_url": images[image_index] if 0 <= image_index < len(images) else images[0] if images else url,
                     "match_label": "very_likely",
                     "engine": "photo-signature",
-                    "reason": "Catalogue photograph with matching colour and composition.",
+                    "reason": "Linked project photograph with matching colour and composition." if image_index < 0 else "Catalogue photograph with matching colour and composition.",
                     "photo_score": round(score, 3),
                 })
                 if len(matches) >= limit:
@@ -2481,9 +2504,12 @@ async def match_quotation_product_by_image(
     # Cache only the expensive visual fallback. The signature includes the
     # published catalogue data used for matching, so product/image/price/name
     # changes automatically invalidate prior results.
-    catalogue_signature = ownership_fingerprint(
-        json.dumps(products, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")
-    )
+    catalogue_signature = ownership_fingerprint(json.dumps(
+        {"products": products, "project_photos": {
+            url: sorted(product["id"] for product in linked)
+            for url, linked in project_photos.items()
+        }}, sort_keys=True, default=str, separators=(",", ":")
+    ).encode("utf-8"))
     cached = await db.quotation_image_search_cache.find_one(
         {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
         {"_id": 0, "response": 1},
