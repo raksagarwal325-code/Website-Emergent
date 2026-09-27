@@ -175,14 +175,14 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       }
 
       if (!result?.index_ready) {
-        setImageMatchError("Catalogue image index is still preparing. Run the search again to continue.");
+        setImageMatchError("Visual catalogue scan is still in progress. Run the search again to continue.");
         return;
       }
 
       const matches = Array.isArray(result?.matches) ? result.matches : [];
       setImageMatches(matches);
       if (!matches.length) {
-        setImageMatchError("No reliable match found. The uploaded image may be a different angle / room photo; search by name or SKU instead.");
+        setImageMatchError("No reliable visual match found in the published catalogue.");
       }
     } catch (error) {
       const message = errorMessage(error, "Could not search the catalogue by image");
@@ -619,7 +619,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
 
                   {imageIndexProgress && imageMatchBusy && (
                     <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-index-progress">
-                      Preparing local visual catalogue index · {imageIndexProgress.indexed ?? Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
+                      Scanning catalogue visually · step {imageIndexProgress.indexed ?? Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
                     </div>
                   )}
 
