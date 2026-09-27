@@ -1884,9 +1884,9 @@ async def match_quotation_product_by_image(
             # automatic frontend iteration so the next short request performs
             # the actual client-image search against the now-complete index.
             "index_ready": False,
-            "index_total": len(primary_refs) + 1,
+            "index_total": len(primary_refs),
             "index_indexed": covered_after,
-            "index_remaining": remaining_after + 1,
+            "index_remaining": max(1, remaining_after),
             "indexed_this_request": len(batch_refs),
             "index_skipped": failed_count,
             "engine": "persistent-visual-index-v1",
