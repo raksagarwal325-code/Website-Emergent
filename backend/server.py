@@ -1688,6 +1688,16 @@ async def match_quotation_product_by_image(
         }
 
     index_urls = sorted(products_by_url.keys())
+    catalogue_signature = ownership_fingerprint(
+        "\n".join(
+            sorted(
+                f"{product.get('id') or ''}|{canonical_media_url(raw_url)}"
+                for product in products
+                for raw_url in (product.get("images") or [])
+                if canonical_media_url(raw_url)
+            )
+        ).encode("utf-8")
+    )
 
     # Zero-ambiguity shortcut for exact stored website images.
     index_rows = await db.quotation_image_index.find(
@@ -1743,7 +1753,7 @@ async def match_quotation_product_by_image(
         )
 
     job = await db.quotation_visual_search_jobs.find_one(
-        {"query_sha": query_sha},
+        {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
         {"_id": 0},
     )
 
@@ -1824,6 +1834,7 @@ async def match_quotation_product_by_image(
         now = now_iso()
         job = {
             "query_sha": query_sha,
+            "catalogue_signature": catalogue_signature,
             "status": "scanning",
             "categories": categories,
             "image_refs": image_refs,
@@ -1837,7 +1848,7 @@ async def match_quotation_product_by_image(
             "updated_at": now,
         }
         await db.quotation_visual_search_jobs.update_one(
-            {"query_sha": query_sha},
+            {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
             {"$set": job},
             upsert=True,
         )
@@ -1919,7 +1930,7 @@ async def match_quotation_product_by_image(
         job["skipped_images"] = int(job.get("skipped_images") or 0) + newly_skipped
         job["updated_at"] = now_iso()
         await db.quotation_visual_search_jobs.update_one(
-            {"query_sha": query_sha},
+            {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
             {"$set": {
                 "next_offset": job["next_offset"],
                 "completed_steps": job["completed_steps"],
@@ -2040,7 +2051,7 @@ async def match_quotation_product_by_image(
 
     completed_steps = total_steps
     await db.quotation_visual_search_jobs.update_one(
-        {"query_sha": query_sha},
+        {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
         {"$set": {
             "status": "complete",
             "completed_steps": completed_steps,
