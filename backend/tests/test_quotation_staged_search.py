@@ -38,3 +38,15 @@ def test_quotation_search_is_single_request_and_has_no_torch_runtime():
     assert "visual_embedding" not in server
     assert "torch==" not in requirements
     assert "transformers>=" not in requirements
+
+
+def test_quotation_search_uses_existing_image_protection_fingerprints_before_ai():
+    route = _quotation_route_source()
+
+    assert "perceptual_fingerprint_variants" in route
+    assert '"perceptual_fingerprint": {"$exists": True, "$ne": None}' in route
+    assert '"engine": "existing-perceptual-fingerprint"' in route
+    assert 'best["full_distance"] <= 18' in route
+    assert 'row["variant_distance"] <= 34' in route
+    assert "nearby_urls" in route
+    assert "if nearby_urls:" in route
