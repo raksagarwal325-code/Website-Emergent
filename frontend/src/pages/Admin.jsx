@@ -1673,6 +1673,7 @@ function SettingsAdmin({ settings, onSave }) {
         ["google_cid", "Google Business CID"],
         ["google_place_id", "Google Place ID (for live reviews)"],
         ["google_maps_api_key", "Google Maps API Key (server-side, keep secret)"],
+        ["gemini_embedding_api_key", "Gemini Embedding API Key (server-side, for quotation visual search)"],
         ["instagram_url", "Instagram URL (blank = hide icon)"],
         ["facebook_url", "Facebook URL (blank = hide icon)"],
         ["youtube_url", "YouTube URL (blank = hide icon)"],
