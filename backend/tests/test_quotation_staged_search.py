@@ -58,3 +58,22 @@ def test_quotation_search_has_no_heavy_local_ml_runtime():
     assert "visual_embedding" not in server
     assert "torch==" not in requirements
     assert "transformers>=" not in requirements
+
+
+def test_direct_fingerprint_match_groups_by_sku_and_accepts_crop_variant():
+    route = _quotation_route_source()
+
+    assert "product_fingerprint_hits" in route
+    assert "variant_ranked = sorted" in route
+    assert 'best["variant_distance"] <= 18' in route
+    assert 'second_distance - best["variant_distance"] >= 5' in route
+    assert "Existing catalogue photograph matched after crop/screenshot normalization." in route
+    assert '"engine": "existing-perceptual-fingerprint"' in route
+
+
+def test_nearby_fingerprint_candidates_are_product_level_not_image_level():
+    route = _quotation_route_source()
+
+    assert "row for row in variant_ranked" in route
+    assert 'if row["variant_distance"] <= 34' in route
+    assert "product = row[\"product\"]" in route
