@@ -26,17 +26,10 @@ describe("Quotation search by image", () => {
     expect(source).toContain('onClick={() => addImageMatch(match)}');
     expect(source).not.toContain("imageMatches[0]");
   });
-  test("image search prepares a reusable visual catalogue index once", () => {
-    expect(source).toContain("index_remaining");
-    expect(source).toContain("index_ready");
-    expect(source).toContain("for (let batch = 0; batch < 80; batch += 1)");
-    expect(source).toContain('data-testid="quotation-image-index-progress"');
-    expect(source).toContain("Preparing reusable visual catalogue index");
-    expect(source).not.toContain('data-testid="quotation-image-index-warning"');
-    expect(source).not.toContain("legacy catalogue image");
-    expect(source).toContain("Reusable visual catalogue index is still preparing");
-    expect(source).toContain("Exact website image");
-    expect(source).toContain("Exact image content");
-    expect(source).toContain("Visual candidate · verify");
+  test("image search is one request with no catalogue-index loop", () => {
+    expect(source).toContain("await api.matchQuotationProductByImage(imageSearchFile, 5)");
+    expect(source).not.toContain("for (let batch = 0; batch < 80; batch += 1)");
+    expect(source).not.toContain('data-testid="quotation-image-index-progress"');
+    expect(source).not.toContain("Preparing reusable visual catalogue index");
   });
 });
