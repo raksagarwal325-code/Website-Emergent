@@ -2,7 +2,7 @@ import io
 
 from PIL import Image
 
-from visual_embedding import cosine_similarity, normalize_vector, prepare_image
+from visual_embedding import MODEL, cosine_similarity, image_variants, normalize_vector, prepare_image
 
 
 def _webp_bytes():
@@ -31,3 +31,14 @@ def test_cosine_similarity_prefers_same_direction():
     other = normalize_vector([3.0, -2.0, 1.0])
     assert cosine_similarity(query, same) > cosine_similarity(query, other)
     assert cosine_similarity(query, same) > 0.999
+
+
+def test_local_visual_model_requires_no_api_key():
+    assert MODEL == "facebook/dinov2-small"
+
+
+def test_query_uses_full_image_and_center_crops():
+    variants = image_variants(_webp_bytes(), "image/webp")
+    assert len(variants) == 3
+    assert variants[1].size[0] < variants[0].size[0]
+    assert variants[2].size[0] < variants[1].size[0]

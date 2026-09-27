@@ -1,52 +1,68 @@
-"""Multimodal visual embeddings for quotation product search.
+"""Local visual embeddings for quotation product search.
 
-Uses Google's Gemini Embedding 2 image model. The API key is server-side only
-and may be supplied via GEMINI_API_KEY / GOOGLE_API_KEY or Admin Settings.
+Runs DINOv2 inside the Samrat backend. No third-party inference API or API key
+is required. The model is loaded lazily and cached in-process after first use.
 """
 from __future__ import annotations
 
-import base64
 import math
 import os
+import threading
+from io import BytesIO
 from typing import Iterable
 
 from PIL import Image, ImageOps
 
-MODEL = "gemini-embedding-2"
-DIMENSIONS = 768
-ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:embedContent"
+MODEL = os.environ.get("QUOTATION_VISION_MODEL", "facebook/dinov2-small")
+DIMENSIONS = 384
+
+_MODEL = None
+_PROCESSOR = None
+_MODEL_LOCK = threading.Lock()
 
 
 class VisualEmbeddingError(RuntimeError):
     pass
 
 
-def resolve_api_key(settings: dict | None = None) -> str:
-    key = (
-        os.environ.get("GEMINI_API_KEY")
-        or os.environ.get("GOOGLE_API_KEY")
-        or str((settings or {}).get("gemini_embedding_api_key") or "").strip()
-    )
-    return str(key or "").strip()
-
-
-def prepare_image(image_bytes: bytes, content_type: str) -> tuple[bytes, str]:
-    """Normalize any supported catalogue/client image to a compact JPG/PNG."""
+def prepare_pil(image_bytes: bytes, content_type: str) -> Image.Image:
+    """Decode JPG/PNG/WebP safely and normalize orientation/RGB."""
     ct = (content_type or "").split(";", 1)[0].strip().lower()
     if ct == "image/jpg":
         ct = "image/jpeg"
     if ct not in {"image/jpeg", "image/png", "image/webp"}:
         raise VisualEmbeddingError("Visual search supports JPG, PNG and WebP images.")
+    if not image_bytes:
+        raise VisualEmbeddingError("Image is empty.")
     try:
-        from io import BytesIO
         with Image.open(BytesIO(image_bytes)) as opened:
             image = ImageOps.exif_transpose(opened).convert("RGB")
             image.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
-            out = BytesIO()
-            image.save(out, format="JPEG", quality=90, optimize=True)
-            return out.getvalue(), "image/jpeg"
+            return image.copy()
     except Exception as exc:
         raise VisualEmbeddingError("Could not decode image for visual search.") from exc
+
+
+def prepare_image(image_bytes: bytes, content_type: str) -> tuple[bytes, str]:
+    """Compatibility helper used by tests and diagnostics."""
+    image = prepare_pil(image_bytes, content_type)
+    out = BytesIO()
+    image.save(out, format="JPEG", quality=90, optimize=True)
+    return out.getvalue(), "image/jpeg"
+
+
+def image_variants(image_bytes: bytes, content_type: str) -> list[Image.Image]:
+    """Return full image plus center crops for screenshot/room-photo resilience."""
+    image = prepare_pil(image_bytes, content_type)
+    variants = [image]
+    width, height = image.size
+    for ratio in (0.82, 0.65):
+        crop_w = max(32, int(width * ratio))
+        crop_h = max(32, int(height * ratio))
+        left = max(0, (width - crop_w) // 2)
+        top = max(0, (height - crop_h) // 2)
+        variants.append(image.crop((left, top, left + crop_w, top + crop_h)))
+    return variants
 
 
 def normalize_vector(values: Iterable[float]) -> list[float]:
@@ -65,90 +81,69 @@ def cosine_similarity(left: Iterable[float], right: Iterable[float]) -> float:
     return sum(float(x) * float(y) for x, y in zip(a, b))
 
 
-def embed_image(
-    image_bytes: bytes,
-    content_type: str,
-    api_key: str,
-) -> list[float]:
-    """Embed one image with Gemini Embedding 2."""
-    if not api_key:
-        raise VisualEmbeddingError("Gemini visual-search API key is not configured.")
-    if not image_bytes:
-        raise VisualEmbeddingError("Image is empty.")
+def _load_model():
+    """Load the local DINOv2 vision model once per backend worker."""
+    global _MODEL, _PROCESSOR
+    if _MODEL is not None and _PROCESSOR is not None:
+        return _PROCESSOR, _MODEL
 
-    try:
-        from google import genai
-        from google.genai import types
+    with _MODEL_LOCK:
+        if _MODEL is not None and _PROCESSOR is not None:
+            return _PROCESSOR, _MODEL
+        try:
+            import torch
+            from transformers import AutoImageProcessor, AutoModel
 
-        prepared, mime = prepare_image(image_bytes, content_type)
-        client = genai.Client(api_key=api_key)
-        result = client.models.embed_content(
-            model=MODEL,
-            contents=[
-                types.Part.from_bytes(
-                    data=prepared,
-                    mime_type=mime,
-                )
-            ],
-            config=types.EmbedContentConfig(output_dimensionality=DIMENSIONS),
-        )
-        embeddings = list(result.embeddings or [])
-        if not embeddings:
-            raise VisualEmbeddingError("Gemini returned no image embedding.")
-        return normalize_vector(embeddings[0].values or [])
-    except VisualEmbeddingError:
-        raise
-    except Exception as exc:
-        message = str(exc)
-        lowered = message.lower()
-        if "api key" in lowered or "permission" in lowered or "unauth" in lowered:
+            processor = AutoImageProcessor.from_pretrained(MODEL)
+            model = AutoModel.from_pretrained(MODEL)
+            model.eval()
+            model.to("cpu")
+            torch.set_grad_enabled(False)
+            _PROCESSOR = processor
+            _MODEL = model
+            return processor, model
+        except Exception as exc:
             raise VisualEmbeddingError(
-                "Gemini visual-search API key is invalid or does not have Gemini API access."
+                "Local visual-search model could not be loaded. "
+                "Check backend model dependencies/network cache."
             ) from exc
-        if "429" in lowered or "rate limit" in lowered or "quota" in lowered:
-            raise VisualEmbeddingError(
-                "Gemini visual-search rate limit reached. Try again shortly."
-            ) from exc
-        raise VisualEmbeddingError(f"Visual embedding request failed: {message}") from exc
 
 
-
-def embed_images_batch(
-    images: list[tuple[bytes, str]],
-    api_key: str,
-) -> list[list[float]]:
-    """Embed up to six images in one Gemini Embedding 2 request."""
-    if not api_key:
-        raise VisualEmbeddingError("Gemini visual-search API key is not configured.")
+def _embed_pil_batch(images: list[Image.Image]) -> list[list[float]]:
     if not images:
         return []
-    if len(images) > 6:
-        raise ValueError("Gemini Embedding 2 accepts at most six images per request.")
-
     try:
-        from google import genai
-        from google.genai import types
+        import torch
 
-        contents = []
-        for image_bytes, content_type in images:
-            prepared, mime = prepare_image(image_bytes, content_type)
-            contents.append(
-                types.Content(
-                    parts=[types.Part.from_bytes(data=prepared, mime_type=mime)]
-                )
-            )
-
-        client = genai.Client(api_key=api_key)
-        result = client.models.embed_content(
-            model=MODEL,
-            contents=contents,
-            config=types.EmbedContentConfig(output_dimensionality=DIMENSIONS),
-        )
-        embeddings = list(result.embeddings or [])
-        if len(embeddings) != len(images):
-            raise VisualEmbeddingError("Gemini returned an incomplete embedding batch.")
-        return [normalize_vector(embedding.values or []) for embedding in embeddings]
+        processor, model = _load_model()
+        inputs = processor(images=images, return_tensors="pt")
+        with torch.inference_mode():
+            outputs = model(**inputs)
+            if getattr(outputs, "pooler_output", None) is not None:
+                features = outputs.pooler_output
+            else:
+                features = outputs.last_hidden_state[:, 0, :]
+        rows = features.detach().cpu().tolist()
+        return [normalize_vector(row) for row in rows]
     except VisualEmbeddingError:
         raise
     except Exception as exc:
-        raise VisualEmbeddingError(f"Visual embedding batch failed: {exc}") from exc
+        raise VisualEmbeddingError(f"Local visual embedding failed: {exc}") from exc
+
+
+def embed_image(image_bytes: bytes, content_type: str) -> list[float]:
+    """Embed one image with the local DINOv2 model."""
+    return _embed_pil_batch([prepare_pil(image_bytes, content_type)])[0]
+
+
+def embed_query_variants(image_bytes: bytes, content_type: str) -> list[list[float]]:
+    """Embed full client image plus center crops; caller uses best similarity."""
+    return _embed_pil_batch(image_variants(image_bytes, content_type))
+
+
+def embed_images_batch(images: list[tuple[bytes, str]]) -> list[list[float]]:
+    """Embed catalogue images locally in one CPU batch."""
+    if not images:
+        return []
+    pil_images = [prepare_pil(image_bytes, content_type) for image_bytes, content_type in images]
+    return _embed_pil_batch(pil_images)
