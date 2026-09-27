@@ -113,6 +113,22 @@ def perceptual_distance(left: str, right: str) -> int:
     return (int(left, 16) ^ int(right, 16)).bit_count()
 
 
+def normalized_pixel_fingerprint(original_bytes: bytes) -> str:
+    """Hash normalized decoded pixels for exact/near-exact file identity.
+
+    Metadata changes do not affect this value. The image is EXIF-oriented,
+    converted to RGB, and hashed with its dimensions. This is deliberately
+    stricter than pHash and is used to rank exact website-image matches first.
+    """
+    with Image.open(io.BytesIO(original_bytes)) as opened:
+        image = ImageOps.exif_transpose(opened).convert("RGB")
+        payload = (
+            f"{image.width}x{image.height}|RGB|".encode("ascii")
+            + image.tobytes()
+        )
+        return hashlib.sha256(payload).hexdigest()
+
+
 def phash_fingerprint(original_bytes: bytes, hash_size: int = 8, highfreq_factor: int = 4) -> str:
     """Return a DCT perceptual hash (pHash) for robust near-photo matching.
 

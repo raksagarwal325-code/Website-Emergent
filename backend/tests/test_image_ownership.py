@@ -2,7 +2,7 @@ import io
 
 from PIL import Image
 
-from image_ownership import embed_ownership_metadata, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants
+from image_ownership import embed_ownership_metadata, normalized_pixel_fingerprint, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants
 import security_runtime
 
 
@@ -172,3 +172,14 @@ def test_phash_variants_include_full_frame_and_multiple_crops():
     assert variants[0] == full
     assert len(variants) > 1
     assert len(set(variants)) == len(variants)
+
+
+def test_normalized_pixel_fingerprint_ignores_png_text_metadata():
+    source = _png_bytes()
+    stamped = embed_ownership_metadata(
+        source,
+        content_type="image/png",
+        asset_id="pixel-test",
+        fingerprint=ownership_fingerprint(source),
+    )
+    assert normalized_pixel_fingerprint(source) == normalized_pixel_fingerprint(stamped)
