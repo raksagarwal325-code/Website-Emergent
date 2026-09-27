@@ -660,7 +660,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                     <div>
                       <div className="text-sm text-white/75">Find the catalogue product from a client image</div>
                       <p className="mt-1 text-xs leading-relaxed text-white/45">
-                        Find a catalogue photo from a client image, including resized and WhatsApp copies. For a different angle or room photo, review the result before adding it.
+                        Find catalogue products from their product photos or linked project photos, including resized and WhatsApp copies. Review the result before adding it.
                       </p>
                       <label className="mt-3 block cursor-pointer text-xs text-[#D4AF37]">
                         {imageSearchFile ? "Replace client image" : "Upload client image"}
@@ -691,7 +691,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                       </button>
                       {imageIndexProgress?.total > 0 && imageIndexProgress.remaining > 0 && (
                         <div className="mt-2 text-xs text-white/55" role="status">
-                          Checking catalogue photos: {imageIndexProgress.total - imageIndexProgress.remaining} of {imageIndexProgress.total} ready
+                          Checking catalogue and project photos: {imageIndexProgress.total - imageIndexProgress.remaining} of {imageIndexProgress.total} ready
                         </div>
                       )}
                       <button
