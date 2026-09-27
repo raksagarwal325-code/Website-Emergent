@@ -1883,6 +1883,187 @@ Confidence is 0 to 1."""
     return sorted(verified, key=lambda row: row["confidence"], reverse=True)
 
 
+
+@api.post("/admin/quotations/product-match-diagnostics")
+async def diagnose_quotation_product_match(
+    file: UploadFile = File(...),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Admin-only local diagnosis for quotation image matching.
+
+    This endpoint never calls AI. It reports whether the uploaded image reaches
+    the stored catalogue files/fingerprints and why the normal matcher would
+    fall through to the slower visual fallback.
+    """
+    content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+    if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(400, "Choose a JPG, PNG or WebP image.")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "The uploaded image is empty.")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(413, "Image too large (25MB max).")
+
+    try:
+        query_sha = ownership_fingerprint(data)
+        query_pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, data)
+        query_dhash_variants = await asyncio.to_thread(
+            perceptual_fingerprint_variants, data
+        )
+        query_dhash_full = query_dhash_variants[0] if query_dhash_variants else ""
+    except Exception:
+        raise HTTPException(400, "Could not read that image.")
+
+    products = await db.products.find(
+        {"status": "published", "images": {"$exists": True, "$ne": []}},
+        {"_id": 0, "id": 1, "sku": 1, "name": 1, "category": 1, "images": 1},
+    ).to_list(5000)
+
+    products_by_url = {}
+    for product in products:
+        for image_index, raw_url in enumerate(product.get("images") or []):
+            url = canonical_media_url(raw_url)
+            if url:
+                products_by_url.setdefault(url, []).append((product, image_index))
+
+    all_urls = list(products_by_url)
+    app_urls = [url for url in all_urls if url.startswith("/api/files/")]
+    storage_paths = [url.removeprefix("/api/files/") for url in app_urls]
+
+    file_rows = []
+    if storage_paths:
+        file_rows = await db.files.find(
+            {"storage_path": {"$in": storage_paths}},
+            {
+                "_id": 0,
+                "storage_path": 1,
+                "perceptual_fingerprint": 1,
+                "ownership_fingerprint": 1,
+                "sha256": 1,
+            },
+        ).to_list(len(storage_paths))
+
+    file_by_url = {
+        canonical_media_url(public_url_for_file(row)): row
+        for row in file_rows
+        if public_url_for_file(row)
+    }
+    fingerprinted = [
+        row for row in file_rows if row.get("perceptual_fingerprint")
+    ]
+
+    index_rows = []
+    if all_urls:
+        index_rows = await db.quotation_image_index.find(
+            {"url": {"$in": all_urls}},
+            {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1},
+        ).to_list(len(all_urls))
+    exact_index_rows = [
+        row for row in index_rows
+        if str(row.get("public_sha256") or "") == query_sha
+        or str(row.get("pixel_hash") or "") == query_pixel_hash
+    ]
+
+    product_scores = {}
+    for url, row in file_by_url.items():
+        stored = str(row.get("perceptual_fingerprint") or "")
+        if not stored:
+            continue
+        try:
+            full_distance = perceptual_distance(query_dhash_full, stored)
+            variant_distances = [
+                perceptual_distance(variant, stored)
+                for variant in query_dhash_variants
+                if len(variant) == len(stored)
+            ]
+            if not variant_distances:
+                continue
+            variant_distance = min(variant_distances)
+        except (TypeError, ValueError):
+            continue
+        for product, image_index in products_by_url.get(url, []):
+            product_id = product.get("id")
+            if not product_id:
+                continue
+            candidate = {
+                "product_id": product_id,
+                "sku": product.get("sku") or "",
+                "name": product.get("name") or "",
+                "category": product.get("category") or "",
+                "image_url": url,
+                "image_index": image_index,
+                "full_distance": full_distance,
+                "variant_distance": variant_distance,
+            }
+            current = product_scores.get(product_id)
+            if current is None or (
+                candidate["variant_distance"], candidate["full_distance"]
+            ) < (
+                current["variant_distance"], current["full_distance"]
+            ):
+                product_scores[product_id] = candidate
+
+    ranked = sorted(
+        product_scores.values(),
+        key=lambda row: (row["variant_distance"], row["full_distance"]),
+    )
+    top = ranked[:5]
+    best = top[0] if top else None
+    runner_up = top[1] if len(top) > 1 else None
+
+    if exact_index_rows:
+        decision = "exact_index_match"
+        reason = "The legacy quotation image index contains an exact SHA/pixel match."
+    elif not app_urls:
+        decision = "no_app_owned_product_images"
+        reason = "Published products do not expose application-owned /api/files image URLs."
+    elif not file_rows:
+        decision = "product_images_not_joining_db_files"
+        reason = "Published product image URLs did not resolve to db.files storage_path rows."
+    elif not fingerprinted:
+        decision = "product_files_have_no_perceptual_fingerprints"
+        reason = "Product file rows exist, but none has a perceptual_fingerprint."
+    elif best and best["variant_distance"] <= 18 and (
+        runner_up is None
+        or runner_up["variant_distance"] - best["variant_distance"] >= 5
+    ):
+        decision = "strong_local_fingerprint_match"
+        reason = "The local fingerprint layer has a strong, clearly separated product match."
+    elif best:
+        decision = "local_match_not_confident_enough"
+        reason = "Local fingerprints produced candidates, but the best score/separation is below the current direct-return rule."
+    else:
+        decision = "no_local_fingerprint_candidate"
+        reason = "Fingerprint rows exist, but none could be compared successfully."
+
+    return {
+        "decision": decision,
+        "reason": reason,
+        "query": {
+            "filename": file.filename or "",
+            "sha256_prefix": query_sha[:12],
+            "dhash_variant_count": len(query_dhash_variants),
+        },
+        "catalogue": {
+            "published_products": len(products),
+            "published_image_urls": len(all_urls),
+            "app_owned_image_urls": len(app_urls),
+            "db_file_rows_for_product_images": len(file_rows),
+            "fingerprinted_db_file_rows": len(fingerprinted),
+            "unmapped_app_owned_urls": max(0, len(set(app_urls)) - len(file_by_url)),
+            "quotation_image_index_rows": len(index_rows),
+            "exact_index_matches": len(exact_index_rows),
+        },
+        "best": best,
+        "runner_up": runner_up,
+        "top_local_candidates": top,
+        "would_enter_ai_fallback": decision not in {
+            "exact_index_match",
+            "strong_local_fingerprint_match",
+        },
+    }
+
+
 @api.post("/admin/quotations/product-match-by-image")
 async def match_quotation_product_by_image(
     file: UploadFile = File(...),
