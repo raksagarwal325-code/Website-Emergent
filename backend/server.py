@@ -1687,6 +1687,8 @@ async def match_quotation_product_by_image(
             "quotation_original_pixel_hash": 1,
             "quotation_phash": 1,
             "quotation_original_phash": 1,
+            "quotation_index_failed_at": 1,
+            "quotation_index_error": 1,
         },
     ).to_list(5000)
 
@@ -1699,12 +1701,17 @@ async def match_quotation_product_by_image(
     missing = [
         (row, public_url)
         for row, public_url in catalogue_rows
-        if not row.get("quotation_public_sha256")
-        or not row.get("quotation_original_sha256")
-        or not row.get("quotation_pixel_hash")
-        or not row.get("quotation_original_pixel_hash")
-        or not row.get("quotation_phash")
-        or not row.get("quotation_original_phash")
+        if (
+            not row.get("quotation_index_failed_at")
+            and (
+                not row.get("quotation_public_sha256")
+                or not row.get("quotation_original_sha256")
+                or not row.get("quotation_pixel_hash")
+                or not row.get("quotation_original_pixel_hash")
+                or not row.get("quotation_phash")
+                or not row.get("quotation_original_phash")
+            )
+        )
     ]
 
     indexed_this_request = 0
@@ -1716,6 +1723,14 @@ async def match_quotation_product_by_image(
         original_path = row.get("original_path") or public_path
         if not public_path or not original_path:
             index_failures += 1
+            await db.files.update_one(
+                {"id": row.get("id")},
+                {"$set": {
+                    "quotation_index_failed_at": now_iso(),
+                    "quotation_index_error": "Missing public or original storage path",
+                }},
+            )
+            row["quotation_index_failed_at"] = now_iso()
             continue
         try:
             public_bytes, _stored_ct = await asyncio.to_thread(get_object, public_path)
@@ -1738,22 +1753,59 @@ async def match_quotation_product_by_image(
                     phash_fingerprint, original_bytes
                 ),
             }
-            await db.files.update_one({"id": row.get("id")}, {"$set": update})
+            await db.files.update_one(
+                {"id": row.get("id")},
+                {
+                    "$set": update,
+                    "$unset": {
+                        "quotation_index_failed_at": "",
+                        "quotation_index_error": "",
+                    },
+                },
+            )
             row.update(update)
+            row.pop("quotation_index_failed_at", None)
+            row.pop("quotation_index_error", None)
             indexed_this_request += 1
         except Exception as exc:
             index_failures += 1
+            await db.files.update_one(
+                {"id": row.get("id")},
+                {"$set": {
+                    "quotation_index_failed_at": now_iso(),
+                    "quotation_index_error": str(exc)[:500],
+                }},
+            )
+            row["quotation_index_failed_at"] = now_iso()
+            row["quotation_index_error"] = str(exc)[:500]
             logger.warning(
                 "quotation_complete_index_failed id=%s path=%s err=%s",
                 row.get("id"), public_path, exc,
             )
 
-    index_remaining = max(0, len(missing) - indexed_this_request - index_failures)
-    index_ready = index_remaining == 0 and index_failures == 0
+    # Recompute the remaining healthy/unfailed indexing work. Failed legacy
+    # images are quarantined so they cannot block quotation search forever.
+    index_remaining = sum(
+        1
+        for row, _public_url in catalogue_rows
+        if not row.get("quotation_index_failed_at")
+        and (
+            not row.get("quotation_public_sha256")
+            or not row.get("quotation_original_sha256")
+            or not row.get("quotation_pixel_hash")
+            or not row.get("quotation_original_pixel_hash")
+            or not row.get("quotation_phash")
+            or not row.get("quotation_original_phash")
+        )
+    )
+    failed_total = sum(
+        1 for row, _public_url in catalogue_rows if row.get("quotation_index_failed_at")
+    )
+    index_ready = index_remaining == 0
 
-    # Do not show misleading partial results while some catalogue images have
-    # never been indexed. Exact matching is only trustworthy against a complete
-    # searchable set.
+    # Only block while healthy catalogue images are still waiting to be
+    # indexed. Quarantined legacy failures are reported but do not prevent
+    # matching against the rest of the complete healthy catalogue.
     if not index_ready:
         return {
             "matches": [],
@@ -1762,7 +1814,7 @@ async def match_quotation_product_by_image(
             "index_total": len(catalogue_rows),
             "index_remaining": index_remaining,
             "indexed_this_request": indexed_this_request,
-            "index_failures": index_failures,
+            "index_failures": failed_total,
         }
 
     best_by_product = {}
@@ -1852,7 +1904,7 @@ async def match_quotation_product_by_image(
         "index_total": len(catalogue_rows),
         "index_remaining": 0,
         "indexed_this_request": indexed_this_request,
-        "index_failures": 0,
+        "index_failures": failed_total,
     }
 
 
