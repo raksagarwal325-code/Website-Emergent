@@ -1761,19 +1761,22 @@ async def match_quotation_product_by_image(
         )
 
     # Reusable index: one primary website image per published product.
-    existing_index = await db.quotation_visual_index.find(
+    current_index_keys = {
+        (ref.get("product_id"), ref.get("url"))
+        for ref in primary_refs
+    }
+    existing_index_all = await db.quotation_visual_index.find(
         {
             "version": VISUAL_INDEX_VERSION,
-            "$or": [
-                {
-                    "product_id": ref.get("product_id"),
-                    "image_url": ref.get("url"),
-                }
-                for ref in primary_refs
-            ] if primary_refs else [{"product_id": "__none__"}],
+            "product_id": {"$in": list(products_by_id.keys())},
         },
         {"_id": 0},
-    ).to_list(max(1, len(primary_refs) * 2))
+    ).to_list(max(1, len(primary_refs) * 3))
+    existing_index = [
+        row
+        for row in existing_index_all
+        if (row.get("product_id"), row.get("image_url")) in current_index_keys
+    ]
 
     covered_keys = {
         (row.get("product_id"), row.get("image_url"))
@@ -1947,14 +1950,19 @@ async def match_quotation_product_by_image(
     except VisionSearchError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    ready_rows = await db.quotation_visual_index.find(
+    ready_rows_all = await db.quotation_visual_index.find(
         {
             "version": VISUAL_INDEX_VERSION,
             "status": "ready",
             "product_id": {"$in": list(products_by_id.keys())},
         },
         {"_id": 0},
-    ).to_list(max(1, len(primary_refs) * 2))
+    ).to_list(max(1, len(primary_refs) * 3))
+    ready_rows = [
+        row
+        for row in ready_rows_all
+        if (row.get("product_id"), row.get("image_url")) in current_index_keys
+    ]
 
     ranked = []
     for row in ready_rows:
