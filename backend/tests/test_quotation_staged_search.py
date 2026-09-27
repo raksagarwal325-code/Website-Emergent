@@ -26,7 +26,7 @@ def test_quotation_index_is_incremental_per_product_image():
     route = _quotation_route_source()
 
     assert '"product_id": ref.get("product_id")' in route
-    assert '"image_url": ref.get("url")' in route
+    assert '"image_url": url' in route
     assert "covered_keys" in route
     assert "missing_refs" in route
     assert "catalogue_signature" in route
