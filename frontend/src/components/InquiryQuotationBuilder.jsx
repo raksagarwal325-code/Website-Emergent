@@ -124,7 +124,6 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [imageMatchBusy, setImageMatchBusy] = useState(false);
   const [imageMatchError, setImageMatchError] = useState("");
   const [imageIndexProgress, setImageIndexProgress] = useState(null);
-  const [imageIndexWarning, setImageIndexWarning] = useState("");
   const [aiBusyLineId, setAiBusyLineId] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -153,7 +152,6 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setImageMatches([]);
     setImageMatchError("");
     setImageIndexProgress(null);
-    setImageIndexWarning("");
   };
 
   const findImageMatches = async () => {
@@ -171,9 +169,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
         result = await api.matchQuotationProductByImage(imageSearchFile, 5);
         const total = Number(result?.index_total || 0);
         const remaining = Number(result?.index_remaining || 0);
-        const failed = Number(result?.index_failures || 0);
-        setImageIndexProgress(total ? { total, remaining } : null);
-        setImageIndexWarning(failed ? `${failed} legacy catalogue image${failed === 1 ? "" : "s"} could not be indexed and ${failed === 1 ? "was" : "were"} skipped.` : "");
+        const indexed = Number(result?.index_indexed || Math.max(0, total - remaining));
+        setImageIndexProgress(total ? { total, remaining, indexed } : null);
         if (result?.index_ready) break;
       }
 
@@ -622,13 +619,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
 
                   {imageIndexProgress && imageMatchBusy && (
                     <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-index-progress">
-                      Preparing complete catalogue image index · {Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
-                    </div>
-                  )}
-
-                  {imageIndexWarning && (
-                    <div className="mt-4 border border-amber-300/20 bg-amber-300/[0.04] p-3 text-xs text-amber-100/70" data-testid="quotation-image-index-warning">
-                      {imageIndexWarning}
+                      Preparing catalogue image index directly from product images · {imageIndexProgress.indexed ?? Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
                     </div>
                   )}
 
