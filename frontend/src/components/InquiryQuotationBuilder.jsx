@@ -123,7 +123,6 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [imageMatches, setImageMatches] = useState([]);
   const [imageMatchBusy, setImageMatchBusy] = useState(false);
   const [imageMatchError, setImageMatchError] = useState("");
-  const [imageIndexProgress, setImageIndexProgress] = useState(null);
   const [aiBusyLineId, setAiBusyLineId] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -151,7 +150,6 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setImageSearchPreview(URL.createObjectURL(file));
     setImageMatches([]);
     setImageMatchError("");
-    setImageIndexProgress(null);
   };
 
   const findImageMatches = async () => {
@@ -164,21 +162,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setImageMatches([]);
     setImageIndexProgress(null);
     try {
-      let result = null;
-      for (let batch = 0; batch < 80; batch += 1) {
-        result = await api.matchQuotationProductByImage(imageSearchFile, 5);
-        const total = Number(result?.index_total || 0);
-        const remaining = Number(result?.index_remaining || 0);
-        const indexed = Number(result?.index_indexed || Math.max(0, total - remaining));
-        setImageIndexProgress(total ? { total, remaining, indexed } : null);
-        if (result?.index_ready) break;
-      }
-
-      if (!result?.index_ready) {
-        setImageMatchError("Reusable visual catalogue index is still preparing. The next search will continue automatically.");
-        return;
-      }
-
+      const result = await api.matchQuotationProductByImage(imageSearchFile, 5);
       const matches = Array.isArray(result?.matches) ? result.matches : [];
       setImageMatches(matches);
       if (!matches.length) {
@@ -616,12 +600,6 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                       </button>
                     </div>
                   </div>
-
-                  {imageIndexProgress && imageMatchBusy && (
-                    <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-index-progress">
-                      Preparing reusable visual catalogue index · {imageIndexProgress.indexed ?? Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
-                    </div>
-                  )}
 
                   {imageMatchError && (
                     <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-search-empty">
