@@ -619,7 +619,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
 
                   {imageIndexProgress && imageMatchBusy && (
                     <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-index-progress">
-                      Preparing AI visual catalogue index · {imageIndexProgress.indexed ?? Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
+                      Preparing local visual catalogue index · {imageIndexProgress.indexed ?? Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
                     </div>
                   )}
 
