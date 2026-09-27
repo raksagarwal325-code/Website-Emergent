@@ -21,6 +21,14 @@ describe("Quotation search by image", () => {
     expect(source).toContain("visual_similarity");
   });
 
+  test("admin can diagnose image search without running the matcher", () => {
+    expect(apiSource).toContain("diagnoseQuotationProductByImage");
+    expect(apiSource).toContain("/admin/quotations/product-match-diagnostics");
+    expect(source).toContain("diagnoseImageSearch");
+    expect(source).toContain('data-testid="quotation-image-search-diagnose"');
+    expect(source).toContain('data-testid="quotation-image-search-diagnostic"');
+  });
+
   test("matched catalogue product is only added after explicit confirmation", () => {
     expect(source).toContain("addImageMatch(match)");
     expect(source).toContain('onClick={() => addImageMatch(match)}');
