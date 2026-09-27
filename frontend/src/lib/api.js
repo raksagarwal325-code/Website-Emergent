@@ -210,6 +210,15 @@ export const api = {
       },
     ).then(r => r.data);
   },
+  diagnoseQuotationProductByImage: (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return client.post(
+      "/admin/quotations/product-match-diagnostics",
+      fd,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    ).then(r => r.data);
+  },
 
   createContact: (data) => client.post("/contact", data).then(r => r.data),
   listContact: () => client.get("/contact").then(r => r.data),
