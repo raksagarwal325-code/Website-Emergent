@@ -593,7 +593,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                     <div>
                       <div className="text-sm text-white/75">Find the catalogue product from a client image</div>
                       <p className="mt-1 text-xs leading-relaxed text-white/45">
-                        Best for the same Samrat catalogue photo, including WhatsApp-compressed, resized or recompressed copies.
+                        Visual search across the published Samrat catalogue — screenshots, WhatsApp images, background changes, room photos and alternate product photos are supported.
                       </p>
                       <label className="mt-3 block cursor-pointer text-xs text-[#D4AF37]">
                         {imageSearchFile ? "Replace client image" : "Upload client image"}
@@ -619,7 +619,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
 
                   {imageIndexProgress && imageMatchBusy && (
                     <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-index-progress">
-                      Preparing catalogue image index directly from product images · {imageIndexProgress.indexed ?? Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
+                      Preparing AI visual catalogue index · {imageIndexProgress.indexed ?? Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
                     </div>
                   )}
 
@@ -646,8 +646,10 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                                 : match.match_label === "exact_image"
                                   ? "Exact image content"
                                   : match.match_label === "very_likely"
-                                    ? "Very likely match"
-                                    : "Possible near-copy"}
+                                    ? "Very likely product match"
+                                    : match.match_label === "possible"
+                                      ? "Possible product match"
+                                      : "Visual candidate · verify" }
                               {" · "}{match.visual_similarity}% visual similarity
                             </div>
                           </div>

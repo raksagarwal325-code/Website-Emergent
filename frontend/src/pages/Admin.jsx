@@ -1673,6 +1673,7 @@ function SettingsAdmin({ settings, onSave }) {
         ["google_cid", "Google Business CID"],
         ["google_place_id", "Google Place ID (for live reviews)"],
         ["google_maps_api_key", "Google Maps API Key (server-side, keep secret)"],
+        ["gemini_embedding_api_key", "Gemini Embedding API Key (server-side, for quotation visual search)"],
         ["instagram_url", "Instagram URL (blank = hide icon)"],
         ["facebook_url", "Facebook URL (blank = hide icon)"],
         ["youtube_url", "YouTube URL (blank = hide icon)"],
@@ -1680,7 +1681,7 @@ function SettingsAdmin({ settings, onSave }) {
       ].map(([k, label]) => (
         <div key={k}>
           <label className="text-xs uppercase tracking-[0.2em] text-white/50 mb-1 block">{label}</label>
-          <input data-testid={`set-${k}`} value={form[k] || ""} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
+          <input type={k.endsWith("_api_key") ? "password" : "text"} autoComplete={k.endsWith("_api_key") ? "new-password" : undefined} data-testid={`set-${k}`} value={form[k] || ""} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
         </div>
       ))}
       <button data-testid="save-settings-btn" className="bg-[#D4AF37] text-black px-8 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]">
