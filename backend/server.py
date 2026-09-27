@@ -2068,6 +2068,7 @@ async def diagnose_quotation_product_match(
 async def match_quotation_product_by_image(
     file: UploadFile = File(...),
     limit: int = Query(5, ge=1, le=10),
+    quick: bool = Query(False),
     admin: _AdminUser = Depends(require_admin),
 ):
     """Find catalogue products by reusing the existing Product AI matcher.
@@ -2233,17 +2234,20 @@ async def match_quotation_product_by_image(
                 })
 
     perceptual_candidates.sort(
-        key=lambda row: (row["full_distance"], row["variant_distance"])
+        key=lambda row: (row["variant_distance"], row["full_distance"])
     )
 
     # A close full-frame match with a clear runner-up gap is a near-identical
     # copy of an existing catalogue photograph. Return it directly.
     if perceptual_candidates:
-        best = perceptual_candidates[0]
-        second = (
-            perceptual_candidates[1]["full_distance"]
-            if len(perceptual_candidates) > 1
-            else 999
+        full_ranked = sorted(
+            perceptual_candidates,
+            key=lambda row: (row["full_distance"], row["variant_distance"]),
+        )
+        best = full_ranked[0]
+        second = min(
+            (row["full_distance"] for row in full_ranked[1:]),
+            default=999,
         )
         if best["full_distance"] <= 18 and second - best["full_distance"] >= 5:
             fast_matches = []
@@ -2289,6 +2293,44 @@ async def match_quotation_product_by_image(
                     "index_skipped": 0,
                     "engine": "existing-perceptual-fingerprint",
                 }
+
+    # Return immediately when requested by the quotation UI. These are
+    # candidates for human inspection, not asserted product identities.
+    # The browser can then run the slower vision verification separately.
+    if quick:
+        matches = []
+        seen_products = set()
+        for candidate in perceptual_candidates:
+            for product, image_index in products_by_url.get(candidate["url"], []):
+                product_id = product.get("id")
+                if not product_id or product_id in seen_products:
+                    continue
+                seen_products.add(product_id)
+                images = product.get("images") or []
+                matches.append({
+                    "product_id": product_id,
+                    "sku": product.get("sku") or "",
+                    "name": product.get("name") or "",
+                    "category": product.get("category") or "",
+                    "price": product.get("price") or 0,
+                    "price_display": product.get("price_display") or (
+                        "fixed" if product.get("fixed_price") else "starting_from"
+                    ),
+                    "image_url": images[image_index],
+                    "match_label": "unverified_candidate",
+                    "engine": "local-candidate",
+                    "reason": "Visual candidate; compare the product before adding.",
+                })
+                if len(matches) >= limit:
+                    break
+            if len(matches) >= limit:
+                break
+        return {
+            "matches": matches,
+            "searched_images": len(perceptual_candidates),
+            "engine": "local-candidate",
+            "needs_verification": True,
+        }
 
     # Cache only the expensive visual fallback. The signature includes the
     # published catalogue data used for matching, so product/image/price/name

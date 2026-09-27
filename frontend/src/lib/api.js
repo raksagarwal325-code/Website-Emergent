@@ -198,15 +198,16 @@ export const api = {
   aiQuotationCustomisation: (data) => client.post(
     "/ai/quotation-customisation", data,
   ).then(r => r.data),
-  matchQuotationProductByImage: (file, limit = 5) => {
+  matchQuotationProductByImage: (file, limit = 5, quick = false) => {
     const fd = new FormData();
     fd.append("file", file);
     return client.post(
       "/admin/quotations/product-match-by-image",
       fd,
       {
-        params: { limit },
+        params: { limit, quick },
         headers: { "Content-Type": "multipart/form-data" },
+        timeout: quick ? 20000 : 55000,
       },
     ).then(r => r.data);
   },

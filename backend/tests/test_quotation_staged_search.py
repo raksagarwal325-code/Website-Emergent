@@ -39,6 +39,15 @@ def test_crop_or_whatsapp_candidates_skip_catalogue_wide_discovery():
     assert "Existing catalogue fingerprint candidate" in route
 
 
+def test_local_candidates_return_before_ai_and_require_selection():
+    route = _quotation_route_source()
+    fast = route.index("if quick:")
+    discovery = route.index("discovery = await _discover_catalogue_candidates")
+    assert fast < discovery
+    assert '"match_label": "unverified_candidate"' in route[fast:discovery]
+    assert '"needs_verification": True' in route[fast:discovery]
+
+
 def test_final_verifier_uses_all_saved_images_for_shortlisted_skus():
     route = _quotation_route_source()
 
