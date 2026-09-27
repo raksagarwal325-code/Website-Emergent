@@ -1721,7 +1721,12 @@ async def match_quotation_product_by_image(
             and row.get("visual_embedding_model") == "gemini-embedding-2"
         )
 
-    missing_urls = [url for url in index_urls if not _embedding_ready(index_by_url.get(url))]
+    missing_urls = [
+        url
+        for url in index_urls
+        if not _embedding_ready(index_by_url.get(url))
+        and not (index_by_url.get(url) or {}).get("visual_skipped_at")
+    ]
 
     indexed_this_request = 0
     skipped_this_request = 0
