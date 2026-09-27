@@ -27,7 +27,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E402
 from watermark import apply_watermark  # noqa: E402
-from image_ownership import embed_ownership_metadata, normalized_pixel_fingerprint, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants, salvage_truncated_image  # noqa: E402
+from image_ownership import color_histogram, color_histogram_distance, embed_ownership_metadata, normalized_pixel_fingerprint, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants, salvage_truncated_image  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
@@ -1911,6 +1911,8 @@ async def diagnose_quotation_product_match(
             perceptual_fingerprint_variants, data
         )
         query_dhash_full = query_dhash_variants[0] if query_dhash_variants else ""
+        query_histogram = await asyncio.to_thread(color_histogram, data)
+        query_phash = await asyncio.to_thread(phash_fingerprint, data)
     except Exception:
         raise HTTPException(400, "Could not read that image.")
 
@@ -1938,6 +1940,8 @@ async def diagnose_quotation_product_match(
                 "_id": 0,
                 "storage_path": 1,
                 "perceptual_fingerprint": 1,
+                "visual_phash": 1,
+                "visual_histogram": 1,
                 "ownership_fingerprint": 1,
                 "sha256": 1,
             },
@@ -1951,6 +1955,26 @@ async def diagnose_quotation_product_match(
     fingerprinted = [
         row for row in file_rows if row.get("perceptual_fingerprint")
     ]
+    photo_scores = []
+    for url, row in file_by_url.items():
+        if not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512:
+            continue
+        try:
+            colour_distance = color_histogram_distance(
+                query_histogram, row["visual_histogram"]
+            )
+            phash_distance = perceptual_distance(query_phash, row["visual_phash"])
+        except (TypeError, ValueError):
+            continue
+        for product, _ in products_by_url.get(url, []):
+            photo_scores.append({
+                "sku": product.get("sku") or "",
+                "colour_distance": round(colour_distance, 3),
+                "phash_distance": phash_distance,
+                "score": round(colour_distance + phash_distance / 64 * 0.25, 3),
+            })
+    photo_scores.sort(key=lambda row: row["score"])
+    photo_best = photo_scores[0] if photo_scores else None
 
     index_rows = []
     if all_urls:
@@ -2011,7 +2035,10 @@ async def diagnose_quotation_product_match(
     best = top[0] if top else None
     runner_up = top[1] if len(top) > 1 else None
 
-    if exact_index_rows:
+    if photo_best and photo_best["score"] <= 0.24 and photo_best["colour_distance"] <= 0.16 and photo_best["phash_distance"] <= 24:
+        decision = "strong_photo_signature_match"
+        reason = "A catalogue photograph matches the uploaded image by colour and composition."
+    elif exact_index_rows:
         decision = "exact_index_match"
         reason = "The legacy quotation image index contains an exact SHA/pixel match."
     elif not app_urls:
@@ -2050,15 +2077,18 @@ async def diagnose_quotation_product_match(
             "app_owned_image_urls": len(app_urls),
             "db_file_rows_for_product_images": len(file_rows),
             "fingerprinted_db_file_rows": len(fingerprinted),
+            "photo_indexed_db_file_rows": len([row for row in file_rows if row.get("visual_phash")]),
             "unmapped_app_owned_urls": max(0, len(set(app_urls)) - len(file_by_url)),
             "quotation_image_index_rows": len(index_rows),
             "exact_index_matches": len(exact_index_rows),
         },
         "best": best,
+        "photo_best": photo_best,
         "runner_up": runner_up,
         "top_local_candidates": top,
         "would_enter_ai_fallback": decision not in {
             "exact_index_match",
+            "strong_photo_signature_match",
             "strong_local_fingerprint_match",
         },
     }
@@ -2099,6 +2129,8 @@ async def match_quotation_product_by_image(
             perceptual_fingerprint_variants, data
         )
         query_dhash_full = query_dhash_variants[0] if query_dhash_variants else ""
+        query_histogram = await asyncio.to_thread(color_histogram, data) if quick else []
+        query_phash = await asyncio.to_thread(phash_fingerprint, data) if quick else ""
     except Exception:
         raise HTTPException(
             status_code=400,
@@ -2294,14 +2326,90 @@ async def match_quotation_product_by_image(
                     "engine": "existing-perceptual-fingerprint",
                 }
 
-    # Return immediately when requested by the quotation UI. These are
-    # candidates for human inspection, not asserted product identities.
-    # The browser can then run the slower vision verification separately.
+    # Prepare a persistent, compact photo index in bounded batches. The old
+    # dHash-only candidate list put unrelated gate lights above an identical
+    # chandelier photo; its low-confidence scores must not be shown as matches.
+    # Main images are indexed first. Subsequent searches reuse these signatures.
     if quick:
+        main_urls = {
+            canonical_media_url((product.get("images") or [""])[0])
+            for product in products
+        }
+        storage_paths = [
+            url.removeprefix("/api/files/")
+            for url in products_by_url
+            if url.startswith("/api/files/")
+        ]
+        rows = await db.files.find(
+            {"storage_path": {"$in": storage_paths}},
+            {"_id": 0, "storage_path": 1, "visual_phash": 1, "visual_histogram": 1},
+        ).to_list(len(storage_paths))
+        missing = [
+            row for row in rows
+            if not row.get("visual_phash")
+            or len(row.get("visual_histogram") or []) != 512
+        ]
+        missing.sort(key=lambda row: (
+            0 if f"/api/files/{row['storage_path']}" in main_urls else 1,
+            min(
+                (str(p.get("sku") or "") for p, _ in products_by_url.get(
+                    f"/api/files/{row['storage_path']}", []
+                )),
+                default="",
+            ),
+        ))
+        semaphore = asyncio.Semaphore(10)
+
+        async def index_photo(row):
+            path = row["storage_path"]
+            try:
+                async with semaphore:
+                    photo_bytes, _ = await asyncio.to_thread(get_object, path)
+                    photo_phash, histogram = await asyncio.to_thread(
+                        lambda: (phash_fingerprint(photo_bytes), color_histogram(photo_bytes))
+                    )
+                await db.files.update_one(
+                    {"storage_path": path},
+                    {"$set": {"visual_phash": photo_phash, "visual_histogram": histogram}},
+                )
+                row["visual_phash"] = photo_phash
+                row["visual_histogram"] = histogram
+                return True
+            except Exception as exc:
+                logger.warning("quotation_photo_index_failed path=%s err=%s", path, exc)
+                return False
+
+        built = await asyncio.gather(*(index_photo(row) for row in missing[:40]))
+        indexed_now = sum(built)
+        remaining = len(missing) - indexed_now
+        photo_candidates = []
+        for row in rows:
+            if not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512:
+                continue
+            try:
+                colour_distance = color_histogram_distance(
+                    query_histogram, row["visual_histogram"]
+                )
+                phash_distance = perceptual_distance(query_phash, row["visual_phash"])
+            except (ValueError, TypeError):
+                continue
+            if colour_distance > 0.45 or phash_distance > 32:
+                continue
+            url = f"/api/files/{row['storage_path']}"
+            photo_candidates.append((
+                colour_distance + (phash_distance / 64.0) * 0.25,
+                colour_distance, phash_distance, url,
+            ))
+        photo_candidates.sort()
         matches = []
         seen_products = set()
-        for candidate in perceptual_candidates:
-            for product, image_index in products_by_url.get(candidate["url"], []):
+        for score, colour_distance, phash_distance, url in photo_candidates:
+            # A partially built index may contain plausible-looking lights
+            # before the actual photograph has been indexed. Show only strong
+            # same-photo evidence; otherwise keep preparing the catalogue.
+            if score > 0.24 or colour_distance > 0.16 or phash_distance > 24:
+                continue
+            for product, image_index in products_by_url.get(url, []):
                 product_id = product.get("id")
                 if not product_id or product_id in seen_products:
                     continue
@@ -2317,9 +2425,10 @@ async def match_quotation_product_by_image(
                         "fixed" if product.get("fixed_price") else "starting_from"
                     ),
                     "image_url": images[image_index],
-                    "match_label": "unverified_candidate",
-                    "engine": "local-candidate",
-                    "reason": "Visual candidate; compare the product before adding.",
+                    "match_label": "very_likely",
+                    "engine": "photo-signature",
+                    "reason": "Catalogue photograph with matching colour and composition.",
+                    "photo_score": round(score, 3),
                 })
                 if len(matches) >= limit:
                     break
@@ -2327,9 +2436,12 @@ async def match_quotation_product_by_image(
                 break
         return {
             "matches": matches,
-            "searched_images": len(perceptual_candidates),
-            "engine": "local-candidate",
-            "needs_verification": True,
+            "searched_images": len(rows) - remaining,
+            "engine": "photo-signature",
+            "index_total": len(rows),
+            "index_remaining": remaining,
+            "indexed_this_request": indexed_now,
+            "needs_verification": not matches and remaining == 0,
         }
 
     # Cache only the expensive visual fallback. The signature includes the

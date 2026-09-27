@@ -207,7 +207,7 @@ export const api = {
       {
         params: { limit, quick },
         headers: { "Content-Type": "multipart/form-data" },
-        timeout: quick ? 20000 : 55000,
+        timeout: quick ? 45000 : 55000,
       },
     ).then(r => r.data);
   },

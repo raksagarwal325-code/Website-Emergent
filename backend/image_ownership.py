@@ -164,6 +164,29 @@ def normalized_pixel_fingerprint(original_bytes: bytes) -> str:
         return hashlib.sha256(payload).hexdigest()
 
 
+def color_histogram(original_bytes: bytes) -> list[int]:
+    """Compact colour distribution for finding resized/recompressed photos.
+
+    Unlike dHash, this remains useful when a product is reframed against the
+    same background. Each image is reduced to 64×64 RGB pixels and 8 bins per
+    colour channel, so a stored signature is only 512 small integers.
+    """
+    with Image.open(io.BytesIO(original_bytes)) as opened:
+        image = ImageOps.exif_transpose(opened).convert("RGB")
+        image = image.resize((64, 64), Image.Resampling.LANCZOS)
+        pixels = np.asarray(image, dtype=np.uint8).reshape(-1, 3)
+    bins = pixels.astype(np.uint16) // 32
+    indices = (bins[:, 0] * 64 + bins[:, 1] * 8 + bins[:, 2]).astype(np.int32)
+    return np.bincount(indices, minlength=512).astype(int).tolist()
+
+
+def color_histogram_distance(left: list[int], right: list[int]) -> float:
+    """L1 distance from 0 (same distribution) to 2 (no overlap)."""
+    if len(left) != 512 or len(right) != 512:
+        raise ValueError("expected two 512-bin colour histograms")
+    return sum(abs(a - b) for a, b in zip(left, right)) / 4096.0
+
+
 def phash_fingerprint(original_bytes: bytes, hash_size: int = 8, highfreq_factor: int = 4) -> str:
     """Return a DCT perceptual hash (pHash) for robust near-photo matching.
 
