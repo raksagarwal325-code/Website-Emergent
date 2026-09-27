@@ -175,7 +175,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       }
 
       if (!result?.index_ready) {
-        setImageMatchError("Visual catalogue scan is still in progress. Run the search again to continue.");
+        setImageMatchError("Reusable visual catalogue index is still preparing. The next search will continue automatically.");
         return;
       }
 
@@ -619,7 +619,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
 
                   {imageIndexProgress && imageMatchBusy && (
                     <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-index-progress">
-                      Scanning catalogue visually · step {imageIndexProgress.indexed ?? Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
+                      Preparing reusable visual catalogue index · {imageIndexProgress.indexed ?? Math.max(0, imageIndexProgress.total - imageIndexProgress.remaining)} / {imageIndexProgress.total}
                     </div>
                   )}
 
