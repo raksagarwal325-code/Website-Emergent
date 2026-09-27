@@ -1880,10 +1880,13 @@ async def match_quotation_product_by_image(
         return {
             "matches": [],
             "searched_images": 0,
-            "index_ready": remaining_after == 0,
-            "index_total": len(primary_refs),
+            # Even when this was the last catalogue batch, force one final
+            # automatic frontend iteration so the next short request performs
+            # the actual client-image search against the now-complete index.
+            "index_ready": False,
+            "index_total": len(primary_refs) + 1,
             "index_indexed": covered_after,
-            "index_remaining": remaining_after,
+            "index_remaining": remaining_after + 1,
             "indexed_this_request": len(batch_refs),
             "index_skipped": failed_count,
             "engine": "persistent-visual-index-v1",
