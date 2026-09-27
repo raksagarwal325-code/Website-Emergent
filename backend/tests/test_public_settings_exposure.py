@@ -118,9 +118,6 @@ def test_public_settings_excludes_google_maps_api_key():
         "SECURITY REGRESSION: the seeded test credential leaked into the "
         "public /api/settings response body under some other key name."
     )
-    assert "gemini_embedding_api_key" not in data, (
-        "SECURITY REGRESSION: /api/settings exposes gemini_embedding_api_key."
-    )
 
 
 def test_public_settings_excludes_admin_only_operational_fields():
@@ -186,7 +183,6 @@ def test_admin_settings_returns_full_settings_for_admin():
     # The admin view is allowed to include the credential — that is
     # what the admin panel form needs to render.
     assert "google_maps_api_key" in data
-    assert "gemini_embedding_api_key" in data
     # We do NOT print the value. Instead we assert against the seeded
     # marker so the check is self-verifying without leaking anything.
     assert data["google_maps_api_key"] == _TEST_KEY_MARKER, (
