@@ -11,6 +11,7 @@ import os
 from typing import Iterable
 
 import requests
+from PIL import Image, ImageOps
 
 MODEL = "gemini-embedding-2"
 DIMENSIONS = 768
@@ -30,13 +31,23 @@ def resolve_api_key(settings: dict | None = None) -> str:
     return str(key or "").strip()
 
 
-def _mime_type(value: str) -> str:
-    ct = (value or "").split(";", 1)[0].strip().lower()
+def prepare_image(image_bytes: bytes, content_type: str) -> tuple[bytes, str]:
+    """Normalize any supported catalogue/client image to a compact JPG/PNG."""
+    ct = (content_type or "").split(";", 1)[0].strip().lower()
     if ct == "image/jpg":
         ct = "image/jpeg"
-    if ct not in {"image/jpeg", "image/png"}:
-        raise VisualEmbeddingError("Gemini visual search supports JPG and PNG images.")
-    return ct
+    if ct not in {"image/jpeg", "image/png", "image/webp"}:
+        raise VisualEmbeddingError("Visual search supports JPG, PNG and WebP images.")
+    try:
+        from io import BytesIO
+        with Image.open(BytesIO(image_bytes)) as opened:
+            image = ImageOps.exif_transpose(opened).convert("RGB")
+            image.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
+            out = BytesIO()
+            image.save(out, format="JPEG", quality=90, optimize=True)
+            return out.getvalue(), "image/jpeg"
+    except Exception as exc:
+        raise VisualEmbeddingError("Could not decode image for visual search.") from exc
 
 
 def normalize_vector(values: Iterable[float]) -> list[float]:
@@ -68,13 +79,13 @@ def embed_image(
     if not image_bytes:
         raise VisualEmbeddingError("Image is empty.")
 
-    mime = _mime_type(content_type)
+    prepared, mime = prepare_image(image_bytes, content_type)
     payload = {
         "content": {
             "parts": [{
                 "inline_data": {
                     "mime_type": mime,
-                    "data": base64.b64encode(image_bytes).decode("ascii"),
+                    "data": base64.b64encode(prepared).decode("ascii"),
                 }
             }]
         },
@@ -119,3 +130,44 @@ def embed_image(
         raise
     except Exception as exc:
         raise VisualEmbeddingError("Gemini visual-search returned an invalid embedding.") from exc
+
+
+def embed_images_batch(
+    images: list[tuple[bytes, str]],
+    api_key: str,
+) -> list[list[float]]:
+    """Embed up to six images in one Gemini Embedding 2 request."""
+    if not api_key:
+        raise VisualEmbeddingError("Gemini visual-search API key is not configured.")
+    if not images:
+        return []
+    if len(images) > 6:
+        raise ValueError("Gemini Embedding 2 accepts at most six images per request.")
+
+    try:
+        from google import genai
+        from google.genai import types
+
+        contents = []
+        for image_bytes, content_type in images:
+            prepared, mime = prepare_image(image_bytes, content_type)
+            contents.append(
+                types.Content(
+                    parts=[types.Part.from_bytes(data=prepared, mime_type=mime)]
+                )
+            )
+
+        client = genai.Client(api_key=api_key)
+        result = client.models.embed_content(
+            model=MODEL,
+            contents=contents,
+            config=types.EmbedContentConfig(output_dimensionality=DIMENSIONS),
+        )
+        embeddings = list(result.embeddings or [])
+        if len(embeddings) != len(images):
+            raise VisualEmbeddingError("Gemini returned an incomplete embedding batch.")
+        return [normalize_vector(embedding.values or []) for embedding in embeddings]
+    except VisualEmbeddingError:
+        raise
+    except Exception as exc:
+        raise VisualEmbeddingError(f"Visual embedding batch failed: {exc}") from exc
