@@ -1619,17 +1619,97 @@ async def update_inquiry_status(inquiry_id: str, status: str = Query(...), admin
 
 
 
+
+def _build_quotation_candidate_board(rows: list[dict]) -> tuple[bytes, dict[int, dict]]:
+    """Render candidate catalogue images into one labelled JPEG board.
+
+    The board lets the vision model compare the client photo against multiple
+    saved views of each shortlisted SKU without sending dozens of separate
+    image attachments. All saved product images are considered; when the board
+    would exceed 48 cells, images are sampled evenly per SKU.
+    """
+    import io
+    import math
+    from PIL import Image, ImageDraw, ImageOps
+
+    if not rows:
+        return b"", {}
+
+    # rows: [{"product":..., "image_url":..., "image_bytes":...}, ...]
+    by_product = {}
+    order = []
+    for row in rows:
+        product = row.get("product") or {}
+        product_id = product.get("id") or product.get("sku")
+        if not product_id:
+            continue
+        if product_id not in by_product:
+            by_product[product_id] = []
+            order.append(product_id)
+        by_product[product_id].append(row)
+
+    max_cells = 48
+    selected = []
+    if sum(len(by_product[key]) for key in order) <= max_cells:
+        for key in order:
+            selected.extend(by_product[key])
+    else:
+        per_product = max(1, max_cells // max(1, len(order)))
+        for key in order:
+            product_rows = by_product[key]
+            if len(product_rows) <= per_product:
+                selected.extend(product_rows)
+                continue
+            # Even sampling preserves first/last and different catalogue views.
+            indexes = {
+                round(i * (len(product_rows) - 1) / max(1, per_product - 1))
+                for i in range(per_product)
+            }
+            selected.extend(product_rows[index] for index in sorted(indexes))
+        selected = selected[:max_cells]
+
+    thumb_w, thumb_h = 220, 250
+    label_h = 42
+    cols = min(4, max(1, math.ceil(math.sqrt(len(selected)))))
+    rows_count = math.ceil(len(selected) / cols)
+    board = Image.new("RGB", (cols * thumb_w, rows_count * (thumb_h + label_h)), "white")
+    draw = ImageDraw.Draw(board)
+    mapping = {}
+
+    for cell_index, row in enumerate(selected, start=1):
+        col = (cell_index - 1) % cols
+        row_index = (cell_index - 1) // cols
+        x0 = col * thumb_w
+        y0 = row_index * (thumb_h + label_h)
+        try:
+            with Image.open(io.BytesIO(row["image_bytes"])) as opened:
+                image = ImageOps.exif_transpose(opened).convert("RGB")
+                image.thumbnail((thumb_w - 12, thumb_h - 12), Image.Resampling.LANCZOS)
+                x = x0 + (thumb_w - image.width) // 2
+                y = y0 + (thumb_h - image.height) // 2
+                board.paste(image, (x, y))
+        except Exception:
+            continue
+
+        product = row["product"]
+        sku = str(product.get("sku") or "")
+        image_slot = int(row.get("image_index") or 0) + 1
+        draw.rectangle((x0, y0 + thumb_h, x0 + thumb_w, y0 + thumb_h + label_h), fill="white")
+        draw.text((x0 + 6, y0 + thumb_h + 4), f"C{cell_index:02d} · {sku}", fill="black")
+        draw.text((x0 + 6, y0 + thumb_h + 20), f"catalogue image {image_slot}", fill="black")
+        mapping[cell_index] = row
+
+    output = io.BytesIO()
+    board.save(output, format="JPEG", quality=88, optimize=True)
+    return output.getvalue(), mapping
+
+
 async def _verify_quotation_catalogue_candidates(
     query_bytes: bytes,
     query_mime: str,
     candidates: list[dict],
 ) -> list[dict]:
-    """Visually verify only the short catalogue candidate list.
-
-    Candidate discovery is handled by the existing Product AI catalogue
-    manifest search. This second pass sees the actual client image plus actual
-    candidate product images and is deliberately conservative.
-    """
+    """Verify shortlisted SKUs against all of their saved catalogue views."""
     import base64
     from emergentintegrations.llm.chat import (
         ImageContent,
@@ -1646,19 +1726,9 @@ async def _verify_quotation_catalogue_candidates(
     if not api_key:
         raise HTTPException(500, "EMERGENT_LLM_KEY is not configured")
 
-    semaphore = asyncio.Semaphore(8)
+    semaphore = asyncio.Semaphore(10)
 
-    async def _load_candidate(row):
-        product = row.get("product") or {}
-        image_url = next(
-            (
-                url for url in (product.get("images") or [])
-                if isinstance(url, str) and url
-            ),
-            None,
-        )
-        if not image_url:
-            return None
+    async def _load_one(product, image_url, image_index):
         try:
             async with semaphore:
                 image_bytes, mime = await _resolve_product_image(
@@ -1667,61 +1737,73 @@ async def _verify_quotation_catalogue_candidates(
             return {
                 "product": product,
                 "image_url": image_url,
+                "image_index": image_index,
                 "image_bytes": image_bytes,
                 "mime": mime or "image/jpeg",
             }
         except Exception:
             return None
 
-    loaded = await asyncio.gather(
-        *[_load_candidate(row) for row in candidates],
-        return_exceptions=False,
-    )
+    jobs = []
+    for candidate in candidates:
+        product = candidate.get("product") or {}
+        seen_urls = set()
+        for image_index, image_url in enumerate(product.get("images") or []):
+            if not isinstance(image_url, str) or not image_url or image_url in seen_urls:
+                continue
+            seen_urls.add(image_url)
+            jobs.append(_load_one(product, image_url, image_index))
+
+    loaded = await asyncio.gather(*jobs, return_exceptions=False) if jobs else []
     loaded = [row for row in loaded if row]
     if not loaded:
         return []
 
+    board_bytes, mapping = await asyncio.to_thread(
+        _build_quotation_candidate_board, loaded
+    )
+    if not board_bytes or not mapping:
+        return []
+
+    candidate_summary = []
+    seen_candidate_skus = set()
+    for candidate in candidates:
+        product = candidate.get("product") or {}
+        sku = str(product.get("sku") or "").upper()
+        if not sku or sku in seen_candidate_skus:
+            continue
+        seen_candidate_skus.add(sku)
+        candidate_summary.append(
+            f"{sku}: {product.get('name') or ''} · {product.get('category') or ''}"
+        )
+
     files = [
-        ImageContent(image_base64=base64.b64encode(query_bytes).decode("ascii"))
+        ImageContent(image_base64=base64.b64encode(query_bytes).decode("ascii")),
+        ImageContent(image_base64=base64.b64encode(board_bytes).decode("ascii")),
     ]
-    labels = []
-    for index, row in enumerate(loaded, start=1):
-        product = row["product"]
-        labels.append(
-            f"{index}. SKU={product.get('sku') or ''}; "
-            f"name={product.get('name') or ''}; "
-            f"category={product.get('category') or ''}"
-        )
-        files.append(
-            ImageContent(
-                image_base64=base64.b64encode(row["image_bytes"]).decode("ascii")
-            )
-        )
+    prompt = """IMAGE 1 is the client reference photo.
+IMAGE 2 is a labelled contact sheet of saved Samrat Glass catalogue photos.
 
-    prompt = """IMAGE 1 is the client reference image.
-The remaining images are shortlisted Samrat Glass catalogue candidates in the
-same order as the numbered labels below.
+Find the SAME PRODUCT DESIGN, not merely a visually similar light.
+A SKU may appear in several cells because all of its saved catalogue views are
+being shown. Use every available view for that SKU as evidence.
 
-Your job is product identity verification, not aesthetic similarity.
 Ignore background colour, room setting, screenshot borders, WhatsApp
-compression, image crop, lighting and camera angle.
+compression, crop, lighting, bulb state and camera angle. Compare physical
+construction: arm/light count, shade/glass shape, central body, frame geometry,
+crystal/drop arrangement, proportions, mounting/base and distinctive motifs.
 
-Compare fixture construction: arm/light count, glass/shade shape, central body,
-frame geometry, crystal/drop arrangement, proportions and distinctive motifs.
+A different glass option on the exact same frame may be
+same_fixture_different_glass. A generic resemblance is NOT a match.
 
-Return a candidate as same_fixture ONLY when it can reasonably be the same
-physical catalogue design. If the frame/body is the same but glass differs,
-use same_fixture_different_glass. Do not return a candidate merely because both
-are chandeliers/wall lights or share generic glass/crystal/brass features.
+If no candidate is genuinely the same fixture, return an empty matches array.
+Never force the closest-looking product.
 
-If none is the same fixture, return an empty matches array. Never force a
-nearest neighbour.
-
-CANDIDATES:
-""" + "\n".join(labels) + """
+CANDIDATE SKUS:
+""" + "\n".join(candidate_summary) + """
 
 Return JSON only:
-{"matches":[{"index":1,"relation":"same_fixture|same_fixture_different_glass","confidence":0.0,"reason":"brief factual reason"}]}
+{"matches":[{"sku":"SGE-XX-000","relation":"same_fixture|same_fixture_different_glass","confidence":0.0,"evidence_cells":["C01","C07"],"reason":"brief factual reason"}]}
 Confidence is 0 to 1."""
 
     chat = configure_product_chat(
@@ -1729,16 +1811,14 @@ Confidence is 0 to 1."""
             api_key=api_key,
             session_id=f"quotation-candidate-verify-{uuid.uuid4().hex[:12]}",
             system_message=(
-                "You are a conservative product identity verifier for Samrat "
-                "Glass Emporium. Prefer no match over a wrong match. JSON only."
+                "You are a conservative product-identity verifier. "
+                "Prefer no match over a wrong SKU. JSON only."
             ),
         )
     )
 
     parts = []
-    async for event in chat.stream_message(
-        UserMessage(text=prompt, file_contents=files)
-    ):
+    async for event in chat.stream_message(UserMessage(text=prompt, file_contents=files)):
         if isinstance(event, TextDelta):
             parts.append(event.content)
         elif isinstance(event, StreamDone):
@@ -1753,50 +1833,54 @@ Confidence is 0 to 1."""
     except json.JSONDecodeError:
         return []
 
+    candidate_by_sku = {
+        str((candidate.get("product") or {}).get("sku") or "").upper(): candidate
+        for candidate in candidates
+        if (candidate.get("product") or {}).get("sku")
+    }
     verified = []
-    seen = set()
     for item in payload.get("matches") or []:
-        try:
-            candidate_index = int(item.get("index") or 0) - 1
-        except (TypeError, ValueError):
-            continue
-        if candidate_index < 0 or candidate_index >= len(loaded):
+        sku = str(item.get("sku") or "").upper().strip()
+        candidate = candidate_by_sku.get(sku)
+        if not candidate:
             continue
         relation = str(item.get("relation") or "").strip()
         if relation not in {"same_fixture", "same_fixture_different_glass"}:
             continue
         try:
-            confidence = max(
-                0.0, min(1.0, float(item.get("confidence") or 0))
-            )
+            confidence = max(0.0, min(1.0, float(item.get("confidence") or 0)))
         except (TypeError, ValueError):
             confidence = 0.0
-
-        # Exact fixture identity must be strong. Variant-frame matches require
-        # even more confidence because the quotation needs the correct SKU.
-        threshold = 0.84 if relation == "same_fixture" else 0.90
+        threshold = 0.86 if relation == "same_fixture" else 0.92
         if confidence < threshold:
             continue
 
-        row = loaded[candidate_index]
-        product = row["product"]
-        sku = str(product.get("sku") or "").upper()
-        if not sku or sku in seen:
-            continue
-        seen.add(sku)
+        product = candidate["product"]
+        evidence_cells = []
+        for raw_cell in item.get("evidence_cells") or []:
+            cell_match = re.fullmatch(r"C(\d{1,2})", str(raw_cell).upper().strip())
+            if not cell_match:
+                continue
+            cell = mapping.get(int(cell_match.group(1)))
+            if cell and str((cell.get("product") or {}).get("sku") or "").upper() == sku:
+                evidence_cells.append(cell)
+        best_image_url = (
+            evidence_cells[0].get("image_url")
+            if evidence_cells
+            else next(
+                (row.get("image_url") for row in loaded if str((row.get("product") or {}).get("sku") or "").upper() == sku),
+                (product.get("images") or [""])[0],
+            )
+        )
         verified.append({
             "product": product,
-            "image_url": row["image_url"],
+            "image_url": best_image_url,
             "relation": relation,
             "confidence": confidence,
             "reason": str(item.get("reason") or "").strip()[:240],
         })
 
-    return sorted(
-        verified,
-        key=lambda row: row["confidence"],
-        reverse=True,
-    )
+    return sorted(verified, key=lambda row: row["confidence"], reverse=True)
 
 
 @api.post("/admin/quotations/product-match-by-image")
