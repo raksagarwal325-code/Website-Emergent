@@ -189,21 +189,16 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     setImageMatchError("");
     setImageMatches([]);
     try {
-      let result;
-      for (let batch = 0; batch < 60; batch += 1) {
-        result = await api.matchQuotationProductByImage(selectedFile, 5, true);
-        if (requestId !== imageSearchSequence.current) return;
-        setImageIndexProgress({
-          total: Number(result?.index_total || 0),
-          remaining: Number(result?.index_remaining || 0),
-        });
-        if ((result?.matches || []).length || !result?.index_remaining) break;
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
+      const result = await api.matchQuotationProductByImage(selectedFile, 5, true);
+      if (requestId !== imageSearchSequence.current) return;
+      setImageIndexProgress({
+        total: Number(result?.index_total || 0),
+        remaining: Number(result?.index_remaining || 0),
+      });
       const matches = Array.isArray(result?.matches) ? result.matches : [];
       setImageMatches(matches);
       if (!matches.length) {
-        setImageMatchError("No confirmed catalogue photo yet. Comparing the design in more detail…");
+        setImageMatchError("Comparing your photo with catalogue product designs…");
       }
       if (!matches.length) void refineImageMatches(selectedFile, requestId);
     } catch (error) {
@@ -247,7 +242,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
         setImageMatches(matches);
         setImageMatchError("");
       } else {
-        setImageMatchError("Detailed comparison found no confirmed product. Review the catalogue visually or search by name / SKU.");
+        setImageMatchError("No product photo could be compared. Try another photo or search by name / SKU.");
       }
     } catch (error) {
       if (requestId === imageSearchSequence.current) {
@@ -763,7 +758,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                                     ? "Very likely product match"
                                     : match.match_label === "possible"
                                       ? "Possible product match"
-                                      : "Visual candidate · verify" }
+                                      : "Visual candidate · compare product photos before adding" }
                               {Number.isFinite(match.visual_similarity) ? ` · ${match.visual_similarity}% visual similarity` : ""}
                             </div>
                           </div>

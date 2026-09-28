@@ -1667,7 +1667,7 @@ def _build_quotation_candidate_board(rows: list[dict]) -> tuple[bytes, dict[int,
     """
     import io
     import math
-    from PIL import Image, ImageDraw, ImageOps
+    from PIL import Image, ImageDraw, ImageFont, ImageOps
 
     if not rows:
         return b"", {}
@@ -1706,7 +1706,11 @@ def _build_quotation_candidate_board(rows: list[dict]) -> tuple[bytes, dict[int,
         selected = selected[:max_cells]
 
     thumb_w, thumb_h = 220, 250
-    label_h = 42
+    label_h = 52
+    try:
+        label_font = ImageFont.truetype("DejaVuSans.ttf", 17)
+    except OSError:
+        label_font = ImageFont.load_default(size=17)
     cols = min(4, max(1, math.ceil(math.sqrt(len(selected)))))
     rows_count = math.ceil(len(selected) / cols)
     board = Image.new("RGB", (cols * thumb_w, rows_count * (thumb_h + label_h)), "white")
@@ -1732,8 +1736,8 @@ def _build_quotation_candidate_board(rows: list[dict]) -> tuple[bytes, dict[int,
         sku = str(product.get("sku") or "")
         image_slot = int(row.get("image_index") or 0) + 1
         draw.rectangle((x0, y0 + thumb_h, x0 + thumb_w, y0 + thumb_h + label_h), fill="white")
-        draw.text((x0 + 6, y0 + thumb_h + 4), f"C{cell_index:02d} · {sku}", fill="black")
-        draw.text((x0 + 6, y0 + thumb_h + 20), f"catalogue image {image_slot}", fill="black")
+        draw.text((x0 + 6, y0 + thumb_h + 3), f"C{cell_index:02d} · {sku}", fill="black", font=label_font)
+        draw.text((x0 + 6, y0 + thumb_h + 26), f"catalogue image {image_slot}", fill="black", font=label_font)
         mapping[cell_index] = row
 
     output = io.BytesIO()
@@ -1918,6 +1922,144 @@ Confidence is 0 to 1."""
         })
 
     return sorted(verified, key=lambda row: row["confidence"], reverse=True)
+
+
+def _quotation_visual_thumbnail(content: bytes) -> bytes:
+    from PIL import Image, ImageOps
+
+    with Image.open(io.BytesIO(content)) as opened:
+        thumbnail = ImageOps.exif_transpose(opened).convert("RGB")
+        thumbnail.thumbnail((420, 420), Image.Resampling.LANCZOS)
+        out = io.BytesIO()
+        thumbnail.save(out, format="JPEG", quality=82)
+        return out.getvalue()
+
+
+async def _visually_shortlist_quotation_products(query_bytes: bytes, products: list[dict]) -> list[dict]:
+    """Compare the query with real catalogue photos, independent of names and gallery links."""
+    import base64
+    from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "EMERGENT_LLM_KEY is not configured")
+
+    # Fetch one representative photo from every published product. An image
+    # that cannot be loaded cannot be compared and must never be invented.
+    semaphore = asyncio.Semaphore(12)
+
+    async def load(product):
+        images = product.get("images") or []
+        if not images:
+            return None
+        try:
+            async with semaphore:
+                url = canonical_media_url(images[0])
+                if url.startswith("/api/files/"):
+                    content, _mime = await asyncio.to_thread(get_object, url.removeprefix("/api/files/"))
+                else:
+                    content, _mime = await _resolve_product_image(
+                        AIRegenerateRequest(image_url=images[0])
+                    )
+            return {"product": product, "image_url": images[0], "image_index": 0,
+                    "image_bytes": await asyncio.to_thread(_quotation_visual_thumbnail, content)}
+        except Exception:
+            logger.warning("quotation_visual_image_unavailable sku=%s", product.get("sku"))
+            return None
+
+    loaded = [row for row in await asyncio.gather(*(load(p) for p in products)) if row]
+    logger.info("quotation_visual_catalogue_loaded published=%d loaded=%d", len(products), len(loaded))
+    if not loaded:
+        return []
+
+    query_image = ImageContent(image_base64=base64.b64encode(query_bytes).decode("ascii"))
+    model_semaphore = asyncio.Semaphore(4)
+
+    async def compare_board(rows, max_choices):
+        board, mapping = await asyncio.to_thread(_build_quotation_candidate_board, rows)
+        if not mapping:
+            return []
+        prompt = f"""IMAGE 1 is a client's photo, possibly from WhatsApp or a real installation.
+IMAGE 2 contains labelled catalogue product photos. Inspect the actual lights in
+both images, not the text in the product names. Ignore background, photography,
+bulb state and colour editing. Compare frame, arms, glass shapes, crystal drops,
+light count and proportions. Choose up to {max_choices} closest visible designs,
+including plausible alternatives when the angle or setting differs. Include
+the closest visible lights even if none is identical; these are
+suggestions for a human to inspect, not confirmed identical products. Only use
+cell labels clearly visible in IMAGE 2. Return JSON only:
+{{"candidates":[{{"cell":"C01","confidence":0.0,"reason":"visible shared details"}}]}}
+Confidence measures resemblance within this sheet, from 0 to 1."""
+        chat = configure_product_chat(LlmChat(
+            api_key=api_key, session_id=f"quotation-visual-{uuid.uuid4().hex[:12]}",
+            system_message="Rank photographed lighting by visible design. JSON only.",
+        ))
+        parts = []
+        async with model_semaphore:
+            async for event in chat.stream_message(UserMessage(
+                text=prompt,
+                file_contents=[query_image, ImageContent(image_base64=base64.b64encode(board).decode("ascii"))],
+            )):
+                if isinstance(event, TextDelta):
+                    parts.append(event.content)
+                elif isinstance(event, StreamDone):
+                    break
+        match = re.search(r"\{.*\}", "".join(parts), re.DOTALL)
+        if not match:
+            return []
+        try:
+            entries = json.loads(match.group(0)).get("candidates") or []
+        except (ValueError, TypeError):
+            return []
+        ranked = []
+        seen = set()
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            cell = re.fullmatch(r"C(\d{1,2})", str(entry.get("cell") or "").upper().strip())
+            row = mapping.get(int(cell.group(1))) if cell else None
+            sku = str((row or {}).get("product", {}).get("sku") or "").upper()
+            if not row or not sku or sku in seen:
+                continue
+            seen.add(sku)
+            try:
+                confidence = max(0.0, min(1.0, float(entry.get("confidence") or 0)))
+            except (ValueError, TypeError):
+                confidence = 0.0
+            ranked.append((confidence, row))
+            if len(ranked) >= max_choices:
+                break
+        return ranked
+
+    # Each product is seen visually once, then the shortlists are compared
+    # together so per-sheet confidence numbers do not decide the final ranking.
+    first_pass = await asyncio.gather(*(
+        compare_board(loaded[offset:offset + 32], 2)
+        for offset in range(0, len(loaded), 32)
+    ), return_exceptions=True)
+    finalists = []
+    seen = set()
+    for result in first_pass:
+        if isinstance(result, BaseException):
+            logger.warning("quotation_visual_sheet_failed: %s", result)
+            continue
+        for _confidence, row in result:
+            sku = str(row["product"].get("sku") or "").upper()
+            if sku not in seen:
+                seen.add(sku)
+                finalists.append(row)
+    logger.info("quotation_visual_catalogue_shortlisted sheets=%d finalists=%d", len(first_pass), len(finalists))
+    if len(finalists) > 8:
+        second_pass = await asyncio.gather(*(
+            compare_board(finalists[offset:offset + 40], 8)
+            for offset in range(0, len(finalists), 40)
+        ), return_exceptions=True)
+        ranked = [item for result in second_pass if not isinstance(result, BaseException)
+                  for item in result]
+        finalists = [row for _confidence, row in sorted(ranked, key=lambda item: -item[0])[:12]] or finalists[:12]
+    return [{"product": row["product"], "discovery_relation": "visual_candidate",
+             "discovery_confidence": 0.0, "discovery_reason": "Compared with catalogue photographs"}
+            for row in finalists[:12]]
 
 
 
@@ -2153,14 +2295,10 @@ async def match_quotation_product_by_image(
     quick: bool = Query(False),
     admin: _AdminUser = Depends(require_admin),
 ):
-    """Find catalogue products by reusing the existing Product AI matcher.
+    """Find products by stored photo hashes, then compare actual catalogue images.
 
-    Flow:
-    1) deterministic SHA/pixel shortcut for exact stored images;
-    2) existing compact catalogue-manifest discovery over published products;
-    3) actual image-to-image verification of only the shortlisted candidates.
-
-    No full catalogue image scan, no separate visual index, no Torch runtime.
+    Different-angle photos use a background visual shortlist across published
+    products, followed by verification of every saved view of those candidates.
     """
     content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
     if content_type not in {"image/jpeg", "image/png", "image/webp"}:
@@ -2209,11 +2347,7 @@ async def match_quotation_product_by_image(
     ).to_list(5000)
 
     products_by_url = {}
-    products_by_sku = {}
     for product in products:
-        sku = str(product.get("sku") or "").upper()
-        if sku:
-            products_by_sku[sku] = product
         for image_index, raw_url in enumerate(product.get("images") or []):
             url = canonical_media_url(raw_url)
             if url:
@@ -2505,7 +2639,7 @@ async def match_quotation_product_by_image(
     # published catalogue data used for matching, so product/image/price/name
     # changes automatically invalidate prior results.
     catalogue_signature = ownership_fingerprint(json.dumps(
-        {"products": products, "project_photos": {
+        {"engine": "visual-catalogue-v2", "products": products, "project_photos": {
             url: sorted(product["id"] for product in linked)
             for url, linked in project_photos.items()
         }}, sort_keys=True, default=str, separators=(",", ":")
@@ -2517,26 +2651,8 @@ async def match_quotation_product_by_image(
     if cached and isinstance(cached.get("response"), dict):
         return cached["response"]
 
-    # Reuse the same complete-manifest shortlist logic already used by the
-    # Product AI upload workflow. This compares the client photo against compact
-    # factual catalogue identities without downloading every catalogue image.
-    import base64
-    from emergentintegrations.llm.chat import ImageContent
-
-    discovery_item = AISopBatchItem(
-        client_id=f"quotation-{query_sha[:12]}",
-        image_urls=[],
-        image_filenames=[file.filename or "client-image"],
-        category="",
-        notes="",
-    )
-    query_image = ImageContent(
-        image_base64=base64.b64encode(data).decode("ascii")
-    )
-
-    # Stage 1b: if crop/near-image fingerprints identify a small set of
-    # plausible SKUs, skip catalogue-wide AI discovery and verify only those
-    # products using all their saved views. This is one AI call, not two.
+    # A near-image fingerprint can save the full scan. If it does not verify,
+    # compare real photos of every published product instead of asking an AI
     candidates = []
     seen_skus = set()
     nearby = [
@@ -2560,30 +2676,10 @@ async def match_quotation_product_by_image(
         if len(candidates) >= 6:
             break
 
-    discovery = {"category": "", "matches": []}
-    if not candidates:
-        # Stage 2: genuinely different photo/angle. Reuse the existing Product
-        # AI catalogue manifest only to shortlist SKUs; actual identity is then
-        # verified against all saved images for those SKUs.
-        discovery = await _discover_catalogue_candidates(
-            discovery_item,
-            [query_image],
-            products,
-        )
-        for row in discovery.get("matches") or []:
-            sku = str(row.get("sku") or "").upper()
-            product = products_by_sku.get(sku)
-            if not product or sku in seen_skus:
-                continue
-            seen_skus.add(sku)
-            candidates.append({
-                "product": product,
-                "discovery_relation": row.get("relation"),
-                "discovery_confidence": float(row.get("confidence") or 0),
-                "discovery_reason": row.get("reason") or "",
-            })
-            if len(candidates) >= 6:
-                break
+    verified = await _verify_quotation_catalogue_candidates(data, content_type, candidates) if candidates else []
+    if not verified:
+        candidates = await _visually_shortlist_quotation_products(data, products)
+        verified = await _verify_quotation_catalogue_candidates(data, content_type, candidates) if candidates else []
 
     if not candidates:
         response = {
@@ -2595,7 +2691,7 @@ async def match_quotation_product_by_image(
             "index_remaining": 0,
             "indexed_this_request": 0,
             "index_skipped": 0,
-            "engine": "catalogue-manifest-plus-vision",
+            "engine": "catalogue-visual-comparison",
         }
         await db.quotation_image_search_cache.update_one(
             {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
@@ -2603,12 +2699,6 @@ async def match_quotation_product_by_image(
             upsert=True,
         )
         return response
-
-    verified = await _verify_quotation_catalogue_candidates(
-        data,
-        content_type,
-        candidates,
-    )
 
     matches = []
     for row in verified[:limit]:
@@ -2632,9 +2722,30 @@ async def match_quotation_product_by_image(
                 if row.get("relation") == "same_fixture" and confidence >= 90
                 else "possible"
             ),
-            "engine": "catalogue-manifest-plus-vision",
+            "engine": "catalogue-visual-comparison",
             "reason": row.get("reason") or "",
         })
+
+    # A client chooses the SKU. When the verifier cannot confirm identity,
+    # still show the visually shortlisted products as explicitly unconfirmed
+    # options rather than an empty result after examining the whole catalogue.
+    if not matches:
+        for candidate in candidates[:limit]:
+            product = candidate["product"]
+            matches.append({
+                "product_id": product.get("id"),
+                "sku": product.get("sku") or "",
+                "name": product.get("name") or "",
+                "category": product.get("category") or "",
+                "price": product.get("price") or 0,
+                "price_display": product.get("price_display") or (
+                    "fixed" if product.get("fixed_price") else "starting_from"
+                ),
+                "image_url": (product.get("images") or [""])[0],
+                "match_label": "candidate",
+                "engine": "catalogue-visual-comparison",
+                "reason": "Visual candidate; compare its full product photos before adding.",
+            })
 
     response = {
         "matches": matches,
@@ -2645,8 +2756,7 @@ async def match_quotation_product_by_image(
         "index_remaining": 0,
         "indexed_this_request": 0,
         "index_skipped": 0,
-        "engine": "catalogue-manifest-plus-vision",
-        "category_hint": discovery.get("category") or "",
+        "engine": "catalogue-visual-comparison",
     }
     await db.quotation_image_search_cache.update_one(
         {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
