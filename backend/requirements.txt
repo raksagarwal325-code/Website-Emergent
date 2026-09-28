@@ -130,3 +130,5 @@ zipp==4.1.0
 resend==2.34.0
 pytest-asyncio==1.4.0
 
+
+onnxruntime==1.30.0

@@ -6734,6 +6734,29 @@ async def root():
     return {"ok": True, "service": "lumiere-catalog"}
 
 
+# Customer-facing image search has its own service, model and Mongo collections.
+from customer_image_search import CustomerImageSearch, search_router  # noqa: E402
+
+
+async def _load_customer_catalogue_image(url):
+    # URLs come only from published product records, never from a user upload.
+    if url.startswith("/api/files/"):
+        data, _mime = await asyncio.to_thread(get_object, url.removeprefix("/api/files/"))
+        return data
+    response = await asyncio.to_thread(lambda: asyncio.run(_proxy_image_secure(url, admin=None)))
+    return response.body
+
+
+customer_image_search = CustomerImageSearch(db, _load_customer_catalogue_image)
+api.include_router(search_router(customer_image_search, rate_limit("customer-image-search", 20, 300)))
+
+
+@api.get("/admin/customer-image-search/status")
+async def customer_image_search_status(admin: _AdminUser = Depends(require_admin)):
+    return await customer_image_search.status()
+
+
+
 # --- Startup ---
 @app.on_event("startup")
 async def startup():
@@ -6781,8 +6804,15 @@ async def startup():
         logger.warning(f"Storage init deferred: {e}")
 
 
+@app.on_event("startup")
+async def start_customer_image_search():
+    if os.environ.get("CUSTOMER_IMAGE_SEARCH_ENABLED", "true").lower() == "true":
+        customer_image_search.start()
+
+
 @app.on_event("shutdown")
 async def shutdown():
+    await customer_image_search.stop()
     client.close()
 
 

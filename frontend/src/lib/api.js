@@ -94,6 +94,11 @@ export const prepareListedProduct = (product, { raw = false } = {}) =>
   raw ? product : sanitizePublicProduct(product);
 
 export const api = {
+  searchByImage: async (file, signal) => {
+    const form = new FormData();
+    form.append("file", file);
+    return (await client.post("/search/image", form, { signal, timeout: 25000 })).data;
+  },
   authMe: () => client.get("/auth/me").then(r => r.data),
   authSession: (session_id) => client.post("/auth/session", { session_id }).then(r => r.data),
   authLogout: () => client.post("/auth/logout").then(r => r.data),
