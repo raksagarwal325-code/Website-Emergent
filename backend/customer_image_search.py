@@ -140,7 +140,7 @@ class CustomerImageSearch:
             manifest = await self.manifest(urls)
             rows = await self.rows(manifest)
             indexed = sum(bool(r.get("vectors")) for r in rows)
-            vectors = await asyncio.to_thread(self.encoder.encode, image) if self.encoder.session is not None else None
+            vectors = await asyncio.to_thread(self.encoder.encode_query, image) if self.encoder.session is not None else None
             matches = await asyncio.to_thread(rank_images, hashes, vectors, rows, urls)
             return {
                 "matches": [{"product": m["product"], "match_type": m["match_type"]} for m in matches],

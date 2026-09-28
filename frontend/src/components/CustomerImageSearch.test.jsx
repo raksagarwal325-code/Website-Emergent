@@ -86,3 +86,14 @@ test("a file that cannot be decoded is rejected without calling the search API",
   expect(await screen.findByRole("alert")).toBeInTheDocument();
   expect(api.searchByImage).not.toHaveBeenCalled();
 });
+
+test("renders tentative candidates separately without claiming an exact match", async () => {
+  api.searchByImage.mockResolvedValue({ index_complete: true, similarity_available: true, available: true,
+    matches: [{ product, match_type: "possible" }] });
+  open(); upload();
+  expect(await screen.findByText("Possible matches")).toBeInTheDocument();
+  expect(screen.getByText(/tentative suggestions/)).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Glass Chandelier/ })).toBeInTheDocument();
+  expect(screen.queryByText("Matching products")).not.toBeInTheDocument();
+  expect(screen.queryByText("Similar designs")).not.toBeInTheDocument();
+});

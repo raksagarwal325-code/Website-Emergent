@@ -133,3 +133,39 @@ async def test_refresh_indexes_new_images_and_continues_past_a_failed_image():
     assert writes[1].args[1]["$set"]["pixels"]
     assert writes[2].args[1]["$set"]["vectors"] == vector()
     images.delete_many.assert_awaited_once_with({"_id": {"$nin": ["bad-key", "good-key"]}})
+
+
+def scored_vector(score):
+    v = np.zeros(EMBEDDING_DIM)
+    v[0], v[1] = score, np.sqrt(1 - score ** 2)
+    return [v.tolist(), v.tolist()]
+
+
+def test_weaker_whole_photo_matches_are_explicitly_tentative_and_bounded():
+    rows = [{"url": str(i), "vectors": scored_vector(s)}
+            for i, s in enumerate([.714, .70, .69, .68, .67, .60, .54])]
+    products = {r["url"]: [{"id": r["url"]}] for r in rows}
+    result = rank_images({"sha256": "q", "pixels": "q"}, vector(), rows, products)
+    assert [r["product"]["id"] for r in result] == ["0", "1", "2", "3"]
+    assert all(r["match_type"] == "possible" for r in result)
+
+
+def test_regional_match_recovers_fixture_without_promoting_weak_background_objects():
+    query = vector() + vector(2)
+    rows = [{"url": "fixture", "vectors": vector(2)}]
+    products = {"fixture": [{"id": "fixture"}]}
+    result = rank_images({"sha256": "q", "pixels": "q"}, query, rows, products)
+    assert result[0]["match_type"] == "similar"
+    weak = np.zeros(EMBEDDING_DIM); weak[2] = .60; weak[3] = .80
+    rows[0]["vectors"] = [weak.tolist(), weak.tolist()]
+    assert rank_images({"sha256": "q", "pixels": "q"}, query, rows, products) == []
+
+
+def test_strong_results_suppress_tentative_fallback_and_exact_still_wins():
+    rows = [{"url": "strong", "vectors": vector()},
+            {"url": "weak", "vectors": scored_vector(.70)},
+            {"url": "exact", "sha256": "q"}]
+    products = {r["url"]: [{"id": r["url"]}] for r in rows}
+    result = rank_images({"sha256": "q", "pixels": "q"}, vector(), rows, products)
+    assert [(r["product"]["id"], r["match_type"]) for r in result] == [
+        ("exact", "exact"), ("strong", "similar")]

@@ -56,6 +56,7 @@ class VisualEncoder:
 
     def load(self):
         import onnxruntime as ort
+        ort.disable_telemetry_events()
         from huggingface_hub import hf_hub_download
         with self.lock:
             if self.session is not None:
@@ -86,22 +87,54 @@ class VisualEncoder:
                 vectors.append(vector.astype(float).tolist())
         return vectors
 
+    def encode_query(self, image):
+        """Keep whole-photo features first, then inspect bounded, overlapping regions.
+
+        Catalogue embeddings stay unchanged. Regions help when a light occupies
+        only part of a room photo; they never establish an exact product match.
+        """
+        vectors = self.encode(image)
+        for box in ((0, 0, .7, 1), (.3, 0, 1, 1), (.15, 0, .85, .6),
+                    (.15, .2, .85, .8), (.15, .4, .85, 1)):
+            bounds = tuple(round(value * (image.width if i % 2 == 0 else image.height))
+                           for i, value in enumerate(box))
+            if bounds[2] > bounds[0] and bounds[3] > bounds[1]:
+                vectors.extend(self.encode(image.crop(bounds)))
+        return vectors
+
 
 def rank_images(hashes, vectors, rows, products_by_url, limit=12, threshold=0.72):
     """Deduplicate by product, reserve exact labels for byte/pixel identity."""
     ranked = {}
+    possible = {}
     query = np.asarray(vectors, dtype=np.float32) if vectors else None
     for row in rows:
         exact = bool(hashes["sha256"] == row.get("sha256") or hashes["pixels"] == row.get("pixels"))
         score = 1.0 if exact else 0.0
         stored = np.asarray(row.get("vectors") or [], dtype=np.float32)
-        if not exact and query is not None and query.shape == (2, EMBEDDING_DIM) and stored.shape == (2, EMBEDDING_DIM):
+        whole_score = 0.0
+        if (not exact and query is not None and query.ndim == 2
+                and 2 <= query.shape[0] <= 12 and query.shape[1] == EMBEDDING_DIM
+                and stored.shape == (2, EMBEDDING_DIM)
+                and np.isfinite(query).all() and np.isfinite(stored).all()):
             score = float(np.max(query @ stored.T))
-        if not exact and score < threshold:
+            whole_score = float(np.max(query[:2] @ stored.T))
+        strong = exact or score >= threshold
+        if not strong and whole_score < 0.55:
             continue
+        destination = ranked if strong else possible
         for product in products_by_url.get(row["url"], []):
-            candidate = {"product": product, "match_type": "exact" if exact else "similar", "score": score}
-            old = ranked.get(product["id"])
-            if old is None or (exact, score) > (old["match_type"] == "exact", old["score"]):
-                ranked[product["id"]] = candidate
-    return sorted(ranked.values(), key=lambda x: (x["match_type"] != "exact", -x["score"], x["product"]["id"]))[:limit]
+            candidate = {"product": product, "match_type": "exact" if exact else ("similar" if strong else "possible"),
+                         "score": score if strong else whole_score}
+            old = destination.get(product["id"])
+            if old is None or (exact, candidate["score"]) > (old["match_type"] == "exact", old["score"]):
+                destination[product["id"]] = candidate
+    if ranked:
+        return sorted(ranked.values(), key=lambda x: (x["match_type"] != "exact", -x["score"], x["product"]["id"]))[:limit]
+    # A small, explicitly uncertain fallback. Use whole-photo scores only:
+    # an incidental object in a regional crop must not create a weak suggestion.
+    if not possible:
+        return []
+    best = max(item["score"] for item in possible.values())
+    return sorted((item for item in possible.values() if item["score"] >= best - 0.06),
+                  key=lambda x: (-x["score"], x["product"]["id"]))[:min(limit, 4)]

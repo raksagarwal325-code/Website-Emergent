@@ -30,3 +30,11 @@ Local deterministic tests cover upload validation, public field projection, no q
 ## Room-photo ranking correction
 
 The initial CLIP model ranked a supplied Noorvastra room photo behind unrelated hanging lights: CH-002 was fifth and CH-069 eleventh in the preview. Changing only the crop aggregation did not reliably correct this. DINOv2-small replaces the visual encoder for standalone customer search; exact byte/pixel matching, request limits and quotation code remain unchanged. Both finish variants are valid similar results; neither is labelled an exact image match from a different photograph.
+
+## Background-heavy uploads and tentative candidates
+
+Query encoding additionally inspects five fixed overlapping regions (left/right and upper/middle/lower centre). The original and padded full-photo vectors stay first. This is bounded to twelve query vectors, uses the same pinned model locally, and does not change catalogue embeddings or require an index rebuild. No SKU, filename, or customer-photo rule is used.
+
+Strong visual results retain the 0.72 threshold and the “Similar designs” label. If there are no strong or exact results, whole-photo scores of at least 0.55 may produce up to four “Possible matches”, restricted to 0.06 of the best whole-photo candidate. Weak regional matches cannot trigger this fallback. The UI explicitly asks customers to compare details and does not represent these as identified products. Exact still means byte/pixel identity only.
+
+This update does not resolve HEIC support or transient catalogue download failures. Deploy both frontend and backend together so the `possible` match type is rendered. Validate the supplied wall-light, Kandil and Meher examples against the complete production catalogue as well as unrelated uploads; local sample results alone do not establish full-catalogue accuracy.
