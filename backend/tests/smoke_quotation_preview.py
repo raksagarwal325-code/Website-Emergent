@@ -61,17 +61,27 @@ async def main():
         raise RuntimeError(f"Unsupported project photo type: {mime}")
 
     print(f"Checking project photo {url} linked_skus={sorted(expected)}", flush=True)
+    first = await search(data, mime)
+    print(f"First pass: engine={first.get('engine')} results="
+          f"{[m.get('sku') for m in first.get('matches', [])]}", flush=True)
+    task = server._quotation_project_index_task
+    if task:
+        print("Waiting up to 120 seconds for linked project photo indexing", flush=True)
+        await asyncio.wait_for(asyncio.shield(task), timeout=120)
+    indexed = await server.db.quotation_image_index.find_one(
+        {"url": url}, {"_id": 0, "public_sha256": 1, "pixel_hash": 1,
+                       "visual_index_failed_at": 1}
+    )
+    print(f"Search-only index: present={bool(indexed)} "
+          f"error={bool((indexed or {}).get('visual_index_failed_at'))}", flush=True)
+    if not indexed or not indexed.get("pixel_hash"):
+        raise AssertionError("FAIL: linked photo without db.files row was not indexed")
+
     result = await search(data, mime)
-    if not expected.intersection(str(m.get("sku")) for m in result.get("matches", [])):
-        task = server._quotation_project_index_task
-        if task and not task.done():
-            print("Waiting up to 120 seconds for linked project photo signatures", flush=True)
-            await asyncio.wait_for(asyncio.shield(task), timeout=120)
-            result = await search(data, mime)
     found = [(m.get("sku"), m.get("match_label")) for m in result.get("matches", [])]
     print(f"Original: engine={result.get('engine')} results={found}", flush=True)
-    if not expected.intersection(sku for sku, _ in found):
-        raise AssertionError("FAIL: actual linked product missing for unchanged project photo")
+    if result.get("engine") != "exact-hash" or not expected.intersection(sku for sku, _ in found):
+        raise AssertionError("FAIL: unchanged linked photo did not use exact search")
 
     # Reencode the same pixels without the original metadata. WhatsApp and
     # downloaded photos often alter metadata without changing the product.
@@ -82,9 +92,9 @@ async def main():
     edited = await search(output.getvalue(), "image/png")
     found = [(m.get("sku"), m.get("match_label")) for m in edited.get("matches", [])]
     print(f"Reencoded: engine={edited.get('engine')} results={found}", flush=True)
-    if not expected.intersection(sku for sku, _ in found):
-        raise AssertionError("FAIL: actual linked product missing after metadata change")
-    print("PASS: a real linked Preview photo finds its catalogue product twice", flush=True)
+    if edited.get("engine") != "exact-hash" or not expected.intersection(sku for sku, _ in found):
+        raise AssertionError("FAIL: re-encoded linked photo did not use exact search")
+    print("PASS: missing-record project photo gets indexed and matches exact twice", flush=True)
 
 
 if __name__ == "__main__":
