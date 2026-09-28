@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from customer_visual_features import decode_image, image_hashes, model_input, rank_images, MAX_BYTES
+from customer_visual_features import decode_image, image_hashes, model_input, rank_images, MAX_BYTES, EMBEDDING_DIM
 from customer_image_search import CustomerImageSearch, catalogue_urls, search_router
 
 
@@ -23,7 +23,7 @@ def photo(colour="gold", fmt="PNG"):
 
 
 def vector(axis=0):
-    v = np.zeros(512); v[axis] = 1
+    v = np.zeros(EMBEDDING_DIM); v[axis] = 1
     return [v.tolist(), v.tolist()]
 
 
@@ -52,6 +52,14 @@ def test_shared_exact_photo_keeps_both_products_without_claiming_unique_identity
     result = rank_images({"sha256": "same", "pixels": "x"}, None, [{"url": "a", "sha256": "same"}], {"a": [{"id": "a"}, {"id": "b"}]})
     assert len(result) == 2
     assert all(m["match_type"] == "exact" for m in result)
+
+
+def test_legacy_vectors_cannot_be_compared_with_new_model_but_hashes_still_match():
+    rows = [{"url": "old", "vectors": np.ones((2, 512)).tolist()},
+            {"url": "exact", "sha256": "same", "vectors": np.ones((2, 512)).tolist()}]
+    result = rank_images({"sha256": "same", "pixels": "x"}, vector(), rows,
+                         {"old": [{"id": "old"}], "exact": [{"id": "exact"}]})
+    assert [(m["product"]["id"], m["match_type"]) for m in result] == [("exact", "exact")]
 
 
 def test_preprocessing_and_invalid_inputs():
