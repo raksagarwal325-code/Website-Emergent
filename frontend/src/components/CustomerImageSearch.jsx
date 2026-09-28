@@ -5,6 +5,22 @@ import { Camera, Upload, X, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
 import { productPath } from "../lib/productUrl";
 
+// Decode and re-encode uploaded pixels. Never use uploaded bytes or a blob URL
+// directly as the DOM image source (including files with a spoofed MIME type).
+export async function makeSearchPreview(file) {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, 320 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/png");
+  } finally {
+    bitmap.close();
+  }
+}
+
 export default function CustomerImageSearch() {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState("");
@@ -18,7 +34,6 @@ export default function CustomerImageSearch() {
   const sequence = useRef(0);
 
   useEffect(() => () => controller.current?.abort(), []);
-  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   useEffect(() => {
     if (!open) return undefined;
     const previousOverflow = document.body.style.overflow;
@@ -52,10 +67,12 @@ export default function CustomerImageSearch() {
       setError("Choose an image smaller than 10 MB.");
       return;
     }
-    setPreview(URL.createObjectURL(file));
     setBusy(true);
     controller.current = new AbortController();
     try {
+      const safePreview = await makeSearchPreview(file);
+      if (attempt !== sequence.current) return;
+      setPreview(safePreview);
       const response = await api.searchByImage(file, controller.current.signal);
       if (attempt === sequence.current) setResult(response);
     } catch (err) {

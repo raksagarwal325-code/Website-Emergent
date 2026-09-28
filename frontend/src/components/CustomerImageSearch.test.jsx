@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import CustomerImageSearch from "./CustomerImageSearch";
+import CustomerImageSearch, { makeSearchPreview } from "./CustomerImageSearch";
 import { api } from "../lib/api";
 
 jest.mock("../lib/api", () => ({ api: { searchByImage: jest.fn(), resolveImage: (x) => x } }));
@@ -12,7 +12,13 @@ const open = () => {
   render(<MemoryRouter><div className="relative"><CustomerImageSearch /></div></MemoryRouter>);
   fireEvent.click(screen.getByRole("button", { name: "Search by image" }));
 };
-beforeEach(() => { jest.clearAllMocks(); URL.createObjectURL = jest.fn(() => "blob:reference"); URL.revokeObjectURL = jest.fn(); });
+beforeEach(() => {
+  jest.clearAllMocks();
+  global.createImageBitmap = jest.fn(async () => ({ width: 640, height: 960, close: jest.fn() }));
+  jest.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage: jest.fn() });
+  jest.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,preview");
+});
+afterEach(() => jest.restoreAllMocks());
 
 test("uploads a photo and separates matching products from similar designs with working links", async () => {
   api.searchByImage.mockResolvedValue({ index_complete: true, similarity_available: true, available: true, matches: [{ product, match_type: "exact" }, { product: { ...product, id: "two", name: "Related Light", sku: "SGE-CH-002" }, match_type: "similar" }] });
@@ -31,9 +37,10 @@ test("rejects unsupported and oversized uploads before sending a request", () =>
   expect(api.searchByImage).not.toHaveBeenCalled();
 });
 
-test("closing cancels an in-flight request and restores focus", () => {
+test("closing cancels an in-flight request and restores focus", async () => {
   api.searchByImage.mockReturnValue(new Promise(() => {}));
   open(); upload();
+  await waitFor(() => expect(api.searchByImage).toHaveBeenCalledTimes(1));
   const signal = api.searchByImage.mock.calls[0][1];
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
   expect(signal.aborted).toBe(true);
@@ -45,7 +52,9 @@ test("an older response cannot replace results for a newer upload", async () => 
   let resolveOld;
   api.searchByImage.mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }));
   api.searchByImage.mockResolvedValueOnce({ matches: [], available: true, index_complete: true, similarity_available: true });
-  open(); upload(); upload();
+  open(); upload();
+  await waitFor(() => expect(api.searchByImage).toHaveBeenCalledTimes(1));
+  upload();
   expect(await screen.findByText(/No close match found/)).toBeInTheDocument();
   await act(async () => resolveOld({ matches: [{ product, match_type: "exact" }] }));
   expect(screen.queryByText("Matching products")).not.toBeInTheDocument();
@@ -59,4 +68,21 @@ test("shows partial-index and server error states without a stuck spinner", asyn
   upload();
   expect(await screen.findByRole("alert")).toHaveTextContent("Image search is busy");
   await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+});
+
+
+test("preview contains newly encoded PNG pixels and closes the decoded bitmap", async () => {
+  const bitmap = { width: 640, height: 960, close: jest.fn() };
+  global.createImageBitmap.mockResolvedValueOnce(bitmap);
+  expect(await makeSearchPreview(file())).toBe("data:image/png;base64,preview");
+  expect(HTMLCanvasElement.prototype.getContext).toHaveBeenCalledWith("2d");
+  expect(HTMLCanvasElement.prototype.toDataURL).toHaveBeenCalledWith("image/png");
+  expect(bitmap.close).toHaveBeenCalledTimes(1);
+});
+
+test("a file that cannot be decoded is rejected without calling the search API", async () => {
+  global.createImageBitmap.mockRejectedValueOnce(new Error("Invalid image"));
+  open(); upload();
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(api.searchByImage).not.toHaveBeenCalled();
 });

@@ -23,6 +23,6 @@ While signed into Admin, request `GET /api/admin/customer-image-search/status`. 
 
 ## Validation
 
-Validation passed: 10 backend tests and 5 React interaction tests (the latter in an isolated Jest harness using the same React and router versions). The full CRA build and repository CI remain pending because dependency installation hit network retries and GitHub push was blocked by automatic approval review.
+Local validation passed: 10 backend tests and 7 React interaction tests. Full repository tests, production build/prerender and security workflows run on PR #425; check the latest commit checks and review annotations before merging. The uploaded-photo preview decodes the image and creates a fresh PNG thumbnail rather than exposing the uploaded bytes directly as a browser image source.
 
 Local deterministic tests cover upload validation, public field projection, no query-time catalogue downloads, exact/visual labels, product deduplication and removal, cancellation/stale-response behaviour and incomplete-index states. Real-model smoke testing used 13 live product images across five categories: all 13 originals and all 13 resized/JPEG-recompressed copies ranked their own product first against that sample. Local feature extraction/ranking took 0.10–0.19 seconds per sample, excluding network/database time. This does not establish full-catalogue retrieval accuracy or accuracy on unseen room photos. Production index readiness and deployed response times remain deployment checks.
