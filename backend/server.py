@@ -36,7 +36,7 @@ from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_
 from product_ai import configure_product_chat, product_ai_settings  # noqa: E402
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, canonical_media_url, collect_references, inspect_media_bytes, public_url_for_file  # noqa: E402
 from quotation_gallery import catalogue_photo_views, linked_project_photos  # noqa: E402
-from quotation_matching import exact_file_matches, strongest_full_frame_match  # noqa: E402
+from quotation_matching import exact_file_matches, needs_photo_index, strongest_full_frame_match  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
@@ -67,13 +67,17 @@ async def _index_quotation_photo_rows(rows):
                 )
                 thumbnail = await asyncio.to_thread(_quotation_visual_thumbnail, photo_bytes)
                 pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, photo_bytes)
+                fingerprint = row.get("perceptual_fingerprint") or await asyncio.to_thread(
+                    perceptual_fingerprint, photo_bytes
+                )
             await db.files.update_one(
                 {"storage_path": path},
                 {
                     "$set": {"visual_phash": phash, "visual_histogram": histogram,
                              "visual_thumbnail": thumbnail, "visual_thumbnail_ready": True,
                              "public_sha256": ownership_fingerprint(photo_bytes),
-                             "public_pixel_hash": pixel_hash},
+                             "public_pixel_hash": pixel_hash,
+                             "perceptual_fingerprint": fingerprint},
                     "$unset": {"visual_index_failed_at": ""},
                 },
             )
@@ -2592,20 +2596,18 @@ async def match_quotation_product_by_image(
             {"storage_path": {"$in": storage_paths}},
             {"_id": 0, "storage_path": 1, "visual_phash": 1, "visual_histogram": 1,
              "visual_index_failed_at": 1, "visual_thumbnail_ready": 1,
-             "public_sha256": 1, "public_pixel_hash": 1},
+             "public_sha256": 1, "public_pixel_hash": 1,
+             "perceptual_fingerprint": 1},
         ).to_list(len(storage_paths))
         retry_cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
         skipped = sum(
             1 for row in rows
             if row.get("visual_index_failed_at", "") > retry_cutoff
-            and (not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512
-                 or not row.get("visual_thumbnail_ready") or not row.get("public_pixel_hash"))
+            and needs_photo_index(row)
         )
         missing = [
             row for row in rows
-            if (not row.get("visual_phash")
-                or len(row.get("visual_histogram") or []) != 512
-                or not row.get("visual_thumbnail_ready") or not row.get("public_pixel_hash"))
+            if needs_photo_index(row)
             and row.get("visual_index_failed_at", "") <= retry_cutoff
         ]
         missing.sort(key=lambda row: (
@@ -4040,6 +4042,16 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
         )
         wm_enabled_for_record = bool(wm.get("enabled") and wm.get("explicit_opt_in"))
 
+    public_sha = ownership_fingerprint(public_bytes) if is_image else None
+    public_pixel_hash = None
+    if is_image:
+        try:
+            public_pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, public_bytes)
+        except (OSError, ValueError):
+            # Search indexing is optional for uploads that the image decoder
+            # cannot open; an existing accepted upload must still succeed.
+            logger.warning("upload_public_image_pixel_hash_unavailable filename=%s", file.filename)
+
     result = put_object(public_path, public_bytes, file.content_type)
     try:
         media_metadata = inspect_media_bytes(data, file.content_type)
@@ -4064,8 +4076,8 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
         "sha256": media_metadata.get("sha256"),
         "ownership_fingerprint": ownership_fp,
         "perceptual_fingerprint": visual_fp,
-        "public_sha256": ownership_fingerprint(public_bytes) if is_image else None,
-        "public_pixel_hash": normalized_pixel_fingerprint(public_bytes) if is_image else None,
+        "public_sha256": public_sha,
+        "public_pixel_hash": public_pixel_hash,
         "width": media_metadata.get("width"),
         "height": media_metadata.get("height"),
         "created_at": now_iso(),

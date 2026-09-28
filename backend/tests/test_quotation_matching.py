@@ -5,7 +5,20 @@ import io
 from PIL import Image, PngImagePlugin
 
 from image_ownership import normalized_pixel_fingerprint, ownership_fingerprint
-from quotation_matching import exact_file_matches, strongest_full_frame_match
+from quotation_matching import exact_file_matches, needs_photo_index, strongest_full_frame_match
+
+
+def test_existing_photo_signatures_without_dhash_are_reindexed():
+    ready = {"storage_path": "catalogue/first.png", "visual_phash": "0" * 16,
+             "visual_histogram": [0] * 512, "visual_thumbnail_ready": True,
+             "public_pixel_hash": "pixels", "perceptual_fingerprint": "f" * 64}
+    assert needs_photo_index(ready) is False
+    legacy = dict(ready)
+    legacy.pop("perceptual_fingerprint")
+    assert needs_photo_index(legacy) is True
+    legacy["perceptual_fingerprint"] = ready["perceptual_fingerprint"]
+    legacy.pop("public_pixel_hash")
+    assert needs_photo_index(legacy) is True
 
 
 def test_public_image_metadata_and_original_hash_can_both_find_product():

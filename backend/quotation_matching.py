@@ -1,6 +1,15 @@
 """Deterministic product-level decisions for quotation photo search."""
 
 
+def needs_photo_index(row):
+    """Backfill older catalogue rows that lack any search signature."""
+    return (not row.get("visual_phash")
+            or len(row.get("visual_histogram") or []) != 512
+            or not row.get("visual_thumbnail_ready")
+            or not row.get("public_pixel_hash")
+            or not row.get("perceptual_fingerprint"))
+
+
 def exact_file_matches(file_rows, query_sha, query_pixel_hash):
     """Return storage paths for identical public bytes/pixels or original bytes."""
     return [row["storage_path"] for row in file_rows
