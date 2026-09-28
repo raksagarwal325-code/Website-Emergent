@@ -54,8 +54,7 @@ async def main():
     row = await server.db.files.find_one(
         {"storage_path": path}, {"_id": 0, "public_sha256": 1, "public_pixel_hash": 1}
     )
-    if not row:
-        raise RuntimeError(f"Project photo is linked but has no db.files record: {url}")
+    print(f"Project photo has db.files record: {bool(row)}", flush=True)
     data, mime = await asyncio.to_thread(server.get_object, path)
     mime = (mime or "").split(";", 1)[0].lower()
     if mime not in {"image/jpeg", "image/png", "image/webp"}:

@@ -36,7 +36,7 @@ from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_
 from product_ai import configure_product_chat, product_ai_settings  # noqa: E402
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, canonical_media_url, collect_references, inspect_media_bytes, public_url_for_file  # noqa: E402
 from quotation_gallery import catalogue_photo_views, linked_project_photos  # noqa: E402
-from quotation_matching import exact_file_matches, needs_photo_index, strongest_full_frame_match  # noqa: E402
+from quotation_matching import exact_file_matches, needs_photo_index, needs_untracked_photo_index, strongest_full_frame_match, untracked_media_urls  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
@@ -93,6 +93,39 @@ async def _index_quotation_photo_rows(rows):
                 logger.exception("quotation_photo_index_failure_record_failed path=%s", path)
 
     await asyncio.gather(*(build(row) for row in rows))
+
+
+async def _index_quotation_untracked_photos(urls):
+    """Index public catalogue/project photos missing their db.files record."""
+    semaphore = asyncio.Semaphore(8)
+
+    async def build(url):
+        path = url.removeprefix("/api/files/")
+        try:
+            async with semaphore:
+                data, _ = await asyncio.to_thread(get_object, path)
+                phash, histogram = await asyncio.to_thread(
+                    lambda: (phash_fingerprint(data), color_histogram(data))
+                )
+                pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, data)
+                fingerprint = await asyncio.to_thread(perceptual_fingerprint, data)
+                thumbnail = await asyncio.to_thread(_quotation_visual_thumbnail, data)
+            await db.quotation_image_index.update_one(
+                {"url": url},
+                {"$set": {"public_sha256": ownership_fingerprint(data),
+                          "pixel_hash": pixel_hash, "perceptual_fingerprint": fingerprint,
+                          "visual_phash": phash, "visual_histogram": histogram,
+                          "visual_thumbnail": thumbnail},
+                 "$unset": {"visual_index_failed_at": ""}},
+                upsert=True,
+            )
+        except Exception as exc:
+            logger.warning("quotation_untracked_photo_index_failed url=%s err=%s", url, exc)
+            await db.quotation_image_index.update_one(
+                {"url": url}, {"$set": {"visual_index_failed_at": now_iso()}}, upsert=True
+            )
+
+    await asyncio.gather(*(build(url) for url in urls))
 
 app = FastAPI(title="Lumière Catalog API")
 api = APIRouter(prefix="/api")
@@ -1982,6 +2015,14 @@ async def _visually_shortlist_quotation_products(
         ).to_list(len(storage_paths))
         thumbnails = {row["storage_path"]: bytes(row["visual_thumbnail"])
                       for row in rows if row.get("visual_thumbnail")}
+        uncached_urls = [f"/api/files/{path}" for path in storage_paths if path not in thumbnails]
+        if uncached_urls:
+            indexed = await db.quotation_image_index.find(
+                {"url": {"$in": uncached_urls}},
+                {"_id": 0, "url": 1, "visual_thumbnail": 1},
+            ).to_list(len(uncached_urls))
+            thumbnails.update({row["url"].removeprefix("/api/files/"): bytes(row["visual_thumbnail"])
+                               for row in indexed if row.get("visual_thumbnail")})
         logger.info("quotation_visual_thumbnail_coverage cached=%d total=%d",
                     len(thumbnails), len(storage_paths))
 
@@ -2220,15 +2261,31 @@ async def diagnose_quotation_product_match(
                 "phash_distance": phash_distance,
                 "score": round(colour_distance + phash_distance / 64 * 0.25, 3),
             })
-    photo_scores.sort(key=lambda row: row["score"])
-    photo_best = photo_scores[0] if photo_scores else None
-
     index_rows = []
     if all_urls:
         index_rows = await db.quotation_image_index.find(
             {"url": {"$in": all_urls}},
-            {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1},
+            {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1,
+             "perceptual_fingerprint": 1, "visual_phash": 1,
+             "visual_histogram": 1},
         ).to_list(len(all_urls))
+    untracked_urls = set(untracked_media_urls(app_urls, file_rows))
+    for row in index_rows:
+        url = row.get("url")
+        if url not in untracked_urls or not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512:
+            continue
+        try:
+            colour_distance = color_histogram_distance(query_histogram, row["visual_histogram"])
+            phash_distance = perceptual_distance(query_phash, row["visual_phash"])
+        except (TypeError, ValueError):
+            continue
+        for product, _ in products_by_url.get(url, []):
+            photo_scores.append({"sku": product.get("sku") or "",
+                                 "colour_distance": round(colour_distance, 3),
+                                 "phash_distance": phash_distance,
+                                 "score": round(colour_distance + phash_distance / 64 * 0.25, 3)})
+    photo_scores.sort(key=lambda row: row["score"])
+    photo_best = photo_scores[0] if photo_scores else None
     exact_file_paths = exact_file_matches(file_rows, query_sha, query_pixel_hash)
     exact_index_rows = [
         row for row in index_rows
@@ -2238,7 +2295,10 @@ async def diagnose_quotation_product_match(
 
     product_scores = {}
     full_frame_scores = []
-    for url, row in file_by_url.items():
+    fingerprint_rows = dict(file_by_url)
+    fingerprint_rows.update({row["url"]: row for row in index_rows
+                             if row.get("url") in untracked_urls})
+    for url, row in fingerprint_rows.items():
         stored = str(row.get("perceptual_fingerprint") or "")
         if not stored:
             continue
@@ -2329,6 +2389,10 @@ async def diagnose_quotation_product_match(
             "photo_indexed_db_file_rows": len([row for row in file_rows if row.get("visual_phash")]),
             "unmapped_app_owned_urls": max(0, len(set(app_urls)) - len(file_by_url)),
             "quotation_image_index_rows": len(index_rows),
+            "app_owned_urls_without_file_rows": len(untracked_urls),
+            "indexed_urls_without_file_rows": sum(1 for row in index_rows
+                                                  if row.get("url") in untracked_urls
+                                                  and not needs_untracked_photo_index(row)),
             "exact_index_matches": len(exact_index_rows) + len(exact_file_paths),
         },
         "best": best,
@@ -2416,6 +2480,8 @@ async def match_quotation_product_by_image(
 
     # Exact bytes or decoded pixels from the uploaded public image and linked
     # projects. Older file rows can also match the unchanged original bytes.
+    untracked_urls = []
+    index_rows = []
     if products_by_url:
         exact_paths = [url.removeprefix("/api/files/") for url in products_by_url
                        if url.startswith("/api/files/")]
@@ -2424,10 +2490,31 @@ async def match_quotation_product_by_image(
             {"_id": 0, "storage_path": 1, "public_sha256": 1,
              "public_pixel_hash": 1, "ownership_fingerprint": 1, "sha256": 1},
         ).to_list(len(exact_paths)) if exact_paths else []
+        untracked_urls = untracked_media_urls(products_by_url, file_exact_rows)
         index_rows = await db.quotation_image_index.find(
             {"url": {"$in": list(products_by_url.keys())}},
-            {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1},
+            {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1,
+             "perceptual_fingerprint": 1, "visual_phash": 1,
+             "visual_histogram": 1,
+             "visual_index_failed_at": 1},
         ).to_list(len(products_by_url))
+        if not quick and untracked_urls:
+            indexed_by_url = {row["url"]: row for row in index_rows}
+            retry_cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+            missing_project_urls = [
+                url for url in untracked_urls if url in project_photos
+                and needs_untracked_photo_index(indexed_by_url.get(url))
+                and (indexed_by_url.get(url) or {}).get("visual_index_failed_at", "") <= retry_cutoff
+            ]
+            if missing_project_urls:
+                await _index_quotation_untracked_photos(missing_project_urls)
+                index_rows = await db.quotation_image_index.find(
+                    {"url": {"$in": list(products_by_url.keys())}},
+                    {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1,
+                     "perceptual_fingerprint": 1, "visual_phash": 1,
+                     "visual_histogram": 1,
+                     "visual_index_failed_at": 1},
+                ).to_list(len(products_by_url))
 
         exact_urls = [
             f"/api/files/{path}" for path in exact_file_matches(
@@ -2499,6 +2586,12 @@ async def match_quotation_product_by_image(
                 },
                 {"_id": 0, "storage_path": 1, "perceptual_fingerprint": 1},
             ).to_list(len(storage_paths))
+            rows.extend(
+                {"storage_path": row["url"].removeprefix("/api/files/"),
+                 "perceptual_fingerprint": row.get("perceptual_fingerprint")}
+                for row in index_rows
+                if row.get("url") in untracked_urls and row.get("perceptual_fingerprint")
+            )
             for row in rows:
                 stored = str(row.get("perceptual_fingerprint") or "")
                 if not stored:
@@ -2600,12 +2693,21 @@ async def match_quotation_product_by_image(
              "public_sha256": 1, "public_pixel_hash": 1,
              "perceptual_fingerprint": 1},
         ).to_list(len(storage_paths))
+        index_total = len(rows) + len(untracked_urls)
         retry_cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        indexed_by_url = {row["url"]: row for row in index_rows}
+        missing_untracked = [
+            url for url in untracked_urls
+            if needs_untracked_photo_index(indexed_by_url.get(url))
+            and (indexed_by_url.get(url) or {}).get("visual_index_failed_at", "") <= retry_cutoff
+        ]
         skipped = sum(
             1 for row in rows
             if row.get("visual_index_failed_at", "") > retry_cutoff
             and needs_photo_index(row)
-        )
+        ) + sum(1 for url in untracked_urls
+                if needs_untracked_photo_index(indexed_by_url.get(url))
+                and (indexed_by_url.get(url) or {}).get("visual_index_failed_at", "") > retry_cutoff)
         missing = [
             row for row in rows
             if needs_photo_index(row)
@@ -2622,7 +2724,7 @@ async def match_quotation_product_by_image(
             ),
         ))
         global _quotation_photo_index_task, _quotation_project_index_task
-        if missing and (
+        if (missing or missing_untracked) and (
             _quotation_photo_index_task is None
             or _quotation_photo_index_task.done()
         ):
@@ -2630,24 +2732,35 @@ async def match_quotation_product_by_image(
                                if f"/api/files/{row['storage_path']}" in project_photos]
             other_missing = [row for row in missing
                              if f"/api/files/{row['storage_path']}" not in project_photos]
-            if project_missing:
-                project_task = asyncio.create_task(
-                    _index_quotation_photo_rows(project_missing)
+            project_untracked = [url for url in missing_untracked if url in project_photos]
+            other_untracked = [url for url in missing_untracked if url not in project_photos]
+            if project_missing or project_untracked:
+                project_task = asyncio.gather(
+                    _index_quotation_photo_rows(project_missing),
+                    _index_quotation_untracked_photos(project_untracked),
                 )
                 _quotation_project_index_task = project_task
 
                 async def index_remaining():
                     await project_task
-                    if other_missing:
-                        await _index_quotation_photo_rows(other_missing)
+                    await asyncio.gather(
+                        _index_quotation_photo_rows(other_missing),
+                        _index_quotation_untracked_photos(other_untracked),
+                    )
 
                 _quotation_photo_index_task = asyncio.create_task(index_remaining())
             else:
                 _quotation_project_index_task = None
-                _quotation_photo_index_task = asyncio.create_task(
-                    _index_quotation_photo_rows(other_missing)
+                _quotation_photo_index_task = asyncio.gather(
+                    _index_quotation_photo_rows(other_missing),
+                    _index_quotation_untracked_photos(other_untracked),
                 )
-        remaining = len(missing)
+        rows.extend(
+            {**row, "storage_path": row["url"].removeprefix("/api/files/")}
+            for row in index_rows if row.get("url") in untracked_urls
+            and not needs_untracked_photo_index(row)
+        )
+        remaining = len(missing) + len(missing_untracked)
         photo_candidates = []
         for row in rows:
             if not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512:
@@ -2702,9 +2815,9 @@ async def match_quotation_product_by_image(
                 break
         return {
             "matches": matches,
-            "searched_images": len(rows) - remaining,
+            "searched_images": max(0, index_total - remaining - skipped),
             "engine": "photo-signature",
-            "index_total": len(rows),
+            "index_total": index_total,
             "index_remaining": remaining,
             "indexed_this_request": 0,
             "index_skipped": skipped,
@@ -2880,7 +2993,7 @@ async def start_quotation_product_match_job(
             if _quotation_project_index_task and not _quotation_project_index_task.done():
                 try:
                     await asyncio.wait_for(
-                        asyncio.shield(_quotation_project_index_task), timeout=30
+                        asyncio.shield(_quotation_project_index_task), timeout=120
                     )
                 except asyncio.TimeoutError:
                     logger.info("quotation_project_photo_index_still_running job=%s", job_id)
