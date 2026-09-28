@@ -712,8 +712,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                         <div>Product images: {imageDiagnostic.catalogue?.published_image_urls ?? 0}</div>
                         <div>db.files mapped: {imageDiagnostic.catalogue?.db_file_rows_for_product_images ?? 0}</div>
                         <div>With fingerprints: {imageDiagnostic.catalogue?.fingerprinted_db_file_rows ?? 0}</div>
-                        <div>Photo signatures ready: {(imageDiagnostic.catalogue?.photo_indexed_db_file_rows ?? 0) + (imageDiagnostic.catalogue?.indexed_urls_without_file_rows ?? 0)}</div>
-                        <div>Project/catalogue photos without file records: {imageDiagnostic.catalogue?.app_owned_urls_without_file_rows ?? 0}</div>
+                        <div>Photo signatures ready: {imageDiagnostic.catalogue?.photo_indexed_db_file_rows ?? 0}</div>
+                        <div>Legacy index rows: {imageDiagnostic.catalogue?.quotation_image_index_rows ?? 0}</div>
                         <div>AI fallback: {imageDiagnostic.would_enter_ai_fallback ? "Yes" : "No"}</div>
                       </div>
                       {imageDiagnostic.best && (

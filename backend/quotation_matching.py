@@ -10,21 +10,6 @@ def needs_photo_index(row):
             or not row.get("perceptual_fingerprint"))
 
 
-def untracked_media_urls(urls, file_rows):
-    """Published app photos with an object-store URL but no db.files row."""
-    tracked = {row.get("storage_path") for row in file_rows}
-    return [url for url in urls if url.startswith("/api/files/")
-            and url.removeprefix("/api/files/") not in tracked]
-
-
-def needs_untracked_photo_index(row):
-    """Incomplete search-only records also need a fresh object-store read."""
-    return (not row or not row.get("public_sha256")
-            or not row.get("pixel_hash") or not row.get("perceptual_fingerprint")
-            or not row.get("visual_phash")
-            or len(row.get("visual_histogram") or []) != 512)
-
-
 def exact_file_matches(file_rows, query_sha, query_pixel_hash):
     """Return storage paths for identical public bytes/pixels or original bytes."""
     return [row["storage_path"] for row in file_rows

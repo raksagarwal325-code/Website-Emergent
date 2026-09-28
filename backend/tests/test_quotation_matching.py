@@ -5,9 +5,7 @@ import io
 from PIL import Image, PngImagePlugin
 
 from image_ownership import normalized_pixel_fingerprint, ownership_fingerprint
-from quotation_matching import (exact_file_matches, needs_photo_index,
-                                needs_untracked_photo_index, strongest_full_frame_match,
-                                untracked_media_urls)
+from quotation_matching import exact_file_matches, needs_photo_index, strongest_full_frame_match
 
 
 def test_existing_photo_signatures_without_dhash_are_reindexed():
@@ -21,19 +19,6 @@ def test_existing_photo_signatures_without_dhash_are_reindexed():
     legacy["perceptual_fingerprint"] = ready["perceptual_fingerprint"]
     legacy.pop("public_pixel_hash")
     assert needs_photo_index(legacy) is True
-
-
-def test_project_image_without_file_record_gets_search_only_index():
-    photos = ["/api/files/products/project.jpg", "/api/files/products/product.jpg"]
-    files = [{"storage_path": "products/product.jpg"}]
-    assert untracked_media_urls(photos, files) == [photos[0]]
-    assert needs_untracked_photo_index(None) is True
-    ready = {"public_sha256": "public", "pixel_hash": "pixels",
-             "perceptual_fingerprint": "1" * 64, "visual_phash": "2" * 16,
-             "visual_histogram": [0] * 512}
-    assert needs_untracked_photo_index(ready) is False
-    ready.pop("pixel_hash")
-    assert needs_untracked_photo_index(ready) is True
 
 
 def test_public_image_metadata_and_original_hash_can_both_find_product():

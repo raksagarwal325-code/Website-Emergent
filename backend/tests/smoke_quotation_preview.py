@@ -52,9 +52,14 @@ async def main():
     expected = {str(row.get("sku") or "") for row in linked_products}
     path = url.removeprefix("/api/files/")
     row = await server.db.files.find_one(
-        {"storage_path": path}, {"_id": 0, "public_sha256": 1, "public_pixel_hash": 1}
+        {"storage_path": path},
+        {"_id": 0, "storage_path": 1, "public_sha256": 1, "public_pixel_hash": 1},
     )
-    print(f"Project photo has db.files record: {bool(row)}", flush=True)
+    print(f"Project photo has db.files record: {row is not None}; "
+          f"sha_ready={bool((row or {}).get('public_sha256'))}; "
+          f"pixels_ready={bool((row or {}).get('public_pixel_hash'))}", flush=True)
+    if row is None:
+        raise AssertionError("FAIL: linked photo really has no db.files record")
     data, mime = await asyncio.to_thread(server.get_object, path)
     mime = (mime or "").split(";", 1)[0].lower()
     if mime not in {"image/jpeg", "image/png", "image/webp"}:
@@ -68,14 +73,16 @@ async def main():
     if task:
         print("Waiting up to 120 seconds for linked project photo indexing", flush=True)
         await asyncio.wait_for(asyncio.shield(task), timeout=120)
-    indexed = await server.db.quotation_image_index.find_one(
-        {"url": url}, {"_id": 0, "public_sha256": 1, "pixel_hash": 1,
-                       "visual_index_failed_at": 1}
+    indexed = await server.db.files.find_one(
+        {"storage_path": path},
+        {"_id": 0, "storage_path": 1, "public_sha256": 1,
+         "public_pixel_hash": 1, "visual_index_failed_at": 1},
     )
-    print(f"Search-only index: present={bool(indexed)} "
+    print(f"Stored public hashes: sha={bool((indexed or {}).get('public_sha256'))} "
+          f"pixels={bool((indexed or {}).get('public_pixel_hash'))} "
           f"error={bool((indexed or {}).get('visual_index_failed_at'))}", flush=True)
-    if not indexed or not indexed.get("pixel_hash"):
-        raise AssertionError("FAIL: linked photo without db.files row was not indexed")
+    if not indexed or not indexed.get("public_pixel_hash"):
+        raise AssertionError("FAIL: linked photo public hashes were not backfilled")
 
     result = await search(data, mime)
     found = [(m.get("sku"), m.get("match_label")) for m in result.get("matches", [])]
@@ -94,7 +101,7 @@ async def main():
     print(f"Reencoded: engine={edited.get('engine')} results={found}", flush=True)
     if edited.get("engine") != "exact-hash" or not expected.intersection(sku for sku, _ in found):
         raise AssertionError("FAIL: re-encoded linked photo did not use exact search")
-    print("PASS: missing-record project photo gets indexed and matches exact twice", flush=True)
+    print("PASS: linked project photo gets public hashes and matches exact twice", flush=True)
 
 
 if __name__ == "__main__":
