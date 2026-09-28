@@ -50,6 +50,7 @@ db = client[os.environ["DB_NAME"]]
 APP_NAME = os.environ.get("APP_NAME", "catalog-app")
 
 _quotation_photo_index_task = None
+_quotation_project_index_task = None
 _quotation_design_tasks = set()
 
 
@@ -2620,14 +2621,32 @@ async def match_quotation_product_by_image(
                 default="",
             ),
         ))
-        global _quotation_photo_index_task
+        global _quotation_photo_index_task, _quotation_project_index_task
         if missing and (
             _quotation_photo_index_task is None
             or _quotation_photo_index_task.done()
         ):
-            _quotation_photo_index_task = asyncio.create_task(
-                _index_quotation_photo_rows(missing)
-            )
+            project_missing = [row for row in missing
+                               if f"/api/files/{row['storage_path']}" in project_photos]
+            other_missing = [row for row in missing
+                             if f"/api/files/{row['storage_path']}" not in project_photos]
+            if project_missing:
+                project_task = asyncio.create_task(
+                    _index_quotation_photo_rows(project_missing)
+                )
+                _quotation_project_index_task = project_task
+
+                async def index_remaining():
+                    await project_task
+                    if other_missing:
+                        await _index_quotation_photo_rows(other_missing)
+
+                _quotation_photo_index_task = asyncio.create_task(index_remaining())
+            else:
+                _quotation_project_index_task = None
+                _quotation_photo_index_task = asyncio.create_task(
+                    _index_quotation_photo_rows(other_missing)
+                )
         remaining = len(missing)
         photo_candidates = []
         for row in rows:
@@ -2855,6 +2874,16 @@ async def start_quotation_product_match_job(
 
     async def run():
         try:
+            # The quick request starts a background index with linked project
+            # photos first. Wait for those 63-ish photos before deciding that
+            # an uploaded installation image needs a slow design comparison.
+            if _quotation_project_index_task and not _quotation_project_index_task.done():
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(_quotation_project_index_task), timeout=30
+                    )
+                except asyncio.TimeoutError:
+                    logger.info("quotation_project_photo_index_still_running job=%s", job_id)
             upload = UploadFile(
                 file=io.BytesIO(data), filename=file.filename,
                 headers=Headers({"content-type": mime}),
