@@ -7,9 +7,10 @@ import threading
 import numpy as np
 from PIL import Image, ImageOps
 
-MODEL_REPO = "Xenova/clip-vit-base-patch32"
-MODEL_REVISION = "d15189d7028b43f1d3e65039190477f6af591c2a"
-INDEX_VERSION = "clip-b32-int8-v1"
+MODEL_REPO = "Xenova/dinov2-small"
+MODEL_REVISION = "c2bb04a51fab207c420665f1946016107bffc701"
+INDEX_VERSION = "dinov2-small-fp32-v1"
+EMBEDDING_DIM = 384
 MAX_BYTES = 10 * 1024 * 1024
 MAX_PIXELS = 20_000_000
 
@@ -37,14 +38,14 @@ def image_hashes(data, image):
 
 
 def model_input(image):
-    # CLIP's published RGB/bicubic, shortest-edge resize and centre crop.
+    # Pinned DINOv2 processor: resize shortest edge to 256, crop to 224.
     width, height = image.size
-    scale = 224 / min(width, height)
+    scale = 256 / min(width, height)
     resized = image.resize((int(width * scale), int(height * scale)), Image.Resampling.BICUBIC)
     left, top = (resized.width - 224) // 2, (resized.height - 224) // 2
     crop = resized.crop((left, top, left + 224, top + 224))
     pixels = np.asarray(crop, dtype=np.float32) / 255.0
-    pixels = (pixels - np.array([0.48145466, 0.4578275, 0.40821073], dtype=np.float32)) / np.array([0.26862954, 0.26130258, 0.27577711], dtype=np.float32)
+    pixels = (pixels - np.array([0.485, 0.456, 0.406], dtype=np.float32)) / np.array([0.229, 0.224, 0.225], dtype=np.float32)
     return pixels.transpose(2, 0, 1)[None].astype(np.float32)
 
 
@@ -60,22 +61,27 @@ class VisualEncoder:
             if self.session is not None:
                 return
             path = os.environ.get("CUSTOMER_IMAGE_MODEL_PATH") or hf_hub_download(
-                MODEL_REPO, "onnx/vision_model_quantized.onnx", revision=MODEL_REVISION,
+                MODEL_REPO, "onnx/model.onnx", revision=MODEL_REVISION,
             )
             options = ort.SessionOptions()
             options.intra_op_num_threads = 2
             options.inter_op_num_threads = 1
-            self.session = ort.InferenceSession(path, sess_options=options, providers=["CPUExecutionProvider"])
+            session = ort.InferenceSession(path, sess_options=options, providers=["CPUExecutionProvider"])
+            output = next((o for o in session.get_outputs() if o.name == "last_hidden_state"), None)
+            if output is None or output.shape[-1] != EMBEDDING_DIM:
+                raise ValueError("CUSTOMER_IMAGE_MODEL_PATH must point to the pinned DINOv2-small model")
+            self.session = session
 
     def encode(self, image):
         if self.session is None:
             raise RuntimeError("Visual model is not ready")
-        # A whole-object view complements the standard centre crop for tall lights.
-        whole = ImageOps.pad(image, (224, 224), method=Image.Resampling.BICUBIC, color="white")
+        # A padded view complements the standard centre crop for tall lights.
+        whole = ImageOps.pad(image, (256, 256), method=Image.Resampling.BICUBIC, color="white")
         vectors = []
         with self.lock:
             for view in (image, whole):
-                vector = self.session.run(["image_embeds"], {"pixel_values": model_input(view)})[0][0]
+                # The CLS token represents the fixture; patch tokens stay local.
+                vector = self.session.run(["last_hidden_state"], {"pixel_values": model_input(view)})[0][0, 0]
                 vector = vector / max(float(np.linalg.norm(vector)), 1e-12)
                 vectors.append(vector.astype(float).tolist())
         return vectors
@@ -89,7 +95,7 @@ def rank_images(hashes, vectors, rows, products_by_url, limit=12, threshold=0.72
         exact = bool(hashes["sha256"] == row.get("sha256") or hashes["pixels"] == row.get("pixels"))
         score = 1.0 if exact else 0.0
         stored = np.asarray(row.get("vectors") or [], dtype=np.float32)
-        if not exact and query is not None and stored.shape == (2, 512):
+        if not exact and query is not None and query.shape == (2, EMBEDDING_DIM) and stored.shape == (2, EMBEDDING_DIM):
             score = float(np.max(query @ stored.T))
         if not exact and score < threshold:
             continue
