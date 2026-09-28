@@ -75,6 +75,7 @@ jobs:
           --health-start-period 10s
 
     env:
+      CUSTOMER_IMAGE_SEARCH_ENABLED: "false"
       MONGO_URL: "mongodb://localhost:27017"
       DB_NAME: "test_ci_${{ github.run_id }}"
       ADMIN_EMAILS: "raks.agarwal325@gmail.com"

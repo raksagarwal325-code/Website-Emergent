@@ -4,6 +4,7 @@ import { Search, SlidersHorizontal, ChevronLeft, ChevronRight } from "lucide-rea
 import { api } from "../lib/api";
 import { NAV_CATEGORIES } from "../lib/categories";
 import ProductCard from "./ProductCard";
+import CustomerImageSearch from "./CustomerImageSearch";
 import { Slider } from "./ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
@@ -208,7 +209,8 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
         <div className="relative flex-1">
           <Search aria-hidden="true" size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
           <label htmlFor="catalog-search" className="sr-only">Search catalogue</label>
-          <input id="catalog-search" name="catalog-search" type="search" autoComplete="off" data-testid="catalog-search" value={q} onChange={(e) => updateSearch(e.target.value)} placeholder="Search products, SKUs, tags…" className="w-full border border-white/15 bg-[#0a0a0a] py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#D4AF37]" />
+          <input id="catalog-search" name="catalog-search" type="search" autoComplete="off" data-testid="catalog-search" value={q} onChange={(e) => updateSearch(e.target.value)} placeholder="Search products, SKUs, tags…" className="w-full border border-white/15 bg-[#0a0a0a] py-3 pl-11 pr-14 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#D4AF37]" />
+          <CustomerImageSearch />
         </div>
         <button type="button" data-testid="filters-toggle" onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters} aria-controls="catalog-filters-panel" className={`inline-flex items-center gap-2 border px-4 py-3 text-xs uppercase tracking-[0.2em] transition-colors ${showFilters ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/15 text-white/80 hover:border-white/40"}`}><SlidersHorizontal aria-hidden="true" size={14} /> Filters</button>
         <div className="w-full md:w-52">
