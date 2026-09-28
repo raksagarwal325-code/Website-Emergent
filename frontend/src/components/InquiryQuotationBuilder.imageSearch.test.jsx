@@ -18,7 +18,8 @@ describe("Quotation search by image", () => {
     expect(source).toContain("findImageMatches");
     expect(source).toContain('data-testid="quotation-image-search-results"');
     expect(source).toContain("Very likely product match");
-    expect(source).toContain("visual_similarity");
+    expect(source).toContain("visualIndexStatus.ready");
+    expect(source).not.toContain("% visual similarity");
   });
 
   test("admin can diagnose image search without running the matcher", () => {

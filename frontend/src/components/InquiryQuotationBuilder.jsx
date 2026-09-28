@@ -126,6 +126,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const imageDetailJobId = useRef(null);
   const [imageRefining, setImageRefining] = useState(false);
   const [imageIndexProgress, setImageIndexProgress] = useState(null);
+  const [visualIndexStatus, setVisualIndexStatus] = useState(null);
   const [imageMatchError, setImageMatchError] = useState("");
   const [imageDiagnostic, setImageDiagnostic] = useState(null);
   const [imageDiagnosticBusy, setImageDiagnosticBusy] = useState(false);
@@ -135,6 +136,24 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     api.adminProductsExport().then(rows => { if (alive) setCatalogue(Array.isArray(rows) ? rows : rows.items || []); }).catch(() => toast.error("Could not load catalogue; you can still add a custom item"));
     return () => { alive = false; };
   }, []);
+  useEffect(() => {
+    if (productSearchMode !== "image") return undefined;
+    let active = true;
+    const refresh = () => api.quotationVisualIndexStatus()
+      .then((status) => { if (active) setVisualIndexStatus(status); })
+      .catch(() => { if (active) setVisualIndexStatus(null); });
+    void refresh();
+    const interval = setInterval(refresh, 10000);
+    return () => { active = false; clearInterval(interval); };
+  }, [productSearchMode]);
+  useEffect(() => {
+    if (visualIndexStatus?.configured && visualIndexStatus.total > 0 &&
+        visualIndexStatus.ready === visualIndexStatus.total && imageSearchFile &&
+        imageMatches.length === 0 && !imageMatchBusy && !imageRefining &&
+        imageMatchError.includes("index")) {
+      void refineImageMatches(imageSearchFile);
+    }
+  }, [visualIndexStatus, imageSearchFile, imageMatches, imageMatchBusy, imageRefining, imageMatchError]);
   const addItem = (product = {}) => change({ items: [...form.items, normaliseItem({ product_id: product.id || null, name: product.name || "", sku: product.sku || "", quantity: 1, unit_price: product.price || 0, image: product.images?.[0] || null })] });
 
   useEffect(() => () => {
@@ -233,7 +252,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       }
       if (job?.status !== "done") {
         imageDetailJobId.current = null;
-        throw new Error("Detailed comparison failed");
+        throw new Error(job?.error || "Detailed comparison failed");
       }
       const result = job.response;
       if (requestId !== imageSearchSequence.current) return;
@@ -246,7 +265,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       }
     } catch (error) {
       if (requestId === imageSearchSequence.current) {
-        setImageMatchError("Detailed comparison could not finish. Try another photo or search by name / SKU.");
+        setImageMatchError(error?.message || "Detailed comparison could not finish. Try another photo or search by name / SKU.");
       }
     } finally {
       if (requestId === imageSearchSequence.current) setImageRefining(false);
@@ -701,6 +720,13 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                     </div>
                   </div>
 
+                  {visualIndexStatus && (
+                    <div className="mt-3 text-xs text-white/55" role="status">
+                      {!visualIndexStatus.configured
+                        ? "Prepared design search needs an image embedding key; exact photo matching remains available."
+                        : `Catalogue design index: ${visualIndexStatus.ready} of ${visualIndexStatus.total} photos ready${visualIndexStatus.failed ? ` · ${visualIndexStatus.failed} need retry` : ""}.`}
+                    </div>
+                  )}
                   {imageDiagnostic && (
                     <div className="mt-4 border border-[#D4AF37]/30 bg-[#D4AF37]/[0.03] p-3 text-xs text-white/65" data-testid="quotation-image-search-diagnostic">
                       <div className="font-medium text-[#D4AF37]">Search diagnosis: {imageDiagnostic.decision}</div>
@@ -759,7 +785,6 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                                     : match.match_label === "possible"
                                       ? "Possible product match"
                                       : "Visual candidate · compare product photos before adding" }
-                              {Number.isFinite(match.visual_similarity) ? ` · ${match.visual_similarity}% visual similarity` : ""}
                             </div>
                           </div>
                           <button

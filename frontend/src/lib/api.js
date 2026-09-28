@@ -222,6 +222,9 @@ export const api = {
   getQuotationImageDetailJob: (jobId) => client.get(
     `/admin/quotations/product-match-by-image-jobs/${encodeURIComponent(jobId)}`,
   ).then(r => r.data),
+  quotationVisualIndexStatus: () => client.get(
+    "/admin/quotations/visual-index-status",
+  ).then(r => r.data),
   diagnoseQuotationProductByImage: (file) => {
     const fd = new FormData();
     fd.append("file", file);
