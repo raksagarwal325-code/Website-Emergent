@@ -36,6 +36,7 @@ from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_
 from product_ai import configure_product_chat, product_ai_settings  # noqa: E402
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, canonical_media_url, collect_references, inspect_media_bytes, public_url_for_file  # noqa: E402
 from quotation_gallery import catalogue_photo_views, linked_project_photos  # noqa: E402
+from quotation_matching import exact_file_matches, strongest_full_frame_match  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
@@ -65,11 +66,14 @@ async def _index_quotation_photo_rows(rows):
                     lambda: (phash_fingerprint(photo_bytes), color_histogram(photo_bytes))
                 )
                 thumbnail = await asyncio.to_thread(_quotation_visual_thumbnail, photo_bytes)
+                pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, photo_bytes)
             await db.files.update_one(
                 {"storage_path": path},
                 {
                     "$set": {"visual_phash": phash, "visual_histogram": histogram,
-                             "visual_thumbnail": thumbnail, "visual_thumbnail_ready": True},
+                             "visual_thumbnail": thumbnail, "visual_thumbnail_ready": True,
+                             "public_sha256": ownership_fingerprint(photo_bytes),
+                             "public_pixel_hash": pixel_hash},
                     "$unset": {"visual_index_failed_at": ""},
                 },
             )
@@ -1973,10 +1977,8 @@ async def _visually_shortlist_quotation_products(
         ).to_list(len(storage_paths))
         thumbnails = {row["storage_path"]: bytes(row["visual_thumbnail"])
                       for row in rows if row.get("visual_thumbnail")}
-        if len(thumbnails) < len(storage_paths) * 0.98:
-            raise HTTPException(
-                503, f"Preparing catalogue photos: {len(thumbnails)} of {len(storage_paths)} ready. Try again shortly."
-            )
+        logger.info("quotation_visual_thumbnail_coverage cached=%d total=%d",
+                    len(thumbnails), len(storage_paths))
 
     semaphore = asyncio.Semaphore(12)
 
@@ -2182,6 +2184,8 @@ async def diagnose_quotation_product_match(
                 "visual_histogram": 1,
                 "ownership_fingerprint": 1,
                 "sha256": 1,
+                "public_sha256": 1,
+                "public_pixel_hash": 1,
             },
         ).to_list(len(storage_paths))
 
@@ -2220,6 +2224,7 @@ async def diagnose_quotation_product_match(
             {"url": {"$in": all_urls}},
             {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1},
         ).to_list(len(all_urls))
+    exact_file_paths = exact_file_matches(file_rows, query_sha, query_pixel_hash)
     exact_index_rows = [
         row for row in index_rows
         if str(row.get("public_sha256") or "") == query_sha
@@ -2227,6 +2232,7 @@ async def diagnose_quotation_product_match(
     ]
 
     product_scores = {}
+    full_frame_scores = []
     for url, row in file_by_url.items():
         stored = str(row.get("perceptual_fingerprint") or "")
         if not stored:
@@ -2243,6 +2249,8 @@ async def diagnose_quotation_product_match(
             variant_distance = min(variant_distances)
         except (TypeError, ValueError):
             continue
+        full_frame_scores.append({"url": url, "full_distance": full_distance,
+                                  "variant_distance": variant_distance})
         for product, image_index in products_by_url.get(url, []):
             product_id = product.get("id")
             if not product_id:
@@ -2273,12 +2281,12 @@ async def diagnose_quotation_product_match(
     best = top[0] if top else None
     runner_up = top[1] if len(top) > 1 else None
 
-    if photo_best and photo_best["score"] <= 0.24 and photo_best["colour_distance"] <= 0.16 and photo_best["phash_distance"] <= 24:
+    if exact_index_rows or exact_file_paths:
+        decision = "exact_index_match"
+        reason = "A stored catalogue image has an exact byte or pixel match."
+    elif photo_best and photo_best["score"] <= 0.24 and photo_best["colour_distance"] <= 0.16 and photo_best["phash_distance"] <= 24:
         decision = "strong_photo_signature_match"
         reason = "A catalogue photograph matches the uploaded image by colour and composition."
-    elif exact_index_rows:
-        decision = "exact_index_match"
-        reason = "The legacy quotation image index contains an exact SHA/pixel match."
     elif not app_urls:
         decision = "no_app_owned_product_images"
         reason = "Published products do not expose application-owned /api/files image URLs."
@@ -2288,10 +2296,7 @@ async def diagnose_quotation_product_match(
     elif not fingerprinted:
         decision = "product_files_have_no_perceptual_fingerprints"
         reason = "Product file rows exist, but none has a perceptual_fingerprint."
-    elif best and best["variant_distance"] <= 18 and (
-        runner_up is None
-        or runner_up["variant_distance"] - best["variant_distance"] >= 5
-    ):
+    elif strongest_full_frame_match(full_frame_scores, products_by_url)[2]:
         decision = "strong_local_fingerprint_match"
         reason = "The local fingerprint layer has a strong, clearly separated product match."
     elif best:
@@ -2319,7 +2324,7 @@ async def diagnose_quotation_product_match(
             "photo_indexed_db_file_rows": len([row for row in file_rows if row.get("visual_phash")]),
             "unmapped_app_owned_urls": max(0, len(set(app_urls)) - len(file_by_url)),
             "quotation_image_index_rows": len(index_rows),
-            "exact_index_matches": len(exact_index_rows),
+            "exact_index_matches": len(exact_index_rows) + len(exact_file_paths),
         },
         "best": best,
         "photo_best": photo_best,
@@ -2404,14 +2409,26 @@ async def match_quotation_product_by_image(
         seen = {product["id"] for product, _ in existing}
         existing.extend((product, -1) for product in linked if product["id"] not in seen)
 
-    # Exact/decoded-pixel shortcut using already-built quotation hash records.
+    # Exact bytes or decoded pixels from the uploaded public image and linked
+    # projects. Older file rows can also match the unchanged original bytes.
     if products_by_url:
+        exact_paths = [url.removeprefix("/api/files/") for url in products_by_url
+                       if url.startswith("/api/files/")]
+        file_exact_rows = await db.files.find(
+            {"storage_path": {"$in": exact_paths}},
+            {"_id": 0, "storage_path": 1, "public_sha256": 1,
+             "public_pixel_hash": 1, "ownership_fingerprint": 1, "sha256": 1},
+        ).to_list(len(exact_paths)) if exact_paths else []
         index_rows = await db.quotation_image_index.find(
             {"url": {"$in": list(products_by_url.keys())}},
             {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1},
         ).to_list(len(products_by_url))
 
         exact_urls = [
+            f"/api/files/{path}" for path in exact_file_matches(
+                file_exact_rows, query_sha, query_pixel_hash
+            )
+        ] + [
             row.get("url")
             for row in index_rows
             if str(row.get("public_sha256") or "") == query_sha
@@ -2509,21 +2526,15 @@ async def match_quotation_product_by_image(
     # A close full-frame match with a clear runner-up gap is a near-identical
     # copy of an existing catalogue photograph. Return it directly.
     if perceptual_candidates:
-        full_ranked = sorted(
-            perceptual_candidates,
-            key=lambda row: (row["full_distance"], row["variant_distance"]),
+        best_product_id, best, confident = strongest_full_frame_match(
+            perceptual_candidates, products_by_url
         )
-        best = full_ranked[0]
-        second = min(
-            (row["full_distance"] for row in full_ranked[1:]),
-            default=999,
-        )
-        if best["full_distance"] <= 18 and second - best["full_distance"] >= 5:
+        if confident:
             fast_matches = []
             seen_fast = set()
             for product, image_index in products_by_url.get(best["url"], []):
                 product_id = product.get("id")
-                if not product_id or product_id in seen_fast:
+                if product_id != best_product_id or product_id in seen_fast:
                     continue
                 seen_fast.add(product_id)
                 images = product.get("images") or []
@@ -2580,20 +2591,21 @@ async def match_quotation_product_by_image(
         rows = await db.files.find(
             {"storage_path": {"$in": storage_paths}},
             {"_id": 0, "storage_path": 1, "visual_phash": 1, "visual_histogram": 1,
-             "visual_index_failed_at": 1, "visual_thumbnail_ready": 1},
+             "visual_index_failed_at": 1, "visual_thumbnail_ready": 1,
+             "public_sha256": 1, "public_pixel_hash": 1},
         ).to_list(len(storage_paths))
         retry_cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
         skipped = sum(
             1 for row in rows
             if row.get("visual_index_failed_at", "") > retry_cutoff
             and (not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512
-                 or not row.get("visual_thumbnail_ready"))
+                 or not row.get("visual_thumbnail_ready") or not row.get("public_pixel_hash"))
         )
         missing = [
             row for row in rows
             if (not row.get("visual_phash")
                 or len(row.get("visual_histogram") or []) != 512
-                or not row.get("visual_thumbnail_ready"))
+                or not row.get("visual_thumbnail_ready") or not row.get("public_pixel_hash"))
             and row.get("visual_index_failed_at", "") <= retry_cutoff
         ]
         missing.sort(key=lambda row: (
@@ -2726,10 +2738,17 @@ async def match_quotation_product_by_image(
         if len(candidates) >= 6:
             break
 
+    # A different-angle photo can have a plausible but incorrect dHash neighbor.
+    # Do not let an AI-approved neighbor hide the rest of the catalogue. The
+    # near-identical/exact paths above have already returned without this scan.
+    visual_candidates = await _visually_shortlist_quotation_products(data, products, project_photos)
+    visual_skus = {str((row.get("product") or {}).get("sku") or "").upper()
+                   for row in visual_candidates}
+    candidates = visual_candidates + [
+        row for row in candidates
+        if str((row.get("product") or {}).get("sku") or "").upper() not in visual_skus
+    ][:6]
     verified = await _verify_quotation_catalogue_candidates(data, content_type, candidates) if candidates else []
-    if not verified:
-        candidates = await _visually_shortlist_quotation_products(data, products, project_photos)
-        verified = await _verify_quotation_catalogue_candidates(data, content_type, candidates) if candidates else []
 
     if not candidates:
         response = {
@@ -4045,6 +4064,8 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
         "sha256": media_metadata.get("sha256"),
         "ownership_fingerprint": ownership_fp,
         "perceptual_fingerprint": visual_fp,
+        "public_sha256": ownership_fingerprint(public_bytes) if is_image else None,
+        "public_pixel_hash": normalized_pixel_fingerprint(public_bytes) if is_image else None,
         "width": media_metadata.get("width"),
         "height": media_metadata.get("height"),
         "created_at": now_iso(),

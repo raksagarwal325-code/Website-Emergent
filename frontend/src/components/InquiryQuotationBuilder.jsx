@@ -221,7 +221,9 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
         imageDetailJobId.current = started.job_id;
       }
       let job;
-      for (let attempt = 0; attempt < 100; attempt += 1) {
+      // The server allows the comparison job ten minutes. Keep following its
+      // real status until it finishes instead of silently abandoning it at 200s.
+      for (let attempt = 0; attempt < 310; attempt += 1) {
         job = await api.getQuotationImageDetailJob(imageDetailJobId.current);
         if (requestId !== imageSearchSequence.current) return;
         if (job.status !== "running") break;

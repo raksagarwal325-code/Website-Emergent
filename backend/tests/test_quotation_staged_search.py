@@ -24,18 +24,17 @@ def test_quotation_search_uses_two_path_design():
 def test_near_identical_catalogue_images_can_return_without_ai():
     route = _quotation_route_source()
 
-    assert 'best["full_distance"] <= 18' in route
-    assert 'second - best["full_distance"] >= 5' in route
+    assert "strongest_full_frame_match(" in route
     assert '"searched_images": 0' in route
     assert 'Near-identical existing catalogue photograph.' in route
 
 
-def test_crop_or_whatsapp_candidates_skip_catalogue_wide_discovery():
+def test_crop_or_whatsapp_candidates_do_not_hide_catalogue_discovery():
     route = _quotation_route_source()
 
     assert 'row["variant_distance"] <= 34' in route
     assert 'if len(candidates) >= 6' in route
-    assert 'if not verified:' in route
+    assert "visual_candidates = await _visually_shortlist_quotation_products" in route
     assert "Existing catalogue fingerprint candidate" in route
 
 
@@ -54,7 +53,7 @@ def test_different_angle_search_compares_actual_catalogue_photos_and_shows_revie
     assert "catalogue_photo_views(products, project_photos)" in route
     assert "compare_board(loaded[offset:offset + 32], 3)" in route
     assert '"image_bytes": thumbnail' in route
-    assert "if not verified:" in route
+    assert "visual_candidates = await _visually_shortlist_quotation_products" in route
     assert '"match_label": "candidate"' in route
     assert '"engine": "visual-catalogue-v3"' in route
 
