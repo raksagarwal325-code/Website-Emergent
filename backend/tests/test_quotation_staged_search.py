@@ -14,7 +14,7 @@ def test_quotation_search_uses_two_path_design():
     assert "perceptual_fingerprint_variants" in route
     assert '"perceptual_fingerprint": {"$exists": True, "$ne": None}' in route
     assert '"engine": "existing-perceptual-fingerprint"' in route
-    assert "_discover_catalogue_candidates" in route
+    assert "_visually_shortlist_quotation_products" in route
     assert "_verify_quotation_catalogue_candidates" in route
     assert "quotation_visual_index" not in route
     assert "describe_index_sheet" not in route
@@ -35,18 +35,28 @@ def test_crop_or_whatsapp_candidates_skip_catalogue_wide_discovery():
 
     assert 'row["variant_distance"] <= 34' in route
     assert 'if len(candidates) >= 6' in route
-    assert 'if not candidates:' in route
+    assert 'if not verified:' in route
     assert "Existing catalogue fingerprint candidate" in route
 
 
 def test_photo_signatures_return_before_ai_and_require_selection():
     route = _quotation_route_source()
     fast = route.index("if quick:")
-    discovery = route.index("discovery = await _discover_catalogue_candidates")
+    discovery = route.index("candidates = await _visually_shortlist_quotation_products")
     assert fast < discovery
     assert '"engine": "photo-signature"' in route[fast:discovery]
     assert "color_histogram_distance" in route[fast:discovery]
     assert "visual_phash" in route[fast:discovery]
+
+
+def test_different_angle_search_compares_actual_catalogue_photos_and_shows_reviewable_candidates():
+    route = _quotation_route_source()
+    assert "load(p) for p in products" in route
+    assert "compare_board(loaded[offset:offset + 32], 2)" in route
+    assert '"image_bytes": await asyncio.to_thread(_quotation_visual_thumbnail, content)' in route
+    assert "if not verified:" in route
+    assert '"match_label": "candidate"' in route
+    assert '"engine": "visual-catalogue-v2"' in route
 
 
 def test_final_verifier_uses_all_saved_images_for_shortlisted_skus():
