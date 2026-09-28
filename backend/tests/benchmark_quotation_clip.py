@@ -107,7 +107,7 @@ def main():
     db = client[os.environ["DB_NAME"]]
     products = list(db.products.find(
         {"status": "published", "images": {"$exists": True, "$ne": []}},
-        {"_id": 0, "sku": 1, "images": 1},
+        {"_id": 0, "id": 1, "sku": 1, "images": 1},
     ))
     by_path = {}
     for product in products:
@@ -115,6 +115,25 @@ def main():
             path = storage_path(image)
             if path:
                 by_path.setdefault(path, set()).add(str(product.get("sku") or ""))
+    catalogue_by_path = {path: set(skus) for path, skus in by_path.items()}
+    catalogue_paths = set(catalogue_by_path)
+    by_id = {row.get("id"): row for row in products if row.get("id")}
+    settings = db.settings.find_one({"id": "settings"}, {"_id": 0, "homepage_content.gallery.items": 1}) or {}
+    projects = (((settings.get("homepage_content") or {}).get("gallery") or {}).get("items") or [])
+    gallery_paths = set()
+    for project in projects:
+        linked = [by_id[pid] for pid in project.get("products") or [] if pid in by_id]
+        for image in project.get("images") or []:
+            path = storage_path(image)
+            if path and linked:
+                gallery_paths.add(path)
+                by_path.setdefault(path, set()).update(str(p.get("sku") or "") for p in linked)
+    print(f"Linked project photos: {len(gallery_paths)}; projects: {len(projects)}", flush=True)
+    for expected in CASES:
+        found = db.products.find_one({"sku": expected}, {"_id": 0, "status": 1, "images": 1})
+        print(f"CASE {expected}: " + (
+            f"status={found.get('status')} catalogue_photos={len(found.get('images') or [])}"
+            if found else "SKU absent from Preview database"), flush=True)
     query_paths = {MEDIA_PREFIX + file for files in CASES.values() for file in files}
     wanted = list(set(by_path) | query_paths)
     file_rows = db.files.find(
@@ -123,21 +142,27 @@ def main():
     )
     thumbnails = {r["storage_path"]: bytes(r["visual_thumbnail"])
                   for r in file_rows if r.get("visual_thumbnail")}
-    print(f"Published products: {len(products)}; catalogue image views: {len(by_path)}; "
-          f"cached thumbnails: {sum(p in thumbnails for p in by_path)}", flush=True)
-    if len(products) < 300 or sum(p in thumbnails for p in by_path) < 500:
+    print(f"Published products: {len(products)}; catalogue image views: {len(catalogue_paths)}; "
+          f"cached catalogue thumbnails: {sum(p in thumbnails for p in catalogue_paths)}", flush=True)
+    if len(products) < 300 or sum(p in thumbnails for p in catalogue_paths) < 500:
         raise RuntimeError("Catalogue index is incomplete: refusing a misleading small-sample result")
-    missing_queries = sorted(query_paths - thumbnails.keys())
-    if missing_queries:
+    missing_photos = sorted((query_paths | gallery_paths) - thumbnails.keys())
+    if missing_photos:
         # Project photos can be absent from the stored thumbnail index. Read
         # public images only; no authenticated endpoints or database writes.
-        for path in missing_queries:
+        print(f"Loading {len(missing_photos)} uncached public project photos", flush=True)
+        for path in missing_photos:
             url = "https://samratglass.com/api/files/" + path
-            with urllib.request.urlopen(url, timeout=30) as response:
-                content = response.read(25 * 1024 * 1024 + 1)
-            if len(content) > 25 * 1024 * 1024:
-                raise RuntimeError("A test photo exceeds the 25 MB upload limit")
-            thumbnails[path] = content
+            try:
+                with urllib.request.urlopen(url, timeout=30) as response:
+                    content = response.read(25 * 1024 * 1024 + 1)
+                if len(content) > 25 * 1024 * 1024:
+                    raise RuntimeError("A project photo exceeds the 25 MB upload limit")
+                thumbnails[path] = content
+            except (OSError, RuntimeError) as exc:
+                if path in query_paths:
+                    raise RuntimeError(f"Required test photo unavailable: {path}") from exc
+                print(f"Project photo unavailable: {path} ({type(exc).__name__})", flush=True)
 
     options = ort.SessionOptions()
     options.intra_op_num_threads = 2
@@ -167,31 +192,42 @@ def main():
         except (OSError, ValueError) as exc:
             skipped += 1
             print(f"Unreadable thumbnail skipped: {path} ({type(exc).__name__})")
-    print(f"Embedded {len(refs)} catalogue images in {time.monotonic()-start:.1f}s; skipped {skipped}", flush=True)
+    print(f"Embedded {len(refs)} total image views in {time.monotonic()-start:.1f}s; "
+          f"project views={sum(path in gallery_paths for path, _, _ in refs)}; skipped={skipped}", flush=True)
     if len(refs) < 500:
         raise RuntimeError("Fewer than 500 images embedded; benchmark is incomplete")
 
-    successes = {1: 0, 5: 0, 10: 0}
+    successes = {mode: {1: 0, 5: 0, 10: 0} for mode in ("catalogue", "linked")}
+    indexed_skus = {sku for _, skus, _ in refs for sku in skus}
+    eligible = sum(len(files) for sku, files in CASES.items() if sku in indexed_skus)
     total = sum(map(len, CASES.values()))
     for expected, files in CASES.items():
         for file in files:
             query = MEDIA_PREFIX + file
             vector = embed(thumbnails[query])
-            scores = {}
-            for path, skus, reference in refs:
-                if path == query:  # exclude the uploaded photo itself
-                    continue
-                similarity = float(np.dot(vector, reference))
-                for sku in skus:
-                    scores[sku] = max(scores.get(sku, -1.0), similarity)
-            ranked = sorted(scores.items(), key=lambda row: -row[1])
-            rank = next((i + 1 for i, (sku, _) in enumerate(ranked) if sku == expected), None)
-            for k in successes:
-                successes[k] += rank is not None and rank <= k
-            print(f"{expected} {file[:8]}: rank={rank} top5="
-                  + ",".join(sku for sku, _ in ranked[:5]), flush=True)
-    print(f"RESULT top1={successes[1]}/{total} top5={successes[5]}/{total} "
-          f"top10={successes[10]}/{total}; indexed={len(refs)}; "
+            results = {}
+            for mode in successes:
+                scores = {}
+                for path, skus, reference in refs:
+                    if path == query or (mode == "catalogue" and path not in catalogue_paths):
+                        continue  # exclude the uploaded photo itself
+                    similarity = float(np.dot(vector, reference))
+                    mode_skus = catalogue_by_path.get(path, ()) if mode == "catalogue" else skus
+                    for sku in mode_skus:
+                        scores[sku] = max(scores.get(sku, -1.0), similarity)
+                ranked = sorted(scores.items(), key=lambda row: -row[1])
+                rank = next((i + 1 for i, (sku, _) in enumerate(ranked) if sku == expected), None)
+                if rank is not None:
+                    for k in successes[mode]:
+                        successes[mode][k] += rank <= k
+                results[mode] = (rank, ",".join(sku for sku, _ in ranked[:5]))
+            print(f"{expected} {file[:8]}: catalogue_rank={results['catalogue'][0]} "
+                  f"linked_rank={results['linked'][0]} linked_top5={results['linked'][1]}", flush=True)
+    print(f"RESULT catalogue_top1={successes['catalogue'][1]}/{total} "
+          f"catalogue_top5={successes['catalogue'][5]}/{total} "
+          f"linked_top1={successes['linked'][1]}/{total} "
+          f"linked_top5={successes['linked'][5]}/{total} "
+          f"eligible_cases={eligible}/{total}; indexed={len(refs)}; "
           f"total_seconds={time.monotonic()-start:.1f}", flush=True)
     client.close()
 
