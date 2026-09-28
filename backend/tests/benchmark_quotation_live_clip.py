@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
-from PIL import Image
+from PIL import Image, ImageOps
 
 from benchmark_quotation_clip import CASES, MEDIA_PREFIX, get_model, prepare, storage_path
 
@@ -57,6 +57,28 @@ def cached_media(path):
     temporary.write_bytes(content)
     temporary.replace(cached)
     return content
+
+
+def generic_crops(content):
+    """Automatic room-photo windows; no fixture coordinates or labelled boxes."""
+    with Image.open(io.BytesIO(content)) as source:
+        image = ImageOps.exif_transpose(source).convert("RGB")
+    w, h = image.size
+    # Full image is handled separately. Overlap preserves a fixture near a
+    # window edge; these six windows are identical for every uploaded photo.
+    windows = (
+        (0.15, 0.10, 0.85, 0.80),  # centre
+        (0.00, 0.00, 1.00, 0.55),  # upper row
+        (0.00, 0.00, 0.60, 0.75),  # left fixture
+        (0.40, 0.00, 1.00, 0.75),  # right fixture
+        (0.00, 0.00, 0.60, 0.55),  # upper left
+        (0.40, 0.00, 1.00, 0.55),  # upper right
+    )
+    for x0, y0, x1, y1 in windows:
+        crop = image.crop((int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h)))
+        output = io.BytesIO()
+        crop.save(output, format="JPEG", quality=90)
+        yield output.getvalue()
 
 
 def live_products():
@@ -160,20 +182,25 @@ def main():
     print(f"Embedded {len(vectors)} live photos; failed={len(failed)}; "
           f"elapsed_seconds={time.monotonic()-started:.1f}", flush=True)
 
-    hits = {mode: {1: 0, 5: 0, 10: 0} for mode in ("catalogue", "linked", "known_category")}
+    hits = {mode: {1: 0, 5: 0, 10: 0} for mode in
+            ("catalogue", "linked", "known_category", "crop_linked", "crop_known_category")}
     total = sum(map(len, CASES.values()))
     for expected, files in CASES.items():
         for file in files:
             query = MEDIA_PREFIX + file
+            crop_vectors = [embed(content) for content in generic_crops(cached_media(query))]
             scores = {mode: {} for mode in hits}
             for path, skus in references.items():
                 if path == query or path not in vectors:
                     continue
-                similarity = float(np.dot(vectors[query], vectors[path]))
+                whole_similarity = float(np.dot(vectors[query], vectors[path]))
+                cropped_similarity = max(whole_similarity, *(float(np.dot(crop, vectors[path]))
+                                                              for crop in crop_vectors))
                 for mode in hits:
-                    visible = catalogue.get(path, ()) if mode != "linked" else skus
+                    visible = catalogue.get(path, ()) if mode in ("catalogue", "known_category") else skus
+                    similarity = cropped_similarity if mode.startswith("crop_") else whole_similarity
                     for sku in visible:
-                        if mode == "known_category" and categories.get(sku) != categories.get(expected):
+                        if mode in ("known_category", "crop_known_category") and categories.get(sku) != categories.get(expected):
                             continue  # diagnostic upper bound; not a deployed classifier
                         scores[mode][sku] = max(scores[mode].get(sku, -1.0), similarity)
             ranks = {}
@@ -184,7 +211,9 @@ def main():
                 for cutoff in hits[mode]:
                     hits[mode][cutoff] += rank is not None and rank <= cutoff
             print(f"{expected} {file[:8]}: catalogue_rank={ranks['catalogue']} "
-                  f"linked_rank={ranks['linked']} category_upper_bound_rank={ranks['known_category']}", flush=True)
+                  f"linked_rank={ranks['linked']} crop_linked_rank={ranks['crop_linked']} "
+                  f"category_upper_bound_rank={ranks['known_category']} "
+                  f"crop_category_upper_bound_rank={ranks['crop_known_category']}", flush=True)
     print("RESULT " + " ".join(f"{mode}_top{k}={hits[mode][k]}/{total}"
                              for mode in hits for k in (1, 5, 10))
           + f" indexed={len(vectors)} seconds={time.monotonic()-started:.1f}", flush=True)
