@@ -233,7 +233,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       }
       if (job?.status !== "done") {
         imageDetailJobId.current = null;
-        throw new Error("Detailed comparison failed");
+        throw new Error(job?.error || "Detailed comparison failed");
       }
       const result = job.response;
       if (requestId !== imageSearchSequence.current) return;
@@ -246,7 +246,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       }
     } catch (error) {
       if (requestId === imageSearchSequence.current) {
-        setImageMatchError("Detailed comparison could not finish. Try another photo or search by name / SKU.");
+        setImageMatchError(errorMessage(error, "Detailed comparison could not finish. Please retry."));
       }
     } finally {
       if (requestId === imageSearchSequence.current) setImageRefining(false);

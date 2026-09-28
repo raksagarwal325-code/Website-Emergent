@@ -51,12 +51,12 @@ def test_photo_signatures_return_before_ai_and_require_selection():
 
 def test_different_angle_search_compares_actual_catalogue_photos_and_shows_reviewable_candidates():
     route = _quotation_route_source()
-    assert "load(p) for p in products" in route
-    assert "compare_board(loaded[offset:offset + 32], 2)" in route
-    assert '"image_bytes": await asyncio.to_thread(_quotation_visual_thumbnail, content)' in route
+    assert "catalogue_photo_views(products, project_photos)" in route
+    assert "compare_board(loaded[offset:offset + 32], 3)" in route
+    assert '"image_bytes": thumbnail' in route
     assert "if not verified:" in route
     assert '"match_label": "candidate"' in route
-    assert '"engine": "visual-catalogue-v2"' in route
+    assert '"engine": "visual-catalogue-v3"' in route
 
 
 def test_final_verifier_uses_all_saved_images_for_shortlisted_skus():

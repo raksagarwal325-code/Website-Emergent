@@ -19,3 +19,24 @@ def linked_project_photos(projects: list[dict], published_products: list[dict]) 
             seen = {product["id"] for product in rows}
             rows.extend(product for product in linked if product["id"] not in seen)
     return mapped
+
+
+def catalogue_photo_views(products: list[dict], project_photos: dict | None = None) -> list[tuple]:
+    """Every eligible view for visual discovery, once per product and photo."""
+    views = []
+    seen = set()
+    for product in products:
+        for index, image_url in enumerate(product.get("images") or []):
+            url = canonical_media_url(image_url)
+            key = (product.get("id"), url)
+            if url and key not in seen:
+                seen.add(key)
+                views.append((product, image_url, index))
+    for image_url, linked_products in (project_photos or {}).items():
+        url = canonical_media_url(image_url)
+        for product in linked_products:
+            key = (product.get("id"), url)
+            if url and key not in seen:
+                seen.add(key)
+                views.append((product, image_url, -1))
+    return views

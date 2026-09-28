@@ -35,7 +35,7 @@ from catalogue_search import catalogue_search_filter, resolve_catalogue_query  #
 from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_PREFIX, apply_identity_authority, apply_owner_facts, apply_reference_family, apply_reference_model, automatic_catalogue_model, blocking_identity_notes, catalogue_manifest_row, conversation_facts, extract_catalogue_references, facts_as_notes, find_similar_product, normalize_ai_record, normalize_catalogue_matches, normalize_product_name, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_model, sop_prompt, validate_record  # noqa: E402
 from product_ai import configure_product_chat, product_ai_settings  # noqa: E402
 from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, canonical_media_url, collect_references, inspect_media_bytes, public_url_for_file  # noqa: E402
-from quotation_gallery import linked_project_photos  # noqa: E402
+from quotation_gallery import catalogue_photo_views, linked_project_photos  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
@@ -64,10 +64,12 @@ async def _index_quotation_photo_rows(rows):
                 phash, histogram = await asyncio.to_thread(
                     lambda: (phash_fingerprint(photo_bytes), color_histogram(photo_bytes))
                 )
+                thumbnail = await asyncio.to_thread(_quotation_visual_thumbnail, photo_bytes)
             await db.files.update_one(
                 {"storage_path": path},
                 {
-                    "$set": {"visual_phash": phash, "visual_histogram": histogram},
+                    "$set": {"visual_phash": phash, "visual_histogram": histogram,
+                             "visual_thumbnail": thumbnail, "visual_thumbnail_ready": True},
                     "$unset": {"visual_index_failed_at": ""},
                 },
             )
@@ -1737,7 +1739,8 @@ def _build_quotation_candidate_board(rows: list[dict]) -> tuple[bytes, dict[int,
         image_slot = int(row.get("image_index") or 0) + 1
         draw.rectangle((x0, y0 + thumb_h, x0 + thumb_w, y0 + thumb_h + label_h), fill="white")
         draw.text((x0 + 6, y0 + thumb_h + 3), f"C{cell_index:02d} · {sku}", fill="black", font=label_font)
-        draw.text((x0 + 6, y0 + thumb_h + 26), f"catalogue image {image_slot}", fill="black", font=label_font)
+        view_label = "linked project photo" if image_slot == 0 else f"catalogue image {image_slot}"
+        draw.text((x0 + 6, y0 + thumb_h + 26), view_label, fill="black", font=label_font)
         mapping[cell_index] = row
 
     output = io.BytesIO()
@@ -1772,9 +1775,15 @@ async def _verify_quotation_catalogue_candidates(
     async def _load_one(product, image_url, image_index):
         try:
             async with semaphore:
-                image_bytes, mime = await _resolve_product_image(
-                    AIRegenerateRequest(image_url=image_url)
-                )
+                url = canonical_media_url(image_url)
+                if url.startswith("/api/files/"):
+                    image_bytes, mime = await asyncio.to_thread(
+                        get_object, url.removeprefix("/api/files/")
+                    )
+                else:
+                    response = await asyncio.to_thread(requests.get, image_url, timeout=20)
+                    response.raise_for_status()
+                    image_bytes, mime = response.content, response.headers.get("content-type", "image/jpeg")
             return {
                 "product": product,
                 "image_url": image_url,
@@ -1794,6 +1803,9 @@ async def _verify_quotation_catalogue_candidates(
                 continue
             seen_urls.add(image_url)
             jobs.append(_load_one(product, image_url, image_index))
+        project_url = candidate.get("image_url")
+        if project_url and project_url not in seen_urls:
+            jobs.append(_load_one(product, project_url, -1))
 
     loaded = await asyncio.gather(*jobs, return_exceptions=False) if jobs else []
     loaded = [row for row in loaded if row]
@@ -1818,8 +1830,9 @@ async def _verify_quotation_catalogue_candidates(
             f"{sku}: {product.get('name') or ''} · {product.get('category') or ''}"
         )
 
+    query_preview = await asyncio.to_thread(_quotation_visual_thumbnail, query_bytes, 768)
     files = [
-        ImageContent(image_base64=base64.b64encode(query_bytes).decode("ascii")),
+        ImageContent(image_base64=base64.b64encode(query_preview).decode("ascii")),
         ImageContent(image_base64=base64.b64encode(board_bytes).decode("ascii")),
     ]
     prompt = """IMAGE 1 is the client reference photo.
@@ -1924,19 +1937,21 @@ Confidence is 0 to 1."""
     return sorted(verified, key=lambda row: row["confidence"], reverse=True)
 
 
-def _quotation_visual_thumbnail(content: bytes) -> bytes:
+def _quotation_visual_thumbnail(content: bytes, max_size: int = 420) -> bytes:
     from PIL import Image, ImageOps
 
     with Image.open(io.BytesIO(content)) as opened:
         thumbnail = ImageOps.exif_transpose(opened).convert("RGB")
-        thumbnail.thumbnail((420, 420), Image.Resampling.LANCZOS)
+        thumbnail.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
         out = io.BytesIO()
         thumbnail.save(out, format="JPEG", quality=82)
         return out.getvalue()
 
 
-async def _visually_shortlist_quotation_products(query_bytes: bytes, products: list[dict]) -> list[dict]:
-    """Compare the query with real catalogue photos, independent of names and gallery links."""
+async def _visually_shortlist_quotation_products(
+    query_bytes: bytes, products: list[dict], project_photos: dict | None = None
+) -> list[dict]:
+    """Compare every published view, including owner-linked installation photos."""
     import base64
     from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
 
@@ -1944,41 +1959,70 @@ async def _visually_shortlist_quotation_products(query_bytes: bytes, products: l
     if not api_key:
         raise HTTPException(500, "EMERGENT_LLM_KEY is not configured")
 
-    # Fetch one representative photo from every published product. An image
-    # that cannot be loaded cannot be compared and must never be invented.
+    views = catalogue_photo_views(products, project_photos)
+    storage_paths = list({
+        url.removeprefix("/api/files/")
+        for _product, image_url, _index in views
+        if (url := canonical_media_url(image_url)).startswith("/api/files/")
+    })
+    thumbnails = {}
+    if storage_paths:
+        rows = await db.files.find(
+            {"storage_path": {"$in": storage_paths}},
+            {"_id": 0, "storage_path": 1, "visual_thumbnail": 1},
+        ).to_list(len(storage_paths))
+        thumbnails = {row["storage_path"]: bytes(row["visual_thumbnail"])
+                      for row in rows if row.get("visual_thumbnail")}
+        if len(thumbnails) < len(storage_paths) * 0.98:
+            raise HTTPException(
+                503, f"Preparing catalogue photos: {len(thumbnails)} of {len(storage_paths)} ready. Try again shortly."
+            )
+
     semaphore = asyncio.Semaphore(12)
 
-    async def load(product):
-        images = product.get("images") or []
-        if not images:
-            return None
+    async def fetch(image_url):
+        url = canonical_media_url(image_url)
+        path = url.removeprefix("/api/files/") if url.startswith("/api/files/") else ""
+        if path in thumbnails:
+            return thumbnails[path]
+        async with semaphore:
+            if url.startswith("/api/files/"):
+                content, _mime = await asyncio.to_thread(get_object, url.removeprefix("/api/files/"))
+            else:
+                response = await asyncio.to_thread(requests.get, image_url, timeout=20)
+                response.raise_for_status()
+                content = response.content
+        return await asyncio.to_thread(_quotation_visual_thumbnail, content)
+
+    fetches = {}
+    for _product, image_url, _index in views:
+        url = canonical_media_url(image_url)
+        if url not in fetches:
+            fetches[url] = asyncio.create_task(fetch(image_url))
+
+    async def load(product, image_url, image_index):
         try:
-            async with semaphore:
-                url = canonical_media_url(images[0])
-                if url.startswith("/api/files/"):
-                    content, _mime = await asyncio.to_thread(get_object, url.removeprefix("/api/files/"))
-                else:
-                    content, _mime = await _resolve_product_image(
-                        AIRegenerateRequest(image_url=images[0])
-                    )
-            return {"product": product, "image_url": images[0], "image_index": 0,
-                    "image_bytes": await asyncio.to_thread(_quotation_visual_thumbnail, content)}
-        except Exception:
-            logger.warning("quotation_visual_image_unavailable sku=%s", product.get("sku"))
+            thumbnail = await fetches[canonical_media_url(image_url)]
+            return {"product": product, "image_url": image_url, "image_index": image_index,
+                    "image_bytes": thumbnail}
+        except Exception as exc:
+            logger.warning("quotation_visual_image_unavailable sku=%s type=%s", product.get("sku"), type(exc).__name__)
             return None
 
-    loaded = [row for row in await asyncio.gather(*(load(p) for p in products)) if row]
-    logger.info("quotation_visual_catalogue_loaded published=%d loaded=%d", len(products), len(loaded))
+    loaded = [row for row in await asyncio.gather(*(load(*view) for view in views)) if row]
+    logger.info("quotation_visual_catalogue_loaded published=%d views=%d loaded=%d", len(products), len(views), len(loaded))
     if not loaded:
-        return []
+        raise HTTPException(503, "Catalogue photographs could not be loaded for comparison.")
 
-    query_image = ImageContent(image_base64=base64.b64encode(query_bytes).decode("ascii"))
+    query_preview = await asyncio.to_thread(_quotation_visual_thumbnail, query_bytes, 768)
+    query_image = ImageContent(image_base64=base64.b64encode(query_preview).decode("ascii"))
     model_semaphore = asyncio.Semaphore(4)
 
     async def compare_board(rows, max_choices):
-        board, mapping = await asyncio.to_thread(_build_quotation_candidate_board, rows)
-        if not mapping:
-            return []
+        async with model_semaphore:
+            board, mapping = await asyncio.to_thread(_build_quotation_candidate_board, rows)
+            if not mapping:
+                return []
         prompt = f"""IMAGE 1 is a client's photo, possibly from WhatsApp or a real installation.
 IMAGE 2 contains labelled catalogue product photos. Inspect the actual lights in
 both images, not the text in the product names. Ignore background, photography,
@@ -2031,10 +2075,9 @@ Confidence measures resemblance within this sheet, from 0 to 1."""
                 break
         return ranked
 
-    # Each product is seen visually once, then the shortlists are compared
-    # together so per-sheet confidence numbers do not decide the final ranking.
+    # Each saved view participates in discovery, before any SKU is excluded.
     first_pass = await asyncio.gather(*(
-        compare_board(loaded[offset:offset + 32], 2)
+        compare_board(loaded[offset:offset + 32], 3)
         for offset in range(0, len(loaded), 32)
     ), return_exceptions=True)
     finalists = []
@@ -2049,6 +2092,8 @@ Confidence measures resemblance within this sheet, from 0 to 1."""
                 seen.add(sku)
                 finalists.append(row)
     logger.info("quotation_visual_catalogue_shortlisted sheets=%d finalists=%d", len(first_pass), len(finalists))
+    if not finalists:
+        raise HTTPException(503, "Catalogue photo comparison returned no usable suggestions. Please retry.")
     if len(finalists) > 8:
         second_pass = await asyncio.gather(*(
             compare_board(finalists[offset:offset + 40], 8)
@@ -2057,7 +2102,7 @@ Confidence measures resemblance within this sheet, from 0 to 1."""
         ranked = [item for result in second_pass if not isinstance(result, BaseException)
                   for item in result]
         finalists = [row for _confidence, row in sorted(ranked, key=lambda item: -item[0])[:12]] or finalists[:12]
-    return [{"product": row["product"], "discovery_relation": "visual_candidate",
+    return [{"product": row["product"], "image_url": row["image_url"], "discovery_relation": "visual_candidate",
              "discovery_confidence": 0.0, "discovery_reason": "Compared with catalogue photographs"}
             for row in finalists[:12]]
 
@@ -2535,18 +2580,20 @@ async def match_quotation_product_by_image(
         rows = await db.files.find(
             {"storage_path": {"$in": storage_paths}},
             {"_id": 0, "storage_path": 1, "visual_phash": 1, "visual_histogram": 1,
-             "visual_index_failed_at": 1},
+             "visual_index_failed_at": 1, "visual_thumbnail_ready": 1},
         ).to_list(len(storage_paths))
         retry_cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
         skipped = sum(
             1 for row in rows
             if row.get("visual_index_failed_at", "") > retry_cutoff
-            and (not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512)
+            and (not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512
+                 or not row.get("visual_thumbnail_ready"))
         )
         missing = [
             row for row in rows
             if (not row.get("visual_phash")
-                or len(row.get("visual_histogram") or []) != 512)
+                or len(row.get("visual_histogram") or []) != 512
+                or not row.get("visual_thumbnail_ready"))
             and row.get("visual_index_failed_at", "") <= retry_cutoff
         ]
         missing.sort(key=lambda row: (
@@ -2639,7 +2686,7 @@ async def match_quotation_product_by_image(
     # published catalogue data used for matching, so product/image/price/name
     # changes automatically invalidate prior results.
     catalogue_signature = ownership_fingerprint(json.dumps(
-        {"engine": "visual-catalogue-v2", "products": products, "project_photos": {
+        {"engine": "visual-catalogue-v3", "products": products, "project_photos": {
             url: sorted(product["id"] for product in linked)
             for url, linked in project_photos.items()
         }}, sort_keys=True, default=str, separators=(",", ":")
@@ -2648,7 +2695,10 @@ async def match_quotation_product_by_image(
         {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
         {"_id": 0, "response": 1},
     )
-    if cached and isinstance(cached.get("response"), dict):
+    if cached and isinstance(cached.get("response"), dict) and any(
+        match.get("match_label") != "candidate"
+        for match in cached["response"].get("matches") or []
+    ):
         return cached["response"]
 
     # A near-image fingerprint can save the full scan. If it does not verify,
@@ -2678,7 +2728,7 @@ async def match_quotation_product_by_image(
 
     verified = await _verify_quotation_catalogue_candidates(data, content_type, candidates) if candidates else []
     if not verified:
-        candidates = await _visually_shortlist_quotation_products(data, products)
+        candidates = await _visually_shortlist_quotation_products(data, products, project_photos)
         verified = await _verify_quotation_catalogue_candidates(data, content_type, candidates) if candidates else []
 
     if not candidates:
@@ -2693,11 +2743,6 @@ async def match_quotation_product_by_image(
             "index_skipped": 0,
             "engine": "catalogue-visual-comparison",
         }
-        await db.quotation_image_search_cache.update_one(
-            {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
-            {"$set": {"response": response, "updated_at": now_iso()}},
-            upsert=True,
-        )
         return response
 
     matches = []
@@ -2741,7 +2786,7 @@ async def match_quotation_product_by_image(
                 "price_display": product.get("price_display") or (
                     "fixed" if product.get("fixed_price") else "starting_from"
                 ),
-                "image_url": (product.get("images") or [""])[0],
+                "image_url": candidate.get("image_url") or (product.get("images") or [""])[0],
                 "match_label": "candidate",
                 "engine": "catalogue-visual-comparison",
                 "reason": "Visual candidate; compare its full product photos before adding.",
@@ -2758,11 +2803,12 @@ async def match_quotation_product_by_image(
         "index_skipped": 0,
         "engine": "catalogue-visual-comparison",
     }
-    await db.quotation_image_search_cache.update_one(
-        {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
-        {"$set": {"response": response, "updated_at": now_iso()}},
-        upsert=True,
-    )
+    if verified and matches:
+        await db.quotation_image_search_cache.update_one(
+            {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
+            {"$set": {"response": response, "updated_at": now_iso()}},
+            upsert=True,
+        )
     return response
 
 
@@ -2799,11 +2845,12 @@ async def start_quotation_product_match_job(
                 {"id": job_id},
                 {"$set": {"status": "done", "response": result, "updated_at": now_iso()}},
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("quotation_image_design_comparison_failed job=%s", job_id)
+            reason = exc.detail if isinstance(exc, HTTPException) else f"Search failed on the server. Reference: {job_id[:12]}"
             await db.quotation_image_search_jobs.update_one(
                 {"id": job_id},
-                {"$set": {"status": "failed", "updated_at": now_iso()}},
+                {"$set": {"status": "failed", "error": str(reason)[:240], "updated_at": now_iso()}},
             )
 
     task = asyncio.create_task(run())
@@ -2820,7 +2867,7 @@ async def get_quotation_product_match_job(
         raise HTTPException(404, "Search not found")
     job = await db.quotation_image_search_jobs.find_one(
         {"id": job_id, "admin_id": admin.user_id},
-        {"_id": 0, "status": 1, "response": 1, "created_at": 1},
+        {"_id": 0, "status": 1, "response": 1, "error": 1, "created_at": 1},
     )
     if not job:
         raise HTTPException(404, "Search not found")
@@ -2829,10 +2876,11 @@ async def get_quotation_product_match_job(
     ).total_seconds() > 600:
         await db.quotation_image_search_jobs.update_one(
             {"id": job_id, "status": "running"},
-            {"$set": {"status": "failed", "updated_at": now_iso()}},
+            {"$set": {"status": "failed", "error": "Search exceeded ten minutes.", "updated_at": now_iso()}},
         )
         job["status"] = "failed"
-    return {key: job[key] for key in ("status", "response") if key in job}
+        job["error"] = "Search exceeded ten minutes."
+    return {key: job[key] for key in ("status", "response", "error") if key in job}
 
 
 @api.get("/admin/inquiries/{inquiry_id}/quotations")
