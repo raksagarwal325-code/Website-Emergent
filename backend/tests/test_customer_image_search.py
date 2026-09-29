@@ -201,3 +201,42 @@ async def test_queries_exclude_detail_bytes_until_shortlist_and_keep_missing_row
     result = await service.detail_rows({"/a": "a", "/b": "b"}, urls, [{"product": {"id": "p"}}])
     assert collection.find.call_args.args[0] == {"_id": {"$in": ["a"]}}
     assert result == [{"url": "/a"}]
+
+
+@pytest.mark.asyncio
+async def test_weak_search_uses_only_saved_catalogue_vectors_for_regional_rescue(monkeypatch):
+    from unittest.mock import Mock
+    import customer_image_search as module
+    load = AsyncMock(side_effect=AssertionError("no catalogue downloads during search"))
+    service = CustomerImageSearch(None, load)
+    product = {"id": "a", "images": ["/a"]}
+    service.catalogue = AsyncMock(return_value=[product])
+    service.manifest = AsyncMock(return_value={"/a": "a"})
+    service.rows = AsyncMock(return_value=[{"url": "/a", "vectors": scored_vector(.77)}])
+    service.encoder = SimpleNamespace(session=True, encode_query=Mock(return_value=vector()))
+    seen = []
+    def rescue(encoder, image, rows, urls, matches, cancelled):
+        assert rows[0]["vectors"] == scored_vector(.77)
+        assert urls["/a"] == [product]
+        assert not cancelled.is_set()
+        seen.append(cancelled)
+        return [{**matches[0], "match_type": "closest"}]
+    monkeypatch.setattr(module, "rescue_region_matches", rescue)
+    result = await service.search(photo())
+    assert result["matches"][0]["match_type"] == "closest"
+    assert seen[0].is_set()
+    load.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_regional_failure_retains_existing_results(monkeypatch):
+    from unittest.mock import Mock
+    import customer_image_search as module
+    service = CustomerImageSearch(None, AsyncMock())
+    service.catalogue = AsyncMock(return_value=[{"id": "a", "images": ["/a"]}])
+    service.manifest = AsyncMock(return_value={"/a": "a"})
+    service.rows = AsyncMock(return_value=[{"url": "/a", "vectors": scored_vector(.77)}])
+    service.encoder = SimpleNamespace(session=True, encode_query=Mock(return_value=vector()))
+    monkeypatch.setattr(module, "rescue_region_matches", Mock(side_effect=RuntimeError("unavailable")))
+    result = await service.search(photo())
+    assert result["matches"] == [{"product": {"id": "a", "images": ["/a"]}, "match_type": "similar"}]

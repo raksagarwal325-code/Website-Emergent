@@ -5,6 +5,7 @@ import hashlib
 import logging
 import os
 import time
+import threading
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -13,6 +14,8 @@ from customer_visual_features import INDEX_VERSION, MAX_BYTES, VisualEncoder, de
 from media_library import canonical_media_url
 from customer_image_references import ReferenceBundle
 from customer_design_ranking import DESIGN_VERSION, encode_details, needs_detail_check, promote_detail_match, load_relations, add_related_designs
+
+from customer_region_search import needs_region_check, rescue_region_matches
 
 logger = logging.getLogger(__name__)
 PUBLIC_FIELDS = {"_id": 0, "id": 1, "name": 1, "sku": 1, "category": 1, "images": 1, "slug": 1}
@@ -175,6 +178,16 @@ class CustomerImageSearch:
                     matches = await asyncio.to_thread(promote_detail_match, candidates, details, detail_rows, urls)
                 except Exception:
                     logger.exception("Detail comparison unavailable; retaining original image results")
+            if indexed == len(urls) and self.encoder.session is not None and needs_region_check(matches):
+                cancelled = threading.Event()
+                try:
+                    matches = await asyncio.to_thread(
+                        rescue_region_matches, self.encoder, image, rows, urls, matches, cancelled,
+                    )
+                except Exception:
+                    logger.exception("Regional comparison unavailable; retaining original image results")
+                finally:
+                    cancelled.set()
             products = {p["id"]: p for values in urls.values() for p in values}
             matches = add_related_designs(matches, list(products.values()), self.design_relations)
             return {
