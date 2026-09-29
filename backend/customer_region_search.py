@@ -147,4 +147,11 @@ def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, dia
         diagnostic['outcome'] = 'cancelled' if cancelled.is_set() else 'budget_exceeded'
         return matches
     finally:
-        diagnostic['elapsed_seconds'] = round(time.monotonic() - started, 3)
+        elapsed = time.monotonic() - started
+        diagnostic['elapsed_seconds'] = round(elapsed, 3)
+        diagnostic.update({key: round(value, 6) if isinstance(value, float) else value
+                           for key, value in worker.timings.items()})
+        measured = sum(worker.timings[key] for key in
+                       ('preprocess_seconds', 'lock_wait_seconds', 'inference_seconds'))
+        diagnostic['other_seconds'] = round(max(0.0, elapsed - measured), 6)
+        diagnostic['timing_version'] = 'region-stage-timing-v1'

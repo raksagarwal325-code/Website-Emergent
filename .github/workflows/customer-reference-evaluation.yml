@@ -37,7 +37,7 @@ jobs:
       - name: Read public catalogue and evaluate offline
         env:
           HF_HUB_DISABLE_TELEMETRY: '1'
-        run: python scripts/evaluate_customer_references.py --output /tmp/reference-evaluation
+        run: sudo --preserve-env=PATH,HF_HUB_DISABLE_TELEMETRY systemd-run --scope -p CPUQuota=50% -p CPUQuotaPeriodSec=100ms $(which python) scripts/evaluate_customer_references.py --output /tmp/reference-evaluation
       - name: Preserve downloaded public images for retries
         if: always()
         uses: actions/cache/save@v4

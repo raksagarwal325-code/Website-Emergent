@@ -132,6 +132,7 @@ def prepare(output):
     from customer_visual_features import MODEL_REPO, MODEL_REVISION
     from huggingface_hub import hf_hub_download
     model = hf_hub_download(MODEL_REPO, "onnx/model.onnx", revision=MODEL_REVISION)
+    os.environ["REGION_QUANT_MODEL"] = hf_hub_download(MODEL_REPO, "onnx/model_quantized.onnx", revision=MODEL_REVISION)
     return products, mapping, cache, model
 
 

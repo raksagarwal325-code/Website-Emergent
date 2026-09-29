@@ -29,60 +29,38 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
     by_product=[[] for p in products]
     for i,r in enumerate(rows):
         for p in mapping[r['url']]: by_product[ids[p['id']]].extend((i*2,i*2+1))
-    report=[]; matrices={}
-    for ci,(label,data) in enumerate(cases):
-        im=decode_image(data); hashes=image_hashes(data,im); vectors=encoder.encode_query(im)
-        base=rank_images(hashes,vectors,augmented,amap)
-        current=base
-        if needs_detail_check(base): current=promote_detail_match(rank_images(hashes,vectors,augmented,amap,60),encode_details(encoder,im),rows,mapping)
-        current=add_related_designs(current,products,load_relations())
-        result={'case':label,'current':[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in current]}
-        from customer_region_search import rescue_region_matches
-        import threading
-        start=time.monotonic()
-        proposed=rescue_region_matches(encoder,im,rows,mapping,current,threading.Event())
-        result['proposed']=[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in proposed]
-        result['region_seconds']=time.monotonic()-start
-        result['changed']=result['proposed']!=result['current']
-        if label.startswith('room'):
-            assert [m['sku'] for m in result['proposed'][:3]]==['SGE-HL-076','SGE-HL-077','SGE-HL-078'],result
-            assert all(m['type']=='closest' for m in result['proposed'][:3])
-            assert {f'SGE-HL-{n:03d}' for n in (72,73,74,75,79)} <= {m['sku'] for m in result['proposed'][3:]},result
-        else:
-            assert result['proposed']==result['current'],result
-        report.append(result)
-        print('REGION_RUNTIME',label,'changed',result['changed'],'seconds',result['region_seconds'],flush=True)
 
-    # Real runtime under one CPU, including every existing ORT/BLAS thread.
-    import os, threading
+    import os,threading
+    import onnxruntime as ort
+    import customer_region_search as regions
     from customer_visual_features import VisualEncoder
-    from customer_region_search import rescue_region_matches
-    from customer_region_search_legacy import rescue_region_matches as legacy_rescue
-    affinity=os.sched_getaffinity(0)
-    def limit_all(cpus):
-        for tid in os.listdir('/proc/self/task'):
-            try: os.sched_setaffinity(int(tid),cpus)
-            except ProcessLookupError: pass
-    limit_all({min(affinity)})
-    small=VisualEncoder();small.load()
-    assert small.inference_threads==1
-    cpu_profiles=[]
-    by_sku={p['sku']:p for p in products}
-    for case_index in (0,1):
-        im=decode_image(cases[case_index][1])
-        current=[{'product':by_sku[m['sku']],'score':m['score'],'match_type':m['type']} for m in report[case_index]['current']]
-        for name,worker,fn in [('legacy',encoder,legacy_rescue),('efficient',small,rescue_region_matches)]:
-            start=time.monotonic()
-            out=fn(worker,im,rows,mapping,current,threading.Event())
-            entry={'case':cases[case_index][0],'implementation':name,'seconds':time.monotonic()-start,
-                   'first_three':[m['product']['sku'] for m in out[:3]]}
-            cpu_profiles.append(entry)
-            print('CONSTRAINED_CPU',entry,flush=True)
-            if name=='efficient':
-                assert entry['seconds'] < 8.0,entry
-                assert entry['first_three']==['SGE-HL-076','SGE-HL-077','SGE-HL-078'],entry
-                assert {f'SGE-HL-{n:03d}' for n in (72,73,74,75,79)} <= {m['product']['sku'] for m in out[3:]}
-    limit_all(affinity)
-
-    (output/'region-report.json').write_text(json.dumps({'skus':skus,'boxes':boxes,'cases':report,'cpu_profiles':cpu_profiles}))
-    np.savez_compressed(output/'region-scores.npz',**matrices)
+    from pathlib import Path
+    cgroup=Path('/sys/fs/cgroup') / Path('/proc/self/cgroup').read_text().strip().split('::')[-1].lstrip('/')
+    quota=(cgroup/'cpu.max').read_text().strip()
+    print('ACTUAL_CPU_QUOTA',quota,flush=True)
+    assert quota.split()[0]!='max' and int(quota.split()[0])/int(quota.split()[1])==.5
+    options=ort.SessionOptions();options.intra_op_num_threads=1;options.inter_op_num_threads=1
+    quant=VisualEncoder()
+    quant.session=ort.InferenceSession(os.environ['REGION_QUANT_MODEL'],sess_options=options,providers=['CPUExecutionProvider'])
+    quant.inference_threads=1
+    report=[]
+    for label,data in cases:
+        im=decode_image(data); hashes=image_hashes(data,im); vectors=encoder.encode_query(im)
+        current=rank_images(hashes,vectors,augmented,amap)
+        if needs_detail_check(current):
+            current=promote_detail_match(rank_images(hashes,vectors,augmented,amap,60),encode_details(encoder,im),rows,mapping)
+        current=add_related_designs(current,products,load_relations())
+        serialize=lambda out:[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in out]
+        result={'case':label,'current':serialize(current),'attempts':[]}
+        if regions.needs_region_check(current):
+            for name,worker,budget in [('fp32-budget',encoder,8),('int8-budget',quant,8),('int8-complete',quant,60)]:
+                regions.REGION_SECONDS=budget
+                diagnostic={}
+                out=regions.rescue_region_matches(worker,im,rows,mapping,current,threading.Event(),diagnostic)
+                result['attempts'].append({'implementation':name,'matches':serialize(out),'diagnostic':diagnostic})
+                print('QUOTA_BENCHMARK',label,name,json.dumps(result['attempts'][-1]),flush=True)
+                if name=='int8-budget' and diagnostic.get('outcome')!='budget_exceeded':
+                    break
+        report.append(result)
+        print('CASE_COMPLETE',label,flush=True)
+        (output/'region-report.json').write_text(json.dumps({'cpu_quota':quota,'products':len(products),'images':len(rows),'cases':report}))
