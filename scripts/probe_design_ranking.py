@@ -46,7 +46,24 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
                 q=np.asarray(encoder.encode(im.crop(bounds)),dtype=np.float32)
                 scores=(q@catalog.T).max(axis=0)
                 regional.append([float(scores[ix].max()) if ix else 0 for ix in by_product])
-            matrices['case_'+str(ci)]=np.asarray(regional,dtype=np.float32)
+            initial=np.asarray(regional,dtype=np.float32)
+            selected=[]
+            def iou(a,b):
+                intersection=max(0,min(a[2],b[2])-max(a[0],b[0]))*max(0,min(a[3],b[3])-max(a[1],b[1]))
+                return intersection/((a[2]-a[0])*(a[3]-a[1])+(b[2]-b[0])*(b[3]-b[1])-intersection)
+            for ri in np.argsort(-initial.max(axis=1)):
+                if initial[ri].max()<.70: break
+                if all(iou(boxes[ri],boxes[old])<.3 for old in selected): selected.append(int(ri))
+                if len(selected)==3: break
+            refined=[]
+            for ri in selected:
+                box=boxes[ri]
+                bounds=tuple(round(v*(im.width if i%2==0 else im.height)) for i,v in enumerate(box))
+                q=np.asarray(encoder.encode_query(im.crop(bounds)),dtype=np.float32)
+                scores=(q@catalog.T).max(axis=0)
+                refined.append([float(scores[ix].max()) if ix else 0 for ix in by_product])
+            result['selected_boxes']=[boxes[i] for i in selected]
+            matrices['case_'+str(ci)]=np.asarray(refined,dtype=np.float32)
             result['matrix']='case_'+str(ci)
         result['region_seconds']=time.monotonic()-start
         report.append(result)
