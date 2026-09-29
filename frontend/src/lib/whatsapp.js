@@ -30,7 +30,7 @@ export const WA_MESSAGES = {
   notFound:
     `${BRAND_PREFIX} I landed on a page that could not be found — can you help me find the piece I was looking at?`,
   imageSearch:
-    `${BRAND_PREFIX} I could not find the light I am looking for through image search. I will share the reference photo here — please help me find the closest match or a custom alternative.`,
+    `${BRAND_PREFIX} I used image search but have not yet found the exact light I have in mind. I will share the reference photo here. Please help me identify the closest catalogue piece or advise whether it can be custom-made.`,
 };
 
 const digitsOnly = (n) => String(n || "").replace(/[^0-9]/g, "");
