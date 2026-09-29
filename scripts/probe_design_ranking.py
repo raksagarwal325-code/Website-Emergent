@@ -64,6 +64,10 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
         serialize=lambda out:[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in out]
         for threshold in (.60,.65,.70,.75):
             hot=(foreground & (heat>=threshold)).reshape(16,16)
+            horizontal=np.zeros_like(hot)
+            horizontal[:,:-1] |= hot[:,:-1] & hot[:,1:]
+            horizontal[:,1:] |= hot[:,:-1] & hot[:,1:]
+            hot &= horizontal
             seen=set();components=[]
             for y in range(16):
                 for x in range(16):
@@ -86,7 +90,7 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
                         box=[float(low[0]),float(low[1]),float(high[0]),float(high[1])]
                         if np.prod(high-low)<.5:
                             components.append({'box':box,'strength':float(heat[indices].mean()),'n':len(points)})
-            components=sorted(components,key=lambda c:(-c['strength'],-c['n'],c['box']))[:3]
+            components=sorted(components,key=lambda c:(-c['n'],-c['strength'],c['box']))[:3]
             refined=[]
             encoder_start=time.monotonic()
             for c in components:
