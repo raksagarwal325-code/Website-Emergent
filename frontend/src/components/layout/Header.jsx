@@ -217,7 +217,7 @@ export default function Header() {
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1" aria-label="Product search options">
-            <Link to="/catalog" aria-label="Search products by text" data-testid="header-search" title="Search products" className="h-10 w-10 flex items-center justify-center text-white/75 hover:text-[#D4AF37] transition-colors">
+            <Link to="/catalog" aria-label="Search" data-testid="header-search" title="Search products" className="h-10 w-10 flex items-center justify-center text-white/75 hover:text-[#D4AF37] transition-colors">
               <Search size={20} strokeWidth={1.6} />
             </Link>
             <CustomerImageSearch variant="header" />
