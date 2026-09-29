@@ -4,6 +4,7 @@ on:
     branches: [experiment/customer-reference-evaluation]
     paths:
       - scripts/evaluate_customer_references.py
+      - scripts/probe_design_ranking.py
       - tests/fixtures/customer-reference-evaluation/**
       - .github/workflows/customer-reference-evaluation.yml
 permissions:
@@ -30,6 +31,7 @@ jobs:
           path: |
             /tmp/reference-evaluation/images
             /tmp/reference-evaluation/features
+            /tmp/reference-evaluation/design-features
           key: customer-reference-images-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: customer-reference-images-
       - name: Read public catalogue and evaluate offline
@@ -43,6 +45,7 @@ jobs:
           path: |
             /tmp/reference-evaluation/images
             /tmp/reference-evaluation/features
+            /tmp/reference-evaluation/design-features
           key: customer-reference-images-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Attach evaluation report
         if: always()
@@ -50,6 +53,7 @@ jobs:
         with:
           name: customer-reference-evaluation
           path: |
+            /tmp/reference-evaluation/design-probe.json
             /tmp/reference-evaluation/diagnosis.json
             /tmp/reference-evaluation/diagnostic-assets
             /tmp/reference-evaluation/report.*

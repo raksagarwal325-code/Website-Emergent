@@ -266,6 +266,8 @@ def evaluate(output, products, mapping, cache, model):
     (output / 'diagnosis.json').write_text(json.dumps(diagnostics, indent=2))
     print('CH_AND_FAMILY_DIAGNOSIS ' + json.dumps({k: v['expected'] for k, v in diagnostics.items()}), flush=True)
 
+    from probe_design_ranking import probe
+    probe(output, products, rows, mapping, cache, encoder, FIXTURES)
     # Any bad image aborts the experiment instead of silently testing a smaller index.
     augmented_rows, augmented_map, references = overlay_references(products, rows, mapping, encoder)
     results = []
