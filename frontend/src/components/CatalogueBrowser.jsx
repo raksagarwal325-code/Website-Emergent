@@ -205,12 +205,17 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
 
   return (
     <>
-      <div className="mb-7 flex flex-col gap-4 no-print md:flex-row md:items-center">
-        <div className="relative flex-1">
-          <Search aria-hidden="true" size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
-          <label htmlFor="catalog-search" className="sr-only">Search catalogue</label>
-          <input id="catalog-search" name="catalog-search" type="search" autoComplete="off" data-testid="catalog-search" value={q} onChange={(e) => updateSearch(e.target.value)} placeholder="Search products, SKUs, tags…" className="w-full border border-white/15 bg-[#0a0a0a] py-3 pl-11 pr-14 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#D4AF37]" />
-          <CustomerImageSearch />
+      <div className="mb-7 flex flex-col gap-4 no-print md:flex-row md:items-start">
+        <div className="flex-1">
+          <div className="relative">
+            <Search aria-hidden="true" size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+            <label htmlFor="catalog-search" className="sr-only">Search catalogue</label>
+            <input id="catalog-search" name="catalog-search" type="search" autoComplete="off" data-testid="catalog-search" value={q} onChange={(e) => updateSearch(e.target.value)} placeholder="Search products, SKUs, tags…" className="w-full border border-white/15 bg-[#0a0a0a] py-3 pl-11 pr-36 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#D4AF37]" />
+            <CustomerImageSearch />
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-white/55">
+            Have a product photo or screenshot? Use <span className="font-medium text-[#D4AF37]">Upload photo</span> to find the same or similar designs.
+          </p>
         </div>
         <button type="button" data-testid="filters-toggle" onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters} aria-controls="catalog-filters-panel" className={`inline-flex items-center gap-2 border px-4 py-3 text-xs uppercase tracking-[0.2em] transition-colors ${showFilters ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/15 text-white/80 hover:border-white/40"}`}><SlidersHorizontal aria-hidden="true" size={14} /> Filters</button>
         <div className="w-full md:w-52">

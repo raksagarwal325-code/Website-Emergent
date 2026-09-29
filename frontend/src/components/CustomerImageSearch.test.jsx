@@ -10,7 +10,7 @@ const file = () => new File(["photo"], "light.png", { type: "image/png" });
 const upload = (f = file()) => fireEvent.change(screen.getByLabelText("Upload image for product search"), { target: { files: [f] } });
 const open = () => {
   render(<MemoryRouter><div className="relative"><CustomerImageSearch /></div></MemoryRouter>);
-  fireEvent.click(screen.getByRole("button", { name: "Search by image" }));
+  fireEvent.click(screen.getByRole("button", { name: "Upload a photo to find exact or similar products" }));
 };
 beforeEach(() => {
   jest.clearAllMocks();
@@ -19,6 +19,13 @@ beforeEach(() => {
   jest.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,preview");
 });
 afterEach(() => jest.restoreAllMocks());
+
+test("presents image search as a prominent labelled upload action", () => {
+  render(<MemoryRouter><div className="relative"><CustomerImageSearch /></div></MemoryRouter>);
+  const button = screen.getByRole("button", { name: "Upload a photo to find exact or similar products" });
+  expect(button).toHaveTextContent("Upload photo");
+  expect(button).toHaveClass("bg-[#D4AF37]");
+});
 
 test("uploads a photo and separates matching products from similar designs with working links", async () => {
   api.searchByImage.mockResolvedValue({ index_complete: true, similarity_available: true, available: true, matches: [{ product, match_type: "exact" }, { product: { ...product, id: "two", name: "Related Light", sku: "SGE-CH-002" }, match_type: "similar" }] });
@@ -78,7 +85,7 @@ test("closing cancels an in-flight request and restores focus", async () => {
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
   expect(signal.aborted).toBe(true);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Search by image" })).toHaveFocus();
+  expect(screen.getByRole("button", { name: "Upload a photo to find exact or similar products" })).toHaveFocus();
 });
 
 test("an older response cannot replace results for a newer upload", async () => {
