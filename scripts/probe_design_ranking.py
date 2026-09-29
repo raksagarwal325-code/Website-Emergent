@@ -74,7 +74,7 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
         proposed=baseline
         if needs_detail_check(baseline):
             candidates=rank_images(hashes,vectors,augmented_rows,augmented_map,60)
-            proposed=promote_detail_match(candidates,encode_details(encoder,im),augmented_rows,augmented_map)
+            proposed=promote_detail_match(candidates,encode_details(encoder,im),rows,mapping)
         proposed=add_related_designs(proposed,products,load_relations())
         summarize=lambda matches:[{'sku':m['product']['sku'],'type':m['match_type'],'score':m['score']} for m in matches]
         result={'case':label,'current':summarize(baseline),'proposed':summarize(proposed),'additional_seconds':time.monotonic()-start}

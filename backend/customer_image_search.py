@@ -160,7 +160,7 @@ class CustomerImageSearch:
                 try:
                     candidates = await asyncio.to_thread(rank_images, hashes, vectors, candidate_rows, candidate_urls, 60)
                     details = await asyncio.to_thread(encode_details, self.encoder, image)
-                    matches = await asyncio.to_thread(promote_detail_match, candidates, details, candidate_rows, candidate_urls)
+                    matches = await asyncio.to_thread(promote_detail_match, candidates, details, rows, urls)
                 except Exception:
                     logger.exception("Detail comparison unavailable; retaining original image results")
             products = {p["id"]: p for values in urls.values() for p in values}
