@@ -232,6 +232,40 @@ def evaluate(output, products, mapping, cache, model):
         rows.append({"url": url, **hashes, "vectors": vectors})
         if count % 50 == 0:
             print(f"Encoded {count}/{len(mapping)}", flush=True)
+    # Independent owner-labelled chandelier query; never add it to candidate rows.
+    import numpy as np
+    import shutil
+    query_data = (FIXTURES / 'ch-029-variant.jpg').read_bytes()
+    original = decode_image(query_data)
+    targets = {'SGE-CH-029', 'SGE-CH-044', 'SGE-CH-051', 'SGE-CH-053'}
+    diagnostics = {}
+    for label, image in [('original', original), ('fixture_crop', original.crop((110, 340, 810, 1010)))]:
+        query = np.asarray(encoder.encode_query(image), dtype=np.float32)
+        by_sku = {}
+        for row in rows:
+            scores = query @ np.asarray(row['vectors'], dtype=np.float32).T
+            for product in mapping[row['url']]:
+                sku = product.get('sku')
+                candidate = {'sku': sku, 'name': product.get('name'), 'slug': product.get('slug'),
+                             'url': row['url'], 'max_score': float(scores.max()),
+                             'whole_score': float(scores[:2].max()),
+                             'mean_view_score': float(scores.max(axis=1).mean())}
+                if sku not in by_sku or candidate['max_score'] > by_sku[sku]['max_score']:
+                    by_sku[sku] = candidate
+        ordered = sorted(by_sku.values(), key=lambda item: -item['max_score'])
+        for rank, candidate in enumerate(ordered, 1):
+            candidate['rank'] = rank
+        diagnostics[label] = {'top_30': ordered[:30], 'expected': [c for c in ordered if c['sku'] in targets]}
+    assets = output / 'diagnostic-assets'
+    assets.mkdir(exist_ok=True)
+    for product in products:
+        if product.get('sku') in targets:
+            for i, raw in enumerate(product.get('images') or []):
+                source = cache / hashlib.sha256(canonical(raw).encode()).hexdigest()
+                shutil.copyfile(source, assets / (product['sku'] + '-' + str(i) + '.image'))
+    (output / 'diagnosis.json').write_text(json.dumps(diagnostics, indent=2))
+    print('CH_AND_FAMILY_DIAGNOSIS ' + json.dumps({k: v['expected'] for k, v in diagnostics.items()}), flush=True)
+
     # Any bad image aborts the experiment instead of silently testing a smaller index.
     augmented_rows, augmented_map, references = overlay_references(products, rows, mapping, encoder)
     results = []

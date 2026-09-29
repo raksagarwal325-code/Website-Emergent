@@ -50,6 +50,8 @@ jobs:
         with:
           name: customer-reference-evaluation
           path: |
+            /tmp/reference-evaluation/diagnosis.json
+            /tmp/reference-evaluation/diagnostic-assets
             /tmp/reference-evaluation/report.*
             /tmp/reference-evaluation/download-failures.json
           if-no-files-found: warn
