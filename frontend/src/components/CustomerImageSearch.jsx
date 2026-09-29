@@ -140,15 +140,23 @@ export default function CustomerImageSearch({ variant = "catalogue" }) {
       aria-label={headerTrigger ? "Search products using a photo" : "Upload a photo to find exact or similar products"}
       title={headerTrigger ? "Search by image" : "Upload a photo to find exact or similar products"}
       className={headerTrigger
-        ? "group relative inline-flex h-10 w-10 items-center justify-center text-white/75 transition-colors hover:text-[#D4AF37] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37]"
+        ? "group relative inline-flex h-10 w-10 items-center justify-center border border-[#D4AF37]/25 text-[#D4AF37] transition-[background-color,border-color,color] hover:border-[#D4AF37]/65 hover:bg-[#D4AF37]/10 hover:text-[#F0D873] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37] xl:w-auto xl:gap-2 xl:px-3"
         : landingTrigger
           ? "group relative inline-flex min-h-12 w-full items-center justify-center gap-3 overflow-hidden border border-[#D4AF37] bg-[#D4AF37] px-7 py-4 text-xs font-semibold uppercase tracking-[0.16em] text-black shadow-[0_0_28px_rgba(212,175,55,0.2)] transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:bg-[#ead06f] hover:shadow-[0_0_34px_rgba(212,175,55,0.32)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37] sm:w-auto"
           : "absolute right-1.5 top-1/2 inline-flex h-9 -translate-y-1/2 items-center gap-2 border border-[#D4AF37] bg-[#D4AF37] px-3 text-xs font-semibold uppercase tracking-[0.08em] text-black shadow-[0_0_18px_rgba(212,175,55,0.18)] transition-colors hover:bg-[#ead06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37]"}
     >
       {landingTrigger && <span aria-hidden="true" className="absolute inset-y-0 -left-1/2 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/45 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-[500%]" />}
-      <Camera size={landingTrigger ? 18 : headerTrigger ? 20 : 16} strokeWidth={headerTrigger ? 1.6 : 2} aria-hidden="true" className={landingTrigger ? "relative z-10" : undefined} />
+      <Camera
+        size={landingTrigger ? 18 : headerTrigger ? 18 : 16}
+        strokeWidth={headerTrigger ? 1.6 : 2}
+        aria-hidden="true"
+        className={landingTrigger ? "relative z-10" : headerTrigger ? "-translate-y-1 xl:translate-y-0" : undefined}
+      />
       {headerTrigger
-        ? <span aria-hidden="true" className="absolute right-1 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.85)] motion-reduce:animate-none" />
+        ? <>
+            <span aria-hidden="true" className="absolute bottom-0.5 text-[7px] font-semibold uppercase leading-none tracking-[0.12em] text-[#D4AF37] xl:hidden">Photo</span>
+            <span className="hidden whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.16em] xl:inline">Search by photo</span>
+          </>
         : <span className={landingTrigger ? "relative z-10" : undefined}>{landingTrigger ? "Upload a photo" : "Upload photo"}</span>}
     </button>
     {open && createPortal(
