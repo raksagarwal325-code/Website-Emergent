@@ -37,14 +37,14 @@ test("renders a full-width landing-page call to action without catalogue positio
   expect(screen.getByRole("dialog", { name: "Find your light" })).toBeInTheDocument();
 });
 
-test("renders a permanent icon-only header trigger and opens image search", () => {
-  render(<MemoryRouter><CustomerImageSearch variant="header" /></MemoryRouter>);
-  const button = screen.getByRole("button", { name: "Search products using a photo" });
-  expect(button).toHaveClass("h-10", "w-10");
-  expect(button).toHaveTextContent("Search by photo");
-  expect(button).toHaveTextContent("Photo");
-  expect(button).not.toHaveTextContent("Upload");
+test("renders a labelled photo action for the unified search menu", () => {
+  const onOpen = jest.fn();
+  render(<MemoryRouter><CustomerImageSearch variant="menu" onOpen={onOpen} /></MemoryRouter>);
+  const button = screen.getByRole("button", { name: "Upload a photo to find exact or similar products" });
+  expect(button).toHaveTextContent("Search with a photo");
+  expect(button).toHaveClass("w-full");
   fireEvent.click(button);
+  expect(onOpen).toHaveBeenCalledTimes(1);
   expect(screen.getByRole("dialog", { name: "Find your light" })).toBeInTheDocument();
 });
 
