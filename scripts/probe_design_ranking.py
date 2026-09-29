@@ -44,6 +44,28 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
     import customer_region_encoder as re
     from PIL import Image
     original_input=re.model_input
+
+    import onnx,copy
+    from onnx import numpy_helper
+    source=onnx.load(os.environ['CUSTOMER_IMAGE_MODEL_PATH'])
+    print('POSITION_TENSORS',[(t.name,list(t.dims)) for t in source.graph.initializer if list(t.dims)==[1,257,384]],flush=True)
+    sessions={224:encoder.session}
+    for side in (168,140,112):
+        graph=copy.deepcopy(source)
+        tensors=list(graph.graph.initializer)
+        tensors += [attr.t for node in graph.graph.node for attr in node.attribute if attr.type==onnx.AttributeProto.TENSOR]
+        count=0
+        for tensor in tensors:
+            if list(tensor.dims)!=[1,257,384]:continue
+            a=numpy_helper.to_array(tensor)
+            grid=a[:,1:,:].reshape(16,16,384)
+            reduced=np.stack([np.asarray(Image.fromarray(grid[:,:,i]).resize((side//14,side//14),Image.Resampling.BICUBIC)) for i in range(384)],axis=-1).reshape(1,-1,384)
+            arr=np.concatenate([a[:,:1,:],reduced],axis=1)
+            tensor.CopyFrom(numpy_helper.from_array(arr.astype(np.float32),name=tensor.name));count+=1
+        print('POSITION_RESIZED',side,count,flush=True)
+        assert count==1
+        options=ort.SessionOptions();options.intra_op_num_threads=1;options.inter_op_num_threads=1
+        sessions[side]=ort.InferenceSession(graph.SerializeToString(),sess_options=options,providers=['CPUExecutionProvider'])
     report=[]
     for label,data in cases[:2]:
         im=decode_image(data); hashes=image_hashes(data,im); vectors=encoder.encode_query(im)
@@ -56,6 +78,7 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
                 if size==224:return arr
                 return np.stack([np.asarray(Image.fromarray(ch).resize((size,size),Image.Resampling.BICUBIC)) for ch in arr[0]])[None].astype(np.float32)
             re.model_input=resized
+            encoder.session=sessions[size]
             regions.REGION_SECONDS=60
             diagnostic={}
             try:
@@ -65,6 +88,7 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
                 entry={'size':size,'error':repr(exc)}
             finally:
                 re.model_input=original_input
+                encoder.session=sessions[224]
             result['attempts'].append(entry)
             print('RESOLUTION_BENCHMARK',label,json.dumps(entry),flush=True)
         report.append(result)
