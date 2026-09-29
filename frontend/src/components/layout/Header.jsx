@@ -252,7 +252,7 @@ export default function Header() {
               aria-controls="header-product-search-menu"
               data-testid="header-search"
               onClick={() => setSearchOpen((current) => !current)}
-              className="group inline-flex h-10 w-10 items-center justify-center gap-2 border border-white/10 text-white/78 transition-[background-color,border-color,color] hover:border-[#D4AF37]/55 hover:bg-[#D4AF37]/8 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37] xl:w-auto xl:px-3"
+              className="group inline-flex h-10 w-10 items-center justify-center gap-2 border border-white/10 text-white/78 transition-[background-color,border-color,color] hover:border-[#D4AF37]/55 hover:bg-[#D4AF37]/[0.08] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37] xl:w-auto xl:px-3"
             >
               <span className="relative">
                 <Search size={19} strokeWidth={1.6} aria-hidden="true" />
