@@ -9,13 +9,17 @@ import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import numpy as np
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pymongo import ReturnDocument
 
 from customer_visual_features import INDEX_VERSION, MAX_BYTES, VisualEncoder, decode_image, image_hashes, rank_images
 from media_library import canonical_media_url
 from customer_image_references import ReferenceBundle
-from customer_design_ranking import DESIGN_VERSION, encode_details, needs_detail_check, promote_detail_match, load_relations, add_related_designs
+from customer_design_ranking import (DESIGN_VERSION, add_related_designs,
+                                     encode_details, load_relations,
+                                     needs_detail_check, promote_detail_match,
+                                     unpack_details)
 
 from customer_region_search import (BACKGROUND_REGIONS, REGION_VERSION,
                                     needs_background_region_check,
@@ -58,6 +62,38 @@ def gallery_urls(products, items):
                 if product not in result.setdefault(url, []):
                     result[url].append(product)
     return result
+
+
+def gallery_crop_matches(query_data, rows, mapping, matches, limit=12):
+    """Recognise a customer crop contained inside a linked gallery photograph."""
+    query = unpack_details(query_data)
+    if query is None:
+        return matches
+    scores = {}
+    products = {}
+    for row in rows:
+        stored = unpack_details(row.get("design_vectors")) if row.get("design_version") == DESIGN_VERSION else None
+        if stored is None:
+            continue
+        overlap = (query @ stored.T).max(axis=1)
+        strongest = np.sort(overlap)[-max(8, len(overlap) // 2):]
+        score = float(strongest.mean())
+        for product in mapping.get(row.get("url"), []):
+            product_id = product.get("id")
+            if product_id:
+                products[product_id] = product
+                scores[product_id] = max(score, scores.get(product_id, -1))
+    if not scores:
+        return matches
+    ordered = sorted(scores, key=lambda product_id: (-scores[product_id], product_id))
+    best = scores[ordered[0]]
+    if best < .72:
+        return matches
+    winners = [product_id for product_id in ordered if best - scores[product_id] <= .015]
+    selected = [{"product": products[product_id], "score": scores[product_id], "match_type": "closest"}
+                for product_id in winners]
+    seen = set(winners)
+    return (selected + [match for match in matches if match["product"]["id"] not in seen])[:limit]
 
 
 class CustomerImageSearch:
@@ -110,6 +146,14 @@ class CustomerImageSearch:
         ).to_list(None)
         by_url = {r["url"]: r for r in found}
         return [by_url.get(url, {"url": url}) for url in selected]
+
+    async def gallery_detail_rows(self, manifest, selected):
+        if not selected:
+            return []
+        return await self.db.customer_visual_images.find(
+            {"_id": {"$in": [manifest[url] for url in selected]}},
+            {"_id": 0, "url": 1, "design_vectors": 1, "design_version": 1},
+        ).to_list(None)
 
     async def refresh(self):
         urls = await self.search_urls()
@@ -279,15 +323,27 @@ class CustomerImageSearch:
             if self.encoder.session is None:
                 await asyncio.to_thread(self.encoder.load)
             image = await asyncio.to_thread(decode_image, bytes(job["image"]))
+            catalogue = await self.catalogue()
+            catalogue_only = set(catalogue_urls(catalogue))
             urls = await self.search_urls()
             manifest = await self.manifest(urls)
             rows = await self.rows(manifest)
             matches = job.get("baseline") or []
-            matches = await asyncio.to_thread(
-                rescue_region_matches, self.encoder, image, rows, urls, matches,
-                cancelled, diagnostic, seconds=BACKGROUND_REGION_SECONDS,
-                regions=BACKGROUND_REGIONS, force=True,
-            )
+            gallery_selected = [url for url in urls if url not in catalogue_only]
+            gallery_rows = await self.gallery_detail_rows(manifest, gallery_selected)
+            if gallery_rows:
+                query_details = await asyncio.to_thread(encode_details, self.encoder, image)
+                crop_matches = await asyncio.to_thread(
+                    gallery_crop_matches, query_details, gallery_rows, urls, matches)
+                if crop_matches is not matches:
+                    matches = crop_matches
+                    diagnostic.update(outcome="gallery_crop_match", gallery_images=len(gallery_rows))
+            if diagnostic.get("outcome") != "gallery_crop_match":
+                matches = await asyncio.to_thread(
+                    rescue_region_matches, self.encoder, image, rows, urls, matches,
+                    cancelled, diagnostic, seconds=BACKGROUND_REGION_SECONDS,
+                    regions=BACKGROUND_REGIONS, force=True,
+                )
             products = {p["id"]: p for values in urls.values() for p in values}
             matches = add_related_designs(matches, list(products.values()), self.design_relations)
             indexed = sum(bool(row.get("vectors")) for row in rows)
