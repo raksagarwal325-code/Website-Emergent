@@ -22,10 +22,22 @@ jobs:
           python-version: '3.11'
       - name: Install pinned evaluation dependencies
         run: pip install numpy==2.4.6 Pillow==11.3.0 onnxruntime==1.30.0 huggingface_hub==1.21.0
+      - name: Restore downloaded public images
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/reference-evaluation/images
+          key: customer-reference-images-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: customer-reference-images-
       - name: Read public catalogue and evaluate offline
         env:
           HF_HUB_DISABLE_TELEMETRY: '1'
         run: python scripts/evaluate_customer_references.py --output /tmp/reference-evaluation
+      - name: Preserve downloaded public images for retries
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/reference-evaluation/images
+          key: customer-reference-images-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Attach evaluation report
         if: always()
         uses: actions/upload-artifact@v4

@@ -113,7 +113,19 @@ def prepare(output):
                 print(f"Downloaded {count}/{len(mapping)}; failures={len(failures)}", flush=True)
     (output / "download-failures.json").write_text(json.dumps(failures, indent=2))
     if failures:
-        raise RuntimeError(f"Incomplete candidate coverage: {len(failures)} downloads failed; no accuracy verdict")
+        # Storage-backed public endpoints occasionally return a transient 404.
+        # Retry only failed URLs after the main pass; never substitute another image.
+        unresolved = []
+        for failure in failures:
+            url, path, error = download(failure["url"])
+            if error:
+                unresolved.append({"url": url, "error": error,
+                                   "products": [p.get("sku") for p in mapping[url]]})
+        failures = unresolved
+        (output / "download-failures.json").write_text(json.dumps(failures, indent=2))
+        if failures:
+            print(json.dumps(failures), flush=True)
+            raise RuntimeError(f"Incomplete candidate coverage: {len(failures)} downloads failed; no accuracy verdict")
     if snapshot_signature(products) != snapshot_signature(catalogue()):
         raise RuntimeError("Catalogue changed during download; no accuracy verdict")
     (output / "catalogue.json").write_text(json.dumps(products))

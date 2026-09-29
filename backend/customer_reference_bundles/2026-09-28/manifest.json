@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "references": [
+    {
+      "sku": "SGE-CS-001",
+      "file": "cs-001.jpg",
+      "sha256": "46e8b15c0122049c8b06b0c56e3c77aa698662e0a6f0d18ab0fe45661490341a"
+    },
+    {
+      "sku": "SGE-WL-085",
+      "file": "wl-085.jpg",
+      "sha256": "4569de48bb5f9aa92fb5775ff8e859effc6d7e2881e7ce3271837b4b6b10589f"
+    },
+    {
+      "sku": "SGE-CS-002",
+      "file": "cs-002.jpg",
+      "sha256": "a931538e7ea7be2d71b2bcc7cf0cf971905c48094c53d61982dca8a87b37b482"
+    }
+  ]
+}
