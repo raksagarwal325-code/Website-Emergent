@@ -7,8 +7,10 @@ import os
 import time
 import threading
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pymongo import ReturnDocument
 
 from customer_visual_features import INDEX_VERSION, MAX_BYTES, VisualEncoder, decode_image, image_hashes, rank_images
 from media_library import canonical_media_url
@@ -19,6 +21,10 @@ from customer_region_search import REGION_VERSION, needs_region_check, rescue_re
 
 logger = logging.getLogger(__name__)
 PUBLIC_FIELDS = {"_id": 0, "id": 1, "name": 1, "sku": 1, "category": 1, "images": 1, "slug": 1}
+BACKGROUND_REGION_SECONDS = 45.0
+BACKGROUND_JOB_TTL_MINUTES = 15
+BACKGROUND_RESULT_TTL_MINUTES = 60
+BACKGROUND_JOB_LIMIT = 8
 
 
 def catalogue_urls(products):
@@ -40,6 +46,7 @@ class CustomerImageSearch:
         self.load_image = load_image
         self.encoder = VisualEncoder()
         self.task = None
+        self.job_task = None
         self.busy = asyncio.Semaphore(2)
         self.owner = uuid.uuid4().hex
         self.last_region_search = None
@@ -133,12 +140,15 @@ class CustomerImageSearch:
 
     def start(self):
         self.task = asyncio.create_task(self.run())
+        self.job_task = asyncio.create_task(self.run_jobs())
 
     async def stop(self):
-        if self.task:
-            self.task.cancel()
+        tasks = [task for task in (self.task, self.job_task) if task]
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
-                await self.task
+                await task
 
     async def status(self):
         urls = catalogue_urls(await self.catalogue())
@@ -151,10 +161,130 @@ class CustomerImageSearch:
             "design_indexed": sum(r.get("design_version") == DESIGN_VERSION and bool(r.get("design_vectors")) for r in rows),
             "model_ready": self.encoder.session is not None,
             "worker_running": bool(self.task and not self.task.done()),
+            "background_worker_running": bool(self.job_task and not self.job_task.done()),
             "region_search_version": REGION_VERSION,
             "inference_threads": getattr(self.encoder, 'inference_threads', None),
             "last_region_search": self.last_region_search,
         }
+
+    @property
+    def jobs(self):
+        return self.db.customer_image_search_jobs
+
+    async def enqueue_region_search(self, data, matches):
+        now = datetime.now(timezone.utc)
+        active = await self.jobs.count_documents({
+            "status": {"$in": ["queued", "processing"]},
+            "expires_at": {"$gt": now},
+        })
+        if active >= BACKGROUND_JOB_LIMIT:
+            raise HTTPException(429, "Detailed image search is busy. Please try again shortly.")
+        job_id = uuid.uuid4().hex
+        await self.jobs.insert_one({
+            "_id": job_id,
+            "status": "queued",
+            "image": data,
+            "baseline": matches,
+            "created_at": now,
+            "updated_at": now,
+            "expires_at": now + timedelta(minutes=BACKGROUND_JOB_TTL_MINUTES),
+        })
+        return job_id
+
+    async def get_job(self, job_id):
+        if len(job_id) != 32 or any(c not in "0123456789abcdef" for c in job_id):
+            raise HTTPException(404, "Image search not found or expired.")
+        job = await self.jobs.find_one({"_id": job_id}, {"_id": 0, "image": 0, "baseline": 0})
+        if not job:
+            raise HTTPException(404, "Image search not found or expired.")
+        response = {
+            "job_id": job_id,
+            "search_status": "processing" if job["status"] in {"queued", "processing"} else job["status"],
+            "poll_after_ms": 1500,
+        }
+        if job["status"] == "complete":
+            response.update(job.get("result") or {})
+        elif job["status"] == "failed":
+            response["detail"] = "Detailed image search could not finish. Please upload the image again."
+        return response
+
+    async def run_jobs(self):
+        try:
+            await self.jobs.create_index("expires_at", expireAfterSeconds=0)
+            # This deployment has one backend worker. Re-queue work interrupted by a restart.
+            await self.jobs.update_many(
+                {"status": "processing"},
+                {"$set": {"status": "queued", "updated_at": datetime.now(timezone.utc)}},
+            )
+        except Exception:
+            logger.exception("Could not initialise customer image search jobs")
+        while True:
+            try:
+                now = datetime.now(timezone.utc)
+                job = await self.jobs.find_one_and_update(
+                    {"status": "queued", "expires_at": {"$gt": now}},
+                    {"$set": {"status": "processing", "updated_at": now, "owner": self.owner}},
+                    sort=[("created_at", 1)],
+                    return_document=ReturnDocument.AFTER,
+                )
+                if not job:
+                    await asyncio.sleep(.5)
+                    continue
+                await self.process_job(job)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Customer background image search worker temporarily unavailable")
+                await asyncio.sleep(1)
+
+    async def process_job(self, job):
+        diagnostic = {"started_at": time.time(), "outcome": "running", "mode": "background"}
+        cancelled = threading.Event()
+        try:
+            if self.encoder.session is None:
+                await asyncio.to_thread(self.encoder.load)
+            image = await asyncio.to_thread(decode_image, bytes(job["image"]))
+            urls = catalogue_urls(await self.catalogue())
+            manifest = await self.manifest(urls)
+            rows = await self.rows(manifest)
+            matches = job.get("baseline") or []
+            matches = await asyncio.to_thread(
+                rescue_region_matches, self.encoder, image, rows, urls, matches,
+                cancelled, diagnostic, BACKGROUND_REGION_SECONDS,
+            )
+            products = {p["id"]: p for values in urls.values() for p in values}
+            matches = add_related_designs(matches, list(products.values()), self.design_relations)
+            indexed = sum(bool(row.get("vectors")) for row in rows)
+            result = {
+                "matches": [{"product": m["product"], "match_type": m["match_type"]} for m in matches],
+                "index_complete": indexed == len(urls) and bool(urls),
+                "available": any(row.get("pixels") for row in rows),
+                "similarity_available": self.encoder.session is not None and indexed > 0,
+            }
+            now = datetime.now(timezone.utc)
+            await self.jobs.update_one(
+                {"_id": job["_id"], "status": "processing", "owner": self.owner},
+                {"$set": {"status": "complete", "result": result, "updated_at": now,
+                           "expires_at": now + timedelta(minutes=BACKGROUND_RESULT_TTL_MINUTES)},
+                 "$unset": {"image": "", "baseline": "", "owner": ""}},
+            )
+        except asyncio.CancelledError:
+            diagnostic["outcome"] = "worker_cancelled"
+            raise
+        except Exception:
+            diagnostic["outcome"] = "error"
+            logger.exception("Customer background regional search failed")
+            now = datetime.now(timezone.utc)
+            await self.jobs.update_one(
+                {"_id": job["_id"]},
+                {"$set": {"status": "failed", "updated_at": now,
+                           "expires_at": now + timedelta(minutes=BACKGROUND_RESULT_TTL_MINUTES)},
+                 "$unset": {"image": "", "baseline": "", "owner": ""}},
+            )
+        finally:
+            cancelled.set()
+            self.last_region_search = dict(diagnostic)
+            logger.info("Customer background regional search: %s", self.last_region_search)
 
     async def search(self, data):
         try:
@@ -182,24 +312,13 @@ class CustomerImageSearch:
                     matches = await asyncio.to_thread(promote_detail_match, candidates, details, detail_rows, urls)
                 except Exception:
                     logger.exception("Detail comparison unavailable; retaining original image results")
+            job_id = None
             if indexed == len(urls) and self.encoder.session is not None and needs_region_check(matches):
-                cancelled = threading.Event()
-                diagnostic = {"started_at": time.time(), "outcome": "running",
-                              "leading_score": round(matches[0]['score'], 4)}
-                try:
-                    matches = await asyncio.to_thread(
-                        rescue_region_matches, self.encoder, image, rows, urls, matches, cancelled, diagnostic,
-                    )
-                except asyncio.CancelledError:
-                    diagnostic['outcome'] = 'request_cancelled'
-                    raise
-                except Exception:
-                    diagnostic['outcome'] = 'error'
-                    logger.exception("Regional comparison unavailable; retaining original image results")
-                finally:
-                    cancelled.set()
-                    self.last_region_search = dict(diagnostic)
-                    logger.info("Customer regional search: %s", self.last_region_search)
+                job_id = await self.enqueue_region_search(data, matches)
+                self.last_region_search = {
+                    "started_at": time.time(), "outcome": "queued", "mode": "background",
+                    "leading_score": round(matches[0]['score'], 4),
+                }
             else:
                 outcome = 'not_needed'
                 if needs_region_check(matches):
@@ -208,12 +327,15 @@ class CustomerImageSearch:
                                            "leading_score": round(matches[0]['score'], 4) if matches else None}
             products = {p["id"]: p for values in urls.values() for p in values}
             matches = add_related_designs(matches, list(products.values()), self.design_relations)
-            return {
+            response = {
                 "matches": [{"product": m["product"], "match_type": m["match_type"]} for m in matches],
                 "index_complete": indexed == len(urls) and bool(urls),
                 "available": any(r.get("pixels") for r in rows),
                 "similarity_available": vectors is not None and indexed > 0,
             }
+            if job_id:
+                response.update({"search_status": "processing", "job_id": job_id, "poll_after_ms": 1500})
+            return response
         finally:
             self.busy.release()
 
@@ -235,5 +357,9 @@ def search_router(service, rate_dependency):
                 raise HTTPException(503, "Image search could not finish. Please try again shortly.")
         finally:
             await file.close()
+
+    @router.get("/search/image/jobs/{job_id}")
+    async def image_search_job(job_id: str):
+        return await service.get_job(job_id)
 
     return router

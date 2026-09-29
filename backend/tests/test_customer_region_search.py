@@ -93,5 +93,19 @@ class RegionSearchTests(unittest.TestCase):
         old = [match(1, 'exact')]
         self.assertIs(rescue_region_matches(encoder, None, [], {}, old, threading.Event()), old)
 
+    def test_background_scan_can_override_interactive_deadline(self):
+        encoder = SimpleNamespace(
+            lock=threading.Lock(),
+            session=SimpleNamespace(run=Mock(return_value=np.ones((1, 1, 384), dtype=np.float32))),
+        )
+        diagnostic = {}
+        result = rescue_region_matches(
+            encoder, Image.new('RGB', (400, 300)),
+            [{'url': 'one', 'vectors': vectors()}], {'one': [{'id': 'a'}]},
+            [match(.76, identity='old')], threading.Event(), diagnostic, seconds=30,
+        )
+        self.assertIsNotNone(result)
+        self.assertNotEqual(diagnostic['outcome'], 'budget_exceeded')
+
 if __name__ == '__main__':
     unittest.main()

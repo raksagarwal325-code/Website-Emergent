@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import CustomerImageSearch, { makeSearchPreview } from "./CustomerImageSearch";
 import { api } from "../lib/api";
 
-jest.mock("../lib/api", () => ({ api: { searchByImage: jest.fn(), resolveImage: (x) => x } }));
+jest.mock("../lib/api", () => ({ api: { searchByImage: jest.fn(), getImageSearchJob: jest.fn(), resolveImage: (x) => x } }));
 const product = { id: "one", name: "Glass Chandelier", sku: "SGE-CH-001", images: ["/one.png"] };
 const file = () => new File(["photo"], "light.png", { type: "image/png" });
 const upload = (f = file()) => fireEvent.change(screen.getByLabelText("Upload image for product search"), { target: { files: [f] } });
@@ -27,6 +27,39 @@ test("uploads a photo and separates matching products from similar designs with 
   expect(screen.getByText("Similar designs")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Glass Chandelier/ })).toHaveAttribute("href", "/product/glass-chandelier-sge-ch-001");
   expect(api.searchByImage).toHaveBeenCalledWith(expect.any(File), expect.any(AbortSignal));
+});
+
+test("polls a difficult search in the background and renders only its completed results", async () => {
+  let releaseFirstPoll;
+  api.searchByImage.mockResolvedValue({
+    search_status: "processing", job_id: "a".repeat(32), poll_after_ms: 0,
+    index_complete: true, similarity_available: true, available: true,
+    matches: [{ product: { ...product, name: "Preliminary" }, match_type: "possible" }],
+  });
+  api.getImageSearchJob
+    .mockImplementationOnce(() => new Promise((resolve) => { releaseFirstPoll = resolve; }))
+    .mockResolvedValueOnce({
+      search_status: "complete", index_complete: true, similarity_available: true, available: true,
+      matches: [{ product: { ...product, name: "Final closest light" }, match_type: "closest" }],
+    });
+  open(); upload();
+  expect(await screen.findByText(/Checking the full catalogue/)).toBeInTheDocument();
+  expect(screen.queryByText("Preliminary")).not.toBeInTheDocument();
+  await waitFor(() => expect(releaseFirstPoll).toBeDefined());
+  await act(async () => releaseFirstPoll({ search_status: "processing", job_id: "a".repeat(32), poll_after_ms: 0 }));
+  expect(await screen.findByText("Final closest light")).toBeInTheDocument();
+  expect(api.getImageSearchJob).toHaveBeenCalledTimes(2);
+});
+
+test("closing cancels background polling", async () => {
+  api.searchByImage.mockResolvedValue({
+    search_status: "processing", job_id: "b".repeat(32), poll_after_ms: 10000, matches: [],
+  });
+  open(); upload();
+  expect(await screen.findByText(/Checking the full catalogue/)).toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(api.getImageSearchJob).not.toHaveBeenCalled();
 });
 
 test("rejects unsupported and oversized uploads before sending a request", () => {
