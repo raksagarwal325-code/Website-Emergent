@@ -131,8 +131,16 @@ export default function CustomerImageSearch() {
   };
 
   return <>
-    <button ref={trigger} type="button" onClick={() => setOpen(true)} aria-label="Search by image" title="Search by image" className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-[#D4AF37] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D4AF37]">
-      <Camera size={20} aria-hidden="true" />
+    <button
+      ref={trigger}
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-label="Upload a photo to find exact or similar products"
+      title="Upload a photo to find exact or similar products"
+      className="absolute right-1.5 top-1/2 inline-flex h-9 -translate-y-1/2 items-center gap-2 border border-[#D4AF37] bg-[#D4AF37] px-3 text-xs font-semibold uppercase tracking-[0.08em] text-black shadow-[0_0_18px_rgba(212,175,55,0.18)] transition-colors hover:bg-[#ead06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37]"
+    >
+      <Camera size={16} aria-hidden="true" />
+      <span>Upload photo</span>
     </button>
     {open && createPortal(
       <div className="fixed inset-0 z-[100] bg-black/80 p-3 sm:p-8 flex items-start justify-center overflow-y-auto" onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
