@@ -39,28 +39,33 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
     quota=(cgroup/'cpu.max').read_text().strip()
     print('ACTUAL_CPU_QUOTA',quota,flush=True)
     assert quota.split()[0]!='max' and int(quota.split()[0])/int(quota.split()[1])==.5
-    options=ort.SessionOptions();options.intra_op_num_threads=1;options.inter_op_num_threads=1
-    quant=VisualEncoder()
-    quant.session=ort.InferenceSession(os.environ['REGION_QUANT_MODEL'],sess_options=options,providers=['CPUExecutionProvider'])
-    quant.inference_threads=1
+
+    print('MODEL_INPUT',[(x.name,x.shape) for x in encoder.session.get_inputs()],flush=True)
+    import customer_region_encoder as re
+    from PIL import Image
+    original_input=re.model_input
     report=[]
-    for label,data in cases:
+    for label,data in cases[:2]:
         im=decode_image(data); hashes=image_hashes(data,im); vectors=encoder.encode_query(im)
         current=rank_images(hashes,vectors,augmented,amap)
-        if needs_detail_check(current):
-            current=promote_detail_match(rank_images(hashes,vectors,augmented,amap,60),encode_details(encoder,im),rows,mapping)
-        current=add_related_designs(current,products,load_relations())
         serialize=lambda out:[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in out]
-        result={'case':label,'current':serialize(current),'attempts':[]}
-        if regions.needs_region_check(current):
-            for name,worker,budget in [('fp32-budget',encoder,8),('int8-budget',quant,8),('int8-complete',quant,60)]:
-                regions.REGION_SECONDS=budget
-                diagnostic={}
-                out=regions.rescue_region_matches(worker,im,rows,mapping,current,threading.Event(),diagnostic)
-                result['attempts'].append({'implementation':name,'matches':serialize(out),'diagnostic':diagnostic})
-                print('QUOTA_BENCHMARK',label,name,json.dumps(result['attempts'][-1]),flush=True)
-                if name=='int8-budget' and diagnostic.get('outcome')!='budget_exceeded':
-                    break
+        result={'case':label,'attempts':[]}
+        for size in (224,168,140,112):
+            def resized(image):
+                arr=original_input(image)
+                if size==224:return arr
+                return np.stack([np.asarray(Image.fromarray(ch).resize((size,size),Image.Resampling.BICUBIC)) for ch in arr[0]])[None].astype(np.float32)
+            re.model_input=resized
+            regions.REGION_SECONDS=60
+            diagnostic={}
+            try:
+                out=regions.rescue_region_matches(encoder,im,rows,mapping,current,threading.Event(),diagnostic)
+                entry={'size':size,'matches':serialize(out),'diagnostic':diagnostic}
+            except Exception as exc:
+                entry={'size':size,'error':repr(exc)}
+            finally:
+                re.model_input=original_input
+            result['attempts'].append(entry)
+            print('RESOLUTION_BENCHMARK',label,json.dumps(entry),flush=True)
         report.append(result)
-        print('CASE_COMPLETE',label,flush=True)
-        (output/'region-report.json').write_text(json.dumps({'cpu_quota':quota,'products':len(products),'images':len(rows),'cases':report}))
+    (output/'region-report.json').write_text(json.dumps({'cpu_quota':quota,'products':len(products),'images':len(rows),'cases':report}))
