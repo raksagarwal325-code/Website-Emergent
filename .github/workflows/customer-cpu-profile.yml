@@ -1,0 +1,23 @@
+name: Regional CPU profile
+on:
+  push:
+    branches: [experiment/customer-region-cpu]
+permissions:
+  contents: read
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Dependencies
+        run: |
+          grep -iE '^(numpy|pillow|onnxruntime|huggingface_hub)==' backend/requirements.txt > /tmp/profile-requirements.txt
+          pip install -r /tmp/profile-requirements.txt
+      - name: Profile identical views under constrained CPU
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+        run: python scripts/profile_customer_cpu.py
