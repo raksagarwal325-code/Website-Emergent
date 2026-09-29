@@ -58,33 +58,26 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
     for p in selected_controls(products):
         data=(image_cache/hashlib.sha256(canonical(p['images'][0]).encode()).hexdigest()).read_bytes()
         cases.append((p['sku']+' control',jpeg_variant(decode_image(data))))
-    pooled=np.asarray([f['pooled'] for f in features],dtype=np.float32)
+    from customer_design_ranking import (DESIGN_VERSION, encode_details, needs_detail_check,
+        promote_detail_match, load_relations, add_related_designs)
+    for row,feature in zip(rows,features):
+        row['design_vectors']=np.asarray(feature['patches'],dtype='<f2').tobytes()
+        row['design_version']=DESIGN_VERSION
     report=[]
+    import time
     for label,data in cases:
         im=decode_image(data)
-        q=np.asarray(encoder.encode_query(im),dtype=np.float32)
-        d=describe(encoder,im)
-        local=np.asarray(d['patches'],dtype=np.float32)
-        global_scores=np.asarray([np.max(q@np.asarray(r['vectors'],dtype=np.float32).T) for r in rows])
-        pool_scores=pooled@np.asarray(d['pooled'],dtype=np.float32)
-        patch_scores=[]
-        containment_scores=[]
-        for f in features:
-            similarity=local@np.asarray(f['patches'],dtype=np.float32).T
-            containment_scores.append(float(similarity.max(axis=0).mean()))
-            patch_scores.append((similarity.max(axis=0).mean()+similarity.max(axis=1).mean())/2)
-        patch_scores=np.asarray(patch_scores)
-        methods={'original':global_scores,'pooled':pool_scores,'patch':patch_scores,
-                 'containment':np.asarray(containment_scores),'containment_blend':.5*global_scores+.5*np.asarray(containment_scores),
-                 'pool_blend':.5*global_scores+.5*pool_scores,'patch_blend':.5*global_scores+.5*patch_scores}
-        result={'case':label,'current':[{'sku':m['product']['sku'],'type':m['match_type'],'score':m['score']} for m in rank_images(image_hashes(data,im),q.tolist(),augmented_rows,augmented_map)],'methods':{}}
-        for method,scores in methods.items():
-            best={}
-            for row,score in zip(rows,scores):
-                for p in mapping[row['url']]:
-                    if p['sku'] not in best or score>best[p['sku']]: best[p['sku']]=float(score)
-            result['methods'][method]=sorted(best.items(),key=lambda x:-x[1])
+        hashes=image_hashes(data,im)
+        vectors=encoder.encode_query(im)
+        baseline=rank_images(hashes,vectors,augmented_rows,augmented_map)
+        start=time.monotonic()
+        proposed=baseline
+        if needs_detail_check(baseline):
+            candidates=rank_images(hashes,vectors,augmented_rows,augmented_map,60)
+            proposed=promote_detail_match(candidates,encode_details(encoder,im),augmented_rows,augmented_map)
+        proposed=add_related_designs(proposed,products,load_relations())
+        summarize=lambda matches:[{'sku':m['product']['sku'],'type':m['match_type'],'score':m['score']} for m in matches]
+        result={'case':label,'current':summarize(baseline),'proposed':summarize(proposed),'additional_seconds':time.monotonic()-start}
         report.append(result)
         (output/'design-probe.json').write_text(json.dumps(report))
-        print('DESIGN QUERY',label,flush=True)
-    (output/'design-probe.json').write_text(json.dumps(report))
+        print('RUNTIME RANKING',label,json.dumps(result),flush=True)
