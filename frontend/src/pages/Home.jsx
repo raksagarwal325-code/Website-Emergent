@@ -1,8 +1,8 @@
 import { heritageEyebrow } from "../lib/brandOrigin";
 import React, { useEffect, useRef, useState, Suspense, lazy } from "react";
 import { Link } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
-import { ArrowUpRight, Camera, Check, MessageCircle, Search, ShieldCheck, Truck } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { ArrowUpRight, Camera, Check, MessageCircle, Search, ShieldCheck, Truck, X } from "lucide-react";
 import SEO from "../components/SEO";
 import { api } from "../lib/api";
 import WelcomeIntro from "../components/WelcomeIntro";
@@ -147,6 +147,39 @@ function DeferredSeasonalSpotlight({ eyebrow, title, viewAllText, viewAllLink })
 export default function Home() {
   const { settings, hp } = useSettings();
   const prefersReducedMotion = useReducedMotion();
+  const [showImageSearchPrompt, setShowImageSearchPrompt] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    let dismissed = false;
+    let welcomeSeen = false;
+    try {
+      dismissed = window.sessionStorage.getItem("sge-image-search-prompt-dismissed-v1") === "1";
+      welcomeSeen = window.sessionStorage.getItem("sge-welcome-intro-seen-v13") === "1";
+    } catch (_) {
+      dismissed = false;
+    }
+    if (dismissed) return undefined;
+
+    const delay = prefersReducedMotion || welcomeSeen ? 1400 : 5600;
+    const timer = window.setTimeout(() => setShowImageSearchPrompt(true), delay);
+    return () => window.clearTimeout(timer);
+  }, [prefersReducedMotion]);
+
+  useEffect(() => {
+    if (!showImageSearchPrompt || typeof document === "undefined") return undefined;
+    const dismissOnEscape = (event) => {
+      if (event.key === "Escape") setShowImageSearchPrompt(false);
+    };
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => document.removeEventListener("keydown", dismissOnEscape);
+  }, [showImageSearchPrompt]);
+
+  const dismissImageSearchPrompt = () => {
+    try { window.sessionStorage.setItem("sge-image-search-prompt-dismissed-v1", "1"); } catch (_) {}
+    setShowImageSearchPrompt(false);
+  };
 
   const waLink = waGeneralLink(settings?.whatsapp_number) || "#";
   const H = hp.hero;
@@ -198,48 +231,50 @@ export default function Home() {
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#16070f] pointer-events-none" />
       </section>
 
-      <section aria-labelledby="home-image-search-title" data-testid="home-image-search-feature" className="relative overflow-hidden border-b border-white/10 bg-[#10070d]">
-        <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(circle_at_82%_18%,rgba(212,175,55,0.14),transparent_44%)]" />
-        <motion.div
-          aria-hidden="true"
-          className="absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-[#D4AF37]/[0.035] to-transparent blur-2xl"
-          animate={prefersReducedMotion ? undefined : { x: ["0vw", "135vw"] }}
-          transition={prefersReducedMotion ? { duration: 0 } : { duration: 9, repeat: Infinity, ease: "linear", repeatDelay: 2 }}
-        />
-        <div className="relative mx-auto grid max-w-7xl gap-8 px-6 py-11 lg:grid-cols-[minmax(0,1fr)_minmax(470px,540px)] lg:items-center lg:py-14">
-          <motion.div
-            className="max-w-2xl"
-            initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.35 }}
-            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.7, ease: LUXURY_EASE }}
+      <AnimatePresence>
+        {showImageSearchPrompt && (
+          <motion.aside
+            aria-labelledby="home-image-search-title"
+            data-testid="home-image-search-feature"
+            className="fixed bottom-4 left-4 right-4 z-40 max-h-[calc(100vh-2rem)] overflow-y-auto border border-[#D4AF37]/35 bg-[#140910]/[0.97] p-5 shadow-[0_28px_90px_rgba(0,0,0,0.58)] backdrop-blur-xl sm:bottom-6 sm:left-6 sm:right-auto sm:w-[440px] sm:p-6"
+            initial={prefersReducedMotion ? false : { opacity: 0, x: -26, y: 18, scale: 0.98 }}
+            animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: -18, y: 12, scale: 0.985 }}
+            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.55, ease: LUXURY_EASE }}
           >
-            <div className="eyebrow text-[#D4AF37]">Search by image</div>
-            <h2 id="home-image-search-title" className="mt-3 font-serif text-3xl leading-tight text-white sm:text-4xl">
-              Seen a light you love? <span className="italic brand-gradient-text">Find it from a photo.</span>
-            </h2>
-            <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/65 sm:text-base">
-              Upload a product photo, room photo or screenshot. We’ll look for the exact catalogue match first, then show the closest and similar designs.
-            </p>
-          </motion.div>
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_90%_8%,rgba(212,175,55,0.16),transparent_42%)]" />
+            <button
+              type="button"
+              onClick={dismissImageSearchPrompt}
+              aria-label="Dismiss image search prompt"
+              className="absolute right-3 top-3 z-20 flex h-10 w-10 items-center justify-center border border-white/10 text-white/55 transition-colors hover:border-[#D4AF37]/50 hover:text-[#D4AF37] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37]"
+            >
+              <X size={17} aria-hidden="true" />
+            </button>
 
-          <motion.div
-            className="w-full border border-white/10 bg-white/[0.025] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.24)] sm:p-5"
-            initial={prefersReducedMotion ? false : { opacity: 0, x: 18 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, amount: 0.35 }}
-            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.75, delay: 0.12, ease: LUXURY_EASE }}
-          >
-            <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_210px] sm:items-center">
-              <ImageSearchPreview reducedMotion={prefersReducedMotion} />
-              <div className="w-full">
+            <div className="relative">
+              <div className="pr-11">
+                <div className="eyebrow text-[#D4AF37]">Search by image</div>
+                <h2 id="home-image-search-title" className="mt-2 font-serif text-2xl leading-tight text-white sm:text-[1.75rem]">
+                  Seen a light you love? <span className="italic brand-gradient-text">Find it from a photo.</span>
+                </h2>
+                <p className="mt-3 text-sm leading-relaxed text-white/62">
+                  Upload a product photo, room photo or screenshot. We’ll find the exact catalogue match first, then similar designs.
+                </p>
+              </div>
+
+              <div className="mt-4 hidden sm:block">
+                <ImageSearchPreview reducedMotion={prefersReducedMotion} />
+              </div>
+
+              <div className="mt-4">
                 <CustomerImageSearch variant="landing" />
-                <p className="mt-3 text-center text-[10px] leading-relaxed text-white/45">JPG, PNG or WebP · Up to 10 MB<br />Deleted automatically after matching</p>
+                <p className="mt-2 text-[10px] leading-relaxed text-white/42">JPG, PNG or WebP · Up to 10 MB · Deleted automatically after matching</p>
               </div>
             </div>
-          </motion.div>
-        </div>
-      </section>
+          </motion.aside>
+        )}
+      </AnimatePresence>
 
       <div className="relative z-10"><CategoryShowcase /></div>
 
