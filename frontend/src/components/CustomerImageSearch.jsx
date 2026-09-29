@@ -139,11 +139,12 @@ export default function CustomerImageSearch({ variant = "catalogue" }) {
       aria-label="Upload a photo to find exact or similar products"
       title="Upload a photo to find exact or similar products"
       className={landingTrigger
-        ? "inline-flex min-h-12 w-full items-center justify-center gap-3 border border-[#D4AF37] bg-[#D4AF37] px-7 py-4 text-xs font-semibold uppercase tracking-[0.16em] text-black shadow-[0_0_28px_rgba(212,175,55,0.2)] transition-colors hover:bg-[#ead06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37] sm:w-auto"
+        ? "group relative inline-flex min-h-12 w-full items-center justify-center gap-3 overflow-hidden border border-[#D4AF37] bg-[#D4AF37] px-7 py-4 text-xs font-semibold uppercase tracking-[0.16em] text-black shadow-[0_0_28px_rgba(212,175,55,0.2)] transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:bg-[#ead06f] hover:shadow-[0_0_34px_rgba(212,175,55,0.32)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37] sm:w-auto"
         : "absolute right-1.5 top-1/2 inline-flex h-9 -translate-y-1/2 items-center gap-2 border border-[#D4AF37] bg-[#D4AF37] px-3 text-xs font-semibold uppercase tracking-[0.08em] text-black shadow-[0_0_18px_rgba(212,175,55,0.18)] transition-colors hover:bg-[#ead06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37]"}
     >
-      <Camera size={landingTrigger ? 18 : 16} aria-hidden="true" />
-      <span>{landingTrigger ? "Upload a photo" : "Upload photo"}</span>
+      {landingTrigger && <span aria-hidden="true" className="absolute inset-y-0 -left-1/2 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/45 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-[500%]" />}
+      <Camera size={landingTrigger ? 18 : 16} aria-hidden="true" className={landingTrigger ? "relative z-10" : undefined} />
+      <span className={landingTrigger ? "relative z-10" : undefined}>{landingTrigger ? "Upload a photo" : "Upload photo"}</span>
     </button>
     {open && createPortal(
       <div className="fixed inset-0 z-[100] bg-black/80 p-3 sm:p-8 flex items-start justify-center overflow-y-auto" onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
