@@ -213,13 +213,23 @@ def evaluate(output, products, mapping, cache, model):
     os.environ["CUSTOMER_IMAGE_MODEL_PATH"] = model
     deny_network()
     from customer_visual_features import VisualEncoder, decode_image, image_hashes, rank_images, INDEX_VERSION
+    import PIL
     encoder = VisualEncoder()
     encoder.load()
     rows = []
+    features = output / "features"
+    features.mkdir(exist_ok=True)
+    processor = hashlib.sha256((ROOT / "backend/customer_visual_features.py").read_bytes()).hexdigest()
     for count, url in enumerate(mapping, 1):
         data = (cache / hashlib.sha256(url.encode()).hexdigest()).read_bytes()
         image = decode_image(data)
-        rows.append({"url": url, **image_hashes(data, image), "vectors": encoder.encode(image)})
+        hashes = image_hashes(data, image)
+        key = hashlib.sha256(f"{INDEX_VERSION}:{PIL.__version__}:{processor}:{hashes['sha256']}".encode()).hexdigest()
+        feature_file = features / (key + ".json")
+        vectors = json.loads(feature_file.read_text()) if feature_file.exists() else encoder.encode(image)
+        if not feature_file.exists():
+            feature_file.write_text(json.dumps(vectors))
+        rows.append({"url": url, **hashes, "vectors": vectors})
         if count % 50 == 0:
             print(f"Encoded {count}/{len(mapping)}", flush=True)
     # Any bad image aborts the experiment instead of silently testing a smaller index.
@@ -242,6 +252,12 @@ def evaluate(output, products, mapping, cache, model):
                   "baseline": summary(baseline), "proposed": summary(proposed)}
         before, after = result["baseline"]["expected_rank"], result["proposed"]["expected_rank"]
         result["regressed"] = before is not None and (after is None or after > before)
+        if kind == "background-only-negative":
+            reference_skus = {"SGE-" + sku for sku in REFERENCES}
+            old_skus = {m["product"].get("sku") for m in baseline}
+            new_skus = {m["product"].get("sku") for m in proposed}
+            result["new_false_reference_matches"] = sorted((new_skus - old_skus) & reference_skus)
+            result["regressed"] = bool(result["new_false_reference_matches"])
         result["ranking_changed"] = [m["sku"] for m in result["baseline"]["matches"]] != [m["sku"] for m in result["proposed"]["matches"]]
         results.append(result)
         print(f"{label}: {before} -> {after}" + (" REGRESSION" if result["regressed"] else ""), flush=True)
@@ -252,12 +268,19 @@ def evaluate(output, products, mapping, cache, model):
         run_case(sku + " compressed", jpeg_variant(decode_image(data)), [f"SGE-{sku}"], "derived-from-reference")
     for label, expected in HOLDOUTS.items():
         run_case(label, (FIXTURES / (label.lower() + ".jpg")).read_bytes(), expected, "independent-owner-labelled")
+    # Exclude the labelled product: curtains, adjacent lantern, newspaper/packaging.
+    # These deliberately challenge incidental background matching in the new rows.
+    for sku, box in (("CS-001", (.35, 0, .8, .12)), ("WL-085", (.64, .35, .9, .78)),
+                     ("CS-002", (0, .5, .3, .85))):
+        original = decode_image((FIXTURES / REFERENCES[sku]).read_bytes())
+        bounds = tuple(round(v * (original.width if i % 2 == 0 else original.height)) for i, v in enumerate(box))
+        run_case(sku + " background/other object", jpeg_variant(original.crop(bounds)), [], "background-only-negative")
     controls = selected_controls(products)
     for product in controls:
         url = canonical(product["images"][0])
         data = (cache / hashlib.sha256(url.encode()).hexdigest()).read_bytes()
         run_case(product["sku"] + " catalogue JPEG", jpeg_variant(decode_image(data)), [product["sku"]], "catalogue-derived-control")
-    report = {"index_version": INDEX_VERSION, "products": len(products), "candidate_images": len(rows),
+    report = {"index_version": INDEX_VERSION, "pillow_version": PIL.__version__, "products": len(products), "candidate_images": len(rows),
               "reference_images": references, "coverage_complete": len(rows) == len(mapping),
               "catalogue_controls": len(controls), "results": results,
               "regressions": sum(r["regressed"] for r in results),

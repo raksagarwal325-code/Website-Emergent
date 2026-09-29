@@ -21,11 +21,15 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install pinned evaluation dependencies
-        run: pip install numpy==2.4.6 Pillow==11.3.0 onnxruntime==1.30.0 huggingface_hub==1.21.0
+        run: |
+          grep -iE '^(numpy|pillow|onnxruntime|huggingface_hub)==' backend/requirements.txt > /tmp/evaluation-requirements.txt
+          pip install -r /tmp/evaluation-requirements.txt
       - name: Restore downloaded public images
         uses: actions/cache/restore@v4
         with:
-          path: /tmp/reference-evaluation/images
+          path: |
+            /tmp/reference-evaluation/images
+            /tmp/reference-evaluation/features
           key: customer-reference-images-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: customer-reference-images-
       - name: Read public catalogue and evaluate offline
@@ -36,7 +40,9 @@ jobs:
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: /tmp/reference-evaluation/images
+          path: |
+            /tmp/reference-evaluation/images
+            /tmp/reference-evaluation/features
           key: customer-reference-images-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Attach evaluation report
         if: always()

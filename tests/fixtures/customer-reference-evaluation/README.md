@@ -13,7 +13,7 @@ These product photographs were supplied by the catalogue owner for testing custo
 
 The existing published search is the baseline. The owner tested about 30 products and reported desired results in almost every case. Those exact 30 photos have not all been supplied, so the evaluation must not claim to cover them.
 
-The experiment downloads every public catalogue page and every unique catalogue image, verifies coverage, and creates both candidate indexes only in runner memory. It aborts rather than presenting a partial index as full coverage. No application code is changed, no server is restarted, and no database is contacted. The supplemental references are not added to public product galleries.
+The experiment downloads every public catalogue page and every unique catalogue image, verifies coverage, and creates both candidate indexes only in runner memory. It aborts rather than presenting a partial index as full coverage. Running it does not modify the deployed application, restart a server, or contact a database. The optional runtime implementation is disabled by default. The supplemental references are not added to public product galleries.
 
 Matching a seeded reference, or a compressed copy of one, is a sanity check only. It is not evidence of generalisation to a different photograph. Independent photos of the three difficult products are still required for that claim.
 
