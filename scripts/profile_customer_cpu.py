@@ -6,7 +6,7 @@ from customer_visual_features import VisualEncoder,MODEL_REPO,MODEL_REVISION,dec
 from huggingface_hub import hf_hub_download
 model=hf_hub_download(MODEL_REPO,'onnx/model.onnx',revision=MODEL_REVISION)
 os.environ['CUSTOMER_IMAGE_MODEL_PATH']=model
-from scripts.evaluate_customer_references import deny_network
+from evaluate_customer_references import deny_network
 deny_network()
 import onnxruntime as ort
 import numpy as np
