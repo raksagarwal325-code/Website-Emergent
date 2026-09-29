@@ -42,6 +42,24 @@ def catalogue_urls(products):
     return result
 
 
+def gallery_urls(products, items):
+    """Map approved project-gallery photos to their linked public products."""
+    by_id = {product.get("id"): product for product in products if product.get("id")}
+    result = {}
+    for item in items or []:
+        linked = [by_id[product_id] for product_id in item.get("products") or [] if product_id in by_id]
+        if not linked:
+            continue
+        for raw in item.get("images") or []:
+            if not isinstance(raw, str) or not raw.strip():
+                continue
+            url = canonical_media_url(raw)
+            for product in linked:
+                if product not in result.setdefault(url, []):
+                    result[url].append(product)
+    return result
+
+
 class CustomerImageSearch:
     def __init__(self, db, load_image):
         self.db = db
@@ -57,6 +75,21 @@ class CustomerImageSearch:
 
     async def catalogue(self):
         return await self.db.products.find({"status": "published", "images.0": {"$exists": True}}, PUBLIC_FIELDS).to_list(None)
+
+    async def search_urls(self):
+        products = await self.catalogue()
+        urls = catalogue_urls(products)
+        settings_collection = getattr(self.db, "settings", None) if self.db is not None else None
+        settings = await settings_collection.find_one(
+            {"id": "settings"}, {"_id": 0, "homepage_content.gallery.items": 1}
+        ) if settings_collection is not None else {}
+        settings = settings or {}
+        items = (((settings.get("homepage_content") or {}).get("gallery") or {}).get("items") or [])
+        for url, linked in gallery_urls(products, items).items():
+            for product in linked:
+                if product not in urls.setdefault(url, []):
+                    urls[url].append(product)
+        return urls
 
     async def manifest(self, urls):
         paths = [u.removeprefix("/api/files/") for u in urls if u.startswith("/api/files/")]
@@ -79,7 +112,7 @@ class CustomerImageSearch:
         return [by_url.get(url, {"url": url}) for url in selected]
 
     async def refresh(self):
-        urls = catalogue_urls(await self.catalogue())
+        urls = await self.search_urls()
         if not urls:
             return
         manifest = await self.manifest(urls)
@@ -153,7 +186,7 @@ class CustomerImageSearch:
                 await task
 
     async def status(self):
-        urls = catalogue_urls(await self.catalogue())
+        urls = await self.search_urls()
         rows = await self.rows(await self.manifest(urls), details=True)
         return {
             "total_images": len(urls),
@@ -246,7 +279,7 @@ class CustomerImageSearch:
             if self.encoder.session is None:
                 await asyncio.to_thread(self.encoder.load)
             image = await asyncio.to_thread(decode_image, bytes(job["image"]))
-            urls = catalogue_urls(await self.catalogue())
+            urls = await self.search_urls()
             manifest = await self.manifest(urls)
             rows = await self.rows(manifest)
             matches = job.get("baseline") or []
@@ -300,7 +333,7 @@ class CustomerImageSearch:
                 hashes = await asyncio.to_thread(image_hashes, data, image)
             except Exception as exc:
                 raise HTTPException(400, str(exc) if isinstance(exc, ValueError) else "Could not read that image. Choose a JPG, PNG or WebP.")
-            urls = catalogue_urls(await self.catalogue())
+            urls = await self.search_urls()
             manifest = await self.manifest(urls)
             rows = await self.rows(manifest)
             indexed = sum(bool(r.get("vectors")) for r in rows)

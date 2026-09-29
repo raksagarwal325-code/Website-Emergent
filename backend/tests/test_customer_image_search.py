@@ -13,7 +13,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from customer_visual_features import decode_image, image_hashes, model_input, rank_images, MAX_BYTES, EMBEDDING_DIM
-from customer_image_search import CustomerImageSearch, catalogue_urls, search_router
+from customer_image_search import CustomerImageSearch, catalogue_urls, gallery_urls, search_router
 
 
 def photo(colour="gold", fmt="PNG"):
@@ -25,6 +25,27 @@ def photo(colour="gold", fmt="PNG"):
 def vector(axis=0):
     v = np.zeros(EMBEDDING_DIM); v[axis] = 1
     return [v.tolist(), v.tolist()]
+
+
+def test_gallery_images_are_searchable_for_linked_products_only():
+    published = {"id": "p-1", "sku": "SGE-TL-057", "images": ["/catalogue.jpg"]}
+    other = {"id": "p-2", "sku": "SGE-TL-022", "images": ["/other.jpg"]}
+    items = [
+        {"images": ["/installation-one.jpg", "", None], "products": ["p-1", "missing"]},
+        {"images": ["/installation-two.jpg"], "products": []},
+    ]
+
+    assert gallery_urls([published, other], items) == {
+        "/installation-one.jpg": [published],
+    }
+
+
+def test_gallery_image_can_link_multiple_catalogue_products_without_duplicates():
+    first = {"id": "p-1", "images": ["/first.jpg"]}
+    second = {"id": "p-2", "images": ["/second.jpg"]}
+    items = [{"images": ["/room.jpg", "/room.jpg"], "products": ["p-1", "p-2", "p-1"]}]
+
+    assert gallery_urls([first, second], items) == {"/room.jpg": [first, second]}
 
 
 def test_pixel_identity_survives_container_changes_but_not_colour_changes():
