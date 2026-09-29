@@ -13,7 +13,10 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from customer_visual_features import decode_image, image_hashes, model_input, rank_images, MAX_BYTES, EMBEDDING_DIM
-from customer_image_search import CustomerImageSearch, catalogue_urls, gallery_urls, search_router
+from customer_image_search import (CustomerImageSearch, catalogue_urls,
+                                   gallery_crop_matches, gallery_urls,
+                                   search_router)
+from customer_design_ranking import DESIGN_VERSION
 
 
 def photo(colour="gold", fmt="PNG"):
@@ -46,6 +49,33 @@ def test_gallery_image_can_link_multiple_catalogue_products_without_duplicates()
     items = [{"images": ["/room.jpg", "/room.jpg"], "products": ["p-1", "p-2", "p-1"]}]
 
     assert gallery_urls([first, second], items) == {"/room.jpg": [first, second]}
+
+
+def test_gallery_crop_promotes_linked_product_without_hardcoded_identity(monkeypatch):
+    import customer_image_search as module
+    query = np.zeros((8, EMBEDDING_DIM), dtype=np.float32)
+    query[:, :8] = np.eye(8)
+    stored = query.astype("<f2").tobytes()
+    product = {"id": "linked", "sku": "ANY-SKU"}
+    old = [{"product": {"id": "generic"}, "score": .68, "match_type": "possible"}]
+    monkeypatch.setattr(module, "unpack_details", lambda data: query if data in {b"query", stored} else None)
+    result = gallery_crop_matches(
+        b"query", [{"url": "/room", "design_version": DESIGN_VERSION, "design_vectors": stored}],
+        {"/room": [product]}, old)
+    assert result[0]["product"] == product
+    assert result[0]["match_type"] == "closest"
+    assert result[1:] == old
+
+
+def test_gallery_crop_rejects_weak_overlap(monkeypatch):
+    import customer_image_search as module
+    query = np.eye(8, EMBEDDING_DIM, dtype=np.float32)
+    stored = np.roll(query, 32, axis=1).astype("<f2").tobytes()
+    monkeypatch.setattr(module, "unpack_details", lambda data: query if data == b"query" else np.roll(query, 32, axis=1))
+    old = [{"product": {"id": "generic"}, "score": .68, "match_type": "possible"}]
+    assert gallery_crop_matches(
+        b"query", [{"url": "/room", "design_version": DESIGN_VERSION, "design_vectors": stored}],
+        {"/room": [{"id": "linked"}]}, old) is old
 
 
 def test_pixel_identity_survives_container_changes_but_not_colour_changes():
