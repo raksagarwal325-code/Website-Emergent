@@ -215,16 +215,18 @@ async def test_weak_search_uses_only_saved_catalogue_vectors_for_regional_rescue
     service.rows = AsyncMock(return_value=[{"url": "/a", "vectors": scored_vector(.77)}])
     service.encoder = SimpleNamespace(session=True, encode_query=Mock(return_value=vector()))
     seen = []
-    def rescue(encoder, image, rows, urls, matches, cancelled):
+    def rescue(encoder, image, rows, urls, matches, cancelled, diagnostic):
         assert rows[0]["vectors"] == scored_vector(.77)
         assert urls["/a"] == [product]
         assert not cancelled.is_set()
         seen.append(cancelled)
+        diagnostic.update(outcome='matched', elapsed_seconds=1.0, coarse_regions=18, refined_regions=3)
         return [{**matches[0], "match_type": "closest"}]
     monkeypatch.setattr(module, "rescue_region_matches", rescue)
     result = await service.search(photo())
     assert result["matches"][0]["match_type"] == "closest"
     assert seen[0].is_set()
+    assert service.last_region_search['outcome'] == 'matched'
     load.assert_not_awaited()
 
 
@@ -240,3 +242,19 @@ async def test_regional_failure_retains_existing_results(monkeypatch):
     monkeypatch.setattr(module, "rescue_region_matches", Mock(side_effect=RuntimeError("unavailable")))
     result = await service.search(photo())
     assert result["matches"] == [{"product": {"id": "a", "images": ["/a"]}, "match_type": "similar"}]
+    assert service.last_region_search['outcome'] == 'error'
+
+
+@pytest.mark.asyncio
+async def test_admin_status_exposes_region_version_and_no_uploaded_photo(monkeypatch):
+    from customer_region_search import REGION_VERSION
+    service = CustomerImageSearch(None, AsyncMock())
+    service.catalogue = AsyncMock(return_value=[])
+    service.manifest = AsyncMock(return_value={})
+    service.rows = AsyncMock(return_value=[])
+    service.last_region_search = {'outcome': 'budget_exceeded', 'elapsed_seconds': 8.0,
+                                  'coarse_regions': 18, 'refined_regions': 1}
+    status = await service.status()
+    assert status['region_search_version'] == REGION_VERSION
+    assert status['last_region_search'] == service.last_region_search
+    assert set(status['last_region_search']) == {'outcome', 'elapsed_seconds', 'coarse_regions', 'refined_regions'}
