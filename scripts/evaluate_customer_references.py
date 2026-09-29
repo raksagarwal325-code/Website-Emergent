@@ -345,4 +345,4 @@ if __name__ == "__main__":
     args.output.mkdir(parents=True, exist_ok=True)
     evaluate(args.output, *prepare(args.output))
 
-# Refine distinct promising regions.
+# Verify exact runtime region rescue and unchanged controls.

@@ -37,36 +37,20 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
         if needs_detail_check(base): current=promote_detail_match(rank_images(hashes,vectors,augmented,amap,60),encode_details(encoder,im),rows,mapping)
         current=add_related_designs(current,products,load_relations())
         result={'case':label,'current':[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in current]}
-        run=bool(base and base[0]['match_type'] in ('similar','possible') and base[0]['score']<.80)
+        from customer_region_search import rescue_region_matches
+        import threading
         start=time.monotonic()
-        if run:
-            regional=[]
-            for box in boxes:
-                bounds=tuple(round(v*(im.width if i%2==0 else im.height)) for i,v in enumerate(box))
-                q=np.asarray(encoder.encode(im.crop(bounds)),dtype=np.float32)
-                scores=(q@catalog.T).max(axis=0)
-                regional.append([float(scores[ix].max()) if ix else 0 for ix in by_product])
-            initial=np.asarray(regional,dtype=np.float32)
-            selected=[]
-            def iou(a,b):
-                intersection=max(0,min(a[2],b[2])-max(a[0],b[0]))*max(0,min(a[3],b[3])-max(a[1],b[1]))
-                return intersection/((a[2]-a[0])*(a[3]-a[1])+(b[2]-b[0])*(b[3]-b[1])-intersection)
-            for ri in np.argsort(-initial.max(axis=1)):
-                if initial[ri].max()<.70: break
-                if all(iou(boxes[ri],boxes[old])<.3 for old in selected): selected.append(int(ri))
-                if len(selected)==3: break
-            refined=[]
-            for ri in selected:
-                box=boxes[ri]
-                bounds=tuple(round(v*(im.width if i%2==0 else im.height)) for i,v in enumerate(box))
-                q=np.asarray(encoder.encode_query(im.crop(bounds)),dtype=np.float32)
-                scores=(q@catalog.T).max(axis=0)
-                refined.append([float(scores[ix].max()) if ix else 0 for ix in by_product])
-            result['selected_boxes']=[boxes[i] for i in selected]
-            matrices['case_'+str(ci)]=np.asarray(refined,dtype=np.float32)
-            result['matrix']='case_'+str(ci)
+        proposed=rescue_region_matches(encoder,im,rows,mapping,current,threading.Event())
+        result['proposed']=[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in proposed]
         result['region_seconds']=time.monotonic()-start
+        result['changed']=result['proposed']!=result['current']
+        if label.startswith('room'):
+            assert [m['sku'] for m in result['proposed'][:3]]==['SGE-HL-076','SGE-HL-077','SGE-HL-078'],result
+            assert all(m['type']=='closest' for m in result['proposed'][:3])
+            assert {f'SGE-HL-{n:03d}' for n in (72,73,74,75,79)} <= {m['sku'] for m in result['proposed'][3:]},result
+        else:
+            assert result['proposed']==result['current'],result
         report.append(result)
-        print('REGION_CASE',label,'scan',run,'seconds',result['region_seconds'],flush=True)
+        print('REGION_RUNTIME',label,'changed',result['changed'],'seconds',result['region_seconds'],flush=True)
     (output/'region-report.json').write_text(json.dumps({'skus':skus,'boxes':boxes,'cases':report}))
     np.savez_compressed(output/'region-scores.npz',**matrices)
