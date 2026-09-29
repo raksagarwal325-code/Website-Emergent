@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from customer_visual_features import INDEX_VERSION, MAX_BYTES, VisualEncoder, decode_image, image_hashes, rank_images
 from media_library import canonical_media_url
 from customer_image_references import ReferenceBundle
+from customer_design_ranking import DESIGN_VERSION, encode_details, needs_detail_check, promote_detail_match, load_relations, add_related_designs
 
 logger = logging.getLogger(__name__)
 PUBLIC_FIELDS = {"_id": 0, "id": 1, "name": 1, "sku": 1, "category": 1, "images": 1, "slug": 1}
@@ -38,6 +39,7 @@ class CustomerImageSearch:
         self.task = None
         self.busy = asyncio.Semaphore(2)
         self.owner = uuid.uuid4().hex
+        self.design_relations = load_relations()
         self.references = ReferenceBundle(os.environ.get("CUSTOMER_IMAGE_REFERENCE_MANIFEST"))
 
     async def catalogue(self):
@@ -49,15 +51,26 @@ class CustomerImageSearch:
         revisions = {"/api/files/" + r["storage_path"]: str(r.get("public_sha256") or r.get("sha256") or r.get("updated_at") or "") for r in files}
         return {url: hashlib.sha256((INDEX_VERSION + url + revisions.get(url, "")).encode()).hexdigest() for url in urls}
 
-    async def rows(self, manifest):
-        return await self.db.customer_visual_images.find({"_id": {"$in": list(manifest.values())}}, {"_id": 0}).to_list(None)
+    async def rows(self, manifest, details=False):
+        projection = {"_id": 0} if details else {"_id": 0, "design_vectors": 0}
+        return await self.db.customer_visual_images.find({"_id": {"$in": list(manifest.values())}}, projection).to_list(None)
+
+    async def detail_rows(self, manifest, urls, candidates):
+        ids = {m["product"]["id"] for m in candidates}
+        selected = [url for url, products in urls.items() if any(p["id"] in ids for p in products)]
+        found = await self.db.customer_visual_images.find(
+            {"_id": {"$in": [manifest[url] for url in selected]}},
+            {"_id": 0, "url": 1, "design_vectors": 1, "design_version": 1},
+        ).to_list(None)
+        by_url = {r["url"]: r for r in found}
+        return [by_url.get(url, {"url": url}) for url in selected]
 
     async def refresh(self):
         urls = catalogue_urls(await self.catalogue())
         if not urls:
             return
         manifest = await self.manifest(urls)
-        existing = {r["url"]: r for r in await self.rows(manifest)}
+        existing = {r["url"]: r for r in await self.rows(manifest, details=True)}
         # Only the worker downloads/loads model weights. Requests never do so.
         try:
             await asyncio.to_thread(self.encoder.load)
@@ -69,7 +82,7 @@ class CustomerImageSearch:
             logger.exception("Optional customer reference bundle unavailable; using catalogue only")
         for url, key in manifest.items():
             row = existing.get(url, {})
-            if row.get("vectors") or row.get("retry_after", 0) > time.time() or (row.get("pixels") and self.encoder.session is None):
+            if (row.get("vectors") and row.get("design_version") == DESIGN_VERSION and row.get("design_vectors")) or row.get("retry_after", 0) > time.time() or (row.get("pixels") and self.encoder.session is None):
                 continue
             lease = await self.db.customer_visual_state.update_one(
                 {"_id": "lease", "owner": self.owner}, {"$set": {"until": time.time() + 180}},
@@ -83,8 +96,10 @@ class CustomerImageSearch:
                 # Exact searches are usable as soon as an image is decoded.
                 await self.db.customer_visual_images.update_one({"_id": key}, {"$set": {"url": url, **hashes}}, upsert=True)
                 if self.encoder.session is not None:
-                    vectors = await asyncio.to_thread(self.encoder.encode, image)
+                    vectors = row.get("vectors") or await asyncio.to_thread(self.encoder.encode, image)
                     await self.db.customer_visual_images.update_one({"_id": key}, {"$set": {"vectors": vectors}, "$unset": {"retry_after": ""}})
+                    details = await asyncio.to_thread(encode_details, self.encoder, image)
+                    await self.db.customer_visual_images.update_one({"_id": key}, {"$set": {"design_vectors": details, "design_version": DESIGN_VERSION}})
             except Exception:
                 logger.exception("Customer visual index failed for %s", url)
                 await self.db.customer_visual_images.update_one({"_id": key}, {"$set": {"url": url, "retry_after": time.time() + 3600}}, upsert=True)
@@ -123,12 +138,13 @@ class CustomerImageSearch:
 
     async def status(self):
         urls = catalogue_urls(await self.catalogue())
-        rows = await self.rows(await self.manifest(urls))
+        rows = await self.rows(await self.manifest(urls), details=True)
         return {
             "total_images": len(urls),
             "exact_indexed": sum(bool(r.get("pixels")) for r in rows),
             "visual_indexed": sum(bool(r.get("vectors")) for r in rows),
             "failed_images": sum(bool(r.get("retry_after")) for r in rows),
+            "design_indexed": sum(r.get("design_version") == DESIGN_VERSION and bool(r.get("design_vectors")) for r in rows),
             "model_ready": self.encoder.session is not None,
             "worker_running": bool(self.task and not self.task.done()),
         }
@@ -151,6 +167,16 @@ class CustomerImageSearch:
             vectors = await asyncio.to_thread(self.encoder.encode_query, image) if self.encoder.session is not None else None
             candidate_rows, candidate_urls = self.references.augment(rows, urls)
             matches = await asyncio.to_thread(rank_images, hashes, vectors, candidate_rows, candidate_urls)
+            if needs_detail_check(matches) and self.encoder.session is not None:
+                try:
+                    candidates = await asyncio.to_thread(rank_images, hashes, vectors, candidate_rows, candidate_urls, 60)
+                    detail_rows = await self.detail_rows(manifest, urls, candidates)
+                    details = await asyncio.to_thread(encode_details, self.encoder, image)
+                    matches = await asyncio.to_thread(promote_detail_match, candidates, details, detail_rows, urls)
+                except Exception:
+                    logger.exception("Detail comparison unavailable; retaining original image results")
+            products = {p["id"]: p for values in urls.values() for p in values}
+            matches = add_related_designs(matches, list(products.values()), self.design_relations)
             return {
                 "matches": [{"product": m["product"], "match_type": m["match_type"]} for m in matches],
                 "index_complete": indexed == len(urls) and bool(urls),
@@ -180,3 +206,4 @@ def search_router(service, rate_dependency):
             await file.close()
 
     return router
+

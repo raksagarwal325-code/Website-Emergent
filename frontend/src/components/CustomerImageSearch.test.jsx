@@ -97,3 +97,16 @@ test("renders tentative candidates separately without claiming an exact match", 
   expect(screen.queryByText("Matching products")).not.toBeInTheDocument();
   expect(screen.queryByText("Similar designs")).not.toBeInTheDocument();
 });
+
+test("keeps exact and closest designs ahead of reviewed alternatives", async () => {
+  api.searchByImage.mockResolvedValue({ index_complete: true, similarity_available: true, available: true,
+    matches: ["exact", "closest", "related", "similar"].map((type, i) => ({
+      product: { ...product, id: String(i), sku: "SGE-CH-00" + i, name: type + " light" }, match_type: type
+    })) });
+  open(); upload();
+  await screen.findByText("Closest design");
+  expect(screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent)).toEqual([
+    "Matching products", "Closest design", "Related designs", "Similar designs"
+  ]);
+  expect(screen.getByText(/confirm size, number of lights and finish/i)).toBeInTheDocument();
+});
