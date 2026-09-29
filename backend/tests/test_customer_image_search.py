@@ -169,3 +169,35 @@ def test_strong_results_suppress_tentative_fallback_and_exact_still_wins():
     result = rank_images({"sha256": "q", "pixels": "q"}, vector(), rows, products)
     assert [(r["product"]["id"], r["match_type"]) for r in result] == [
         ("exact", "exact"), ("strong", "similar")]
+
+
+@pytest.mark.asyncio
+async def test_design_backfill_retains_existing_global_vectors(monkeypatch):
+    from unittest.mock import Mock
+    import customer_image_search as module
+    images = SimpleNamespace(update_one=AsyncMock(), delete_many=AsyncMock())
+    state = SimpleNamespace(update_one=AsyncMock(return_value=SimpleNamespace(matched_count=1)))
+    service = CustomerImageSearch(SimpleNamespace(customer_visual_images=images, customer_visual_state=state), AsyncMock(return_value=photo()))
+    service.catalogue = AsyncMock(return_value=[{"id": "p", "images": ["/a"]}])
+    service.manifest = AsyncMock(return_value={"/a": "key"})
+    service.rows = AsyncMock(return_value=[{"url": "/a", "vectors": vector()}])
+    service.encoder = SimpleNamespace(session=True, load=Mock(), encode=Mock(side_effect=AssertionError("do not rebuild global vectors")))
+    monkeypatch.setattr(module, "encode_details", lambda encoder, image: b"compact-details")
+    await service.refresh()
+    service.encoder.encode.assert_not_called()
+    writes = images.update_one.call_args_list
+    assert writes[-1].args[1]["$set"]["design_vectors"] == b"compact-details"
+    assert all("retry_after" not in call.args[1].get("$set", {}) for call in writes)
+
+
+@pytest.mark.asyncio
+async def test_queries_exclude_detail_bytes_until_shortlist_and_keep_missing_rows():
+    from unittest.mock import Mock
+    collection = SimpleNamespace(find=Mock(return_value=SimpleNamespace(to_list=AsyncMock(return_value=[]))))
+    service = CustomerImageSearch(SimpleNamespace(customer_visual_images=collection), AsyncMock())
+    await service.rows({"/a": "a"})
+    assert collection.find.call_args.args[1]["design_vectors"] == 0
+    urls = {"/a": [{"id": "p"}], "/b": [{"id": "other"}]}
+    result = await service.detail_rows({"/a": "a", "/b": "b"}, urls, [{"product": {"id": "p"}}])
+    assert collection.find.call_args.args[0] == {"_id": {"$in": ["a"]}}
+    assert result == [{"url": "/a"}]

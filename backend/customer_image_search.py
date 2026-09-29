@@ -98,7 +98,6 @@ class CustomerImageSearch:
                 if self.encoder.session is not None:
                     vectors = row.get("vectors") or await asyncio.to_thread(self.encoder.encode, image)
                     await self.db.customer_visual_images.update_one({"_id": key}, {"$set": {"vectors": vectors}, "$unset": {"retry_after": ""}})
-                    detail_rows = await self.detail_rows(manifest, urls, candidates)
                     details = await asyncio.to_thread(encode_details, self.encoder, image)
                     await self.db.customer_visual_images.update_one({"_id": key}, {"$set": {"design_vectors": details, "design_version": DESIGN_VERSION}})
             except Exception:
