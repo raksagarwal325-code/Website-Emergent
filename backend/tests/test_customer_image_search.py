@@ -216,6 +216,7 @@ async def test_weak_search_queues_regional_rescue_without_blocking_request(monke
     service.encoder = SimpleNamespace(session=True, encode_query=Mock(return_value=vector()))
     service.enqueue_region_search = AsyncMock(return_value="a" * 32)
     monkeypatch.setattr(module, "rescue_region_matches", Mock(side_effect=AssertionError("must run in worker")))
+    monkeypatch.setattr(module, "encode_details", Mock(side_effect=AssertionError("detail inference must run in worker")))
     result = await service.search(photo())
     assert result["matches"][0]["match_type"] == "similar"
     assert result["search_status"] == "processing"

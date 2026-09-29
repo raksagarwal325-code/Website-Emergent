@@ -304,7 +304,14 @@ class CustomerImageSearch:
             vectors = await asyncio.to_thread(self.encoder.encode_query, image) if self.encoder.session is not None else None
             candidate_rows, candidate_urls = self.references.augment(rows, urls)
             matches = await asyncio.to_thread(rank_images, hashes, vectors, candidate_rows, candidate_urls)
-            if needs_detail_check(matches) and self.encoder.session is not None:
+            job_id = None
+            background_ready = indexed == len(urls) and self.encoder.session is not None
+            # Room photos that need the regional pass must leave the request path
+            # before patch/detail inference. That work was the remaining source of
+            # browser timeouts even after the regional scan itself became a job.
+            if background_ready and needs_region_check(matches):
+                job_id = await self.enqueue_region_search(data, matches)
+            elif needs_detail_check(matches) and self.encoder.session is not None:
                 try:
                     candidates = await asyncio.to_thread(rank_images, hashes, vectors, candidate_rows, candidate_urls, 60)
                     detail_rows = await self.detail_rows(manifest, urls, candidates)
@@ -312,9 +319,9 @@ class CustomerImageSearch:
                     matches = await asyncio.to_thread(promote_detail_match, candidates, details, detail_rows, urls)
                 except Exception:
                     logger.exception("Detail comparison unavailable; retaining original image results")
-            job_id = None
-            if indexed == len(urls) and self.encoder.session is not None and needs_region_check(matches):
+            if not job_id and background_ready and needs_region_check(matches):
                 job_id = await self.enqueue_region_search(data, matches)
+            if job_id:
                 self.last_region_search = {
                     "started_at": time.time(), "outcome": "queued", "mode": "background",
                     "leading_score": round(matches[0]['score'], 4),

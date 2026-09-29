@@ -111,7 +111,10 @@ export default function CustomerImageSearch() {
     } catch (err) {
       if (attempt === sequence.current) {
         const message = err.response?.data?.detail;
-        setError(typeof message === "string" ? message : (err.message || "Image search could not finish. Please try again."));
+        const timedOut = err.code === "ECONNABORTED" || /timeout/i.test(err.message || "");
+        setError(typeof message === "string" ? message : timedOut
+          ? "Image search took too long to start. Please try the image again."
+          : (err.message || "Image search could not finish. Please try again."));
       }
     } finally {
       if (attempt === sequence.current) setBusy(false);
@@ -161,4 +164,3 @@ export default function CustomerImageSearch() {
     )}
   </>;
 }
-
