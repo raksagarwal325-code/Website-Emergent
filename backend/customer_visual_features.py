@@ -3,6 +3,7 @@ import hashlib
 import io
 import os
 import threading
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageOps
@@ -13,6 +14,30 @@ INDEX_VERSION = "dinov2-small-fp32-v1"
 EMBEDDING_DIM = 384
 MAX_BYTES = 10 * 1024 * 1024
 MAX_PIXELS = 20_000_000
+
+
+def inference_thread_count():
+    """Respect container CPU quotas, which CPU affinity alone does not report."""
+    available = os.cpu_count() or 1
+    try:
+        available = min(available, len(os.sched_getaffinity(0)))
+    except (AttributeError, OSError):
+        pass
+    try:
+        quota, period = Path('/sys/fs/cgroup/cpu.max').read_text().split()
+        if quota != 'max' and int(quota) > 0 and int(period) > 0:
+            available = min(available, int(quota) / int(period))
+    except (OSError, ValueError):
+        pass
+    for root in ('/sys/fs/cgroup/cpu', '/sys/fs/cgroup/cpu,cpuacct'):
+        try:
+            quota = int(Path(root, 'cpu.cfs_quota_us').read_text())
+            period = int(Path(root, 'cpu.cfs_period_us').read_text())
+            if quota > 0 and period > 0:
+                available = min(available, quota / period)
+        except (OSError, ValueError):
+            pass
+    return 2 if available >= 2 else 1
 
 
 def decode_image(data):
@@ -53,6 +78,7 @@ class VisualEncoder:
     def __init__(self):
         self.session = None
         self.lock = threading.Lock()
+        self.inference_threads = None
 
     def load(self):
         import onnxruntime as ort
@@ -65,13 +91,14 @@ class VisualEncoder:
                 MODEL_REPO, "onnx/model.onnx", revision=MODEL_REVISION,
             )
             options = ort.SessionOptions()
-            options.intra_op_num_threads = 2
+            options.intra_op_num_threads = inference_thread_count()
             options.inter_op_num_threads = 1
             session = ort.InferenceSession(path, sess_options=options, providers=["CPUExecutionProvider"])
             output = next((o for o in session.get_outputs() if o.name == "last_hidden_state"), None)
             if output is None or output.shape[-1] != EMBEDDING_DIM:
                 raise ValueError("CUSTOMER_IMAGE_MODEL_PATH must point to the pinned DINOv2-small model")
             self.session = session
+            self.inference_threads = options.intra_op_num_threads
 
     def encode(self, image):
         if self.session is None:

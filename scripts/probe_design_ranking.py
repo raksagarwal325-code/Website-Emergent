@@ -37,19 +37,52 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
         if needs_detail_check(base): current=promote_detail_match(rank_images(hashes,vectors,augmented,amap,60),encode_details(encoder,im),rows,mapping)
         current=add_related_designs(current,products,load_relations())
         result={'case':label,'current':[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in current]}
-        from customer_region_search import needs_region_check
-        if needs_region_check(current):
-            start=time.monotonic()
-            all_scores=[]
-            for box in boxes:
-                crop=im.crop(tuple(round(v*(im.width if i%2==0 else im.height)) for i,v in enumerate(box)))
-                query=np.asarray(encoder.encode_query(crop),dtype=np.float32)
-                sims=query @ catalog.T
-                all_scores.append(np.stack([sims[:,idx].max(axis=1) for idx in by_product],axis=1))
-            matrices[f'case_{ci}']=np.asarray(all_scores)
-            result['region_seconds']=time.monotonic()-start
-            print('ALL_VIEWS',label,matrices[f'case_{ci}'].shape,result['region_seconds'],flush=True)
+        from customer_region_search import rescue_region_matches
+        import threading
+        start=time.monotonic()
+        proposed=rescue_region_matches(encoder,im,rows,mapping,current,threading.Event())
+        result['proposed']=[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in proposed]
+        result['region_seconds']=time.monotonic()-start
+        result['changed']=result['proposed']!=result['current']
+        if label.startswith('room'):
+            assert [m['sku'] for m in result['proposed'][:3]]==['SGE-HL-076','SGE-HL-077','SGE-HL-078'],result
+            assert all(m['type']=='closest' for m in result['proposed'][:3])
+            assert {f'SGE-HL-{n:03d}' for n in (72,73,74,75,79)} <= {m['sku'] for m in result['proposed'][3:]},result
+        else:
+            assert result['proposed']==result['current'],result
         report.append(result)
+        print('REGION_RUNTIME',label,'changed',result['changed'],'seconds',result['region_seconds'],flush=True)
 
-    (output/'region-report.json').write_text(json.dumps({'skus':skus,'boxes':boxes,'cases':report}))
+    # Real runtime under one CPU, including every existing ORT/BLAS thread.
+    import os, threading
+    from customer_visual_features import VisualEncoder
+    from customer_region_search import rescue_region_matches
+    from customer_region_search_legacy import rescue_region_matches as legacy_rescue
+    affinity=os.sched_getaffinity(0)
+    def limit_all(cpus):
+        for tid in os.listdir('/proc/self/task'):
+            try: os.sched_setaffinity(int(tid),cpus)
+            except ProcessLookupError: pass
+    limit_all({min(affinity)})
+    small=VisualEncoder();small.load()
+    assert small.inference_threads==1
+    cpu_profiles=[]
+    by_sku={p['sku']:p for p in products}
+    for case_index in (0,1):
+        im=decode_image(cases[case_index][1])
+        current=[{'product':by_sku[m['sku']],'score':m['score'],'match_type':m['type']} for m in report[case_index]['current']]
+        for name,worker,fn in [('legacy',encoder,legacy_rescue),('efficient',small,rescue_region_matches)]:
+            start=time.monotonic()
+            out=fn(worker,im,rows,mapping,current,threading.Event())
+            entry={'case':cases[case_index][0],'implementation':name,'seconds':time.monotonic()-start,
+                   'first_three':[m['product']['sku'] for m in out[:3]]}
+            cpu_profiles.append(entry)
+            print('CONSTRAINED_CPU',entry,flush=True)
+            if name=='efficient':
+                assert entry['seconds'] < 8.0,entry
+                assert entry['first_three']==['SGE-HL-076','SGE-HL-077','SGE-HL-078'],entry
+                assert {f'SGE-HL-{n:03d}' for n in (72,73,74,75,79)} <= {m['product']['sku'] for m in out[3:]}
+    limit_all(affinity)
+
+    (output/'region-report.json').write_text(json.dumps({'skus':skus,'boxes':boxes,'cases':report,'cpu_profiles':cpu_profiles}))
     np.savez_compressed(output/'region-scores.npz',**matrices)
