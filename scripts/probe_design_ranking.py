@@ -47,27 +47,19 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
 
     import onnx,copy
     from onnx import numpy_helper
-    opt=ort.SessionOptions();opt.intra_op_num_threads=1;opt.inter_op_num_threads=1
-    opt.graph_optimization_level=ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
-    opt.optimized_model_filepath=str(output/'regional-folded.onnx')
-    folded=ort.InferenceSession(os.environ['CUSTOMER_IMAGE_MODEL_PATH'],sess_options=opt,providers=['CPUExecutionProvider'])
-    source=onnx.load(opt.optimized_model_filepath)
+    source=onnx.load(os.environ['CUSTOMER_IMAGE_MODEL_PATH'])
     print('POSITION_TENSORS',[(t.name,list(t.dims)) for t in source.graph.initializer if list(t.dims)==[1,257,384]],flush=True)
     sessions={224:encoder.session}
     for side in (168,140,112):
         graph=copy.deepcopy(source)
-        tensors=list(graph.graph.initializer)
-        tensors += [attr.t for node in graph.graph.node for attr in node.attribute if attr.type==onnx.AttributeProto.TENSOR]
-        count=0
-        for tensor in tensors:
-            if list(tensor.dims)!=[1,257,384]:continue
-            a=numpy_helper.to_array(tensor)
-            grid=a[:,1:,:].reshape(16,16,384)
-            reduced=np.stack([np.asarray(Image.fromarray(grid[:,:,i]).resize((side//14,side//14),Image.Resampling.BICUBIC)) for i in range(384)],axis=-1).reshape(1,-1,384)
-            arr=np.concatenate([a[:,:1,:],reduced],axis=1)
-            tensor.CopyFrom(numpy_helper.from_array(arr.astype(np.float32),name=tensor.name));count+=1
-        print('POSITION_RESIZED',side,count,flush=True)
-        assert count==1
+        nodes=[n for n in graph.graph.node if n.name=='/embeddings/Constant_9' and n.op_type=='Constant']
+        assert len(nodes)==1
+        tensor=nodes[0].attribute[0].t
+        old=numpy_helper.to_array(tensor)
+        assert old.shape==(4,) and np.allclose(old,[1,1,16.1/37,16.1/37])
+        tensor.CopyFrom(numpy_helper.from_array(np.array([1,1,(side/14+.1)/37,(side/14+.1)/37],dtype=np.float32)))
+        graph.graph.output[0].type.tensor_type.shape.dim[1].dim_value=(side//14)**2+1
+        print('POSITION_SCALE',side,flush=True)
         options=ort.SessionOptions();options.intra_op_num_threads=1;options.inter_op_num_threads=1
         sessions[side]=ort.InferenceSession(graph.SerializeToString(),sess_options=options,providers=['CPUExecutionProvider'])
     report=[]
