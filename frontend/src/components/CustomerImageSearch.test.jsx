@@ -27,6 +27,16 @@ test("presents image search as a prominent labelled upload action", () => {
   expect(button).toHaveClass("bg-[#D4AF37]");
 });
 
+test("renders a full-width landing-page call to action without catalogue positioning", () => {
+  render(<MemoryRouter><CustomerImageSearch variant="landing" /></MemoryRouter>);
+  const button = screen.getByRole("button", { name: "Upload a photo to find exact or similar products" });
+  expect(button).toHaveTextContent("Upload a photo");
+  expect(button).toHaveClass("w-full");
+  expect(button).not.toHaveClass("absolute");
+  fireEvent.click(button);
+  expect(screen.getByRole("dialog", { name: "Find your light" })).toBeInTheDocument();
+});
+
 test("uploads a photo and separates matching products from similar designs with working links", async () => {
   api.searchByImage.mockResolvedValue({ index_complete: true, similarity_available: true, available: true, matches: [{ product, match_type: "exact" }, { product: { ...product, id: "two", name: "Related Light", sku: "SGE-CH-002" }, match_type: "similar" }] });
   open(); upload();
