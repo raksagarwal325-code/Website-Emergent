@@ -71,7 +71,7 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
         containment_scores=[]
         for f in features:
             similarity=local@np.asarray(f['patches'],dtype=np.float32).T
-            containment_scores.append(float(similarity.max(axis=1).mean()))
+            containment_scores.append(float(similarity.max(axis=0).mean()))
             patch_scores.append((similarity.max(axis=0).mean()+similarity.max(axis=1).mean())/2)
         patch_scores=np.asarray(patch_scores)
         methods={'original':global_scores,'pooled':pool_scores,'patch':patch_scores,
