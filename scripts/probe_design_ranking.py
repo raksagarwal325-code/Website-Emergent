@@ -22,7 +22,7 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
     for p in selected_controls(products):
         data=(image_cache/hashlib.sha256(canonical(p['images'][0]).encode()).hexdigest()).read_bytes()
         cases.append((p['sku']+' control',jpeg_variant(decode_image(data))))
-    boxes=[(x,y,x+size,y+size) for size,starts in [(.4,(0,.2,.4,.6)),(.6,(0,.2,.4))] for y in starts for x in starts]
+    boxes=[(x,y,x+.25,y+.5) for y in (0,.25,.5) for x in (0,.15,.3,.45,.6,.75)]
     skus=[p['sku'] for p in products]
     ids={p['id']:i for i,p in enumerate(products)}
     catalog=np.asarray([r['vectors'] for r in rows],dtype=np.float32).reshape(-1,384)

@@ -344,3 +344,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     evaluate(args.output, *prepare(args.output))
+
+# Evaluate narrower portrait regions.
