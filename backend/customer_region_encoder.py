@@ -17,6 +17,9 @@ class RegionEncoder:
         self.encoder = encoder
         self.deadline = deadline
         self.cancelled = cancelled
+        self.timings = dict(preprocess_seconds=0.0, lock_wait_seconds=0.0,
+                            inference_seconds=0.0, inference_thread_cpu_seconds=0.0,
+                            inference_calls=0, lock_timeouts=0)
 
     def _check(self):
         if self.cancelled.is_set() or time.monotonic() >= self.deadline:
@@ -24,14 +27,29 @@ class RegionEncoder:
 
     def encode(self, image):
         self._check()
-        whole = ImageOps.pad(image, (256, 256), method=Image.Resampling.BICUBIC, color='white')
-        inputs = model_input(whole)
+        started = time.monotonic()
+        try:
+            whole = ImageOps.pad(image, (256, 256), method=Image.Resampling.BICUBIC, color='white')
+            inputs = model_input(whole)
+        finally:
+            self.timings['preprocess_seconds'] += time.monotonic() - started
         remaining = max(0, self.deadline - time.monotonic())
-        if not self.encoder.lock.acquire(timeout=remaining):
+        started = time.monotonic()
+        acquired = self.encoder.lock.acquire(timeout=remaining)
+        self.timings['lock_wait_seconds'] += time.monotonic() - started
+        if not acquired:
+            self.timings['lock_timeouts'] += 1
             raise RegionDeadline()
         try:
             self._check()
-            vector = self.encoder.session.run(['last_hidden_state'], {'pixel_values': inputs})[0][0, 0]
+            started = time.monotonic()
+            cpu_started = time.thread_time()
+            self.timings['inference_calls'] += 1
+            try:
+                vector = self.encoder.session.run(['last_hidden_state'], {'pixel_values': inputs})[0][0, 0]
+            finally:
+                self.timings['inference_seconds'] += time.monotonic() - started
+                self.timings['inference_thread_cpu_seconds'] += time.thread_time() - cpu_started
         finally:
             self.encoder.lock.release()
         self._check()
