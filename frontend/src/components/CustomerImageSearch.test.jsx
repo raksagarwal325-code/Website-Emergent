@@ -41,6 +41,8 @@ test("renders a permanent icon-only header trigger and opens image search", () =
   render(<MemoryRouter><CustomerImageSearch variant="header" /></MemoryRouter>);
   const button = screen.getByRole("button", { name: "Search products using a photo" });
   expect(button).toHaveClass("h-10", "w-10");
+  expect(button).toHaveTextContent("Search by photo");
+  expect(button).toHaveTextContent("Photo");
   expect(button).not.toHaveTextContent("Upload");
   fireEvent.click(button);
   expect(screen.getByRole("dialog", { name: "Find your light" })).toBeInTheDocument();
