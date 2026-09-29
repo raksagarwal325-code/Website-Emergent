@@ -31,61 +31,61 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
         for p in mapping[r['url']]: by_product[ids[p['id']]].extend((i*2,i*2+1))
 
     import os,threading
-    import onnxruntime as ort
-    import customer_region_search as regions
-    from customer_visual_features import VisualEncoder
     from pathlib import Path
+    from PIL import ImageOps,Image
+    from customer_visual_features import model_input
+    from customer_design_ranking import unpack_details
+    from customer_region_encoder import RegionEncoder
+    from customer_region_search import region_iou,select_region_matches
     cgroup=Path('/sys/fs/cgroup') / Path('/proc/self/cgroup').read_text().strip().split('::')[-1].lstrip('/')
-    quota=(cgroup/'cpu.max').read_text().strip()
-    print('ACTUAL_CPU_QUOTA',quota,flush=True)
-    assert quota.split()[0]!='max' and int(quota.split()[0])/int(quota.split()[1])==.5
-
-    print('MODEL_INPUT',[(x.name,x.shape) for x in encoder.session.get_inputs()],flush=True)
-    import customer_region_encoder as re
-    from PIL import Image
-    original_input=re.model_input
-
-    import onnx,copy
-    from onnx import numpy_helper
-    source=onnx.load(os.environ['CUSTOMER_IMAGE_MODEL_PATH'])
-    print('POSITION_TENSORS',[(t.name,list(t.dims)) for t in source.graph.initializer if list(t.dims)==[1,257,384]],flush=True)
-    sessions={224:encoder.session}
-    for side in (168,140,112):
-        graph=copy.deepcopy(source)
-        nodes=[n for n in graph.graph.node if n.name=='/embeddings/Constant_9' and n.op_type=='Constant']
-        assert len(nodes)==1
-        tensor=nodes[0].attribute[0].t
-        old=numpy_helper.to_array(tensor)
-        assert old.shape==(4,) and np.allclose(old,[1,1,16.1/37,16.1/37])
-        tensor.CopyFrom(numpy_helper.from_array(np.array([1,1,(side/14+.1)/37,(side/14+.1)/37],dtype=np.float32)))
-        graph.graph.output[0].type.tensor_type.shape.dim[1].dim_value=(side//14)**2+1
-        print('POSITION_SCALE',side,flush=True)
-        options=ort.SessionOptions();options.intra_op_num_threads=1;options.inter_op_num_threads=1
-        sessions[side]=ort.InferenceSession(graph.SerializeToString(),sess_options=options,providers=['CPUExecutionProvider'])
+    print('ACTUAL_CPU_QUOTA',(cgroup/'cpu.max').read_text().strip(),flush=True)
+    chunks=[unpack_details(r['design_vectors']) for r in rows]
+    starts=np.cumsum([0]+[len(c) for c in chunks])
+    patches=np.concatenate(chunks).T
     report=[]
     for label,data in cases[:2]:
         im=decode_image(data); hashes=image_hashes(data,im); vectors=encoder.encode_query(im)
         current=rank_images(hashes,vectors,augmented,amap)
-        serialize=lambda out:[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in out]
-        result={'case':label,'attempts':[]}
-        for size in (224,168,140,112):
-            def resized(image):
-                arr=original_input(image)
-                if size==224:return arr
-                return np.stack([np.asarray(Image.fromarray(ch).resize((size,size),Image.Resampling.BICUBIC)) for ch in arr[0]])[None].astype(np.float32)
-            re.model_input=resized
-            encoder.session=sessions[size]
-            regions.REGION_SECONDS=60
-            diagnostic={}
-            try:
-                out=regions.rescue_region_matches(encoder,im,rows,mapping,current,threading.Event(),diagnostic)
-                entry={'size':size,'matches':serialize(out),'diagnostic':diagnostic}
-            except Exception as exc:
-                entry={'size':size,'error':repr(exc)}
-            finally:
-                re.model_input=original_input
-                encoder.session=sessions[224]
-            result['attempts'].append(entry)
-            print('RESOLUTION_BENCHMARK',label,json.dumps(entry),flush=True)
-        report.append(result)
-    (output/'region-report.json').write_text(json.dumps({'cpu_quota':quota,'products':len(products),'images':len(rows),'cases':report}))
+        t=time.monotonic()
+        padded=ImageOps.pad(im,(256,256),method=Image.Resampling.BICUBIC,color='white')
+        pixels=model_input(padded)
+        with encoder.lock:
+            tokens=encoder.session.run(['last_hidden_state'],{'pixel_values':pixels})[0][0,1:]
+        tokens=tokens/np.maximum(np.linalg.norm(tokens,axis=1,keepdims=True),1e-12)
+        rgb=(pixels[0].transpose(1,2,0)*np.array([.229,.224,.225])+np.array([.485,.456,.406]))*255
+        parts=rgb.reshape(16,14,16,14,3).transpose(0,2,1,3,4).reshape(256,-1,3)
+        foreground=(parts.std(axis=1).mean(axis=1)>8)&(parts.mean(axis=(1,2))>15)&(parts.mean(axis=(1,2))<245)
+        similarity=tokens@patches
+        scaled=ImageOps.contain(im,(256,256))
+        xy=np.stack(np.meshgrid(np.arange(16)*14+23,np.arange(16)*14+23),axis=-1).reshape(-1,2)
+        xy=(xy-np.array([(256-scaled.width)//2,(256-scaled.height)//2]))/np.array([scaled.width,scaled.height])
+        region_scores=[]
+        for box in boxes:
+            mask=foreground & (xy[:,0]>=box[0]) & (xy[:,0]<box[2]) & (xy[:,1]>=box[1]) & (xy[:,1]<box[3])
+            by_id={}
+            if mask.sum()>=4:
+                for i,row in enumerate(rows):
+                    a=similarity[mask,starts[i]:starts[i+1]]
+                    score=float((a.max(axis=0).mean()+a.max(axis=1).mean())/2)
+                    for prod in mapping[row['url']]:by_id[prod['id']]=max(by_id.get(prod['id'],-1),score)
+            region_scores.append(max(by_id.values(),default=-1))
+        selected=[]
+        for i in np.argsort(-np.asarray(region_scores),kind='stable'):
+            if all(region_iou(boxes[i],boxes[old])<.3 for old in selected):selected.append(int(i))
+            if len(selected)==3:break
+        coarse_elapsed=time.monotonic()-t
+        worker=RegionEncoder(encoder,time.monotonic()+60,threading.Event())
+        refined=[]
+        for i in selected:
+            box=boxes[i];bounds=tuple(round(v*(im.width if j%2==0 else im.height)) for j,v in enumerate(box))
+            crop=im.crop(bounds);q=worker.encode(crop)
+            for subbox in ((.15,0,.85,.6),(.15,.4,.85,1)):
+                sub=tuple(round(v*(crop.width if j%2==0 else crop.height)) for j,v in enumerate(subbox))
+                q.extend(worker.encode(crop.crop(sub)))
+            a=np.asarray(q,dtype=np.float32)@catalog.T
+            refined.append([float(a[:,inds].max()) for inds in by_product])
+        out=select_region_matches(current,np.asarray(refined),products)
+        result={'case':label,'selected':selected,'region_scores':region_scores,'coarse_seconds':coarse_elapsed,'total_seconds':time.monotonic()-t,
+                'matches':[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in out]}
+        report.append(result);print('PATCH_PROPOSALS',json.dumps(result),flush=True)
+    (output/'region-report.json').write_text(json.dumps({'cases':report}))

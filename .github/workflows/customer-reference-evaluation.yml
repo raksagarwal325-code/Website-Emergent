@@ -24,7 +24,7 @@ jobs:
       - name: Install pinned evaluation dependencies
         run: |
           grep -iE '^(numpy|pillow|onnxruntime|huggingface_hub)==' backend/requirements.txt > /tmp/evaluation-requirements.txt
-          pip install -r /tmp/evaluation-requirements.txt onnx==1.17.0
+          pip install -r /tmp/evaluation-requirements.txt
       - name: Restore downloaded public images
         uses: actions/cache/restore@v4
         with:
