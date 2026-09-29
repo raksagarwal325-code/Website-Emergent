@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import Header from "./Header";
+import { api } from "../../lib/api";
 
 jest.mock("../../context/CatalogContext", () => ({
   useCatalog: () => ({ cart: [], favorites: [] }),
@@ -9,9 +10,13 @@ jest.mock("../../context/CatalogContext", () => ({
 
 jest.mock("../../lib/api", () => ({
   api: {
-    getSettings: jest.fn(() => Promise.resolve({ brand_name: "Samrat Glass Emporium" })),
+    getSettings: jest.fn(),
   },
 }));
+
+beforeEach(() => {
+  api.getSettings.mockResolvedValue({ brand_name: "Samrat Glass Emporium" });
+});
 
 function LocationProbe() {
   const location = useLocation();
