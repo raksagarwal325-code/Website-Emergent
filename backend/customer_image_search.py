@@ -15,7 +15,7 @@ from media_library import canonical_media_url
 from customer_image_references import ReferenceBundle
 from customer_design_ranking import DESIGN_VERSION, encode_details, needs_detail_check, promote_detail_match, load_relations, add_related_designs
 
-from customer_region_search import needs_region_check, rescue_region_matches
+from customer_region_search import REGION_VERSION, needs_region_check, rescue_region_matches
 
 logger = logging.getLogger(__name__)
 PUBLIC_FIELDS = {"_id": 0, "id": 1, "name": 1, "sku": 1, "category": 1, "images": 1, "slug": 1}
@@ -42,6 +42,7 @@ class CustomerImageSearch:
         self.task = None
         self.busy = asyncio.Semaphore(2)
         self.owner = uuid.uuid4().hex
+        self.last_region_search = None
         self.design_relations = load_relations()
         self.references = ReferenceBundle(os.environ.get("CUSTOMER_IMAGE_REFERENCE_MANIFEST"))
 
@@ -150,6 +151,9 @@ class CustomerImageSearch:
             "design_indexed": sum(r.get("design_version") == DESIGN_VERSION and bool(r.get("design_vectors")) for r in rows),
             "model_ready": self.encoder.session is not None,
             "worker_running": bool(self.task and not self.task.done()),
+            "region_search_version": REGION_VERSION,
+            "inference_threads": getattr(self.encoder, 'inference_threads', None),
+            "last_region_search": self.last_region_search,
         }
 
     async def search(self, data):
@@ -180,14 +184,28 @@ class CustomerImageSearch:
                     logger.exception("Detail comparison unavailable; retaining original image results")
             if indexed == len(urls) and self.encoder.session is not None and needs_region_check(matches):
                 cancelled = threading.Event()
+                diagnostic = {"started_at": time.time(), "outcome": "running",
+                              "leading_score": round(matches[0]['score'], 4)}
                 try:
                     matches = await asyncio.to_thread(
-                        rescue_region_matches, self.encoder, image, rows, urls, matches, cancelled,
+                        rescue_region_matches, self.encoder, image, rows, urls, matches, cancelled, diagnostic,
                     )
+                except asyncio.CancelledError:
+                    diagnostic['outcome'] = 'request_cancelled'
+                    raise
                 except Exception:
+                    diagnostic['outcome'] = 'error'
                     logger.exception("Regional comparison unavailable; retaining original image results")
                 finally:
                     cancelled.set()
+                    self.last_region_search = dict(diagnostic)
+                    logger.info("Customer regional search: %s", self.last_region_search)
+            else:
+                outcome = 'not_needed'
+                if needs_region_check(matches):
+                    outcome = 'index_incomplete' if indexed != len(urls) else 'model_unavailable'
+                self.last_region_search = {"started_at": time.time(), "outcome": outcome, "elapsed_seconds": 0,
+                                           "leading_score": round(matches[0]['score'], 4) if matches else None}
             products = {p["id"]: p for values in urls.values() for p in values}
             matches = add_related_designs(matches, list(products.values()), self.design_relations)
             return {
@@ -219,4 +237,3 @@ def search_router(service, rate_dependency):
             await file.close()
 
     return router
-

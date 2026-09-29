@@ -4,11 +4,13 @@ import time
 import numpy as np
 
 from customer_visual_features import EMBEDDING_DIM
+from customer_region_encoder import RegionEncoder, RegionDeadline
 
 # Generic overlapping windows; independent of product identity and image content.
 REGIONS = tuple((x, y, x + .25, y + .5)
                 for y in (0, .25, .5) for x in (0, .15, .3, .45, .6, .75))
 REGION_SECONDS = 8.0
+REGION_VERSION = 'efficient-regions-v2'
 
 
 def needs_region_check(matches):
@@ -17,8 +19,13 @@ def needs_region_check(matches):
                 and not any(m['match_type'] == 'exact' for m in matches))
 
 
-def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled):
+def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled, diagnostic=None):
     """Return complete region scores only; never download or write index data."""
+    diagnostic = diagnostic if diagnostic is not None else {}
+    diagnostic.update(coarse_regions=0, refined_regions=0)
+    def stop(reason):
+        diagnostic['outcome'] = reason
+        return None
     products = {}
     embeddings = []
     offsets = {}
@@ -28,31 +35,34 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled):
             continue
         vectors = np.asarray(row.get('vectors') or [], dtype=np.float32)
         if vectors.shape != (2, EMBEDDING_DIM) or not np.isfinite(vectors).all():
-            return None  # Do not compare a partially available catalogue.
+            return stop('invalid_catalogue_vectors')
         offset = len(embeddings)
         embeddings.extend(vectors)
         for product in linked:
             products[product['id']] = product
             offsets.setdefault(product['id'], []).extend((offset, offset + 1))
     if not embeddings:
-        return None
+        return stop('no_catalogue_vectors')
     ordered = sorted(products)
     catalogue = np.asarray(embeddings, dtype=np.float32).T
     scores = []
+    coarse_vectors = []
     for box in REGIONS:
         if cancelled.is_set() or time.monotonic() >= deadline:
-            return None
+            return stop('cancelled' if cancelled.is_set() else 'budget_exceeded')
         bounds = tuple(round(v * (image.width if i % 2 == 0 else image.height))
                        for i, v in enumerate(box))
         if bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
-            return None
+            return stop('invalid_crop')
         query = np.asarray(encoder.encode(image.crop(bounds)), dtype=np.float32)
-        if query.shape != (2, EMBEDDING_DIM) or not np.isfinite(query).all():
-            return None
+        if query.shape != (1, EMBEDDING_DIM) or not np.isfinite(query).all():
+            return stop('invalid_query_vectors')
+        coarse_vectors.append(query.tolist())
         similarity = (query @ catalogue).max(axis=0)
         scores.append([float(similarity[offsets[key]].max()) for key in ordered])
+        diagnostic['coarse_regions'] += 1
     if cancelled.is_set() or time.monotonic() >= deadline:
-        return None
+        return stop('cancelled' if cancelled.is_set() else 'budget_exceeded')
     coarse = np.asarray(scores)
     selected = []
     for index in np.argsort(-coarse.max(axis=1), kind='stable'):
@@ -63,20 +73,21 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled):
         if len(selected) == 3:
             break
     if not selected:
-        return None
+        return stop('no_promising_regions')
     refined = []
     for index in selected:
         if cancelled.is_set() or time.monotonic() >= deadline:
-            return None
+            return stop('cancelled' if cancelled.is_set() else 'budget_exceeded')
         bounds = tuple(round(v * (image.width if i % 2 == 0 else image.height))
                        for i, v in enumerate(REGIONS[index]))
-        query = np.asarray(encoder.encode_query(image.crop(bounds)), dtype=np.float32)
-        if query.shape != (12, EMBEDDING_DIM) or not np.isfinite(query).all():
-            return None
+        query = np.asarray(encoder.encode_query(image.crop(bounds), initial=coarse_vectors[index]), dtype=np.float32)
+        if query.shape != (6, EMBEDDING_DIM) or not np.isfinite(query).all():
+            return stop('invalid_query_vectors')
         similarity = (query @ catalogue).max(axis=0)
         refined.append([float(similarity[offsets[key]].max()) for key in ordered])
+        diagnostic['refined_regions'] += 1
     if cancelled.is_set() or time.monotonic() >= deadline:
-        return None
+        return stop('cancelled' if cancelled.is_set() else 'budget_exceeded')
     return np.asarray(refined), [products[key] for key in ordered]
 
 
@@ -115,12 +126,25 @@ def select_region_matches(matches, scores, products, limit=12):
             for i in (leading + alternatives)[:limit]]
 
 
-def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled):
+def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, diagnostic=None):
+    diagnostic = diagnostic if diagnostic is not None else {}
     if not needs_region_check(matches):
+        diagnostic['outcome'] = 'not_needed'
         return matches
-    result = collect_region_scores(encoder, image, rows, mapping,
-                                   time.monotonic() + REGION_SECONDS, cancelled)
-    if result is None:
+    started = time.monotonic()
+    deadline = started + REGION_SECONDS
+    worker = RegionEncoder(encoder, deadline, cancelled)
+    try:
+        result = collect_region_scores(worker, image, rows, mapping,
+                                       deadline, cancelled, diagnostic)
+        if result is None:
+            return matches
+        scores, products = result
+        selected = select_region_matches(matches, scores, products)
+        diagnostic['outcome'] = 'matched' if selected is not matches else 'no_improvement'
+        return selected
+    except RegionDeadline:
+        diagnostic['outcome'] = 'cancelled' if cancelled.is_set() else 'budget_exceeded'
         return matches
-    scores, products = result
-    return select_region_matches(matches, scores, products)
+    finally:
+        diagnostic['elapsed_seconds'] = round(time.monotonic() - started, 3)

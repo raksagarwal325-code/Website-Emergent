@@ -32,7 +32,7 @@ class RegionSearchTests(unittest.TestCase):
         self.assertTrue(needs_region_check([match(.65, 'possible')]))
 
     def test_region_scan_is_bounded_and_deduplicates_shared_products(self):
-        encoder = SimpleNamespace(encode=Mock(return_value=vectors()), encode_query=Mock(return_value=vectors()*6))
+        encoder = SimpleNamespace(encode=Mock(return_value=vectors()[:1]), encode_query=Mock(return_value=vectors()*3))
         rows = [{'url': 'one', 'vectors': vectors()}, {'url': 'two', 'vectors': vectors()},
                 {'url': 'deleted', 'vectors': vectors()}]
         mapping = {'one': [{'id': 'a'}, {'id': 'b'}], 'two': [{'id': 'a'}]}
@@ -45,7 +45,7 @@ class RegionSearchTests(unittest.TestCase):
         self.assertTrue(np.allclose(scores, 1))
 
     def test_cancelled_expired_and_incomplete_scans_do_not_return_partial_evidence(self):
-        encoder = SimpleNamespace(encode=Mock(return_value=vectors()), encode_query=Mock(return_value=vectors()*6))
+        encoder = SimpleNamespace(encode=Mock(return_value=vectors()[:1]), encode_query=Mock(return_value=vectors()*3))
         image = Image.new('RGB', (200, 200))
         rows = [{'url': 'a', 'vectors': vectors()}]
         mapping = {'a': [{'id': 'a'}]}
