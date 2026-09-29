@@ -268,6 +268,7 @@ def evaluate(output, products, mapping, cache, model):
 
     from probe_design_ranking import probe
     probe(output, products, rows, mapping, cache, encoder, FIXTURES)
+    return  # This run already compares the current ranking for every query.
     # Any bad image aborts the experiment instead of silently testing a smaller index.
     augmented_rows, augmented_map, references = overlay_references(products, rows, mapping, encoder)
     results = []

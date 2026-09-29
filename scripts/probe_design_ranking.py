@@ -51,6 +51,10 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
         data=(fixtures/file).read_bytes()
         cases.append((sku+' original',data))
         cases.append((sku+' compressed',jpeg_variant(decode_image(data))))
+    for sku,box in [('CS-001',(.35,0,.8,.12)),('WL-085',(.64,.35,.9,.78)),('CS-002',(0,.5,.3,.85))]:
+        im=decode_image((fixtures/(sku.lower()+'.jpg')).read_bytes())
+        bounds=tuple(round(v*(im.width if i%2==0 else im.height)) for i,v in enumerate(box))
+        cases.append((sku+' negative',jpeg_variant(im.crop(bounds))))
     for p in selected_controls(products):
         data=(image_cache/hashlib.sha256(canonical(p['images'][0]).encode()).hexdigest()).read_bytes()
         cases.append((p['sku']+' control',jpeg_variant(decode_image(data))))
@@ -64,13 +68,16 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
         global_scores=np.asarray([np.max(q@np.asarray(r['vectors'],dtype=np.float32).T) for r in rows])
         pool_scores=pooled@np.asarray(d['pooled'],dtype=np.float32)
         patch_scores=[]
+        containment_scores=[]
         for f in features:
             similarity=local@np.asarray(f['patches'],dtype=np.float32).T
+            containment_scores.append(float(similarity.max(axis=1).mean()))
             patch_scores.append((similarity.max(axis=0).mean()+similarity.max(axis=1).mean())/2)
         patch_scores=np.asarray(patch_scores)
         methods={'original':global_scores,'pooled':pool_scores,'patch':patch_scores,
+                 'containment':np.asarray(containment_scores),'containment_blend':.5*global_scores+.5*np.asarray(containment_scores),
                  'pool_blend':.5*global_scores+.5*pool_scores,'patch_blend':.5*global_scores+.5*patch_scores}
-        result={'case':label,'current':[{'sku':m['product']['sku'],'type':m['match_type'],'score':m['score']} for m in rank_images(image_hashes(data,im),q,augmented_rows,augmented_map)],'methods':{}}
+        result={'case':label,'current':[{'sku':m['product']['sku'],'type':m['match_type'],'score':m['score']} for m in rank_images(image_hashes(data,im),q.tolist(),augmented_rows,augmented_map)],'methods':{}}
         for method,scores in methods.items():
             best={}
             for row,score in zip(rows,scores):
@@ -78,5 +85,6 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
                     if p['sku'] not in best or score>best[p['sku']]: best[p['sku']]=float(score)
             result['methods'][method]=sorted(best.items(),key=lambda x:-x[1])
         report.append(result)
+        (output/'design-probe.json').write_text(json.dumps(report))
         print('DESIGN QUERY',label,flush=True)
     (output/'design-probe.json').write_text(json.dumps(report))
