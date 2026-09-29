@@ -4,6 +4,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { Heart, ShoppingBag, Search, Menu, X, Images, ArrowUpRight } from "lucide-react";
 import { useCatalog } from "../../context/CatalogContext";
 import { api } from "../../lib/api";
+import CustomerImageSearch from "../CustomerImageSearch";
 
 const NAV_ITEMS = [
   {
@@ -192,7 +193,7 @@ export default function Header() {
           <span className="logo-badge inline-flex h-10 w-10 flex-shrink-0">
             <img src="/logo-header.webp" alt="Samrat Glass Emporium" className="w-full h-full object-cover" />
           </span>
-          <span className="font-serif text-base md:text-lg tracking-wide leading-tight">
+          <span className="hidden font-serif text-base tracking-wide leading-tight sm:block md:text-lg">
             <span className="block text-white">Samrat Glass</span>
             <span className="block text-[10px] tracking-[0.28em] uppercase text-[#BF9972]">Emporium</span>
           </span>
@@ -214,10 +215,13 @@ export default function Header() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-4">
-          <Link to="/catalog" aria-label="Search" data-testid="header-search" className="h-10 w-10 flex items-center justify-center text-white/75 hover:text-[#D4AF37] transition-colors">
-            <Search size={20} strokeWidth={1.6} />
-          </Link>
+        <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
+          <div className="flex items-center gap-1" aria-label="Product search options">
+            <Link to="/catalog" aria-label="Search" data-testid="header-search" title="Search products" className="h-10 w-10 flex items-center justify-center text-white/75 hover:text-[#D4AF37] transition-colors">
+              <Search size={20} strokeWidth={1.6} />
+            </Link>
+            <CustomerImageSearch variant="header" />
+          </div>
           <Link to="/favorites" aria-label="Favorites" data-testid="header-favorites" className="relative h-10 w-10 flex items-center justify-center text-white/75 hover:text-[#D4AF37] transition-colors">
             <Heart size={20} strokeWidth={1.6} />
             {favorites.length > 0 && (
