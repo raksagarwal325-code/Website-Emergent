@@ -47,7 +47,11 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
 
     import onnx,copy
     from onnx import numpy_helper
-    source=onnx.load(os.environ['CUSTOMER_IMAGE_MODEL_PATH'])
+    opt=ort.SessionOptions();opt.intra_op_num_threads=1;opt.inter_op_num_threads=1
+    opt.graph_optimization_level=ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
+    opt.optimized_model_filepath=str(output/'regional-folded.onnx')
+    folded=ort.InferenceSession(os.environ['CUSTOMER_IMAGE_MODEL_PATH'],sess_options=opt,providers=['CPUExecutionProvider'])
+    source=onnx.load(opt.optimized_model_filepath)
     print('POSITION_TENSORS',[(t.name,list(t.dims)) for t in source.graph.initializer if list(t.dims)==[1,257,384]],flush=True)
     sessions={224:encoder.session}
     for side in (168,140,112):
