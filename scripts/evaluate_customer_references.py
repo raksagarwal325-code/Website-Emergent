@@ -215,6 +215,8 @@ def evaluate(output, products, mapping, cache, model):
     deny_network()
     from customer_visual_features import VisualEncoder, decode_image, image_hashes, rank_images, INDEX_VERSION
     import PIL
+    import customer_visual_features
+    customer_visual_features.inference_thread_count = lambda: 1  # Match observed live ORT configuration.
     encoder = VisualEncoder()
     encoder.load()
     rows = []
