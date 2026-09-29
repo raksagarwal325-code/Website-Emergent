@@ -21,10 +21,29 @@ export async function makeSearchPreview(file) {
   }
 }
 
+export function waitForPoll(milliseconds, signal) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(done, milliseconds);
+    function done() {
+      signal?.removeEventListener("abort", aborted);
+      resolve();
+    }
+    function aborted() {
+      clearTimeout(timer);
+      const error = new Error("Image search cancelled");
+      error.name = "AbortError";
+      reject(error);
+    }
+    if (signal?.aborted) aborted();
+    else signal?.addEventListener("abort", aborted, { once: true });
+  });
+}
+
 export default function CustomerImageSearch() {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState("");
   const [busy, setBusy] = useState(false);
+  const [busyMessage, setBusyMessage] = useState("Searching our catalogue…");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const trigger = useRef(null);
@@ -68,17 +87,31 @@ export default function CustomerImageSearch() {
       return;
     }
     setBusy(true);
+    setBusyMessage("Searching our catalogue…");
     controller.current = new AbortController();
     try {
       const safePreview = await makeSearchPreview(file);
       if (attempt !== sequence.current) return;
       setPreview(safePreview);
-      const response = await api.searchByImage(file, controller.current.signal);
+      let response = await api.searchByImage(file, controller.current.signal);
+      if (response.search_status === "processing" && response.job_id) {
+        setBusyMessage("Checking the full catalogue for the closest designs…");
+        for (let poll = 0; poll < 60 && response.search_status === "processing"; poll += 1) {
+          await waitForPoll(response.poll_after_ms ?? 1500, controller.current.signal);
+          response = await api.getImageSearchJob(response.job_id, controller.current.signal);
+        }
+        if (response.search_status === "processing") {
+          throw new Error("Detailed image search is taking longer than expected. Please try again shortly.");
+        }
+        if (response.search_status === "failed") {
+          throw new Error(response.detail || "Detailed image search could not finish. Please try again.");
+        }
+      }
       if (attempt === sequence.current) setResult(response);
     } catch (err) {
       if (attempt === sequence.current) {
         const message = err.response?.data?.detail;
-        setError(typeof message === "string" ? message : "Image search could not finish. Please try again.");
+        setError(typeof message === "string" ? message : (err.message || "Image search could not finish. Please try again."));
       }
     } finally {
       if (attempt === sequence.current) setBusy(false);
@@ -107,10 +140,10 @@ export default function CustomerImageSearch() {
           </div>
           <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); search(e.dataTransfer.files?.[0]); }} className="mt-6 flex flex-wrap items-center gap-4 border border-dashed border-white/25 p-5">
             {preview && <img src={preview} alt="Your search reference" className="h-24 w-24 object-contain bg-white" />}
-            <div><button type="button" onClick={() => input.current?.click()} className="inline-flex items-center gap-2 bg-[#D4AF37] px-5 py-3 text-sm text-black"><Upload size={16} />{preview ? "Choose another image" : "Upload an image"}</button><p className="mt-2 text-xs text-white/55">Or drop it here · JPG, PNG, WebP · Up to 10 MB</p><p className="mt-1 text-xs text-white/55">For best results, crop around one light. Your upload is not saved.</p></div>
+            <div><button type="button" onClick={() => input.current?.click()} className="inline-flex items-center gap-2 bg-[#D4AF37] px-5 py-3 text-sm text-black"><Upload size={16} />{preview ? "Choose another image" : "Upload an image"}</button><p className="mt-2 text-xs text-white/55">Or drop it here · JPG, PNG, WebP · Up to 10 MB</p><p className="mt-1 text-xs text-white/55">For best results, crop around one light. Your upload is held temporarily for matching and deleted automatically.</p></div>
             <input ref={input} hidden type="file" accept="image/jpeg,image/png,image/webp" aria-label="Upload image for product search" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; search(file); }} />
           </div>
-          {busy && <p role="status" className="mt-6 flex items-center gap-2 text-sm text-[#D4AF37]"><Loader2 className="animate-spin" size={18} />Searching our catalogue…</p>}
+          {busy && <p role="status" className="mt-6 flex items-center gap-2 text-sm text-[#D4AF37]"><Loader2 className="animate-spin" size={18} />{busyMessage}</p>}
           {error && <p role="alert" className="mt-5 text-sm text-red-300">{error}</p>}
           {result && <div aria-live="polite">
             {(!result.index_complete || !result.similarity_available) && <p className="mt-5 text-sm text-white/65">Image search is still preparing some catalogue photos. These results may be incomplete; please try again later.</p>}

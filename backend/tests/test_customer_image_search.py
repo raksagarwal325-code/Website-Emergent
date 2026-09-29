@@ -204,7 +204,7 @@ async def test_queries_exclude_detail_bytes_until_shortlist_and_keep_missing_row
 
 
 @pytest.mark.asyncio
-async def test_weak_search_uses_only_saved_catalogue_vectors_for_regional_rescue(monkeypatch):
+async def test_weak_search_queues_regional_rescue_without_blocking_request(monkeypatch):
     from unittest.mock import Mock
     import customer_image_search as module
     load = AsyncMock(side_effect=AssertionError("no catalogue downloads during search"))
@@ -214,35 +214,79 @@ async def test_weak_search_uses_only_saved_catalogue_vectors_for_regional_rescue
     service.manifest = AsyncMock(return_value={"/a": "a"})
     service.rows = AsyncMock(return_value=[{"url": "/a", "vectors": scored_vector(.77)}])
     service.encoder = SimpleNamespace(session=True, encode_query=Mock(return_value=vector()))
-    seen = []
-    def rescue(encoder, image, rows, urls, matches, cancelled, diagnostic):
-        assert rows[0]["vectors"] == scored_vector(.77)
-        assert urls["/a"] == [product]
-        assert not cancelled.is_set()
-        seen.append(cancelled)
-        diagnostic.update(outcome='matched', elapsed_seconds=1.0, coarse_regions=18, refined_regions=3)
-        return [{**matches[0], "match_type": "closest"}]
-    monkeypatch.setattr(module, "rescue_region_matches", rescue)
+    service.enqueue_region_search = AsyncMock(return_value="a" * 32)
+    monkeypatch.setattr(module, "rescue_region_matches", Mock(side_effect=AssertionError("must run in worker")))
     result = await service.search(photo())
-    assert result["matches"][0]["match_type"] == "closest"
-    assert seen[0].is_set()
-    assert service.last_region_search['outcome'] == 'matched'
+    assert result["matches"][0]["match_type"] == "similar"
+    assert result["search_status"] == "processing"
+    assert result["job_id"] == "a" * 32
+    assert service.last_region_search['outcome'] == 'queued'
+    service.enqueue_region_search.assert_awaited_once()
     load.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_regional_failure_retains_existing_results(monkeypatch):
+async def test_background_regional_failure_deletes_upload_and_marks_job_failed(monkeypatch):
     from unittest.mock import Mock
     import customer_image_search as module
-    service = CustomerImageSearch(None, AsyncMock())
+    jobs = SimpleNamespace(update_one=AsyncMock())
+    service = CustomerImageSearch(SimpleNamespace(customer_image_search_jobs=jobs), AsyncMock())
     service.catalogue = AsyncMock(return_value=[{"id": "a", "images": ["/a"]}])
     service.manifest = AsyncMock(return_value={"/a": "a"})
     service.rows = AsyncMock(return_value=[{"url": "/a", "vectors": scored_vector(.77)}])
     service.encoder = SimpleNamespace(session=True, encode_query=Mock(return_value=vector()))
     monkeypatch.setattr(module, "rescue_region_matches", Mock(side_effect=RuntimeError("unavailable")))
-    result = await service.search(photo())
-    assert result["matches"] == [{"product": {"id": "a", "images": ["/a"]}, "match_type": "similar"}]
+    await service.process_job({
+        "_id": "a" * 32, "image": photo(),
+        "baseline": [{"product": {"id": "a", "images": ["/a"]}, "score": .77, "match_type": "similar"}],
+    })
+    update = jobs.update_one.await_args.args[1]
+    assert update["$set"]["status"] == "failed"
+    assert update["$unset"]["image"] == ""
     assert service.last_region_search['outcome'] == 'error'
+
+
+@pytest.mark.asyncio
+async def test_background_worker_uses_long_budget_and_stores_final_public_results(monkeypatch):
+    from unittest.mock import Mock
+    import customer_image_search as module
+    jobs = SimpleNamespace(update_one=AsyncMock())
+    service = CustomerImageSearch(SimpleNamespace(customer_image_search_jobs=jobs), AsyncMock())
+    product = {"id": "final", "name": "Final", "images": ["/a"]}
+    service.catalogue = AsyncMock(return_value=[product])
+    service.manifest = AsyncMock(return_value={"/a": "a"})
+    service.rows = AsyncMock(return_value=[{"url": "/a", "vectors": scored_vector(.77), "pixels": "p"}])
+    service.encoder = SimpleNamespace(session=True)
+    seen = {}
+    def rescue(encoder, image, rows, urls, matches, cancelled, diagnostic, seconds):
+        seen["seconds"] = seconds
+        diagnostic.update(outcome="matched", elapsed_seconds=22.0)
+        return [{"product": product, "score": .91, "match_type": "closest"}]
+    monkeypatch.setattr(module, "rescue_region_matches", rescue)
+    await service.process_job({
+        "_id": "b" * 32, "image": photo(),
+        "baseline": [{"product": product, "score": .77, "match_type": "similar"}],
+    })
+    assert seen["seconds"] == module.BACKGROUND_REGION_SECONDS
+    update = jobs.update_one.await_args.args[1]
+    assert update["$set"]["status"] == "complete"
+    assert update["$set"]["result"]["matches"] == [{"product": product, "match_type": "closest"}]
+    assert update["$unset"]["image"] == ""
+
+
+@pytest.mark.asyncio
+async def test_job_status_never_returns_upload_or_internal_baseline():
+    jobs = SimpleNamespace(find_one=AsyncMock(return_value={
+        "status": "complete", "image": b"private", "baseline": [{"score": .7}],
+        "result": {"matches": [], "available": True},
+    }))
+    service = CustomerImageSearch(SimpleNamespace(customer_image_search_jobs=jobs), AsyncMock())
+    result = await service.get_job("c" * 32)
+    assert result == {
+        "job_id": "c" * 32, "search_status": "complete", "poll_after_ms": 1500,
+        "matches": [], "available": True,
+    }
+    assert jobs.find_one.await_args.args[1] == {"_id": 0, "image": 0, "baseline": 0}
 
 
 @pytest.mark.asyncio

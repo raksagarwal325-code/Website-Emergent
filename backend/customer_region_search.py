@@ -126,13 +126,14 @@ def select_region_matches(matches, scores, products, limit=12):
             for i in (leading + alternatives)[:limit]]
 
 
-def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, diagnostic=None):
+def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, diagnostic=None,
+                          seconds=None):
     diagnostic = diagnostic if diagnostic is not None else {}
     if not needs_region_check(matches):
         diagnostic['outcome'] = 'not_needed'
         return matches
     started = time.monotonic()
-    deadline = started + REGION_SECONDS
+    deadline = started + (REGION_SECONDS if seconds is None else seconds)
     worker = RegionEncoder(encoder, deadline, cancelled)
     try:
         result = collect_region_scores(worker, image, rows, mapping,

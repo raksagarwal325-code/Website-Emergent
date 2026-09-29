@@ -99,6 +99,10 @@ export const api = {
     form.append("file", file);
     return (await client.post("/search/image", form, { signal, timeout: 25000 })).data;
   },
+  getImageSearchJob: (jobId, signal) => client.get(
+    `/search/image/jobs/${encodeURIComponent(jobId)}`,
+    { signal, timeout: 10000 },
+  ).then(r => r.data),
   authMe: () => client.get("/auth/me").then(r => r.data),
   authSession: (session_id) => client.post("/auth/session", { session_id }).then(r => r.data),
   authLogout: () => client.post("/auth/logout").then(r => r.data),
