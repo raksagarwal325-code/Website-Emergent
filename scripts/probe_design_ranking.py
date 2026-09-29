@@ -59,33 +59,43 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
         scaled=ImageOps.contain(im,(256,256))
         xy=np.stack(np.meshgrid(np.arange(16)*14+23,np.arange(16)*14+23),axis=-1).reshape(-1,2)
         xy=(xy-np.array([(256-scaled.width)//2,(256-scaled.height)//2]))/np.array([scaled.width,scaled.height])
-        region_scores=[]
-        for box in boxes:
-            mask=foreground & (xy[:,0]>=box[0]) & (xy[:,0]<box[2]) & (xy[:,1]>=box[1]) & (xy[:,1]<box[3])
-            by_id={}
-            if mask.sum()>=4:
-                for i,row in enumerate(rows):
-                    a=similarity[mask,starts[i]:starts[i+1]]
-                    score=float((a.max(axis=0).mean()+a.max(axis=1).mean())/2)
-                    for prod in mapping[row['url']]:by_id[prod['id']]=max(by_id.get(prod['id'],-1),score)
-            region_scores.append(max(by_id.values(),default=-1))
-        selected=[]
-        for i in np.argsort(-np.asarray(region_scores),kind='stable'):
-            if all(region_iou(boxes[i],boxes[old])<.3 for old in selected):selected.append(int(i))
-            if len(selected)==3:break
-        coarse_elapsed=time.monotonic()-t
-        worker=RegionEncoder(encoder,time.monotonic()+60,threading.Event())
-        refined=[]
-        for i in selected:
-            box=boxes[i];bounds=tuple(round(v*(im.width if j%2==0 else im.height)) for j,v in enumerate(box))
-            crop=im.crop(bounds);q=worker.encode(crop)
-            for subbox in ((.15,0,.85,.6),(.15,.4,.85,1)):
-                sub=tuple(round(v*(crop.width if j%2==0 else crop.height)) for j,v in enumerate(subbox))
-                q.extend(worker.encode(crop.crop(sub)))
-            a=np.asarray(q,dtype=np.float32)@catalog.T
-            refined.append([float(a[:,inds].max()) for inds in by_product])
-        out=select_region_matches(current,np.asarray(refined),products)
-        result={'case':label,'selected':selected,'region_scores':region_scores,'coarse_seconds':coarse_elapsed,'total_seconds':time.monotonic()-t,
-                'matches':[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in out]}
-        report.append(result);print('PATCH_PROPOSALS',json.dumps(result),flush=True)
+
+        heat=similarity.max(axis=1)
+        serialize=lambda out:[{'sku':m['product']['sku'],'score':m['score'],'type':m['match_type']} for m in out]
+        for threshold in (.60,.65,.70,.75):
+            hot=(foreground & (heat>=threshold)).reshape(16,16)
+            seen=set();components=[]
+            for y in range(16):
+                for x in range(16):
+                    if not hot[y,x] or (y,x) in seen:continue
+                    todo=[(y,x)];seen.add((y,x));points=[]
+                    while todo:
+                        yy,xx=todo.pop();points.append((yy,xx))
+                        for dy in (-1,0,1):
+                            for dx in (-1,0,1):
+                                ny,nx=yy+dy,xx+dx
+                                if 0<=ny<16 and 0<=nx<16 and hot[ny,nx] and (ny,nx) not in seen:
+                                    seen.add((ny,nx));todo.append((ny,nx))
+                    if 3<=len(points)<=80:
+                        indices=[yy*16+xx for yy,xx in points]
+                        coords=xy[indices]
+                        low=coords.min(axis=0)-np.array([7/scaled.width,7/scaled.height])
+                        high=coords.max(axis=0)+np.array([7/scaled.width,7/scaled.height])
+                        margin=(high-low)*.15
+                        low=np.maximum(low-margin,0);high=np.minimum(high+margin,1)
+                        box=[float(low[0]),float(low[1]),float(high[0]),float(high[1])]
+                        if np.prod(high-low)<.5:
+                            components.append({'box':box,'strength':float(heat[indices].mean()),'n':len(points)})
+            components=sorted(components,key=lambda c:(-c['strength'],-c['n'],c['box']))[:3]
+            refined=[]
+            encoder_start=time.monotonic()
+            for c in components:
+                bounds=tuple(round(v*(im.width if j%2==0 else im.height)) for j,v in enumerate(c['box']))
+                q=np.asarray(encoder.encode(im.crop(bounds)),dtype=np.float32)
+                sim=q@catalog.T
+                refined.append([float(sim[:,inds].max()) for inds in by_product])
+            out=select_region_matches(current,np.asarray(refined),products) if refined else current
+            result={'case':label,'threshold':threshold,'components':components,'refine_seconds':time.monotonic()-encoder_start,
+                    'matches':serialize(out)}
+            report.append(result);print('OBJECT_PROPOSALS',json.dumps(result),flush=True)
     (output/'region-report.json').write_text(json.dumps({'cases':report}))
