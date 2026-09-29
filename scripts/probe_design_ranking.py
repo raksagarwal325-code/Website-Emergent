@@ -11,6 +11,31 @@ def probe(output, products, rows, mapping, image_cache, encoder, fixtures):
         f=output/'design-features'/(row['sha256']+'.json')
         row['design_vectors']=np.asarray(json.loads(f.read_text())['patches'],dtype='<f2').tobytes() if f.exists() else encode_details(encoder,decode_image((image_cache/hashlib.sha256(row['url'].encode()).hexdigest()).read_bytes()))
         row['design_version']=DESIGN_VERSION
+
+    import os, cProfile, pstats, io, threading
+    from customer_region_search import collect_region_scores, select_region_matches
+    im=decode_image((fixtures/'pendants-room.jpg').read_bytes())
+    hashes=image_hashes((fixtures/'pendants-room.jpg').read_bytes(),im)
+    # Existing primary search supplies the gate input.
+    ranked=rank_images(hashes,encoder.encode_query(im),rows,mapping)
+    print('PROFILE_GATE', [(m['product']['sku'],m['score']) for m in ranked[:3]],flush=True)
+    print('MODEL_INPUTS',[(i.name,i.shape) for i in encoder.session.get_inputs()],flush=True)
+    affinity=os.sched_getaffinity(0)
+    for label,cpus in [('runner',affinity),('one_cpu',{min(affinity)})]:
+        os.sched_setaffinity(0,cpus)
+        prof=cProfile.Profile()
+        start=time.monotonic()
+        prof.enable()
+        scores,ps=collect_region_scores(encoder,im,rows,mapping,time.monotonic()+120,threading.Event())
+        prof.disable()
+        elapsed=time.monotonic()-start
+        out=io.StringIO();pstats.Stats(prof,stream=out).sort_stats('cumulative').print_stats(22)
+        print('PROFILE',label,'seconds',elapsed, out.getvalue(),flush=True)
+        matched=select_region_matches(ranked,scores,ps)
+        print('PROFILE_RESULT',label,[m['product']['sku'] for m in matched[:3]],flush=True)
+    os.sched_setaffinity(0,affinity)
+    return
+
     augmented,amap,_=overlay_references(products,rows,mapping,encoder)
     cases=[]
     for sku,file in [('room','pendants-room.jpg'),('CH-029','ch-029-variant.jpg'),('CS-001','cs-001.jpg'),('CS-002','cs-002.jpg'),('WL-085','wl-085.jpg'),('WL-060','wl-060.jpg'),('HL-114','hl-114.jpg'),('Meher','meher.jpg')]:
