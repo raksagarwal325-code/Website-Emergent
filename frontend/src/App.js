@@ -9,6 +9,7 @@ import Footer from "@/components/layout/Footer";
 import Home from "@/pages/Home";
 import FloatingActions from "@/components/FloatingActions";
 import MobileReachStrip from "@/components/MobileReachStrip";
+import ImageSearchDiscoveryPrompt from "@/components/ImageSearchDiscoveryPrompt";
 import AnalyticsRouteTracker from "@/components/AnalyticsRouteTracker";
 import ScrollToTop from "@/components/ScrollToTop";
 
@@ -213,6 +214,7 @@ function App() {
             </React.Suspense>
           </main>
           <Footer />
+          <ImageSearchDiscoveryPrompt />
           <FloatingActions />
           <MobileReachStrip />
           <React.Suspense fallback={null}>

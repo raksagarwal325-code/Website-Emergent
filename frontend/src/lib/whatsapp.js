@@ -29,6 +29,8 @@ export const WA_MESSAGES = {
     `${BRAND_PREFIX} I would like to know more about this project/style and the lighting used in it.`,
   notFound:
     `${BRAND_PREFIX} I landed on a page that could not be found — can you help me find the piece I was looking at?`,
+  imageSearch:
+    `${BRAND_PREFIX} I could not find the light I am looking for through image search. I will share the reference photo here — please help me find the closest match or a custom alternative.`,
 };
 
 const digitsOnly = (n) => String(n || "").replace(/[^0-9]/g, "");
@@ -107,6 +109,7 @@ export const waCustomLightingLink = (number) => buildWaLink(number, WA_MESSAGES.
 export const waArchitectsLink = (number) => buildWaLink(number, WA_MESSAGES.architects);
 export const waGalleryLink = (number) => buildWaLink(number, WA_MESSAGES.gallery);
 export const waNotFoundLink = (number) => buildWaLink(number, WA_MESSAGES.notFound);
+export const waImageSearchLink = (number) => buildWaLink(number, WA_MESSAGES.imageSearch);
 export const waProductLink = (number, product, url) =>
   buildWaLink(number, productMessage(product, url));
 export const waActualProductLink = (number, product, url) =>

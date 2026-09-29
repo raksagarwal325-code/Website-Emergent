@@ -1,0 +1,105 @@
+import React, { useEffect, useState } from "react";
+import { Camera, Sparkles, X } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import CustomerImageSearch from "./CustomerImageSearch";
+
+const DISCOVERY_KEY = "sge-image-search-seen";
+
+function hasSeenImageSearch() {
+  try {
+    return window.sessionStorage.getItem(DISCOVERY_KEY) === "1";
+  } catch (_) {
+    return false;
+  }
+}
+
+function rememberImageSearch() {
+  try {
+    window.sessionStorage.setItem(DISCOVERY_KEY, "1");
+  } catch (_) {
+    // The prompt can still be dismissed when session storage is blocked.
+  }
+}
+
+export default function ImageSearchDiscoveryPrompt() {
+  const { pathname } = useLocation();
+  const [visible, setVisible] = useState(false);
+  const excluded = pathname.startsWith("/admin") || pathname.startsWith("/catalogue");
+
+  useEffect(() => {
+    setVisible(false);
+    if (excluded || hasSeenImageSearch()) return undefined;
+
+    let frame = null;
+    const checkPosition = () => {
+      frame = null;
+      const pageHeight = document.documentElement.scrollHeight;
+      const viewportHeight = window.innerHeight;
+      if (pageHeight - viewportHeight < 400) return;
+      const progress = (window.scrollY + viewportHeight) / pageHeight;
+      if (progress >= 0.82) setVisible(true);
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(checkPosition);
+    };
+    const hideAfterSearch = () => setVisible(false);
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    window.addEventListener("sge:image-search-opened", hideAfterSearch);
+    checkPosition();
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("sge:image-search-opened", hideAfterSearch);
+    };
+  }, [excluded, pathname]);
+
+  if (!visible || excluded) return null;
+
+  const dismiss = () => {
+    rememberImageSearch();
+    setVisible(false);
+  };
+
+  return (
+    <aside
+      role="dialog"
+      aria-label="Find a light from a photo"
+      data-testid="image-search-discovery-prompt"
+      className="fixed bottom-20 left-3 right-3 z-40 overflow-hidden border border-[#D4AF37]/35 bg-[#140910]/[0.98] p-5 text-white shadow-[0_24px_70px_rgba(0,0,0,0.62)] backdrop-blur-xl sm:bottom-6 sm:left-6 sm:right-auto sm:w-[410px] sm:p-6"
+    >
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_4%_0%,rgba(212,175,55,0.18),transparent_42%)]" />
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss photo search suggestion"
+        className="absolute right-3 top-3 z-10 p-2 text-white/45 transition-colors hover:text-white"
+      >
+        <X size={18} />
+      </button>
+
+      <div className="relative pr-7">
+        <div className="flex items-center gap-2 text-[9px] font-medium uppercase tracking-[0.28em] text-[#D4AF37]">
+          <Sparkles size={13} aria-hidden="true" />
+          A more personal way to search
+        </div>
+        <h2 className="mt-3 font-serif text-2xl leading-tight text-[#FFF8ED]">Didn’t find the light you had in mind?</h2>
+        <p className="mt-2 text-sm leading-relaxed text-white/62">
+          Share a photo or screenshot. We’ll look for the same design first, then show the closest pieces from our catalogue.
+        </p>
+
+        <div className="mt-5">
+          <CustomerImageSearch variant="landing" onOpen={dismiss} />
+        </div>
+
+        <div className="mt-3 flex items-center gap-2 text-[10px] leading-relaxed text-white/42">
+          <Camera size={13} aria-hidden="true" className="shrink-0 text-[#D4AF37]" />
+          Works with room photos, screenshots and saved references.
+        </div>
+      </div>
+    </aside>
+  );
+}

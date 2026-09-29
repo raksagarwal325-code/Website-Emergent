@@ -8,6 +8,10 @@ jest.mock("../../context/CatalogContext", () => ({
   useCatalog: () => ({ cart: [], favorites: [] }),
 }));
 
+jest.mock("../../context/SettingsContext", () => ({
+  useSettings: () => ({ settings: { whatsapp_number: "+91 98765 43210" } }),
+}));
+
 jest.mock("../../lib/api", () => ({
   api: {
     getSettings: jest.fn(),
@@ -35,7 +39,7 @@ test("opens one clear search menu with text and photo choices", () => {
 
   expect(screen.getByRole("dialog", { name: "Find a light" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Upload a photo to find exact or similar products" })).toHaveTextContent("Search with a photo");
-  expect(screen.getByText(/Exact matches are shown first/i)).toBeInTheDocument();
+  expect(screen.getByText(/same design first, followed by close alternatives/i)).toBeInTheDocument();
 });
 
 test("submits a header text search to the catalogue query", () => {

@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import CustomerImageSearch, { makeSearchPreview } from "./CustomerImageSearch";
 import { api } from "../lib/api";
 
-jest.mock("../lib/api", () => ({ api: { searchByImage: jest.fn(), getImageSearchJob: jest.fn(), resolveImage: (x) => x } }));
+jest.mock("../lib/api", () => ({ api: { searchByImage: jest.fn(), getImageSearchJob: jest.fn(), getSettings: jest.fn(), resolveImage: (x) => x } }));
 const product = { id: "one", name: "Glass Chandelier", sku: "SGE-CH-001", images: ["/one.png"] };
 const file = () => new File(["photo"], "light.png", { type: "image/png" });
 const upload = (f = file()) => fireEvent.change(screen.getByLabelText("Upload image for product search"), { target: { files: [f] } });
@@ -14,6 +14,7 @@ const open = () => {
 };
 beforeEach(() => {
   jest.clearAllMocks();
+  api.getSettings.mockResolvedValue({ whatsapp_number: "+91 98765 43210" });
   global.createImageBitmap = jest.fn(async () => ({ width: 640, height: 960, close: jest.fn() }));
   jest.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage: jest.fn() });
   jest.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,preview");
@@ -34,7 +35,7 @@ test("renders a full-width landing-page call to action without catalogue positio
   expect(button).toHaveClass("w-full");
   expect(button).not.toHaveClass("absolute");
   fireEvent.click(button);
-  expect(screen.getByRole("dialog", { name: "Find your light" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Let a photograph lead the way" })).toBeInTheDocument();
 });
 
 test("renders a labelled photo action for the unified search menu", () => {
@@ -45,7 +46,7 @@ test("renders a labelled photo action for the unified search menu", () => {
   expect(button).toHaveClass("w-full");
   fireEvent.click(button);
   expect(onOpen).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole("dialog", { name: "Find your light" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Let a photograph lead the way" })).toBeInTheDocument();
 });
 
 test("uploads a photo and separates matching products from similar designs with working links", async () => {
@@ -116,7 +117,8 @@ test("an older response cannot replace results for a newer upload", async () => 
   open(); upload();
   await waitFor(() => expect(api.searchByImage).toHaveBeenCalledTimes(1));
   upload();
-  expect(await screen.findByText(/No close match found/)).toBeInTheDocument();
+  expect(await screen.findByText(/Still searching for the right light/)).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: /Let our team find it/i })).toHaveAttribute("href", expect.stringContaining("wa.me/919876543210"));
   await act(async () => resolveOld({ matches: [{ product, match_type: "exact" }] }));
   expect(screen.queryByText("Matching products")).not.toBeInTheDocument();
 });
@@ -124,7 +126,7 @@ test("an older response cannot replace results for a newer upload", async () => 
 test("shows partial-index and server error states without a stuck spinner", async () => {
   api.searchByImage.mockResolvedValueOnce({ matches: [], available: false, index_complete: false });
   open(); upload();
-  expect(await screen.findByText(/Image search is getting ready/)).toBeInTheDocument();
+  expect(await screen.findByText(/visual catalogue is still preparing/i)).toBeInTheDocument();
   api.searchByImage.mockRejectedValueOnce({ response: { data: { detail: "Image search is busy. Please try again shortly." } } });
   upload();
   expect(await screen.findByRole("alert")).toHaveTextContent("Image search is busy");

@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { Camera, Upload, X, Loader2 } from "lucide-react";
+import { Camera, Upload, X, Loader2, MessageCircle } from "lucide-react";
 import { api } from "../lib/api";
+import { trackWhatsAppClick } from "../lib/analytics";
 import { productPath } from "../lib/productUrl";
+import { waImageSearchLink } from "../lib/whatsapp";
 
 // Decode and re-encode uploaded pixels. Never use uploaded bytes or a blob URL
 // directly as the DOM image source (including files with a spoofed MIME type).
@@ -48,11 +50,22 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen }) {
   const [busyMessage, setBusyMessage] = useState("Searching our catalogue…");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [whatsappNumber, setWhatsappNumber] = useState("");
   const trigger = useRef(null);
   const dialog = useRef(null);
   const input = useRef(null);
   const controller = useRef(null);
   const sequence = useRef(0);
+  const whatsappLink = waImageSearchLink(whatsappNumber);
+
+  useEffect(() => {
+    let active = true;
+    const request = typeof api.getSettings === "function" ? api.getSettings() : null;
+    request?.then((value) => {
+      if (active) setWhatsappNumber(value?.whatsapp_number || "");
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => () => controller.current?.abort(), []);
   useEffect(() => {
@@ -137,6 +150,12 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen }) {
       ref={trigger}
       type="button"
       onClick={() => {
+        try {
+          window.sessionStorage.setItem("sge-image-search-seen", "1");
+          window.dispatchEvent(new Event("sge:image-search-opened"));
+        } catch (_) {
+          // Search remains available when session storage is blocked.
+        }
         if (typeof onOpen === "function") onOpen();
         setOpen(true);
       }}
@@ -156,7 +175,7 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen }) {
       <div className="fixed inset-0 z-[100] bg-black/80 p-3 sm:p-8 flex items-start justify-center overflow-y-auto" onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
         <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="image-search-title" onKeyDown={keyDown} className="my-auto w-full max-w-4xl border border-[#D4AF37]/30 bg-[#101010] p-5 sm:p-8 text-white shadow-2xl">
           <div className="flex items-start justify-between gap-4">
-            <div><h2 id="image-search-title" className="font-serif text-2xl sm:text-3xl">Find your light</h2><p className="mt-2 text-sm text-white/65">Upload a product photo or screenshot to find a match or explore similar designs.</p></div>
+            <div><div className="text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">Visual search concierge</div><h2 id="image-search-title" className="mt-2 font-serif text-2xl sm:text-3xl">Let a photograph lead the way</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">Share a room photo, product image or screenshot. We’ll look for the same design first, then the closest alternatives from our catalogue.</p></div>
             <button type="button" onClick={close} aria-label="Close image search" className="p-2 text-white/70 hover:text-white"><X size={22} /></button>
           </div>
           <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); search(e.dataTransfer.files?.[0]); }} className="mt-6 flex flex-wrap items-center gap-4 border border-dashed border-white/25 p-5">
@@ -168,7 +187,19 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen }) {
           {error && <p role="alert" className="mt-5 text-sm text-red-300">{error}</p>}
           {result && <div aria-live="polite">
             {(!result.index_complete || !result.similarity_available) && <p className="mt-5 text-sm text-white/65">Image search is still preparing some catalogue photos. These results may be incomplete; please try again later.</p>}
-            {!result.matches?.length && <p className="mt-5 text-sm">{result.available ? "No close match found. Try a clearer photo cropped around the light, or search by name." : "Image search is getting ready. Please use the text search for now."}</p>}
+            {!result.matches?.length && <div className="mt-6 border border-[#D4AF37]/30 bg-[#D4AF37]/[0.06] p-5 sm:p-6">
+              <div className="text-[9px] font-medium uppercase tracking-[0.28em] text-[#D4AF37]">Personal search assistance</div>
+              <h3 className="mt-2 font-serif text-xl text-white">{result.available ? "Still searching for the right light?" : "Our visual catalogue is still preparing."}</h3>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">{result.available ? "Send the reference to us on WhatsApp. Our team will identify the closest piece or suggest a custom alternative from our Firozabad collection." : "You can still share the reference with our team and let us continue the search personally."}</p>
+              {whatsappLink && <a
+                href={whatsappLink}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => trackWhatsAppClick({ source: "image_search_no_match", page: window.location.pathname })}
+                className="mt-4 inline-flex min-h-11 items-center gap-2 border border-[#D4AF37] bg-[#D4AF37] px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-black transition-colors hover:bg-[#E3C85F]"
+              ><MessageCircle size={16} aria-hidden="true" />Let our team find it</a>}
+              <p className="mt-3 text-[10px] leading-relaxed text-white/42">WhatsApp will open with a prepared message. Attach the same reference photo before sending.</p>
+            </div>}
             {["exact", "closest", "related", "similar", "possible"].map((type) => {
               const items = (result.matches || []).filter((match) => match.match_type === type);
               if (!items.length) return null;

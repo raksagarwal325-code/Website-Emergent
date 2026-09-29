@@ -270,8 +270,9 @@ export default function Header() {
               >
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_92%_8%,rgba(212,175,55,0.14),transparent_38%)]" />
                 <div className="relative">
-                  <div className="eyebrow text-[#D4AF37]">Find a light</div>
-                  <p className="mt-2 text-sm leading-relaxed text-white/60">Search the catalogue in whichever way is easiest.</p>
+                  <div className="text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">Lighting concierge</div>
+                  <h2 className="mt-2 font-serif text-xl text-[#FFF8ED]">Find the piece you have in mind</h2>
+                  <p className="mt-2 text-sm leading-relaxed text-white/60">Search by name, SKU or product type—or let a photograph lead the way.</p>
 
                   <form onSubmit={submitHeaderSearch} className="mt-4">
                     <label htmlFor="header-product-search-input" className="sr-only">Search by product name, SKU or type</label>
@@ -297,7 +298,7 @@ export default function Header() {
                   </div>
 
                   <CustomerImageSearch variant="menu" onOpen={() => setSearchOpen(false)} />
-                  <p className="mt-2 text-[10px] leading-relaxed text-white/42">Upload a room photo, product photo or screenshot. Exact matches are shown first.</p>
+                  <p className="mt-2 text-[10px] leading-relaxed text-white/42">Room photo, screenshot or saved reference—we’ll show the same design first, followed by close alternatives.</p>
                 </div>
               </div>
             )}
