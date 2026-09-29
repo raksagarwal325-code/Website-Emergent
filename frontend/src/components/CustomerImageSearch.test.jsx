@@ -37,6 +37,15 @@ test("renders a full-width landing-page call to action without catalogue positio
   expect(screen.getByRole("dialog", { name: "Find your light" })).toBeInTheDocument();
 });
 
+test("renders a permanent icon-only header trigger and opens image search", () => {
+  render(<MemoryRouter><CustomerImageSearch variant="header" /></MemoryRouter>);
+  const button = screen.getByRole("button", { name: "Search products using a photo" });
+  expect(button).toHaveClass("h-10", "w-10");
+  expect(button).not.toHaveTextContent("Upload");
+  fireEvent.click(button);
+  expect(screen.getByRole("dialog", { name: "Find your light" })).toBeInTheDocument();
+});
+
 test("uploads a photo and separates matching products from similar designs with working links", async () => {
   api.searchByImage.mockResolvedValue({ index_complete: true, similarity_available: true, available: true, matches: [{ product, match_type: "exact" }, { product: { ...product, id: "two", name: "Related Light", sku: "SGE-CH-002" }, match_type: "similar" }] });
   open(); upload();
