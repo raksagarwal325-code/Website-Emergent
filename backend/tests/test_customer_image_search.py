@@ -259,8 +259,8 @@ async def test_background_worker_uses_long_budget_and_stores_final_public_result
     service.rows = AsyncMock(return_value=[{"url": "/a", "vectors": scored_vector(.77), "pixels": "p"}])
     service.encoder = SimpleNamespace(session=True)
     seen = {}
-    def rescue(encoder, image, rows, urls, matches, cancelled, diagnostic, seconds):
-        seen["seconds"] = seconds
+    def rescue(encoder, image, rows, urls, matches, cancelled, diagnostic, **options):
+        seen.update(options)
         diagnostic.update(outcome="matched", elapsed_seconds=22.0)
         return [{"product": product, "score": .91, "match_type": "closest"}]
     monkeypatch.setattr(module, "rescue_region_matches", rescue)
@@ -269,10 +269,31 @@ async def test_background_worker_uses_long_budget_and_stores_final_public_result
         "baseline": [{"product": product, "score": .77, "match_type": "similar"}],
     })
     assert seen["seconds"] == module.BACKGROUND_REGION_SECONDS
+    assert seen["force"] is True
+    assert len(seen["regions"]) > 18
     update = jobs.update_one.await_args.args[1]
     assert update["$set"]["status"] == "complete"
     assert update["$set"]["result"]["matches"] == [{"product": product, "match_type": "closest"}]
     assert update["$unset"]["image"] == ""
+
+
+@pytest.mark.asyncio
+async def test_no_whole_photo_match_still_queues_background_regions(monkeypatch):
+    from unittest.mock import Mock
+    import customer_image_search as module
+    service = CustomerImageSearch(None, AsyncMock())
+    product = {"id": "a", "images": ["/a"]}
+    service.catalogue = AsyncMock(return_value=[product])
+    service.manifest = AsyncMock(return_value={"/a": "a"})
+    service.rows = AsyncMock(return_value=[{"url": "/a", "vectors": scored_vector(.4)}])
+    service.encoder = SimpleNamespace(session=True, encode_query=Mock(return_value=vector()))
+    service.enqueue_region_search = AsyncMock(return_value="d" * 32)
+    monkeypatch.setattr(module, "encode_details", Mock(side_effect=AssertionError("must queue first")))
+    result = await service.search(photo())
+    assert result["search_status"] == "processing"
+    assert result["job_id"] == "d" * 32
+    assert result["matches"] == []
+    service.enqueue_region_search.assert_awaited_once()
 
 
 @pytest.mark.asyncio
