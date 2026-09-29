@@ -3,6 +3,7 @@ import asyncio
 import contextlib
 import hashlib
 import logging
+import os
 import time
 import uuid
 
@@ -10,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from customer_visual_features import INDEX_VERSION, MAX_BYTES, VisualEncoder, decode_image, image_hashes, rank_images
 from media_library import canonical_media_url
+from customer_image_references import ReferenceBundle
 
 logger = logging.getLogger(__name__)
 PUBLIC_FIELDS = {"_id": 0, "id": 1, "name": 1, "sku": 1, "category": 1, "images": 1, "slug": 1}
@@ -36,6 +38,7 @@ class CustomerImageSearch:
         self.task = None
         self.busy = asyncio.Semaphore(2)
         self.owner = uuid.uuid4().hex
+        self.references = ReferenceBundle(os.environ.get("CUSTOMER_IMAGE_REFERENCE_MANIFEST"))
 
     async def catalogue(self):
         return await self.db.products.find({"status": "published", "images.0": {"$exists": True}}, PUBLIC_FIELDS).to_list(None)
@@ -60,6 +63,10 @@ class CustomerImageSearch:
             await asyncio.to_thread(self.encoder.load)
         except Exception:
             logger.exception("Visual model unavailable; building exact-image index only")
+        try:
+            await asyncio.to_thread(self.references.refresh, self.encoder)
+        except Exception:
+            logger.exception("Optional customer reference bundle unavailable; using catalogue only")
         for url, key in manifest.items():
             row = existing.get(url, {})
             if row.get("vectors") or row.get("retry_after", 0) > time.time() or (row.get("pixels") and self.encoder.session is None):
@@ -100,6 +107,7 @@ class CustomerImageSearch:
                 elif self.encoder.session is None:
                     # Each web worker needs an encoder; only the lease holder indexes.
                     await asyncio.to_thread(self.encoder.load)
+                    await asyncio.to_thread(self.references.refresh, self.encoder)
             except Exception:
                 logger.exception("Customer visual index temporarily unavailable")
             await asyncio.sleep(300)
@@ -141,7 +149,8 @@ class CustomerImageSearch:
             rows = await self.rows(manifest)
             indexed = sum(bool(r.get("vectors")) for r in rows)
             vectors = await asyncio.to_thread(self.encoder.encode_query, image) if self.encoder.session is not None else None
-            matches = await asyncio.to_thread(rank_images, hashes, vectors, rows, urls)
+            candidate_rows, candidate_urls = self.references.augment(rows, urls)
+            matches = await asyncio.to_thread(rank_images, hashes, vectors, candidate_rows, candidate_urls)
             return {
                 "matches": [{"product": m["product"], "match_type": m["match_type"]} for m in matches],
                 "index_complete": indexed == len(urls) and bool(urls),
