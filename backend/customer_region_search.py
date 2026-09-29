@@ -9,8 +9,10 @@ from customer_region_encoder import RegionEncoder, RegionDeadline
 # Generic overlapping windows; independent of product identity and image content.
 REGIONS = tuple((x, y, x + .25, y + .5)
                 for y in (0, .25, .5) for x in (0, .15, .3, .45, .6, .75))
+TALL_REGIONS = tuple((x, 0, x + .33, 1) for x in (0, .13, .27, .4, .53, .67))
+BACKGROUND_REGIONS = REGIONS + TALL_REGIONS
 REGION_SECONDS = 8.0
-REGION_VERSION = 'efficient-regions-v2'
+REGION_VERSION = 'efficient-regions-v3'
 
 
 def needs_region_check(matches):
@@ -19,7 +21,13 @@ def needs_region_check(matches):
                 and not any(m['match_type'] == 'exact' for m in matches))
 
 
-def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled, diagnostic=None):
+def needs_background_region_check(matches):
+    """Background work may inspect photos whose whole-image rank found nothing."""
+    return not matches or needs_region_check(matches)
+
+
+def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
+                          diagnostic=None, regions=REGIONS):
     """Return complete region scores only; never download or write index data."""
     diagnostic = diagnostic if diagnostic is not None else {}
     diagnostic.update(coarse_regions=0, refined_regions=0)
@@ -47,7 +55,7 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled, di
     catalogue = np.asarray(embeddings, dtype=np.float32).T
     scores = []
     coarse_vectors = []
-    for box in REGIONS:
+    for box in regions:
         if cancelled.is_set() or time.monotonic() >= deadline:
             return stop('cancelled' if cancelled.is_set() else 'budget_exceeded')
         bounds = tuple(round(v * (image.width if i % 2 == 0 else image.height))
@@ -68,7 +76,7 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled, di
     for index in np.argsort(-coarse.max(axis=1), kind='stable'):
         if coarse[index].max() < .70:
             break
-        if all(region_iou(REGIONS[index], REGIONS[old]) < .3 for old in selected):
+        if all(region_iou(regions[index], regions[old]) < .3 for old in selected):
             selected.append(int(index))
         if len(selected) == 3:
             break
@@ -79,7 +87,7 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled, di
         if cancelled.is_set() or time.monotonic() >= deadline:
             return stop('cancelled' if cancelled.is_set() else 'budget_exceeded')
         bounds = tuple(round(v * (image.width if i % 2 == 0 else image.height))
-                       for i, v in enumerate(REGIONS[index]))
+                       for i, v in enumerate(regions[index]))
         query = np.asarray(encoder.encode_query(image.crop(bounds), initial=coarse_vectors[index]), dtype=np.float32)
         if query.shape != (6, EMBEDDING_DIM) or not np.isfinite(query).all():
             return stop('invalid_query_vectors')
@@ -96,9 +104,9 @@ def region_iou(a, b):
     return intersection / ((a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - intersection)
 
 
-def select_region_matches(matches, scores, products, limit=12):
+def select_region_matches(matches, scores, products, limit=12, force=False):
     """Require a clear improvement and corroboration for separate region winners."""
-    if not needs_region_check(matches):
+    if not force and not needs_region_check(matches):
         return matches
     scores = np.asarray(scores, dtype=np.float32)
     if (scores.ndim != 2 or not 1 <= scores.shape[0] <= 3
@@ -108,8 +116,9 @@ def select_region_matches(matches, scores, products, limit=12):
     best = scores.max(axis=0)
     order = sorted(range(len(products)), key=lambda i: (-float(best[i]), products[i]['id']))
     anchor = order[0]
-    if (best[anchor] < max(.80, matches[0]['score'] + .03)
-            or products[anchor]['id'] == matches[0]['product']['id']):
+    baseline_score = matches[0]['score'] if matches else 0
+    if (best[anchor] < max(.80, baseline_score + .03)
+            or (matches and products[anchor]['id'] == matches[0]['product']['id'])):
         return matches
     primary = int(scores[:, anchor].argmax())
     # Keep near-identical catalogue variants alongside the strongest design.
@@ -127,9 +136,9 @@ def select_region_matches(matches, scores, products, limit=12):
 
 
 def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, diagnostic=None,
-                          seconds=None):
+                          seconds=None, regions=REGIONS, force=False):
     diagnostic = diagnostic if diagnostic is not None else {}
-    if not needs_region_check(matches):
+    if not force and not needs_region_check(matches):
         diagnostic['outcome'] = 'not_needed'
         return matches
     started = time.monotonic()
@@ -137,11 +146,11 @@ def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, dia
     worker = RegionEncoder(encoder, deadline, cancelled)
     try:
         result = collect_region_scores(worker, image, rows, mapping,
-                                       deadline, cancelled, diagnostic)
+                                       deadline, cancelled, diagnostic, regions)
         if result is None:
             return matches
         scores, products = result
-        selected = select_region_matches(matches, scores, products)
+        selected = select_region_matches(matches, scores, products, force=force)
         diagnostic['outcome'] = 'matched' if selected is not matches else 'no_improvement'
         return selected
     except RegionDeadline:

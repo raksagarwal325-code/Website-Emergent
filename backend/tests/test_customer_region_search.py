@@ -10,7 +10,9 @@ import numpy as np
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from customer_region_search import REGIONS, collect_region_scores, needs_region_check, select_region_matches, rescue_region_matches
+from customer_region_search import (BACKGROUND_REGIONS, REGIONS, collect_region_scores,
+                                    needs_background_region_check, needs_region_check,
+                                    select_region_matches, rescue_region_matches)
 
 
 def match(score=.76, kind='similar', identity='a'):
@@ -30,6 +32,12 @@ class RegionSearchTests(unittest.TestCase):
             self.assertFalse(needs_region_check(matches))
         self.assertTrue(needs_region_check([match()]))
         self.assertTrue(needs_region_check([match(.65, 'possible')]))
+        self.assertTrue(needs_background_region_check([]))
+        self.assertFalse(needs_background_region_check([match(.9)]))
+
+    def test_background_regions_add_full_height_views_for_small_room_objects(self):
+        self.assertGreater(len(BACKGROUND_REGIONS), len(REGIONS))
+        self.assertTrue(any(box[1] == 0 and box[3] == 1 for box in BACKGROUND_REGIONS))
 
     def test_region_scan_is_bounded_and_deduplicates_shared_products(self):
         encoder = SimpleNamespace(encode=Mock(return_value=vectors()[:1]), encode_query=Mock(return_value=vectors()*3))
@@ -87,6 +95,12 @@ class RegionSearchTests(unittest.TestCase):
         self.assertEqual(len(result), 12)
         self.assertEqual(sum(m['match_type']=='closest' for m in result), 6)
         self.assertEqual(len({m['product']['id'] for m in result}), 12)
+
+    def test_background_scan_can_recover_when_whole_photo_has_no_candidates(self):
+        products = [{'id': 'catalogue'}, {'id': 'other'}]
+        result = select_region_matches([], [[.86, .72]], products, force=True)
+        self.assertEqual(result[0]['product']['id'], 'catalogue')
+        self.assertEqual(result[0]['match_type'], 'closest')
 
     def test_exact_results_do_not_even_start_a_scan(self):
         encoder = SimpleNamespace(encode=Mock(side_effect=AssertionError('must bypass')))

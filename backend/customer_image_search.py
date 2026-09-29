@@ -17,7 +17,9 @@ from media_library import canonical_media_url
 from customer_image_references import ReferenceBundle
 from customer_design_ranking import DESIGN_VERSION, encode_details, needs_detail_check, promote_detail_match, load_relations, add_related_designs
 
-from customer_region_search import REGION_VERSION, needs_region_check, rescue_region_matches
+from customer_region_search import (BACKGROUND_REGIONS, REGION_VERSION,
+                                    needs_background_region_check,
+                                    needs_region_check, rescue_region_matches)
 
 logger = logging.getLogger(__name__)
 PUBLIC_FIELDS = {"_id": 0, "id": 1, "name": 1, "sku": 1, "category": 1, "images": 1, "slug": 1}
@@ -250,7 +252,8 @@ class CustomerImageSearch:
             matches = job.get("baseline") or []
             matches = await asyncio.to_thread(
                 rescue_region_matches, self.encoder, image, rows, urls, matches,
-                cancelled, diagnostic, BACKGROUND_REGION_SECONDS,
+                cancelled, diagnostic, seconds=BACKGROUND_REGION_SECONDS,
+                regions=BACKGROUND_REGIONS, force=True,
             )
             products = {p["id"]: p for values in urls.values() for p in values}
             matches = add_related_designs(matches, list(products.values()), self.design_relations)
@@ -309,7 +312,7 @@ class CustomerImageSearch:
             # Room photos that need the regional pass must leave the request path
             # before patch/detail inference. That work was the remaining source of
             # browser timeouts even after the regional scan itself became a job.
-            if background_ready and needs_region_check(matches):
+            if background_ready and needs_background_region_check(matches):
                 job_id = await self.enqueue_region_search(data, matches)
             elif needs_detail_check(matches) and self.encoder.session is not None:
                 try:
@@ -319,16 +322,16 @@ class CustomerImageSearch:
                     matches = await asyncio.to_thread(promote_detail_match, candidates, details, detail_rows, urls)
                 except Exception:
                     logger.exception("Detail comparison unavailable; retaining original image results")
-            if not job_id and background_ready and needs_region_check(matches):
+            if not job_id and background_ready and needs_background_region_check(matches):
                 job_id = await self.enqueue_region_search(data, matches)
             if job_id:
                 self.last_region_search = {
                     "started_at": time.time(), "outcome": "queued", "mode": "background",
-                    "leading_score": round(matches[0]['score'], 4),
+                    "leading_score": round(matches[0]['score'], 4) if matches else None,
                 }
             else:
                 outcome = 'not_needed'
-                if needs_region_check(matches):
+                if needs_background_region_check(matches):
                     outcome = 'index_incomplete' if indexed != len(urls) else 'model_unavailable'
                 self.last_region_search = {"started_at": time.time(), "outcome": outcome, "elapsed_seconds": 0,
                                            "leading_score": round(matches[0]['score'], 4) if matches else None}
