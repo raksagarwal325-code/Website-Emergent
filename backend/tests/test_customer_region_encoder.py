@@ -105,3 +105,49 @@ class RegionEncoderTests(unittest.TestCase):
         self.assertIs(result, old)
         self.assertEqual(diagnostic['outcome'], 'budget_exceeded')
         encoder.session.run.assert_not_called()
+
+    def test_stage_timings_separate_wait_from_model_even_on_deadline(self):
+        from unittest.mock import patch
+        import customer_region_encoder as module
+        for lock_wait, model_time in ((2.0, 0.25), (0.0, 4.0)):
+            clock = [0.0]
+            encoder = VisualEncoder()
+            def acquire(**kwargs):
+                clock[0] += lock_wait
+                return True
+            encoder.lock = Mock(acquire=Mock(side_effect=acquire))
+            def run(*args):
+                clock[0] += model_time
+                return [np.ones((1, 1, 384), dtype=np.float32)]
+            encoder.session = SimpleNamespace(run=Mock(side_effect=run))
+            worker = RegionEncoder(encoder, 3.0, threading.Event())
+            with patch.object(module.time, 'monotonic', side_effect=lambda: clock[0]):
+                if model_time > 3:
+                    with self.assertRaises(RegionDeadline):
+                        worker.encode(Image.new('RGB', (100, 100)))
+                else:
+                    worker.encode(Image.new('RGB', (100, 100)))
+            self.assertEqual(worker.timings['lock_wait_seconds'], lock_wait)
+            self.assertEqual(worker.timings['inference_seconds'], model_time)
+            self.assertEqual(worker.timings['inference_calls'], 1)
+            encoder.lock.release.assert_called_once()
+
+    def test_lock_timeout_is_measured_without_inference_or_unlock(self):
+        from unittest.mock import patch
+        import customer_region_encoder as module
+        clock = [0.0]
+        encoder = VisualEncoder(); encoder.session = SimpleNamespace(run=Mock())
+        def acquire(**kwargs):
+            clock[0] += kwargs['timeout']
+            return False
+        encoder.lock = Mock(acquire=Mock(side_effect=acquire))
+        worker = RegionEncoder(encoder, 3.0, threading.Event())
+        with patch.object(module.time, 'monotonic', side_effect=lambda: clock[0]):
+            with self.assertRaises(RegionDeadline):
+                worker.encode(Image.new('RGB', (100, 100)))
+        self.assertEqual(worker.timings['lock_wait_seconds'], 3.0)
+        self.assertEqual(worker.timings['lock_timeouts'], 1)
+        self.assertEqual(worker.timings['inference_calls'], 0)
+        self.assertEqual(worker.timings['inference_seconds'], 0.0)
+        encoder.session.run.assert_not_called()
+        encoder.lock.release.assert_not_called()
