@@ -115,10 +115,10 @@ export default function CustomerImageSearch() {
           {result && <div aria-live="polite">
             {(!result.index_complete || !result.similarity_available) && <p className="mt-5 text-sm text-white/65">Image search is still preparing some catalogue photos. These results may be incomplete; please try again later.</p>}
             {!result.matches?.length && <p className="mt-5 text-sm">{result.available ? "No close match found. Try a clearer photo cropped around the light, or search by name." : "Image search is getting ready. Please use the text search for now."}</p>}
-            {["exact", "similar", "possible"].map((type) => {
+            {["exact", "closest", "related", "similar", "possible"].map((type) => {
               const items = (result.matches || []).filter((match) => match.match_type === type);
               if (!items.length) return null;
-              return <div key={type} className="mt-7"><h3 className="font-serif text-xl">{type === "exact" ? "Matching products" : type === "similar" ? "Similar designs" : "Possible matches"}</h3>{type === "similar" && <p className="mt-1 text-xs text-white/55">Visual suggestions; details and proportions may differ.</p>}{type === "possible" && <p className="mt-1 text-sm text-white/65">We couldn’t confidently match this photo. These are tentative suggestions; compare the details or try a closer photo of one light.</p>}<div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
+              return <div key={type} className="mt-7"><h3 className="font-serif text-xl">{type === "exact" ? "Matching products" : type === "closest" ? "Closest design" : type === "related" ? "Related designs" : type === "similar" ? "Similar designs" : "Possible matches"}</h3>{type === "closest" && <p className="mt-1 text-xs text-white/55">Closest visual design; confirm size, number of lights and finish.</p>}{type === "related" && <p className="mt-1 text-xs text-white/55">Selected alternatives to the leading design; size, light count, glass and finish may differ.</p>}{type === "similar" && <p className="mt-1 text-xs text-white/55">Visual suggestions; details and proportions may differ.</p>}{type === "possible" && <p className="mt-1 text-sm text-white/65">We couldn’t confidently match this photo. These are tentative suggestions; compare the details or try a closer photo of one light.</p>}<div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
                 {items.map(({ product }) => <Link key={product.id} to={productPath(product)} onClick={close} className="group border border-white/10 p-3 hover:border-[#D4AF37]/60"><img src={api.resolveImage(product.images?.[0])} alt={product.name} loading="lazy" className="h-36 sm:h-48 w-full object-contain" /><p className="mt-3 font-serif text-sm sm:text-base group-hover:text-[#D4AF37]">{product.name}</p><p className="mt-1 text-xs text-white/50">{product.sku}</p><p className="mt-3 text-xs text-[#D4AF37]">View product →</p></Link>)}
               </div></div>;
             })}
@@ -128,3 +128,4 @@ export default function CustomerImageSearch() {
     )}
   </>;
 }
+
