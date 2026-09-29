@@ -7,6 +7,7 @@ import SEO from "../components/SEO";
 import { api } from "../lib/api";
 import WelcomeIntro from "../components/WelcomeIntro";
 import HeroSlideshow from "../components/HeroSlideshow";
+import CustomerImageSearch from "../components/CustomerImageSearch";
 import CategoryShowcase from "../components/CategoryShowcase";
 import { useSettings } from "../context/SettingsContext";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
@@ -140,6 +141,25 @@ export default function Home() {
         </div>
 
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#16070f] pointer-events-none" />
+      </section>
+
+      <section aria-labelledby="home-image-search-title" data-testid="home-image-search-feature" className="relative overflow-hidden border-b border-white/10 bg-[#10070d]">
+        <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(circle_at_85%_20%,rgba(212,175,55,0.12),transparent_42%)]" />
+        <div className="relative mx-auto grid max-w-7xl gap-8 px-6 py-11 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:py-14">
+          <div className="max-w-2xl">
+            <div className="eyebrow text-[#D4AF37]">Search by image</div>
+            <h2 id="home-image-search-title" className="mt-3 font-serif text-3xl leading-tight text-white sm:text-4xl">
+              Seen a light you love? <span className="italic brand-gradient-text">Find it from a photo.</span>
+            </h2>
+            <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/65 sm:text-base">
+              Upload a product photo, room photo or screenshot. We’ll look for the exact catalogue match first, then show the closest and similar designs.
+            </p>
+          </div>
+          <div className="w-full md:w-auto md:min-w-[230px]">
+            <CustomerImageSearch variant="landing" />
+            <p className="mt-3 text-center text-[11px] leading-relaxed text-white/45">JPG, PNG or WebP · Up to 10 MB · Deleted automatically after matching</p>
+          </div>
+        </div>
       </section>
 
       <div className="relative z-10"><CategoryShowcase /></div>
