@@ -52,10 +52,12 @@ test("renders a labelled photo action for the unified search menu", () => {
 test("uploads a photo and separates matching products from similar designs with working links", async () => {
   api.searchByImage.mockResolvedValue({ index_complete: true, similarity_available: true, available: true, matches: [{ product, match_type: "exact" }, { product: { ...product, id: "two", name: "Related Light", sku: "SGE-CH-002" }, match_type: "similar" }] });
   open(); upload();
-  expect(await screen.findByText("Matching products")).toBeInTheDocument();
-  expect(screen.getByText("Similar designs")).toBeInTheDocument();
+  expect(await screen.findByText("Your catalogue match")).toBeInTheDocument();
+  expect(screen.getByText("Further pieces to consider")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Glass Chandelier/ })).toHaveAttribute("href", "/product/glass-chandelier-sge-ch-001");
   expect(api.searchByImage).toHaveBeenCalledWith(expect.any(File), expect.any(AbortSignal));
+  expect(screen.getByText(/Not quite the piece you had in mind/i)).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: /Ask our lighting team/i })).toBeInTheDocument();
 });
 
 test("polls a difficult search in the background and renders only its completed results", async () => {
@@ -117,10 +119,10 @@ test("an older response cannot replace results for a newer upload", async () => 
   open(); upload();
   await waitFor(() => expect(api.searchByImage).toHaveBeenCalledTimes(1));
   upload();
-  expect(await screen.findByText(/Still searching for the right light/)).toBeInTheDocument();
-  expect(await screen.findByRole("link", { name: /Let our team find it/i })).toHaveAttribute("href", expect.stringContaining("wa.me/919876543210"));
+  expect(await screen.findByText(/Let us continue the search for you/i)).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: /Ask our lighting team/i })).toHaveAttribute("href", expect.stringContaining("wa.me/919876543210"));
   await act(async () => resolveOld({ matches: [{ product, match_type: "exact" }] }));
-  expect(screen.queryByText("Matching products")).not.toBeInTheDocument();
+  expect(screen.queryByText("Your catalogue match")).not.toBeInTheDocument();
 });
 
 test("shows partial-index and server error states without a stuck spinner", async () => {
@@ -154,11 +156,11 @@ test("renders tentative candidates separately without claiming an exact match", 
   api.searchByImage.mockResolvedValue({ index_complete: true, similarity_available: true, available: true,
     matches: [{ product, match_type: "possible" }] });
   open(); upload();
-  expect(await screen.findByText("Possible matches")).toBeInTheDocument();
-  expect(screen.getByText(/tentative suggestions/)).toBeInTheDocument();
+  expect(await screen.findByText("Possibilities worth exploring")).toBeInTheDocument();
+  expect(screen.getByText(/starting points/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Glass Chandelier/ })).toBeInTheDocument();
-  expect(screen.queryByText("Matching products")).not.toBeInTheDocument();
-  expect(screen.queryByText("Similar designs")).not.toBeInTheDocument();
+  expect(screen.queryByText("Your catalogue match")).not.toBeInTheDocument();
+  expect(screen.queryByText("Further pieces to consider")).not.toBeInTheDocument();
 });
 
 test("keeps exact and closest designs ahead of reviewed alternatives", async () => {
@@ -167,9 +169,10 @@ test("keeps exact and closest designs ahead of reviewed alternatives", async () 
       product: { ...product, id: String(i), sku: "SGE-CH-00" + i, name: type + " light" }, match_type: type
     })) });
   open(); upload();
-  await screen.findByText("Closest design");
+  await screen.findByText("The closest expression we found");
   expect(screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent)).toEqual([
-    "Matching products", "Closest design", "Related designs", "Similar designs"
+    "Your catalogue match", "The closest expression we found", "In the same design language", "Further pieces to consider",
+    "Not quite the piece you had in mind?"
   ]);
-  expect(screen.getByText(/confirm size, number of lights and finish/i)).toBeInTheDocument();
+  expect(screen.getByText(/confirm scale, light count and finish/i)).toBeInTheDocument();
 });

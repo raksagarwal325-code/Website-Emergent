@@ -187,26 +187,30 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen }) {
           {error && <p role="alert" className="mt-5 text-sm text-red-300">{error}</p>}
           {result && <div aria-live="polite">
             {(!result.index_complete || !result.similarity_available) && <p className="mt-5 text-sm text-white/65">Image search is still preparing some catalogue photos. These results may be incomplete; please try again later.</p>}
-            {!result.matches?.length && <div className="mt-6 border border-[#D4AF37]/30 bg-[#D4AF37]/[0.06] p-5 sm:p-6">
-              <div className="text-[9px] font-medium uppercase tracking-[0.28em] text-[#D4AF37]">Personal search assistance</div>
-              <h3 className="mt-2 font-serif text-xl text-white">{result.available ? "Still searching for the right light?" : "Our visual catalogue is still preparing."}</h3>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">{result.available ? "Send the reference to us on WhatsApp. Our team will identify the closest piece or suggest a custom alternative from our Firozabad collection." : "You can still share the reference with our team and let us continue the search personally."}</p>
-              {whatsappLink && <a
-                href={whatsappLink}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => trackWhatsAppClick({ source: "image_search_no_match", page: window.location.pathname })}
-                className="mt-4 inline-flex min-h-11 items-center gap-2 border border-[#D4AF37] bg-[#D4AF37] px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-black transition-colors hover:bg-[#E3C85F]"
-              ><MessageCircle size={16} aria-hidden="true" />Let our team find it</a>}
-              <p className="mt-3 text-[10px] leading-relaxed text-white/42">WhatsApp will open with a prepared message. Attach the same reference photo before sending.</p>
-            </div>}
+            {!result.matches?.length && <p className="mt-6 text-sm leading-relaxed text-white/65">{result.available ? "We couldn’t identify a dependable catalogue match from this photograph." : "Our visual catalogue is still preparing, so these results may be incomplete."}</p>}
             {["exact", "closest", "related", "similar", "possible"].map((type) => {
               const items = (result.matches || []).filter((match) => match.match_type === type);
               if (!items.length) return null;
-              return <div key={type} className="mt-7"><h3 className="font-serif text-xl">{type === "exact" ? "Matching products" : type === "closest" ? "Closest design" : type === "related" ? "Related designs" : type === "similar" ? "Similar designs" : "Possible matches"}</h3>{type === "closest" && <p className="mt-1 text-xs text-white/55">Closest visual design; confirm size, number of lights and finish.</p>}{type === "related" && <p className="mt-1 text-xs text-white/55">Selected alternatives to the leading design; size, light count, glass and finish may differ.</p>}{type === "similar" && <p className="mt-1 text-xs text-white/55">Visual suggestions; details and proportions may differ.</p>}{type === "possible" && <p className="mt-1 text-sm text-white/65">We couldn’t confidently match this photo. These are tentative suggestions; compare the details or try a closer photo of one light.</p>}<div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
+              return <div key={type} className="mt-7"><h3 className="font-serif text-xl">{type === "exact" ? "Your catalogue match" : type === "closest" ? "The closest expression we found" : type === "related" ? "In the same design language" : type === "similar" ? "Further pieces to consider" : "Possibilities worth exploring"}</h3>{type === "closest" && <p className="mt-1 text-xs leading-relaxed text-white/55">The strongest visual relationship in form and detailing. Please confirm scale, light count and finish.</p>}{type === "related" && <p className="mt-1 text-xs leading-relaxed text-white/55">Curated around the leading design; proportions, glass, light count or finish may vary.</p>}{type === "similar" && <p className="mt-1 text-xs leading-relaxed text-white/55">Selected for a related silhouette or decorative character; individual details may differ.</p>}{type === "possible" && <p className="mt-1 text-sm leading-relaxed text-white/65">The photograph did not allow a confident match. Consider these as starting points, or let our team continue the search.</p>}<div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
                 {items.map(({ product }) => <Link key={product.id} to={productPath(product)} onClick={close} className="group border border-white/10 p-3 hover:border-[#D4AF37]/60"><img src={api.resolveImage(product.images?.[0])} alt={product.name} loading="lazy" className="h-36 sm:h-48 w-full object-contain" /><p className="mt-3 font-serif text-sm sm:text-base group-hover:text-[#D4AF37]">{product.name}</p><p className="mt-1 text-xs text-white/50">{product.sku}</p><p className="mt-3 text-xs text-[#D4AF37]">View product →</p></Link>)}
               </div></div>;
             })}
+            <div className="relative mt-8 overflow-hidden border border-[#D4AF37]/35 bg-[#D4AF37]/[0.055] p-5 sm:p-6">
+              <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_92%_10%,rgba(212,175,55,0.13),transparent_38%)]" />
+              <div className="relative">
+                <div className="text-[9px] font-medium uppercase tracking-[0.28em] text-[#D4AF37]">Your search, personally continued</div>
+                <h3 className="mt-2 font-serif text-xl leading-snug text-[#FFF8ED]">{result.matches?.length ? "Not quite the piece you had in mind?" : "Let us continue the search for you."}</h3>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">Share the reference with our lighting team. We’ll compare its form, glass, finish and proportions, then guide you to the closest catalogue piece—or explore a custom interpretation made in Firozabad.</p>
+                {whatsappLink && <a
+                  href={whatsappLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => trackWhatsAppClick({ source: "image_search_concierge", page: window.location.pathname })}
+                  className="mt-4 inline-flex min-h-11 items-center gap-2 border border-[#D4AF37] bg-[#D4AF37] px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-black transition-colors hover:bg-[#E3C85F]"
+                ><MessageCircle size={16} aria-hidden="true" />Ask our lighting team</a>}
+                <p className="mt-3 text-[10px] leading-relaxed text-white/42">A prepared WhatsApp message will open. Attach the same reference image and our team will take it from there.</p>
+              </div>
+            </div>
           </div>}
         </section>
       </div>, document.body,
