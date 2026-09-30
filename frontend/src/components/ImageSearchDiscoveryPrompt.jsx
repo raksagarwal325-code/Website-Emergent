@@ -3,7 +3,7 @@ import { Camera, Sparkles, X } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import CustomerImageSearch from "./CustomerImageSearch";
 
-const DISCOVERY_KEY = "sge-image-search-seen";
+const DISCOVERY_KEY = "sge-image-search-discovery-dismissed";
 
 function hasSeenImageSearch() {
   try {
@@ -42,18 +42,14 @@ export default function ImageSearchDiscoveryPrompt() {
     const onScroll = () => {
       if (!frame) frame = window.requestAnimationFrame(checkPosition);
     };
-    const hideAfterSearch = () => setVisible(false);
-
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
-    window.addEventListener("sge:image-search-opened", hideAfterSearch);
     checkPosition();
 
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
-      window.removeEventListener("sge:image-search-opened", hideAfterSearch);
     };
   }, [excluded, pathname]);
 
@@ -92,7 +88,7 @@ export default function ImageSearchDiscoveryPrompt() {
         </p>
 
         <div className="mt-5">
-          <CustomerImageSearch variant="landing" onOpen={dismiss} />
+          <CustomerImageSearch variant="landing" onClose={dismiss} />
         </div>
 
         <div className="mt-3 flex items-center gap-2 text-[10px] leading-relaxed text-white/42">
