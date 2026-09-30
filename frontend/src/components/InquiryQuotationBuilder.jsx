@@ -159,8 +159,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   }, []);
   const addItem = (product = {}) => change({ items: [...form.items, normaliseItem({ product_id: product.id || null, name: product.name || "", sku: product.sku || "", quantity: 1, unit_price: product.price || 0, image: product.images?.[0] || null })] });
 
+  useEffect(() => () => imageSearchController.current?.abort(), []);
   useEffect(() => () => {
-    imageSearchController.current?.abort();
     if (imageSearchPreview) URL.revokeObjectURL(imageSearchPreview);
   }, [imageSearchPreview]);
 
