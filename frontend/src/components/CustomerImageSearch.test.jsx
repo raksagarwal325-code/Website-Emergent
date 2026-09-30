@@ -35,7 +35,7 @@ test("renders a full-width landing-page call to action without catalogue positio
   expect(button).toHaveClass("w-full");
   expect(button).not.toHaveClass("absolute");
   fireEvent.click(button);
-  expect(screen.getByRole("dialog", { name: "Let a photograph lead the way" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Upload a photo. We’ll find the closest match." })).toBeInTheDocument();
 });
 
 test("renders a labelled photo action for the unified search menu", () => {
@@ -47,7 +47,7 @@ test("renders a labelled photo action for the unified search menu", () => {
   expect(button).toHaveClass("w-full");
   fireEvent.click(button);
   expect(onOpen).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole("dialog", { name: "Let a photograph lead the way" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Upload a photo. We’ll find the closest match." })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Close image search" }));
   expect(onClose).toHaveBeenCalledTimes(1);
 });
@@ -59,8 +59,8 @@ test("uploads a photo and separates matching products from similar designs with 
   expect(screen.getByText("Further pieces to consider")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Glass Chandelier/ })).toHaveAttribute("href", "/product/glass-chandelier-sge-ch-001");
   expect(api.searchByImage).toHaveBeenCalledWith(expect.any(File), expect.any(AbortSignal));
-  expect(screen.getByText(/Not quite the piece you had in mind/i)).toBeInTheDocument();
-  expect(await screen.findByRole("link", { name: /Ask our lighting team/i })).toBeInTheDocument();
+  expect(screen.getByText(/Not the light you had in mind/i)).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: /Let our team help/i })).toBeInTheDocument();
 });
 
 test("polls a difficult search in the background and renders only its completed results", async () => {
@@ -122,8 +122,8 @@ test("an older response cannot replace results for a newer upload", async () => 
   open(); upload();
   await waitFor(() => expect(api.searchByImage).toHaveBeenCalledTimes(1));
   upload();
-  expect(await screen.findByText(/Let us continue the search for you/i)).toBeInTheDocument();
-  expect(await screen.findByRole("link", { name: /Ask our lighting team/i })).toHaveAttribute("href", expect.stringContaining("wa.me/919876543210"));
+  expect(await screen.findByText(/No match yet? Let our team take over/i)).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: /Let our team help/i })).toHaveAttribute("href", expect.stringContaining("wa.me/919876543210"));
   await act(async () => resolveOld({ matches: [{ product, match_type: "exact" }] }));
   expect(screen.queryByText("Your catalogue match")).not.toBeInTheDocument();
 });
@@ -175,7 +175,7 @@ test("keeps exact and closest designs ahead of reviewed alternatives", async () 
   await screen.findByText("The closest expression we found");
   expect(screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent)).toEqual([
     "Your catalogue match", "The closest expression we found", "In the same design language", "Further pieces to consider",
-    "Not quite the piece you had in mind?"
+    "Not the light you had in mind?"
   ]);
   expect(screen.getByText(/confirm scale, light count and finish/i)).toBeInTheDocument();
 });
