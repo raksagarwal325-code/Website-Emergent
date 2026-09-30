@@ -74,7 +74,7 @@ class RegionSearchTests(unittest.TestCase):
         products = [{'id': key} for key in ('a', 'b', 'c', 'similar', 'background')]
         scores = [[.86, .85, .74, .79, .60], [.74, .73, .78, .74, .65], [.70, .71, .73, .72, .80]]
         result = select_region_matches(old, scores, products)
-        self.assertEqual([m['product']['id'] for m in result[:3]], ['a', 'b', 'c'])
+        self.assertEqual([m['product']['id'] for m in result[:3]], ['a', 'c', 'b'])
         self.assertTrue(all(m['match_type'] == 'closest' for m in result[:3]))
         self.assertTrue(all(m['match_type'] != 'exact' for m in result))
         self.assertEqual(next(m['match_type'] for m in result if m['product']['id']=='background'), 'similar')
@@ -84,7 +84,7 @@ class RegionSearchTests(unittest.TestCase):
         old = [match(.77, identity='a')]
         products = [{'id': 'a'}, {'id': 'b'}]
         for scores in ([[.70, .79]], [[.91, .93]], [[.90, .80]],
-                       [[float('nan'), .90]], [], [[.9]], [[.1,.9]]*4):
+                       [[float('nan'), .90]], [], [[.9]], [[.1,.9]]*5):
             # The .91/.93 case is bypassed below with an already-confident input.
             baseline = [match(.91, identity='a')] if scores == [[.91,.93]] else old
             self.assertIs(select_region_matches(baseline, scores, products), baseline)
@@ -95,6 +95,27 @@ class RegionSearchTests(unittest.TestCase):
         self.assertEqual(len(result), 12)
         self.assertEqual(sum(m['match_type']=='closest' for m in result), 6)
         self.assertEqual(len({m['product']['id'] for m in result}), 12)
+
+    def test_repeated_second_product_leads_before_same_object_variants(self):
+        products = [{'id': key} for key in ('wrong', 'chandelier', 'table-lamp', 'variant')]
+        scores = [
+            [.86, .85, .65, .845],
+            [.73, .83, .76, .81],
+            [.62, .70, .82, .69],
+        ]
+        result = select_region_matches([match(.74, identity='old')], scores, products, force=True)
+        ids = [item['product']['id'] for item in result]
+        self.assertEqual(ids[0], 'chandelier')
+        self.assertLess(ids.index('chandelier'), ids.index('variant'))
+        self.assertLess(ids.index('table-lamp'), ids.index('variant'))
+        self.assertEqual(result[ids.index('table-lamp')]['match_type'], 'closest')
+
+    def test_more_than_three_regions_are_rejected(self):
+        products = [{'id': 'a'}, {'id': 'b'}]
+        valid = select_region_matches([], [[.86, .72]] * 3, products, force=True)
+        self.assertEqual(valid[0]['product']['id'], 'a')
+        invalid = select_region_matches([], [[.86, .72]] * 4, products, force=True)
+        self.assertEqual(invalid, [])
 
     def test_background_scan_can_recover_when_whole_photo_has_no_candidates(self):
         products = [{'id': 'catalogue'}, {'id': 'other'}]

@@ -12,7 +12,7 @@ REGIONS = tuple((x, y, x + .25, y + .5)
 TALL_REGIONS = tuple((x, 0, x + .33, 1) for x in (0, .13, .27, .4, .53, .67))
 BACKGROUND_REGIONS = REGIONS + TALL_REGIONS
 REGION_SECONDS = 8.0
-REGION_VERSION = 'efficient-regions-v3'
+REGION_VERSION = 'multi-product-regions-v4'
 
 
 def needs_region_check(matches):
@@ -72,12 +72,29 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
     if cancelled.is_set() or time.monotonic() >= deadline:
         return stop('cancelled' if cancelled.is_set() else 'budget_exceeded')
     coarse = np.asarray(scores)
+    ranked = [int(index) for index in np.argsort(-coarse.max(axis=1), kind='stable')
+              if coarse[index].max() >= .70]
     selected = []
-    for index in np.argsort(-coarse.max(axis=1), kind='stable'):
-        if coarse[index].max() < .70:
-            break
+    covered_products = set()
+    # First preserve spatially separate crops whose strongest catalogue product
+    # differs. This prevents several chandelier crops from consuming the whole
+    # refinement budget when a room also contains a table or wall light.
+    for index in ranked:
+        winner = int(coarse[index].argmax())
+        if winner in covered_products:
+            continue
         if all(region_iou(regions[index], regions[old]) < .3 for old in selected):
-            selected.append(int(index))
+            selected.append(index)
+            covered_products.add(winner)
+        if len(selected) == 3:
+            break
+    # Repeated instances of one product are useful corroboration, so use any
+    # remaining capacity for the strongest non-overlapping crops.
+    for index in ranked:
+        if index in selected:
+            continue
+        if all(region_iou(regions[index], regions[old]) < .3 for old in selected):
+            selected.append(index)
         if len(selected) == 3:
             break
     if not selected:
@@ -105,7 +122,7 @@ def region_iou(a, b):
 
 
 def select_region_matches(matches, scores, products, limit=12, force=False):
-    """Require a clear improvement and corroboration for separate region winners."""
+    """Lead with corroborated object winners, then variants and alternatives."""
     if not force and not needs_region_check(matches):
         return matches
     scores = np.asarray(scores, dtype=np.float32)
@@ -114,21 +131,32 @@ def select_region_matches(matches, scores, products, limit=12, force=False):
             or not np.isfinite(scores).all()):
         return matches
     best = scores.max(axis=0)
-    order = sorted(range(len(products)), key=lambda i: (-float(best[i]), products[i]['id']))
+    support = np.sum(scores >= np.maximum(.72, best - .08), axis=0)
+    consensus = best + .015 * np.maximum(0, support - 1)
+    order = sorted(range(len(products)),
+                   key=lambda i: (-float(consensus[i]), -float(best[i]), products[i]['id']))
     anchor = order[0]
     baseline_score = matches[0]['score'] if matches else 0
     if (best[anchor] < max(.80, baseline_score + .03)
             or (matches and products[anchor]['id'] == matches[0]['product']['id'])):
         return matches
     primary = int(scores[:, anchor].argmax())
-    # Keep near-identical catalogue variants alongside the strongest design.
-    closest = {i for i in order if scores[primary, i] >= best[anchor] - .015}
-    for region in range(len(scores)):
+    # Independent, corroborated region winners represent different objects in
+    # the room. Put them before alternate catalogue variants of one object.
+    regional = [anchor]
+    for region in sorted(range(len(scores)), key=lambda row: -float(scores[row].max())):
         winner = min(range(len(products)), key=lambda i: (-float(scores[region, i]), products[i]['id']))
-        support = np.delete(scores[:, winner], region)
-        if scores[region, winner] >= .75 and support.size and support.max() >= .72:
-            closest.add(winner)
-    leading = [i for i in order if i in closest][:6]
+        corroboration = np.delete(scores[:, winner], region)
+        if (scores[region, winner] >= .75 and corroboration.size
+                and corroboration.max() >= .72):
+            if winner not in regional:
+                regional.append(winner)
+    variants = sorted(
+        (i for i in range(len(products))
+         if i not in regional and scores[primary, i] >= best[anchor] - .015),
+        key=lambda i: (-float(scores[primary, i]), products[i]['id']),
+    )
+    leading = (regional + variants)[:6]
     alternatives = [i for i in order if i not in leading and best[i] >= .72]
     return [{'product': products[i], 'score': float(best[i]),
              'match_type': 'closest' if i in leading else 'similar'}
