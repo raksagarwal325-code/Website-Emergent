@@ -458,3 +458,9 @@ def search_router(service, rate_dependency):
                 raise HTTPException(503, "Image search could not finish. Please try again shortly.")
         finally:
             await file.close()
+
+    @router.get("/search/image/jobs/{job_id}")
+    async def image_search_job(job_id: str):
+        return await service.get_job(job_id)
+
+    return router
