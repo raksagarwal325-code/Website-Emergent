@@ -303,3 +303,33 @@ jobs:
           fi
           echo "All 10 expected category HTML files present:"
           printf '  ✓ %s\n' "${expected_slugs[@]}"
+
+
+  quotation-mobile:
+    name: Netlify quotation app
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: quotation-mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node 20.20.2
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20.20.2"
+          cache: "npm"
+          cache-dependency-path: quotation-mobile/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test narrow gateway
+        run: npm test
+
+      - name: Build shared quotation app
+        run: npm run build
