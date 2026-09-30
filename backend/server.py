@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 73483)
-Total output lines: 6874
-
 """Product Catalog API - Lumière."""
 import asyncio
 import csv
@@ -2936,7 +2933,1386 @@ async def _create_quotation(inquiry_id, payload, admin):
         }
     created_at = datetime.now(timezone.utc)
     quote_number = await _next_quotation_number(created_at)
-    settings = await db.settings.fin…13483 tokens truncated…og.startsWith('http')) return og;
+    settings = await db.settings.find_one(
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1, "quotation_business": 1, "quotation_non_tax_business": 1}
+    ) or {}
+    business_key = "quotation_non_tax_business" if payload.tax_mode == "no_tax" else "quotation_business"
+    business = settings.get(business_key) or {}
+    if payload.tax_mode == "no_tax" and not all(str(business.get(key) or "").strip() for key in ("name", "bank", "accountNumber", "ifsc")):
+        raise HTTPException(422, "Configure the alternate payment account under Admin quotation settings before creating a quotation without tax.")
+    quotation = build_quotation(
+        inquiry_id,
+        payload,
+        admin.email,
+        created_at=created_at,
+        quote_number=quote_number,
+        product_images=image_by_product_id,
+        branding=settings.get("quotation_branding") or {},
+        business=business,
+    )
+    await db.quotations.insert_one(dict(quotation))
+    if inquiry_id is not None:
+        await db.inquiries.update_one(
+            {"id": inquiry_id},
+            {"$set": {
+                "status": "in_progress",
+                "latest_quotation_id": quotation["id"],
+                "latest_quotation_number": quotation["quote_number"],
+            }},
+        )
+    return quotation
+
+
+@api.put("/admin/quotations/{quote_id}")
+async def update_quotation(quote_id: str, payload: QuotationCreate, admin: _AdminUser = Depends(require_admin)):
+    existing = await db.quotations.find_one({"id": quote_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Quotation not found")
+    previous_tax_mode = existing.get("tax_mode") or ("gst" if existing.get("tax_rate", 0) > 0 else "no_tax")
+    business = existing.get("business") or {}
+    if payload.tax_mode != "legacy" and payload.tax_mode != previous_tax_mode:
+        settings = await db.settings.find_one(
+            {"id": "settings"}, {"_id": 0, "quotation_business": 1, "quotation_non_tax_business": 1}
+        ) or {}
+        business_key = "quotation_non_tax_business" if payload.tax_mode == "no_tax" else "quotation_business"
+        business = settings.get(business_key) or {}
+        if payload.tax_mode == "no_tax" and not all(str(business.get(key) or "").strip() for key in ("name", "bank", "accountNumber", "ifsc")):
+            raise HTTPException(422, "Configure the alternate payment account under Admin quotation settings before switching this quotation to without tax.")
+    quotation = build_quotation(
+        existing.get("inquiry_id"), payload, existing.get("created_by", admin.email),
+        quote_id=existing["id"], quote_number=existing["quote_number"],
+        created_at=datetime.fromisoformat(existing["created_at"]),
+        business=business,
+        branding={key: existing.get(key) for key in ("signature_url", "stamp_url")},
+    )
+    quotation["status"] = existing.get("status", "draft")
+    quotation["updated_at"] = datetime.now(timezone.utc).isoformat()
+    quotation["updated_by"] = admin.email
+    result = await db.quotations.update_one({"id": quote_id}, {"$set": quotation})
+    if not result.matched_count:
+        raise HTTPException(404, "Quotation not found")
+    return quotation
+
+
+@api.delete("/admin/quotations/{quote_id}")
+async def delete_quotation(quote_id: str, admin: _AdminUser = Depends(require_admin)):
+    existing = await db.quotations.find_one({"id": quote_id}, {"_id": 0, "inquiry_id": 1})
+    if not existing:
+        raise HTTPException(404, "Quotation not found")
+    result = await db.quotations.delete_one({"id": quote_id})
+    if not result.deleted_count:
+        raise HTTPException(404, "Quotation not found")
+
+    inquiry_id = existing.get("inquiry_id")
+    if inquiry_id:
+        inquiry = await db.inquiries.find_one(
+            {"id": inquiry_id}, {"_id": 0, "latest_quotation_id": 1}
+        )
+        if inquiry and inquiry.get("latest_quotation_id") == quote_id:
+            replacement = await db.quotations.find_one(
+                {"inquiry_id": inquiry_id},
+                {"_id": 0, "id": 1, "quote_number": 1},
+                sort=[("created_at", -1)],
+            )
+            if replacement:
+                update = {"$set": {
+                    "latest_quotation_id": replacement["id"],
+                    "latest_quotation_number": replacement["quote_number"],
+                }}
+            else:
+                update = {"$unset": {
+                    "latest_quotation_id": "",
+                    "latest_quotation_number": "",
+                }}
+            await db.inquiries.update_one({"id": inquiry_id}, update)
+    return {"ok": True, "deleted": 1, "id": quote_id}
+
+
+class _IdList(BaseModel):
+    """Body payload for bulk-delete endpoints. IDs are deduplicated and
+    validated (non-empty, string) before use."""
+    ids: list[str]
+
+
+def _clean_ids(payload: _IdList) -> list[str]:
+    """Deduplicate + strip + drop blanks. Returns a stable ordered list."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in payload.ids or []:
+        s = (raw or "").strip()
+        if not s or s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+    if not out:
+        raise HTTPException(status_code=400, detail="No valid ids supplied")
+    if len(out) > 500:
+        raise HTTPException(status_code=413, detail="Too many ids (max 500)")
+    return out
+
+
+@api.delete("/inquiries/{inquiry_id}")
+async def admin_delete_inquiry(inquiry_id: str, admin: _AdminUser = Depends(require_admin)):
+    """Permanently remove an enquiry and its owned quotation snapshots."""
+    res = await db.inquiries.delete_one({"id": inquiry_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Inquiry not found")
+    await db.quotations.delete_many({"inquiry_id": inquiry_id})
+    return {"ok": True, "deleted": 1}
+
+
+@api.post("/admin/inquiries/bulk-delete")
+async def admin_bulk_delete_inquiries(payload: _IdList, admin: _AdminUser = Depends(require_admin)):
+    """Bulk-delete enquiries. Reports the actual count Mongo removed —
+    non-existent IDs are silently skipped rather than aborting the batch."""
+    ids = _clean_ids(payload)
+    res = await db.inquiries.delete_many({"id": {"$in": ids}})
+    await db.quotations.delete_many({"inquiry_id": {"$in": ids}})
+    return {"ok": True, "requested": len(ids), "deleted": res.deleted_count}
+
+
+@api.delete("/contact-messages/{message_id}")
+async def admin_delete_contact_message(message_id: str, admin: _AdminUser = Depends(require_admin)):
+    res = await db.contact_messages.delete_one({"id": message_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"ok": True, "deleted": 1}
+
+
+@api.post("/admin/contact-messages/bulk-delete")
+async def admin_bulk_delete_messages(payload: _IdList, admin: _AdminUser = Depends(require_admin)):
+    ids = _clean_ids(payload)
+    res = await db.contact_messages.delete_many({"id": {"$in": ids}})
+    return {"ok": True, "requested": len(ids), "deleted": res.deleted_count}
+
+
+# --- Contact ---
+@api.post("/contact", response_model=ContactMessage)
+async def create_contact(payload: ContactCreate, _rl = Depends(rate_limit("contact", 10, 300))):
+    msg = ContactMessage(**payload.model_dump())
+    await db.contact_messages.insert_one(msg.model_dump())
+    # Fire-and-forget: admin ping + customer acknowledgement. Failures are
+    # swallowed inside mailer helpers — a broken email path must not fail
+    # the already-persisted contact submission.
+    try:
+        msg_dict = msg.model_dump()
+        asyncio.create_task(mailer.notify_admin_contact(msg_dict))
+        asyncio.create_task(mailer.ack_customer_contact(msg_dict))
+    except Exception:  # pragma: no cover
+        pass
+    return msg
+
+
+@api.get("/contact")
+async def list_contact(admin: _AdminUser = Depends(require_admin)):
+    """Same defensive pattern as `list_inquiries`. Skips + logs any row
+    that fails ContactMessage validation instead of returning a 500."""
+    try:
+        raw_rows = await db.contact_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    except Exception as e:  # pragma: no cover
+        logger.exception("list_contact.mongo_error err=%s", e)
+        raise HTTPException(status_code=503, detail="Could not load messages")
+    out = []
+    skipped = 0
+    for row in raw_rows:
+        try:
+            out.append(ContactMessage(**row).model_dump())
+        except Exception as e:
+            skipped += 1
+            logger.warning(
+                "list_contact.row_validation_failed id=%s err=%s",
+                row.get("id"), e,
+            )
+    if skipped:
+        logger.warning("list_contact.skipped_rows=%d total=%d", skipped, len(raw_rows))
+    return out
+
+
+class CatalogueRequest(BaseModel):
+    name: str
+    phone: str
+    source: str = "contact_page"
+
+
+import re
+
+_INDIAN_MOBILE_RE = re.compile(r"^(?:\+?91)?([6-9]\d{9})$")
+
+
+def _normalize_indian_mobile(raw: str) -> str | None:
+    """Return `+91XXXXXXXXXX` or None if the input is not a valid Indian mobile.
+
+    Accepts 10 digits, `+91` + 10 digits, or `91` + 10 digits, tolerant of
+    embedded whitespace / dashes / brackets. First subscriber-digit must be
+    6-9 per TRAI numbering plan.
+    """
+    s = re.sub(r"[^\d+]", "", str(raw or ""))
+    m = _INDIAN_MOBILE_RE.match(s)
+    return f"+91{m.group(1)}" if m else None
+
+
+@api.post("/catalogue-request")
+async def create_catalogue_request(payload: CatalogueRequest, _rl = Depends(rate_limit("catreq", 10, 300))):
+    """Store a name + WhatsApp number every time someone requests the PDF
+    catalogue via the WhatsApp flow. WhatsApp is now mandatory and validated
+    both here and on the frontend."""
+    name = (payload.name or "").strip()[:120]
+    raw_phone = (payload.phone or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Please enter your name.")
+    if not raw_phone:
+        raise HTTPException(status_code=400, detail="Please enter your WhatsApp number.")
+    normalized = _normalize_indian_mobile(raw_phone)
+    if not normalized:
+        raise HTTPException(status_code=400,
+                            detail="Please enter a valid 10-digit WhatsApp number.")
+    record = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "phone": normalized,
+        "source": (payload.source or "contact_page")[:64],
+        "created_at": now_iso(),
+        "type": "catalogue_request",
+    }
+    await db.inquiries.insert_one({
+        **record,
+        "customer_name": record["name"],
+        "customer_email": "",
+        "customer_phone": normalized,
+        "customer_whatsapp": normalized,
+        "message": f"Requested the PDF catalogue via WhatsApp from {record['source']}",
+        "items": [],
+        "total": 0.0,
+        "status": "new",
+    })
+    return {"success": True, "id": record["id"]}
+
+
+# --- SEO · dynamic sitemap ---------------------------------------------
+# Public, unauthenticated. Returns an XML sitemap listing every indexable
+# static page + every currently published product URL under the canonical
+# https://samratglass.com origin. Draft / unpublished products are excluded.
+# /favorites is intentionally omitted (that page is noindex,follow).
+_SITE_ORIGIN = "https://samratglass.com"
+# Path to the shared single-source category catalogue. Backend and frontend
+# read from the same file so the sitemap can never drift from the pages.
+_CATEGORIES_JSON = Path(__file__).parent.parent / "frontend" / "src" / "lib" / "categories.data.json"
+
+
+def _load_seo_category_paths() -> list[tuple[str, str, str]]:
+    """Return sitemap tuples for every published + sitemap-flagged category.
+
+    Reads the shared JSON at request time (cheap, small file) so admin edits
+    that flip a `published`/`sitemap` flag take effect on the next request
+    without a service restart. Errors log and fall back to an empty list so
+    a corrupt/absent file never blows up the sitemap endpoint entirely.
+    """
+    try:
+        with open(_CATEGORIES_JSON, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        logger.warning("sitemap: could not read categories.data.json: %s", e)
+        return []
+    out: list[tuple[str, str, str]] = []
+    for c in data.get("categories") or []:
+        if not (c.get("published") and c.get("sitemap")):
+            continue
+        slug = c.get("slug") or ""
+        if not slug or "/" in slug:
+            # Invalid slug — refuse to advertise it.
+            continue
+        out.append((f"/category/{slug}", "weekly", "0.85"))
+    return out
+
+
+_STATIC_SITEMAP_ENTRIES: list[tuple[str, str, str]] = [
+    ("/",                 "weekly",  "1.0"),
+    ("/catalog",          "weekly",  "0.9"),
+    ("/craft",            "monthly", "0.8"),
+    ("/about",            "monthly", "0.7"),
+    ("/gallery",          "weekly",  "0.8"),
+    ("/faq",              "monthly", "0.6"),
+    ("/contact",          "yearly",  "0.6"),
+    # Dedicated commercial-lead landing pages — high-intent B2B traffic.
+    ("/custom-lighting-bulk-orders",     "monthly", "0.8"),
+    ("/architects-interior-designers",   "monthly", "0.8"),
+    ("/legal/privacy",    "yearly",  "0.3"),
+    ("/legal/terms",      "yearly",  "0.3"),
+    ("/legal/shipping",   "yearly",  "0.3"),
+    ("/legal/returns",    "yearly",  "0.3"),
+    ("/legal/payment",    "yearly",  "0.3"),
+]
+
+
+from xml.sax.saxutils import escape as xml_escape
+import re
+import unicodedata
+
+
+def _gallery_sitemap_paths(items):
+    """Mirror the frontend's title slug and collision numbering in list order."""
+    used = {}
+    paths = []
+    for index, project in enumerate(items if isinstance(items, list) else []):
+        if not isinstance(project, dict):
+            continue
+        title = str(project.get("title") or "")
+        base = unicodedata.normalize("NFKD", title.lower())
+        base = re.sub(r"[\u0300-\u036f]", "", base)
+        base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")[:80] or f"project-{index + 1}"
+        used[base] = used.get(base, 0) + 1
+        if title.strip() or any(project.get("images") or []):
+            slug = base if used[base] == 1 else f"{base}-{used[base]}"
+            paths.append(f"/gallery/{slug}")
+    return paths
+
+
+def _absolute_image_url(url: str) -> str:
+    """Return an absolute URL for a stored image reference.
+
+    Accepts absolute http(s) URLs and internal /api/files/… paths. Empty or
+    obviously invalid values return an empty string so callers can skip them.
+    """
+    if not url or not isinstance(url, str):
+        return ""
+    s = url.strip()
+    if not s:
+        return ""
+    if s.startswith("http://") or s.startswith("https://"):
+        return s
+    if s.startswith("/"):
+        return f"{_SITE_ORIGIN}{s}"
+    return ""
+
+
+@api.get("/sitemap.xml")
+async def sitemap_xml():
+    """Return the site sitemap as XML — static pages + every published
+    product, with a Google image-sitemap entry per valid product image so
+    the images can be indexed alongside the pages."""
+    parts: list[str] = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'
+        ' xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">',
+    ]
+    # Static + SEO categories (categories read from the shared JSON so this
+    # list can never fall out of sync with the pages themselves).
+    all_entries = list(_STATIC_SITEMAP_ENTRIES) + _load_seo_category_paths()
+    seen_paths: set[str] = set()
+    for path, freq, prio in all_entries:
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
+        parts.append(
+            f"<url><loc>{_SITE_ORIGIN}{path}</loc>"
+            f"<changefreq>{freq}</changefreq><priority>{prio}</priority></url>"
+        )
+    settings = await db.settings.find_one(
+        {"id": "settings"}, {"_id": 0, "homepage_content.gallery.items": 1}
+    ) or {}
+    gallery_items = ((settings.get("homepage_content") or {}).get("gallery") or {}).get("items")
+    for path in _gallery_sitemap_paths(gallery_items):
+        if path not in seen_paths:
+            seen_paths.add(path)
+            parts.append(
+                f"<url><loc>{_SITE_ORIGIN}{xml_escape(path)}</loc>"
+                "<changefreq>monthly</changefreq><priority>0.6</priority></url>"
+            )
+    cursor = db.products.find(
+        {"status": "published"},
+        {"_id": 0, "id": 1, "name": 1, "sku": 1, "images": 1, "updated_at": 1},
+    )
+    async for doc in cursor:
+        slug = product_slug(doc)
+        if not slug:
+            continue
+        lastmod = doc.get("updated_at") or ""
+        lastmod_tag = f"<lastmod>{lastmod[:10]}</lastmod>" if lastmod else ""
+        image_tags = ""
+        for raw in (doc.get("images") or []):
+            abs_url = _absolute_image_url(raw)
+            if not abs_url:
+                continue
+            image_tags += (
+                "<image:image>"
+                f"<image:loc>{xml_escape(abs_url)}</image:loc>"
+                "</image:image>"
+            )
+        parts.append(
+            f"<url><loc>{_SITE_ORIGIN}/product/{slug}</loc>"
+            f"{lastmod_tag}<changefreq>weekly</changefreq><priority>0.7</priority>"
+            f"{image_tags}</url>"
+        )
+    parts.append("</urlset>")
+    body = "\n".join(parts)
+    return Response(
+        content=body,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=1800"},
+    )
+
+
+
+
+# --- Hero Slider (backgrounds for the homepage hero) ------------------
+# Storage: images live in Emergent object storage. MongoDB is the source
+# of truth for the slide list, order, alt text, and enable flag.
+import hero_storage  # local module
+
+
+class HeroSlide(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    storage_path: str
+    alt_text: str = ""
+    enabled: bool = True
+    order: int = 0
+    content_type: str = "image/jpeg"
+    created_at: str = Field(default_factory=now_iso)
+
+
+class HeroSlideUpdate(BaseModel):
+    alt_text: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class HeroSettings(BaseModel):
+    display_duration: float = 6.0
+    transition_duration: float = 1.5
+
+
+@app.on_event("startup")
+async def _init_hero_storage():
+    try:
+        hero_storage.init_storage()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("hero_storage init failed: %s", e)
+
+
+def _slide_out(doc: dict) -> dict:
+    """Serialise a HeroSlide MongoDB doc into the API's public shape."""
+    return {
+        "id": doc.get("id"),
+        "image_url": f"/api/hero-slides/image/{doc.get('storage_path', '')}",
+        "alt_text": doc.get("alt_text", ""),
+        "enabled": bool(doc.get("enabled", True)),
+        "order": int(doc.get("order", 0)),
+        "created_at": doc.get("created_at", ""),
+    }
+
+
+@api.get("/hero-slides")
+async def public_hero_slides():
+    """Return only enabled slides, ordered, for the public homepage."""
+    docs = await db.hero_slides.find(
+        {"enabled": True}, {"_id": 0}
+    ).sort("order", 1).to_list(length=100)
+    settings_doc = await db.hero_settings.find_one({"_id": "singleton"}) or {}
+    return {
+        "slides": [_slide_out(d) for d in docs],
+        "settings": {
+            "display_duration": float(settings_doc.get("display_duration", 6.0)),
+            "transition_duration": float(settings_doc.get("transition_duration", 1.5)),
+        },
+    }
+
+
+@api.get("/hero-slides/image/{path:path}")
+async def hero_slide_image(path: str):
+    """Public proxy for a hero image (no auth needed — these are marketing
+    assets). 404 if the path is not a tracked slide, so callers can't scrape
+    arbitrary storage paths."""
+    if not path or ".." in path:
+        raise HTTPException(status_code=404, detail="not found")
+    doc = await db.hero_slides.find_one({"storage_path": path}, {"_id": 0, "content_type": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        data, ct = hero_storage.get_object(path)
+    except Exception:
+        raise HTTPException(status_code=502, detail="storage unavailable")
+    return Response(
+        content=data,
+        media_type=doc.get("content_type") or ct or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@api.get("/admin/hero-slides", dependencies=[Depends(require_admin)])
+async def admin_list_hero_slides():
+    docs = await db.hero_slides.find({}, {"_id": 0}).sort("order", 1).to_list(length=200)
+    return [_slide_out(d) for d in docs]
+
+
+@api.get("/admin/hero-settings", dependencies=[Depends(require_admin)])
+async def admin_get_hero_settings():
+    doc = await db.hero_settings.find_one({"_id": "singleton"}) or {}
+    return {
+        "display_duration": float(doc.get("display_duration", 6.0)),
+        "transition_duration": float(doc.get("transition_duration", 1.5)),
+    }
+
+
+@api.patch("/admin/hero-settings", dependencies=[Depends(require_admin)])
+async def admin_update_hero_settings(payload: HeroSettings):
+    if payload.display_duration < 2 or payload.display_duration > 60:
+        raise HTTPException(status_code=400, detail="display_duration out of range")
+    if payload.transition_duration < 0.2 or payload.transition_duration > 10:
+        raise HTTPException(status_code=400, detail="transition_duration out of range")
+    await db.hero_settings.update_one(
+        {"_id": "singleton"},
+        {"$set": {
+            "display_duration": float(payload.display_duration),
+            "transition_duration": float(payload.transition_duration),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.post("/admin/hero-slides", dependencies=[Depends(require_admin)])
+async def admin_upload_hero_slide(
+    file: UploadFile = File(...),
+    alt_text: str = Form(""),
+):
+    data = await file.read()
+    if len(data) > 6 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="image too large (6MB max)")
+    ct = (file.content_type or "image/jpeg").split(";")[0].strip()
+    if not ct.startswith("image/"):
+        raise HTTPException(status_code=400, detail="only images allowed")
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+    if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
+        ext = {"image/png": "png", "image/webp": "webp", "image/gif": "gif"}.get(ct, "jpg")
+    slide_id = str(uuid.uuid4())
+    path = hero_storage.image_path(slide_id, ext)
+    try:
+        hero_storage.put_object(path, data, ct)
+    except hero_storage.StorageError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    max_order = 0
+    async for d in db.hero_slides.find({}, {"_id": 0, "order": 1}).sort("order", -1).limit(1):
+        max_order = int(d.get("order", 0))
+    slide = HeroSlide(
+        id=slide_id, storage_path=path, alt_text=alt_text[:180],
+        enabled=True, order=max_order + 1, content_type=ct,
+    )
+    await db.hero_slides.insert_one(slide.model_dump())
+    return _slide_out(slide.model_dump())
+
+
+class HeroReorderPayload(BaseModel):
+    order: List[str]  # slide ids in the new visual order
+
+
+@api.patch("/admin/hero-slides/reorder", dependencies=[Depends(require_admin)])
+async def admin_reorder_hero_slides(payload: HeroReorderPayload):
+    for i, sid in enumerate(payload.order):
+        await db.hero_slides.update_one({"id": sid}, {"$set": {"order": i}})
+    return {"ok": True}
+
+
+@api.patch("/admin/hero-slides/{slide_id}", dependencies=[Depends(require_admin)])
+async def admin_update_hero_slide(slide_id: str, payload: HeroSlideUpdate):
+    update = {}
+    if payload.alt_text is not None:
+        update["alt_text"] = payload.alt_text[:180]
+    if payload.enabled is not None:
+        update["enabled"] = bool(payload.enabled)
+    if not update:
+        return {"ok": True}
+    # If disabling, ensure at least one other slide remains enabled.
+    if update.get("enabled") is False:
+        others = await db.hero_slides.count_documents({"enabled": True, "id": {"$ne": slide_id}})
+        if others < 1:
+            raise HTTPException(status_code=400, detail="at least one enabled slide is required")
+    res = await db.hero_slides.update_one({"id": slide_id}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="slide not found")
+    return {"ok": True}
+
+
+@api.delete("/admin/hero-slides/{slide_id}", dependencies=[Depends(require_admin)])
+async def admin_delete_hero_slide(slide_id: str):
+    doc = await db.hero_slides.find_one({"id": slide_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="slide not found")
+    # Enforce "at least one active image" only when the deletion would leave
+    # zero enabled slides.
+    if doc.get("enabled"):
+        others = await db.hero_slides.count_documents({"enabled": True, "id": {"$ne": slide_id}})
+        if others < 1:
+            raise HTTPException(status_code=400, detail="cannot delete the last enabled slide")
+    await db.hero_slides.delete_one({"id": slide_id})
+    # Storage is append-only per playbook — the object stays but is orphaned.
+    return {"ok": True}
+
+
+# --- Category Featured Images ----------------------------------------------
+# Per-category "hero image" for the homepage "Shop by Category" grid.
+#
+# Two source types are supported — and ONLY these two:
+#   1. "product": pin an image URL that already belongs to a product in that
+#      category (validated against `products.images`). We store just the
+#      reference, so if the product is deleted the frontend gracefully falls
+#      back to the newest-product image.
+#   2. "upload": bytes uploaded to Emergent object storage under
+#      `samrat-glass/categories/<uuid>.<ext>` — served through a scoped proxy
+#      that only serves paths tracked by an existing override doc.
+#
+# We deliberately DO NOT accept arbitrary external URLs — that would defeat
+# the SSRF hardening applied elsewhere.
+CATEGORY_FEATURED_ALLOWED = {
+    "Chandelier",
+    "Hanging Light",
+    "Wall Light",
+    "Table Lamp",
+    "Floor Lamp",
+    "Candle Stand",
+    "Ceiling Light",
+    "Gate Light",
+    "Floor Chandelier",
+    "Table Chandelier",
+}
+
+
+class CategoryFeaturedProductPayload(BaseModel):
+    """JSON body for pinning an image from an existing product."""
+    product_id: str
+    image_url: str
+
+
+def _cat_out(doc: dict) -> dict:
+    """Public shape for a single category override doc."""
+    src = doc.get("source_type")
+    if src == "upload":
+        image_url = f"/api/category-featured-images/image/{doc.get('storage_path', '')}"
+    else:
+        image_url = doc.get("product_image_url", "")
+    return {
+        "category": doc.get("category"),
+        "source_type": src,
+        "image_url": image_url,
+        "product_id": doc.get("product_id") if src == "product" else None,
+        "updated_at": doc.get("updated_at", ""),
+    }
+
+
+@api.get("/category-featured-images")
+async def public_category_featured_images():
+    """Return the current category→image_url override map (admin-set only).
+    Categories without an override are omitted; the frontend falls back to
+    the newest-product image for those."""
+    docs = await db.category_featured_images.find({}, {"_id": 0}).to_list(length=50)
+    return {d["category"]: _cat_out(d)["image_url"] for d in docs if d.get("category")}
+
+
+@api.get("/category-featured-images/image/{path:path}")
+async def category_featured_image_bytes(path: str):
+    """Serve an uploaded category image. Only paths tracked by an existing
+    override doc are served — arbitrary storage keys 404."""
+    if not path or ".." in path:
+        raise HTTPException(status_code=404, detail="not found")
+    doc = await db.category_featured_images.find_one(
+        {"storage_path": path, "source_type": "upload"},
+        {"_id": 0, "content_type": 1},
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        data, ct = hero_storage.get_object(path)
+    except Exception:
+        raise HTTPException(status_code=502, detail="storage unavailable")
+    return Response(
+        content=data,
+        media_type=doc.get("content_type") or ct or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@api.get("/admin/category-featured-images", dependencies=[Depends(require_admin)])
+async def admin_list_category_featured():
+    """Return every override doc, keyed by category, for the admin UI."""
+    docs = await db.category_featured_images.find({}, {"_id": 0}).to_list(length=50)
+    return [_cat_out(d) for d in docs]
+
+
+@api.put("/admin/category-featured-images/{category}",
+         dependencies=[Depends(require_admin)])
+async def admin_set_category_featured_from_product(
+    category: str, payload: CategoryFeaturedProductPayload,
+):
+    """Pin an image from an existing product in the same category.
+
+    We validate three things before saving:
+      * category is in the allow-list;
+      * product exists AND belongs to that category (case-sensitive match on
+        the canonical value); and
+      * `image_url` is a member of that product's `images` list — this is
+        what stops the admin from injecting arbitrary external URLs.
+    """
+    if category not in CATEGORY_FEATURED_ALLOWED:
+        raise HTTPException(status_code=400, detail="unknown category")
+    prod = await db.products.find_one(
+        {"id": payload.product_id},
+        {"_id": 0, "id": 1, "category": 1, "images": 1},
+    )
+    if not prod:
+        raise HTTPException(status_code=404, detail="product not found")
+    if prod.get("category") != category:
+        raise HTTPException(status_code=400,
+                            detail="product is not in this category")
+    if payload.image_url not in (prod.get("images") or []):
+        raise HTTPException(status_code=400,
+                            detail="image_url is not one of the product's images")
+    doc = {
+        "category": category,
+        "source_type": "product",
+        "product_id": payload.product_id,
+        "product_image_url": payload.image_url,
+        "updated_at": now_iso(),
+    }
+    # `$unset` clears any legacy upload fields so the record is clean.
+    await db.category_featured_images.update_one(
+        {"category": category},
+        {"$set": doc, "$unset": {"storage_path": "", "content_type": ""}},
+        upsert=True,
+    )
+    return _cat_out(doc)
+
+
+@api.post("/admin/category-featured-images/{category}/upload",
+          dependencies=[Depends(require_admin)])
+async def admin_upload_category_featured(
+    category: str, file: UploadFile = File(...),
+):
+    """Upload a custom image for one category. Same validation as the hero
+    slider (image content-type, ≤6MB) and stored under
+    samrat-glass/categories/<uuid>.<ext>."""
+    if category not in CATEGORY_FEATURED_ALLOWED:
+        raise HTTPException(status_code=400, detail="unknown category")
+    data = await file.read()
+    if len(data) > 6 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="image too large (6MB max)")
+    ct = (file.content_type or "image/jpeg").split(";")[0].strip()
+    if not ct.startswith("image/"):
+        raise HTTPException(status_code=400, detail="only images allowed")
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+    if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
+        ext = {"image/png": "png", "image/webp": "webp", "image/gif": "gif"}.get(ct, "jpg")
+    upload_id = str(uuid.uuid4())
+    slug = category.lower().replace(" ", "-")
+    path = f"{hero_storage.APP_NAME}/categories/{slug}/{upload_id}.{ext}"
+    try:
+        hero_storage.put_object(path, data, ct)
+    except hero_storage.StorageError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    doc = {
+        "category": category,
+        "source_type": "upload",
+        "storage_path": path,
+        "content_type": ct,
+        "updated_at": now_iso(),
+    }
+    await db.category_featured_images.update_one(
+        {"category": category},
+        {"$set": doc, "$unset": {"product_id": "", "product_image_url": ""}},
+        upsert=True,
+    )
+    return _cat_out(doc)
+
+
+@api.delete("/admin/category-featured-images/{category}",
+            dependencies=[Depends(require_admin)])
+async def admin_reset_category_featured(category: str):
+    """Reset a category back to the automatic newest-product fallback."""
+    if category not in CATEGORY_FEATURED_ALLOWED:
+        raise HTTPException(status_code=400, detail="unknown category")
+    await db.category_featured_images.delete_one({"category": category})
+    # Storage objects are left in place (append-only); reused key would
+    # collide with a new UUID, so this is safe.
+    return {"ok": True}
+
+
+# --- Settings ---
+# PUBLIC endpoint — MUST return the reduced `PublicSettings` model only.
+# The full `Settings` object contains `google_maps_api_key` (a server-side
+# Google Places credential) and must never be exposed unauthenticated.
+@api.get("/settings", response_model=PublicSettings)
+async def get_settings():
+    doc = await db.settings.find_one({"id": "settings"}, {"_id": 0})
+    if not doc:
+        # Seed on first read so the admin has a row to edit.
+        s = Settings()
+        await db.settings.insert_one(s.model_dump())
+        doc = s.model_dump()
+    # Merge defaults for backward compat with older DB rows, then let
+    # PublicSettings strip out any field not explicitly whitelisted
+    # (google_maps_api_key, watermark, and any future secret additions).
+    merged = {**Settings().model_dump(), **doc}
+    return PublicSettings(**merged)
+
+
+# ADMIN-ONLY endpoint — full Settings object including
+# `google_maps_api_key`. Protected by `require_admin`; the frontend
+# admin panel now points here instead of the public /settings.
+@api.get("/admin/settings", response_model=Settings)
+async def get_admin_settings(admin: _AdminUser = Depends(require_admin)):
+    doc = await db.settings.find_one({"id": "settings"}, {"_id": 0})
+    if not doc:
+        s = Settings()
+        await db.settings.insert_one(s.model_dump())
+        return s
+    merged = {**Settings().model_dump(), **doc}
+    return merged
+
+
+@api.put("/settings", response_model=Settings)
+async def update_settings(payload: SettingsUpdate, admin: _AdminUser = Depends(require_admin)):
+    doc = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or Settings().model_dump()
+    updates = {k: v for k, v in payload.model_dump(exclude_none=True).items()}
+    doc.update(updates)
+    await db.settings.update_one({"id": "settings"}, {"$set": doc}, upsert=True)
+    return doc
+
+
+import ipaddress
+import socket
+from urllib.parse import urlparse
+
+# --- SSRF-safe image proxy -------------------------------------------------
+# Only allow HTTPS, only allow images, only allow a fixed set of trusted image
+# hosts, block loopback / private / metadata IP ranges (even if DNS resolves
+# to them), cap download size, hard timeout, and never leak internal detail.
+_ALLOWED_IMAGE_HOSTS: set[str] = {
+    "images.unsplash.com", "plus.unsplash.com",
+    "cdn.pixabay.com", "images.pexels.com",
+    "customer-assets.emergentagent.com",
+    "d3adwkbyhxyrtq.cloudfront.net",
+    "d33sy5i8bnduwe.cloudfront.net",
+    "instagram.com", "cdninstagram.com",
+    "scontent.cdninstagram.com",
+    "res.cloudinary.com",
+}
+_MAX_IMAGE_BYTES = 15 * 1024 * 1024
+
+
+def _is_public_ip(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return not (addr.is_private or addr.is_loopback or addr.is_link_local
+                or addr.is_multicast or addr.is_reserved or addr.is_unspecified)
+
+
+@api.get("/proxy-image")
+async def proxy_image(url: str, admin: _AdminUser = Depends(require_admin)):
+    """Admin-only alias for the SSRF-safe proxy — kept at the historic path
+    so existing catalogue-PDF calls keep working. All safety checks live in
+    the shared helper below."""
+    return await _proxy_image_secure(url=url, admin=admin)
+
+
+# Real implementation with admin gate + SSRF checks — declared later with
+# require_admin dependency after auth wiring below.
+
+
+
+# --- Google Reviews ---
+@api.get("/google/reviews")
+async def google_reviews():
+    raw = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    doc = {**Settings().model_dump(), **raw}
+    cid = doc.get("google_cid", "")
+    place_id = doc.get("google_place_id", "")
+    api_key = doc.get("google_maps_api_key", "")
+
+    view_url = f"https://www.google.com/maps?cid={cid}" if cid else ""
+    write_url = f"https://search.google.com/local/writereview?placeid={place_id}" if place_id else view_url
+
+    result = {
+        "enabled": False,
+        "view_url": view_url,
+        "write_url": write_url,
+        "cid": cid,
+        "place_id_set": bool(place_id),
+        "api_key_set": bool(api_key),
+        "rating": None,
+        "total_ratings": None,
+        "reviews": [],
+    }
+
+    if not (place_id and api_key):
+        return result
+
+    try:
+        r = requests.get(
+            "https://maps.googleapis.com/maps/api/place/details/json",
+            params={
+                "place_id": place_id,
+                "fields": "name,rating,user_ratings_total,reviews,url",
+                "key": api_key,
+                "reviews_no_translations": "true",
+                "reviews_sort": "newest",
+            },
+            timeout=10,
+        )
+        data = r.json()
+        if data.get("status") == "OK":
+            res = data.get("result", {})
+            result.update({
+                "enabled": True,
+                "rating": res.get("rating"),
+                "total_ratings": res.get("user_ratings_total"),
+                "reviews": [
+                    {
+                        "author_name": rv.get("author_name"),
+                        "profile_photo_url": rv.get("profile_photo_url"),
+                        "rating": rv.get("rating"),
+                        "relative_time_description": rv.get("relative_time_description"),
+                        "text": rv.get("text"),
+                    }
+                    for rv in (res.get("reviews") or [])
+                ],
+                "view_url": res.get("url") or view_url,
+            })
+        else:
+            logger.warning(f"Google Places status: {data.get('status')} - {data.get('error_message')}")
+    except Exception as e:
+        logger.error(f"Google reviews fetch failed: {e}")
+
+    return result
+
+
+# --- Uploads ---
+DEFAULT_WATERMARK = {
+    "enabled": False,
+    "explicit_opt_in": False,
+    "opacity": 0.15,
+    "size_pct": 0.30,
+    "position": "center",
+    "adaptive_tone": True,
+}
+
+
+async def _get_watermark_settings() -> dict:
+    doc = await db.settings.find_one({"id": "settings"}, {"_id": 0, "watermark": 1})
+    wm = (doc or {}).get("watermark") or {}
+    return {**DEFAULT_WATERMARK, **wm}
+
+
+VIDEO_EXTS = {"mp4", "webm", "mov", "m4v"}
+VIDEO_MIME_TYPES = {
+    "mp4": "video/mp4",
+    "webm": "video/webm",
+    "mov": "video/quicktime",
+    "m4v": "video/x-m4v",
+}
+MAX_IMAGE_BYTES = 25 * 1024 * 1024
+MAX_VIDEO_BYTES = 100 * 1024 * 1024
+
+
+@api.post("/upload")
+async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends(require_admin)):
+    ct = (file.content_type or "").lower()
+    is_image = ct.startswith("image/")
+    is_video = ct.startswith("video/")
+    if not (is_image or is_video):
+        raise HTTPException(400, "Only images or videos are allowed")
+
+    ext = (file.filename or "img").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+    if is_video:
+        if ext not in VIDEO_EXTS:
+            ext = "mp4"
+    else:
+        if ext not in MIME_TYPES:
+            ext = "png"
+
+    data = await file.read()
+    limit = MAX_VIDEO_BYTES if is_video else MAX_IMAGE_BYTES
+    if len(data) > limit:
+        mb = limit // (1024 * 1024)
+        raise HTTPException(400, f"File too large — max {mb}MB. Please compress or resize.")
+
+    file_id = str(uuid.uuid4())
+    subdir = "videos" if is_video else "products"
+    original_path = f"{APP_NAME}/originals/{file_id}.{ext}"
+    public_path = f"{APP_NAME}/{subdir}/{file_id}.{ext}"
+
+    # Always keep the untouched original (admin-only).
+    put_object(original_path, data, file.content_type)
+
+    # Videos are never watermarked. Public image derivatives receive invisible
+    # ownership metadata whether or not the visible watermark is enabled.
+    ownership_fp = None
+    visual_fp = None
+    if is_video:
+        public_bytes = data
+        wm_enabled_for_record = False
+    else:
+        ownership_fp = ownership_fingerprint(data)
+        visual_fp = perceptual_fingerprint(data)
+        wm = await _get_watermark_settings()
+        if wm.get("enabled") and wm.get("explicit_opt_in"):
+            public_bytes = apply_watermark(
+                data,
+                opacity=wm.get("opacity", 0.15),
+                size_pct=wm.get("size_pct", 0.30),
+                adaptive_tone=wm.get("adaptive_tone", True),
+                content_type=file.content_type,
+            )
+        else:
+            public_bytes = data
+        public_bytes = embed_ownership_metadata(
+            public_bytes,
+            content_type=file.content_type,
+            asset_id=file_id,
+            fingerprint=ownership_fp,
+            visual_fingerprint=visual_fp,
+        )
+        wm_enabled_for_record = bool(wm.get("enabled") and wm.get("explicit_opt_in"))
+
+    result = put_object(public_path, public_bytes, file.content_type)
+    try:
+        media_metadata = inspect_media_bytes(data, file.content_type)
+    except Exception:
+        media_metadata = {
+            "sha256": None,
+            "width": None,
+            "height": None,
+            "background_tone": None,
+            "background_luminance": None,
+        }
+
+    await db.files.insert_one({
+        "id": file_id,
+        "storage_path": result["path"],
+        "original_path": original_path,
+        "original_filename": file.filename,
+        "content_type": file.content_type,
+        "size": result["size"],
+        "watermarked": wm_enabled_for_record,
+        "kind": "video" if is_video else "image",
+        "sha256": media_metadata.get("sha256"),
+        "ownership_fingerprint": ownership_fp,
+        "perceptual_fingerprint": visual_fp,
+        "width": media_metadata.get("width"),
+        "height": media_metadata.get("height"),
+        "created_at": now_iso(),
+    })
+    public_url = f"/api/files/{result['path']}"
+    return {
+        "path": result["path"],
+        "url": public_url,
+        "asset_id": asset_id_for_url(public_url),
+    }
+
+
+@api.post("/admin/quotation-branding/{asset_kind}")
+async def admin_upload_quotation_branding(
+    asset_kind: Literal["signature", "stamp"],
+    file: UploadFile = File(...),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Store an unwatermarked signature/stamp used only on admin quotations."""
+    content_type = (file.content_type or "").lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(400, "Only image files are allowed")
+    data = await file.read()
+    if len(data) > 6 * 1024 * 1024:
+        raise HTTPException(413, "Branding image must be 6MB or smaller")
+
+    extension_by_type = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+    }
+    ext = extension_by_type.get(content_type)
+    if not ext:
+        raise HTTPException(400, "Use PNG, JPEG, WebP or GIF")
+
+    file_id = str(uuid.uuid4())
+    public_path = f"{APP_NAME}/quotation-branding/{file_id}.{ext}"
+    result = put_object(public_path, data, MIME_TYPES[ext])
+    public_url = f"/api/files/{result['path']}"
+    await db.files.insert_one({
+        "id": file_id,
+        "storage_path": result["path"],
+        "original_path": result["path"],
+        "original_filename": file.filename,
+        "content_type": MIME_TYPES[ext],
+        "size": result["size"],
+        "watermarked": False,
+        "kind": "image",
+        "usage": f"quotation_{asset_kind}",
+        "created_at": now_iso(),
+    })
+    field = f"quotation_branding.{asset_kind}_url"
+    await db.settings.update_one(
+        {"id": "settings"},
+        {"$set": {field: public_url}},
+        upsert=True,
+    )
+    settings = await db.settings.find_one(
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1, "quotation_business": 1}
+    ) or {}
+    return settings.get("quotation_branding") or {}
+
+
+@api.delete("/admin/quotation-branding/{asset_kind}")
+async def admin_clear_quotation_branding(
+    asset_kind: Literal["signature", "stamp"],
+    admin: _AdminUser = Depends(require_admin),
+):
+    field = f"quotation_branding.{asset_kind}_url"
+    await db.settings.update_one(
+        {"id": "settings"}, {"$set": {field: ""}}, upsert=True
+    )
+    settings = await db.settings.find_one(
+        {"id": "settings"}, {"_id": 0, "quotation_branding": 1, "quotation_business": 1}
+    ) or {}
+    return settings.get("quotation_branding") or {}
+
+
+# --- Central admin media library ----------------------------------------------
+@api.get("/admin/media-library")
+async def admin_media_library(admin: _AdminUser = Depends(require_admin)):
+    products = await db.products.find({}, {"_id": 0}).to_list(5000)
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    files = await db.files.find({}, {"_id": 0}).to_list(5000)
+    metadata = await db.media_assets.find({}, {"_id": 0}).to_list(5000)
+    hero_slides = await db.hero_slides.find({}, {"_id": 0}).to_list(500)
+    category_rows = await db.category_featured_images.find(
+        {}, {"_id": 0}
+    ).to_list(100)
+    category_images = [_cat_out(row) for row in category_rows]
+    return build_media_library_report(
+        products=products,
+        settings=settings,
+        files=files,
+        metadata=metadata,
+        hero_slides=[_slide_out(row) for row in hero_slides],
+        category_images=category_images,
+    )
+
+
+@api.patch("/admin/media-library/{asset_id}")
+async def admin_update_media_asset(
+    asset_id: str,
+    payload: MediaAssetUpdate,
+    admin: _AdminUser = Depends(require_admin),
+):
+    expected_id = asset_id_for_url(payload.url)
+    if asset_id != expected_id:
+        raise HTTPException(400, "Asset id does not match URL")
+    await db.media_assets.update_one(
+        {"id": asset_id},
+        {"$set": {
+            "id": asset_id,
+            "url": payload.url,
+            "usage_type": payload.usage_type,
+            "notes": payload.notes.strip(),
+            "updated_at": now_iso(),
+            "updated_by": admin.email,
+        }},
+        upsert=True,
+    )
+    return {"ok": True, "id": asset_id, "usage_type": payload.usage_type}
+
+
+@api.post("/admin/media-library/recommendations/apply")
+async def admin_apply_media_recommendations(
+    payload: MediaRecommendationBulkApply,
+    admin: _AdminUser = Depends(require_admin),
+):
+    operations = []
+    approved_at = now_iso()
+    for item in payload.items:
+        if item.id != asset_id_for_url(item.url):
+            raise HTTPException(400, "One or more asset ids do not match their URLs")
+        operations.append(UpdateOne(
+            {"id": item.id},
+            {"$set": {
+                "id": item.id,
+                "url": item.url,
+                "usage_type": item.usage_type,
+                "notes": item.reason.strip(),
+                "recommendation_confidence": item.confidence,
+                "approved_from_recommendation": True,
+                "updated_at": approved_at,
+                "updated_by": admin.email,
+            }},
+            upsert=True,
+        ))
+    result = await db.media_assets.bulk_write(operations, ordered=False)
+    return {
+        "ok": True,
+        "approved": len(operations),
+        "matched": result.matched_count,
+        "upserted": result.upserted_count,
+    }
+
+
+@api.post("/admin/media-library/scan")
+async def admin_scan_media_library(
+    limit: int = Query(10, ge=1, le=25),
+    admin: _AdminUser = Depends(require_admin),
+):
+    needs_metadata = {"$or": [
+        {"sha256": {"$exists": False}},
+        {"sha256": None},
+        {"width": {"$exists": False}},
+        {"$and": [
+            {"kind": {"$ne": "video"}},
+            {"background_tone": {"$exists": False}},
+        ]},
+    ]}
+    eligible = {"$and": [
+        needs_metadata,
+        {"media_scan_failed_at": {"$exists": False}},
+    ]}
+    rows = await db.files.find(eligible, {"_id": 0}).limit(limit).to_list(limit)
+    scanned = 0
+    failed = 0
+    for row in rows:
+        path = row.get("original_path") or row.get("storage_path")
+        if not path:
+            await db.files.update_one(
+                {"id": row.get("id")},
+                {"$set": {
+                    "media_scan_failed_at": now_iso(),
+                    "media_scan_error": "No storage path",
+                }},
+            )
+            failed += 1
+            continue
+        try:
+            # Storage reads and Pillow decoding are blocking operations. Run them
+            # off the FastAPI event loop so the origin can still answer health,
+            # admin and Cloudflare requests while legacy metadata is inspected.
+            data, content_type = await asyncio.to_thread(get_object, path)
+            values = await asyncio.to_thread(
+                inspect_media_bytes,
+                data,
+                content_type or row.get("content_type") or "",
+            )
+            await db.files.update_one(
+                {"id": row.get("id")},
+                {"$set": values, "$unset": {
+                    "media_scan_failed_at": "",
+                    "media_scan_error": "",
+                }},
+            )
+            scanned += 1
+        except Exception as exc:
+            logger.warning("media_library.scan_failed file=%s err=%s", row.get("id"), exc)
+            await db.files.update_one(
+                {"id": row.get("id")},
+                {"$set": {
+                    "media_scan_failed_at": now_iso(),
+                    "media_scan_error": str(exc)[:240],
+                }},
+            )
+            failed += 1
+    remaining = await db.files.count_documents(eligible)
+    skipped_failed = await db.files.count_documents({
+        "media_scan_failed_at": {"$exists": True}
+    })
+    return {
+        "scanned": scanned,
+        "failed": failed,
+        "skipped_failed": skipped_failed,
+        "remaining": remaining,
+        "total_considered": len(rows),
+    }
+
+
+@api.get("/admin/media-library/original/{file_id}")
+async def admin_media_original(
+    file_id: str,
+    admin: _AdminUser = Depends(require_admin),
+):
+    row = await db.files.find_one({"id": file_id}, {"_id": 0})
+    if not row or not row.get("original_path"):
+        raise HTTPException(404, "Original file not found")
+    try:
+        data, content_type = get_object(row["original_path"])
+    except Exception:
+        raise HTTPException(404, "Original file not found")
+    return Response(
+        content=data,
+        media_type=content_type or row.get("content_type") or "application/octet-stream",
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+# --- Instagram cover auto-pull ------------------------------------------------
+def _canonical_instagram_url(raw: str) -> Optional[str]:
+    """Return a canonical Reel/Post/TV permalink (no query params, no fragment)
+    or None if the input is not a supported Instagram URL."""
+    try:
+        u = urlparse((raw or "").strip())
+    except Exception:
+        return None
+    host = (u.netloc or "").lower()
+    if not host.endswith("instagram.com"):
+        return None
+    path = u.path or "/"
+    if not path.endswith("/"):
+        path = path + "/"
+    # Support /p/, /reel/, /reels/, /tv/ permalinks
+    parts = [p for p in path.split("/") if p]
+    if len(parts) < 2 or parts[0] not in {"p", "reel", "reels", "tv"}:
+        return None
+    # Strip query string (?utm_source=, &igsh=, etc.) and fragment.
+    return f"{u.scheme or 'https'}://{host}{path}"
+
+
+_IG_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
+
+
+async def _extract_ig_cover_via_browser(url: str) -> Optional[str]:
+    """Load an Instagram permalink in headless Chromium and return the URL of
+    the reel/post poster image.
+
+    Priority order (most accurate first):
+      1. `og:image` meta tag — Instagram's canonical share thumbnail, populated
+         by their SPA after render (empty in the initial HTML).
+      2. `twitter:image` meta tag — same source, fallback.
+      3. Main <video> poster attribute (when Instagram renders the reel).
+      4. First large `<img alt="Video by …">` OR `<img alt="Photo by …">` —
+         last-resort scan of the DOM.
+
+    We deliberately avoid the "More posts from …" grid: those are unrelated
+    older uploads and picking one of them yields a completely wrong cover.
+    """
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+        try:
+            ctx = await browser.new_context(
+                viewport={"width": 500, "height": 900},
+                user_agent=_IG_UA,
+                locale="en-US",
+            )
+            page = await ctx.new_page()
+            resp = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            status = resp.status if resp else 0
+            # Give Instagram's SPA time to inject og:image / render video.
+            await page.wait_for_timeout(5000)
+
+            src = await page.evaluate(
+                """() => {
+                    // 1. og:image (most accurate — Instagram's canonical cover)
+                    const og = document.querySelector('meta[property=\"og:image\"]')?.content;
+                    if (og && og.startsWith('http')) return og;
                     // 2. twitter:image
                     const tw = document.querySelector('meta[name=\"twitter:image\"]')?.content;
                     if (tw && tw.startsWith('http')) return tw;
