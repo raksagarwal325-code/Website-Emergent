@@ -167,7 +167,7 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen, onC
       <span className={landingTrigger ? "relative z-10" : undefined}>{landingTrigger ? "Upload a photo" : menuTrigger ? "Search with a photo" : "Upload photo"}</span>
     </button>
     {open && createPortal(
-      <div className="fixed inset-0 z-[100] bg-black/80 p-3 sm:p-8 flex items-start justify-center overflow-y-auto" onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
+      <div data-customer-image-search-overlay="true" className="fixed inset-0 z-[100] bg-black/80 p-3 sm:p-8 flex items-start justify-center overflow-y-auto" onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
         <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="image-search-title" onKeyDown={keyDown} className="my-auto w-full max-w-4xl border border-[#D4AF37]/30 bg-[#101010] p-5 sm:p-8 text-white shadow-2xl">
           <div className="flex items-start justify-between gap-4">
             <div><div className="text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">Visual search concierge</div><h2 id="image-search-title" className="mt-2 font-serif text-2xl sm:text-3xl">Let a photograph lead the way</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">Share a room photo, product image or screenshot. We’ll look for the same design first, then the closest alternatives from our catalogue.</p></div>
