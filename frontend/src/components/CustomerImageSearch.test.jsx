@@ -122,7 +122,7 @@ test("an older response cannot replace results for a newer upload", async () => 
   open(); upload();
   await waitFor(() => expect(api.searchByImage).toHaveBeenCalledTimes(1));
   upload();
-  expect(await screen.findByText(/No match yet? Let our team take over/i)).toBeInTheDocument();
+  expect(await screen.findByText(/No match yet\? Let our team take over/i)).toBeInTheDocument();
   expect(await screen.findByRole("link", { name: /Let our team help/i })).toHaveAttribute("href", expect.stringContaining("wa.me/919876543210"));
   await act(async () => resolveOld({ matches: [{ product, match_type: "exact" }] }));
   expect(screen.queryByText("Your catalogue match")).not.toBeInTheDocument();
