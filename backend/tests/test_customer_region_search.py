@@ -106,6 +106,7 @@ class RegionSearchTests(unittest.TestCase):
         ]
         result = select_region_matches([match(.74, identity='old')], scores, products, force=True)
         ids = [item['product']['id'] for item in result]
+        self.assertEqual(ids[0], 'chandelier')
         self.assertLess(ids.index('chandelier'), ids.index('variant'))
         self.assertLess(ids.index('table-lamp'), ids.index('variant'))
         self.assertEqual(result[ids.index('table-lamp')]['match_type'], 'closest')
