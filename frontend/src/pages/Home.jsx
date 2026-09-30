@@ -1,13 +1,12 @@
 import { heritageEyebrow } from "../lib/brandOrigin";
 import React, { useEffect, useRef, useState, Suspense, lazy } from "react";
 import { Link } from "react-router-dom";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowUpRight, Camera, Check, MessageCircle, Search, ShieldCheck, Truck, X } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowUpRight, MessageCircle, ShieldCheck, Truck } from "lucide-react";
 import SEO from "../components/SEO";
 import { api } from "../lib/api";
 import WelcomeIntro from "../components/WelcomeIntro";
 import HeroSlideshow from "../components/HeroSlideshow";
-import CustomerImageSearch from "../components/CustomerImageSearch";
 import CategoryShowcase from "../components/CategoryShowcase";
 import { useSettings } from "../context/SettingsContext";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
@@ -24,61 +23,6 @@ const FounderTeaser = lazy(() => import("../components/FounderTeaser"));
 const AtelierShowcase = lazy(() => import("../components/AtelierShowcase"));
 const GalleryPreview = lazy(() => import("../components/GalleryPreview"));
 const InfluencerPromotions = lazy(() => import(/* webpackChunkName: "influencer" */ "../components/InfluencerPromotions"));
-
-function ImageSearchPreview({ reducedMotion }) {
-  const reveal = (delay) => reducedMotion
-    ? { initial: false, animate: undefined, transition: { duration: 0 } }
-    : {
-        initial: { opacity: 0, x: 8 },
-        animate: { opacity: 1, x: 0 },
-        transition: { duration: 0.55, delay, ease: LUXURY_EASE },
-      };
-
-  return (
-    <div aria-hidden="true" data-testid="home-image-search-demo" className="relative min-w-0">
-      <motion.div
-        className="relative overflow-hidden border border-white/10 bg-black/25 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.28)]"
-        animate={reducedMotion ? undefined : { borderColor: ["rgba(255,255,255,0.10)", "rgba(212,175,55,0.32)", "rgba(255,255,255,0.10)"] }}
-        transition={reducedMotion ? { duration: 0 } : { duration: 4.8, repeat: Infinity, ease: "easeInOut" }}
-      >
-        <div className="relative grid grid-cols-[82px_minmax(0,1fr)] items-center gap-3">
-          <div className="relative h-[108px] overflow-hidden border border-white/15 bg-[radial-gradient(circle_at_50%_28%,rgba(212,175,55,0.18),rgba(255,255,255,0.025)_58%,transparent_72%)]">
-            <div className="absolute left-2 top-2 h-3 w-3 border-l border-t border-[#D4AF37]/70" />
-            <div className="absolute right-2 top-2 h-3 w-3 border-r border-t border-[#D4AF37]/70" />
-            <div className="absolute bottom-2 left-2 h-3 w-3 border-b border-l border-[#D4AF37]/70" />
-            <div className="absolute bottom-2 right-2 h-3 w-3 border-b border-r border-[#D4AF37]/70" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/48">
-              <Camera size={22} strokeWidth={1.4} />
-              <span className="text-[8px] uppercase tracking-[0.2em]">Your photo</span>
-            </div>
-            <motion.div
-              className="absolute left-2 right-2 top-2 h-px bg-[#D4AF37] shadow-[0_0_10px_2px_rgba(212,175,55,0.65)]"
-              animate={reducedMotion ? undefined : { y: [0, 90, 0], opacity: [0.45, 1, 0.45] }}
-              transition={reducedMotion ? { duration: 0 } : { duration: 3.8, repeat: Infinity, ease: "easeInOut", repeatDelay: 0.45 }}
-            />
-          </div>
-
-          <div className="min-w-0 space-y-2">
-            <motion.div {...reveal(0.15)} className="flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] text-white/45">
-              <Search size={12} strokeWidth={1.5} className="text-[#D4AF37]" />
-              Visual search
-            </motion.div>
-            <motion.div {...reveal(0.45)} className="flex items-center gap-2 border border-[#D4AF37]/35 bg-[#D4AF37]/10 px-2.5 py-2">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#D4AF37] text-black"><Check size={12} strokeWidth={2.4} /></span>
-              <span className="min-w-0 flex-1 text-[10px] font-medium uppercase tracking-[0.08em] text-white/85">Exact match</span>
-              <span className="text-[8px] uppercase tracking-[0.14em] text-[#D4AF37]">First</span>
-            </motion.div>
-            <motion.div {...reveal(0.75)} className="flex items-center gap-2 border border-white/10 bg-white/[0.035] px-2.5 py-2">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/20 text-white/55"><Search size={11} strokeWidth={1.6} /></span>
-              <span className="min-w-0 flex-1 text-[10px] font-medium uppercase tracking-[0.08em] text-white/65">Similar designs</span>
-              <span className="text-[8px] uppercase tracking-[0.14em] text-white/40">Next</span>
-            </motion.div>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
 
 function DeferredSection({ children, minHeight = 480, rootMargin = "500px 0px" }) {
   const [ready, setReady] = useState(false);
@@ -147,40 +91,6 @@ function DeferredSeasonalSpotlight({ eyebrow, title, viewAllText, viewAllLink })
 export default function Home() {
   const { settings, hp } = useSettings();
   const prefersReducedMotion = useReducedMotion();
-  const [showImageSearchPrompt, setShowImageSearchPrompt] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-
-    let dismissed = false;
-    let welcomeSeen = false;
-    try {
-      dismissed = window.sessionStorage.getItem("sge-image-search-prompt-dismissed-v1") === "1";
-      welcomeSeen = window.sessionStorage.getItem("sge-welcome-intro-seen-v13") === "1";
-    } catch (_) {
-      dismissed = false;
-    }
-    if (dismissed) return undefined;
-
-    const delay = prefersReducedMotion || welcomeSeen ? 1400 : 5600;
-    const timer = window.setTimeout(() => setShowImageSearchPrompt(true), delay);
-    return () => window.clearTimeout(timer);
-  }, [prefersReducedMotion]);
-
-  useEffect(() => {
-    if (!showImageSearchPrompt || typeof document === "undefined") return undefined;
-    const dismissOnEscape = (event) => {
-      if (event.key === "Escape") setShowImageSearchPrompt(false);
-    };
-    document.addEventListener("keydown", dismissOnEscape);
-    return () => document.removeEventListener("keydown", dismissOnEscape);
-  }, [showImageSearchPrompt]);
-
-  const dismissImageSearchPrompt = () => {
-    try { window.sessionStorage.setItem("sge-image-search-prompt-dismissed-v1", "1"); } catch (_) {}
-    setShowImageSearchPrompt(false);
-  };
-
   const waLink = waGeneralLink(settings?.whatsapp_number) || "#";
   const H = hp.hero;
   const F = hp.featured;
@@ -231,50 +141,6 @@ export default function Home() {
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#16070f] pointer-events-none" />
       </section>
 
-      <AnimatePresence>
-        {showImageSearchPrompt && (
-          <motion.aside
-            aria-labelledby="home-image-search-title"
-            data-testid="home-image-search-feature"
-            className="fixed bottom-4 left-4 right-4 z-40 max-h-[calc(100vh-2rem)] overflow-y-auto border border-[#D4AF37]/35 bg-[#140910]/[0.97] p-5 shadow-[0_28px_90px_rgba(0,0,0,0.58)] backdrop-blur-xl sm:bottom-6 sm:left-6 sm:right-auto sm:w-[440px] sm:p-6"
-            initial={prefersReducedMotion ? false : { opacity: 0, x: -26, y: 18, scale: 0.98 }}
-            animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: -18, y: 12, scale: 0.985 }}
-            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.55, ease: LUXURY_EASE }}
-          >
-            <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_90%_8%,rgba(212,175,55,0.16),transparent_42%)]" />
-            <button
-              type="button"
-              onClick={dismissImageSearchPrompt}
-              aria-label="Dismiss image search prompt"
-              className="absolute right-3 top-3 z-20 flex h-10 w-10 items-center justify-center border border-white/10 text-white/55 transition-colors hover:border-[#D4AF37]/50 hover:text-[#D4AF37] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37]"
-            >
-              <X size={17} aria-hidden="true" />
-            </button>
-
-            <div className="relative">
-              <div className="pr-11">
-                <div className="eyebrow text-[#D4AF37]">Search by image</div>
-                <h2 id="home-image-search-title" className="mt-2 font-serif text-2xl leading-tight text-white sm:text-[1.75rem]">
-                  Seen a light you love? <span className="italic brand-gradient-text">Find it from a photo.</span>
-                </h2>
-                <p className="mt-3 text-sm leading-relaxed text-white/62">
-                  Upload a product photo, room photo or screenshot. We’ll find the exact catalogue match first, then similar designs.
-                </p>
-              </div>
-
-              <div className="mt-4 hidden sm:block">
-                <ImageSearchPreview reducedMotion={prefersReducedMotion} />
-              </div>
-
-              <div className="mt-4">
-                <CustomerImageSearch variant="landing" />
-                <p className="mt-2 text-[10px] leading-relaxed text-white/42">JPG, PNG or WebP · Up to 10 MB · Deleted automatically after matching</p>
-              </div>
-            </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
 
       <div className="relative z-10"><CategoryShowcase /></div>
 
