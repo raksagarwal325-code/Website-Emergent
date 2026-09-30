@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { api } from "../lib/api";
 import { createQuotationPdf } from "../lib/quotationPdf";
 import { harmoniseCustomVariantNames } from "../lib/quotationNaming";
+import { normalizeImageSearchFile } from "../lib/imageSearchFile";
 
 export { createQuotationPdf } from "../lib/quotationPdf";
 
@@ -164,9 +165,10 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     if (imageSearchPreview) URL.revokeObjectURL(imageSearchPreview);
   }, [imageSearchPreview]);
 
-  const chooseImageSearchFile = (file) => {
-    if (!file) return;
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+  const chooseImageSearchFile = (selectedFile) => {
+    if (!selectedFile) return;
+    const file = normalizeImageSearchFile(selectedFile);
+    if (!file) {
       toast.error("Choose a JPG, PNG or WebP image");
       return;
     }
