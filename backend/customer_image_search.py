@@ -338,12 +338,14 @@ class CustomerImageSearch:
                 if crop_matches is not matches:
                     matches = crop_matches
                     diagnostic.update(outcome="gallery_crop_match", gallery_images=len(gallery_rows))
-            if diagnostic.get("outcome") != "gallery_crop_match":
-                matches = await asyncio.to_thread(
-                    rescue_region_matches, self.encoder, image, rows, urls, matches,
-                    cancelled, diagnostic, seconds=BACKGROUND_REGION_SECONDS,
-                    regions=BACKGROUND_REGIONS, force=True,
-                )
+            # A gallery crop may identify one fixture, but a room can contain
+            # several catalogue products. Always let the bounded regional pass
+            # expand or improve that candidate list before completing the job.
+            matches = await asyncio.to_thread(
+                rescue_region_matches, self.encoder, image, rows, urls, matches,
+                cancelled, diagnostic, seconds=BACKGROUND_REGION_SECONDS,
+                regions=BACKGROUND_REGIONS, force=True,
+            )
             products = {p["id"]: p for values in urls.values() for p in values}
             matches = add_related_designs(matches, list(products.values()), self.design_relations)
             indexed = sum(bool(row.get("vectors")) for row in rows)
@@ -456,9 +458,3 @@ def search_router(service, rate_dependency):
                 raise HTTPException(503, "Image search could not finish. Please try again shortly.")
         finally:
             await file.close()
-
-    @router.get("/search/image/jobs/{job_id}")
-    async def image_search_job(job_id: str):
-        return await service.get_job(job_id)
-
-    return router
