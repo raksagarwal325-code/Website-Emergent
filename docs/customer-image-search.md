@@ -1,6 +1,6 @@
 # Customer image search
 
-A standalone feature accessed through the camera button inside the catalogue/category search bar. It does not call or modify quotation matching, use quotation collections, or require an admin session for searching.
+A shared catalogue visual-search service accessed through the public camera button and the quotation maker’s Search by image tab. Public searching does not require an admin session. Quotation customisation references and PDF generation remain separate.
 
 ## Architecture
 
@@ -29,7 +29,7 @@ Local deterministic tests cover upload validation, public field projection, no q
 
 ## Room-photo ranking correction
 
-The initial CLIP model ranked a supplied Noorvastra room photo behind unrelated hanging lights: CH-002 was fifth and CH-069 eleventh in the preview. Changing only the crop aggregation did not reliably correct this. DINOv2-small replaces the visual encoder for standalone customer search; exact byte/pixel matching, request limits and quotation code remain unchanged. Both finish variants are valid similar results; neither is labelled an exact image match from a different photograph.
+The initial CLIP model ranked a supplied Noorvastra room photo behind unrelated hanging lights: CH-002 was fifth and CH-069 eleventh in the preview. Changing only the crop aggregation did not reliably correct this. DINOv2-small replaces the visual encoder for catalogue search; exact byte/pixel matching and request limits remain unchanged. Both finish variants are valid similar results; neither is labelled an exact image match from a different photograph.
 
 ## Background-heavy uploads and tentative candidates
 
@@ -38,3 +38,10 @@ Query encoding additionally inspects five fixed overlapping regions (left/right 
 Strong visual results retain the 0.72 threshold and the “Similar designs” label. If there are no strong or exact results, whole-photo scores of at least 0.55 may produce up to four “Possible matches”, restricted to 0.06 of the best whole-photo candidate. Weak regional matches cannot trigger this fallback. The UI explicitly asks customers to compare details and does not represent these as identified products. Exact still means byte/pixel identity only.
 
 This update does not resolve HEIC support or transient catalogue download failures. Deploy both frontend and backend together so the `possible` match type is rendered. Validate the supplied wall-light, Kandil and Meher examples against the complete production catalogue as well as unrelated uploads; local sample results alone do not establish full-catalogue accuracy.
+
+
+## Quotation maker integration
+
+The quotation maker calls the same `POST /api/search/image` endpoint and polls the same background job endpoint as the public search. It receives the same exact-first ordering, design-family relations, regional/multi-product matching, gallery-image mappings and automatic catalogue index updates. Results are adapted only for quotation selection: an administrator must explicitly choose **Add** before a product becomes a quotation line.
+
+The older quotation-only quick matcher, AI detail job and technical diagnostics are no longer used by this interface. Their backend routes remain temporarily available for compatibility, but they do not affect quotation-maker results. Customisation reference images still describe requested product changes and are not sent through catalogue identification.

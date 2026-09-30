@@ -25,6 +25,30 @@ const errorMessage = (error, fallback) => {
 };
 
 const createLocalId = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+
+const IMAGE_MATCH_LABELS = {
+  exact: "Exact catalogue match",
+  closest: "Closest product match",
+  related: "Same design family",
+  similar: "Similar design",
+  possible: "Possible match",
+};
+
+const waitForImageSearchPoll = (milliseconds, signal) => new Promise((resolve, reject) => {
+  const timer = setTimeout(done, milliseconds);
+  function done() {
+    signal?.removeEventListener("abort", aborted);
+    resolve();
+  }
+  function aborted() {
+    clearTimeout(timer);
+    const error = new Error("Image search cancelled");
+    error.name = "AbortError";
+    reject(error);
+  }
+  if (signal?.aborted) aborted();
+  else signal?.addEventListener("abort", aborted, { once: true });
+});
 const REFERENCE_CATEGORIES = [
   ["shade_design", "Shade design", "SD"],
   ["metal_finish", "Metal finish", "MF"],
@@ -122,13 +146,11 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [imageSearchPreview, setImageSearchPreview] = useState("");
   const [imageMatches, setImageMatches] = useState([]);
   const [imageMatchBusy, setImageMatchBusy] = useState(false);
-  const imageSearchSequence = useRef(0);
-  const imageDetailJobId = useRef(null);
-  const [imageRefining, setImageRefining] = useState(false);
-  const [imageIndexProgress, setImageIndexProgress] = useState(null);
+  const [imageMatchStatus, setImageMatchStatus] = useState("");
+  const [imageMatchIncomplete, setImageMatchIncomplete] = useState(false);
   const [imageMatchError, setImageMatchError] = useState("");
-  const [imageDiagnostic, setImageDiagnostic] = useState(null);
-  const [imageDiagnosticBusy, setImageDiagnosticBusy] = useState(false);
+  const imageSearchSequence = useRef(0);
+  const imageSearchController = useRef(null);
   const [aiBusyLineId, setAiBusyLineId] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -137,6 +159,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   }, []);
   const addItem = (product = {}) => change({ items: [...form.items, normaliseItem({ product_id: product.id || null, name: product.name || "", sku: product.sku || "", quantity: 1, unit_price: product.price || 0, image: product.images?.[0] || null })] });
 
+  useEffect(() => () => imageSearchController.current?.abort(), []);
   useEffect(() => () => {
     if (imageSearchPreview) URL.revokeObjectURL(imageSearchPreview);
   }, [imageSearchPreview]);
@@ -147,36 +170,18 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       toast.error("Choose a JPG, PNG or WebP image");
       return;
     }
-    if (file.size > 25 * 1024 * 1024) {
-      toast.error("Image is too large — maximum 25MB");
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image is too large — maximum 10MB");
       return;
     }
     if (imageSearchPreview) URL.revokeObjectURL(imageSearchPreview);
     setImageSearchFile(file);
-    imageDetailJobId.current = null;
     setImageSearchPreview(URL.createObjectURL(file));
     setImageMatches([]);
     setImageMatchError("");
-    setImageDiagnostic(null);
-    setImageRefining(false);
-    setImageIndexProgress(null);
+    setImageMatchStatus("");
+    setImageMatchIncomplete(false);
     void findImageMatches(file);
-  };
-
-  const diagnoseImageSearch = async () => {
-    if (!imageSearchFile) {
-      toast.error("Upload the client image first");
-      return;
-    }
-    setImageDiagnosticBusy(true);
-    setImageDiagnostic(null);
-    try {
-      setImageDiagnostic(await api.diagnoseQuotationProductByImage(imageSearchFile));
-    } catch (error) {
-      toast.error(errorMessage(error, "Could not diagnose image search"));
-    } finally {
-      setImageDiagnosticBusy(false);
-    }
   };
 
   const findImageMatches = async (selectedFile = imageSearchFile) => {
@@ -185,25 +190,45 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
       return;
     }
     const requestId = ++imageSearchSequence.current;
+    imageSearchController.current?.abort();
+    const controller = new AbortController();
+    imageSearchController.current = controller;
     setImageMatchBusy(true);
+    setImageMatchStatus("Searching the same visual catalogue used on the website…");
     setImageMatchError("");
     setImageMatches([]);
+    setImageMatchIncomplete(false);
     try {
-      const result = await api.matchQuotationProductByImage(selectedFile, 5, true);
-      if (requestId !== imageSearchSequence.current) return;
-      setImageIndexProgress({
-        total: Number(result?.index_total || 0),
-        remaining: Number(result?.index_remaining || 0),
-      });
-      const matches = Array.isArray(result?.matches) ? result.matches : [];
-      setImageMatches(matches);
-      if (!matches.length) {
-        setImageMatchError("Comparing your photo with catalogue product designs…");
+      let result = await api.searchByImage(selectedFile, controller.signal);
+      if (result.search_status === "processing" && result.job_id) {
+        setImageMatchStatus("Checking the full catalogue for exact and similar designs…");
+        for (let poll = 0; poll < 60 && result.search_status === "processing"; poll += 1) {
+          await waitForImageSearchPoll(result.poll_after_ms ?? 1500, controller.signal);
+          result = await api.getImageSearchJob(result.job_id, controller.signal);
+        }
+        if (result.search_status === "processing") {
+          throw new Error("Detailed image search is taking longer than expected. Try again shortly.");
+        }
+        if (result.search_status === "failed") {
+          throw new Error(result.detail || "Detailed image search could not finish. Try again.");
+        }
       }
-      if (!matches.length) void refineImageMatches(selectedFile, requestId);
-    } catch (error) {
       if (requestId !== imageSearchSequence.current) return;
+      const matches = (Array.isArray(result?.matches) ? result.matches : [])
+        .filter((match) => match?.product)
+        .slice(0, 12);
+      setImageMatches(matches);
+      setImageMatchIncomplete(!result?.index_complete || !result?.similarity_available);
+      setImageMatchStatus("");
+      if (!matches.length) {
+        setImageMatchError(result?.available
+          ? "No dependable catalogue match was found. Try a clearer crop or search by name / SKU."
+          : "The visual catalogue is still preparing. Try again shortly or search by name / SKU.");
+      }
+    } catch (error) {
+      if (requestId !== imageSearchSequence.current || error?.name === "AbortError") return;
       const message = errorMessage(error, "Could not search the catalogue by image");
+      setImageMatchStatus("");
       setImageMatchError(message);
       toast.error(message);
     } finally {
@@ -211,57 +236,11 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     }
   };
 
-  const refineImageMatches = async (selectedFile = imageSearchFile, requestId = imageSearchSequence.current) => {
-    if (!selectedFile) return;
-    setImageRefining(true);
-    try {
-      if (!imageDetailJobId.current) {
-        const started = await api.startQuotationImageDetailJob(selectedFile);
-        if (requestId !== imageSearchSequence.current) return;
-        imageDetailJobId.current = started.job_id;
-      }
-      let job;
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        job = await api.getQuotationImageDetailJob(imageDetailJobId.current);
-        if (requestId !== imageSearchSequence.current) return;
-        if (job.status !== "running") break;
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-      if (job?.status === "running") {
-        setImageMatchError("Detailed comparison is still running. Select Compare designs in detail to check its result.");
-        return;
-      }
-      if (job?.status !== "done") {
-        imageDetailJobId.current = null;
-        throw new Error("Detailed comparison failed");
-      }
-      const result = job.response;
-      if (requestId !== imageSearchSequence.current) return;
-      const matches = Array.isArray(result?.matches) ? result.matches : [];
-      if (matches.length) {
-        setImageMatches(matches);
-        setImageMatchError("");
-      } else {
-        setImageMatchError("No product photo could be compared. Try another photo or search by name / SKU.");
-      }
-    } catch (error) {
-      if (requestId === imageSearchSequence.current) {
-        setImageMatchError("Detailed comparison could not finish. Try another photo or search by name / SKU.");
-      }
-    } finally {
-      if (requestId === imageSearchSequence.current) setImageRefining(false);
-    }
-  };
-
   const addImageMatch = (match) => {
-    addItem({
-      id: match.product_id,
-      name: match.name,
-      sku: match.sku,
-      price: match.price,
-      images: match.image_url ? [match.image_url] : [],
-    });
-    toast.success(`${match.sku ? match.sku + " · " : ""}${match.name} added to quotation`);
+    const product = match.product;
+    if (!product) return;
+    addItem(product);
+    toast.success(`${product.sku ? product.sku + " · " : ""}${product.name} added to quotation`);
   };
 
   useEffect(() => {
@@ -653,9 +632,9 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                       )}
                     </div>
                     <div>
-                      <div className="text-sm text-white/75">Find the catalogue product from a client image</div>
+                      <div className="text-sm text-white/75">Find catalogue products from a client image</div>
                       <p className="mt-1 text-xs leading-relaxed text-white/45">
-                        Find catalogue products from their product photos or linked project photos, including resized and WhatsApp copies. Review the result before adding it.
+                        Uses the same proven search as the website. Exact matches appear first, followed by the closest family and similar designs—even from room photos, screenshots or WhatsApp copies.
                       </p>
                       <label className="mt-3 block cursor-pointer text-xs text-[#D4AF37]">
                         {imageSearchFile ? "Replace client image" : "Upload client image"}
@@ -676,59 +655,15 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
                       >
                         {imageMatchBusy ? "Searching catalogue…" : "Search again"}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => refineImageMatches()}
-                        disabled={!imageSearchFile || imageMatchBusy || imageRefining}
-                        className="ml-2 mt-3 border border-[#D4AF37]/50 px-4 py-2.5 text-[10px] uppercase tracking-[0.18em] text-[#D4AF37] disabled:opacity-40"
-                      >
-                        {imageRefining ? "Comparing designs…" : "Compare designs in detail"}
-                      </button>
-                      {imageIndexProgress?.total > 0 && imageIndexProgress.remaining > 0 && (
-                        <div className="mt-2 text-xs text-white/55" role="status">
-                          Checking catalogue and project photos: {imageIndexProgress.total - imageIndexProgress.remaining} of {imageIndexProgress.total} ready
-                        </div>
+                      {imageMatchStatus && (
+                        <div className="mt-3 text-xs text-[#D4AF37]" role="status">{imageMatchStatus}</div>
                       )}
-                      <button
-                        type="button"
-                        onClick={diagnoseImageSearch}
-                        disabled={!imageSearchFile || imageDiagnosticBusy}
-                        className="ml-2 mt-3 border border-white/20 px-4 py-2.5 text-[10px] uppercase tracking-[0.18em] text-white/70 disabled:opacity-40"
-                        data-testid="quotation-image-search-diagnose"
-                      >
-                        {imageDiagnosticBusy ? "Diagnosing…" : "Diagnose search"}
-                      </button>
                     </div>
                   </div>
 
-                  {imageDiagnostic && (
-                    <div className="mt-4 border border-[#D4AF37]/30 bg-[#D4AF37]/[0.03] p-3 text-xs text-white/65" data-testid="quotation-image-search-diagnostic">
-                      <div className="font-medium text-[#D4AF37]">Search diagnosis: {imageDiagnostic.decision}</div>
-                      <div className="mt-1">{imageDiagnostic.reason}</div>
-                      <div className="mt-2 grid gap-1 md:grid-cols-2">
-                        <div>Products: {imageDiagnostic.catalogue?.published_products ?? 0}</div>
-                        <div>Product images: {imageDiagnostic.catalogue?.published_image_urls ?? 0}</div>
-                        <div>db.files mapped: {imageDiagnostic.catalogue?.db_file_rows_for_product_images ?? 0}</div>
-                        <div>With fingerprints: {imageDiagnostic.catalogue?.fingerprinted_db_file_rows ?? 0}</div>
-                        <div>Photo signatures ready: {imageDiagnostic.catalogue?.photo_indexed_db_file_rows ?? 0}</div>
-                        <div>Legacy index rows: {imageDiagnostic.catalogue?.quotation_image_index_rows ?? 0}</div>
-                        <div>AI fallback: {imageDiagnostic.would_enter_ai_fallback ? "Yes" : "No"}</div>
-                      </div>
-                      {imageDiagnostic.best && (
-                        <div className="mt-2">
-                          Best: {imageDiagnostic.best.sku || "No SKU"} · full {imageDiagnostic.best.full_distance} · crop {imageDiagnostic.best.variant_distance}
-                        </div>
-                      )}
-                      {imageDiagnostic.photo_best && (
-                        <div className="mt-1">
-                          Photo match: {imageDiagnostic.photo_best.sku} · score {imageDiagnostic.photo_best.score}
-                        </div>
-                      )}
-                      {imageDiagnostic.runner_up && (
-                        <div className="mt-1">
-                          Runner-up: {imageDiagnostic.runner_up.sku || "No SKU"} · full {imageDiagnostic.runner_up.full_distance} · crop {imageDiagnostic.runner_up.variant_distance}
-                        </div>
-                      )}
+                  {imageMatchIncomplete && (
+                    <div className="mt-4 border border-white/10 p-3 text-xs text-white/55">
+                      Some catalogue photos are still being prepared, so these results may be incomplete.
                     </div>
                   )}
 
@@ -740,37 +675,33 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
 
                   {imageMatches.length > 0 && (
                     <div className="mt-4 space-y-2" data-testid="quotation-image-search-results">
-                      <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Best catalogue matches</div>
-                      {imageMatches.map((match) => (
-                        <div key={match.product_id} className="grid grid-cols-[64px_1fr_auto] items-center gap-3 border border-white/10 p-3">
-                          <div className="h-16 w-16 bg-black/30">
-                            {match.image_url ? <a href={api.resolveImage(match.image_url)} target="_blank" rel="noreferrer" title="Open catalogue image full size"><img src={api.resolveImage(match.image_url)} alt={match.name} className="h-full w-full object-contain" /></a> : null}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="truncate text-sm text-white/80">{match.name}</div>
-                            <div className="mt-1 text-[10px] uppercase tracking-[0.13em] text-[#BF9972]">{match.sku || "No SKU"} · {match.category || "Catalogue product"}</div>
-                            <div className="mt-1 text-[10px] text-white/40">
-                              {match.match_label === "exact_file"
-                                ? "Exact website image"
-                                : match.match_label === "exact_image"
-                                  ? "Exact image content"
-                                  : match.match_label === "very_likely"
-                                    ? "Very likely product match"
-                                    : match.match_label === "possible"
-                                      ? "Possible product match"
-                                      : "Visual candidate · compare product photos before adding" }
-                              {Number.isFinite(match.visual_similarity) ? ` · ${match.visual_similarity}% visual similarity` : ""}
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Exact matches first · then closest and similar designs</div>
+                      {imageMatches.map((match) => {
+                        const product = match.product;
+                        const image = product.images?.[0];
+                        return (
+                          <div key={product.id} className="grid grid-cols-[64px_1fr_auto] items-center gap-3 border border-white/10 p-3">
+                            <div className="h-16 w-16 bg-black/30">
+                              {image ? <a href={api.resolveImage(image)} target="_blank" rel="noreferrer" title="Open catalogue image full size"><img src={api.resolveImage(image)} alt={product.name} className="h-full w-full object-contain" /></a> : null}
                             </div>
+                            <div className="min-w-0">
+                              <div className="truncate text-sm text-white/80">{product.name}</div>
+                              <div className="mt-1 text-[10px] uppercase tracking-[0.13em] text-[#BF9972]">{product.sku || "No SKU"} · {product.category || "Catalogue product"}</div>
+                              <div className="mt-1 text-[10px] text-white/40">
+                                {IMAGE_MATCH_LABELS[match.match_type] || "Visual match"}
+                                {Number.isFinite(match.score) ? ` · ${Math.round(match.score * 100)}% match` : ""}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => addImageMatch(match)}
+                              className="border border-[#D4AF37]/50 px-3 py-2 text-[9px] uppercase tracking-[0.14em] text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black"
+                            >
+                              Add
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => addImageMatch(match)}
-                            className="border border-[#D4AF37]/50 px-3 py-2 text-[9px] uppercase tracking-[0.14em] text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black"
-                          >
-                            Add
-                          </button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

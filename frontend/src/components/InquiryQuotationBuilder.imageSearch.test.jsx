@@ -12,35 +12,40 @@ describe("Quotation search by image", () => {
     expect(source).toContain('aria-label="Client image for catalogue search"');
   });
 
-  test("image search calls the protected quotation matcher and renders ranked matches", () => {
-    expect(apiSource).toContain("matchQuotationProductByImage");
-    expect(apiSource).toContain("/admin/quotations/product-match-by-image");
-    expect(source).toContain("findImageMatches");
-    expect(source).toContain('data-testid="quotation-image-search-results"');
-    expect(source).toContain("Very likely product match");
-    expect(source).toContain("visual_similarity");
+  test("quotation maker reuses the public exact-first catalogue search", () => {
+    expect(apiSource).toContain("searchByImage");
+    expect(apiSource).toContain('/search/image');
+    expect(source).toContain("await api.searchByImage(selectedFile, controller.signal)");
+    expect(source).toContain("await api.getImageSearchJob(result.job_id, controller.signal)");
+    expect(source).toContain("Exact matches first · then closest and similar designs");
+    expect(source).toContain("IMAGE_MATCH_LABELS[match.match_type]");
   });
 
-  test("admin can diagnose image search without running the matcher", () => {
-    expect(apiSource).toContain("diagnoseQuotationProductByImage");
-    expect(apiSource).toContain("/admin/quotations/product-match-diagnostics");
-    expect(source).toContain("diagnoseImageSearch");
-    expect(source).toContain('data-testid="quotation-image-search-diagnose"');
-    expect(source).toContain('data-testid="quotation-image-search-diagnostic"');
+  test("background results are polled without blocking quotation editing", () => {
+    expect(source).toContain('result.search_status === "processing"');
+    expect(source).toContain("waitForImageSearchPoll");
+    expect(source).toContain("poll < 60");
+    expect(source).toContain("requestId !== imageSearchSequence.current");
+    expect(source).toContain("imageSearchController.current?.abort()");
+  });
+
+  test("the older quotation-only matcher and diagnostics are no longer used", () => {
+    expect(source).not.toContain("matchQuotationProductByImage");
+    expect(source).not.toContain("startQuotationImageDetailJob");
+    expect(source).not.toContain("diagnoseImageSearch");
+    expect(source).not.toContain('data-testid="quotation-image-search-diagnose"');
   });
 
   test("matched catalogue product is only added after explicit confirmation", () => {
     expect(source).toContain("addImageMatch(match)");
     expect(source).toContain('onClick={() => addImageMatch(match)}');
+    expect(source).toContain("const product = match.product");
     expect(source).not.toContain("imageMatches[0]");
   });
-  test("upload starts local search and can refine without blocking candidate selection", () => {
-    expect(source).toContain("void findImageMatches(file)");
-    expect(source).toContain("await api.matchQuotationProductByImage(selectedFile, 5, true)");
-    expect(source).toContain("await api.startQuotationImageDetailJob(selectedFile)");
-    expect(source).toContain("await api.getQuotationImageDetailJob(imageDetailJobId.current)");
-    expect(source).toContain("Checking catalogue and project photos:");
-    expect(source).toContain("const result = await api.matchQuotationProductByImage(selectedFile, 5, true)");
-    expect(source).toContain("requestId !== imageSearchSequence.current");
+
+  test("result limit and accepted file types match customer image search", () => {
+    expect(source).toContain(".slice(0, 12)");
+    expect(source).toContain("file.size > 10 * 1024 * 1024");
+    expect(source).toContain('/^image\\/(jpeg|png|webp)$/');
   });
 });
