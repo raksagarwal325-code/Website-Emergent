@@ -345,6 +345,7 @@ class CustomerImageSearch:
                 rescue_region_matches, self.encoder, image, rows, urls, matches,
                 cancelled, diagnostic, seconds=BACKGROUND_REGION_SECONDS,
                 regions=BACKGROUND_REGIONS, force=True, coarse_threshold=.55,
+                max_refined=5,
             )
             products = {p["id"]: p for values in urls.values() for p in values}
             matches = add_related_designs(matches, list(products.values()), self.design_relations)
