@@ -81,6 +81,75 @@ def promote_detail_match(matches, query_data, rows, mapping):
     return [{**selected, 'match_type': 'closest'}] + [m for m in matches if m is not selected]
 
 
+def promote_regional_detail_matches(matches, query_data, rows, mapping,
+                                    diagnostic=None):
+    """Reorder ambiguous products within a category using isolated-room crops."""
+    if len(matches) < 2:
+        return matches
+    queries = [unpack_details(data) for data in query_data]
+    queries = [query for query in queries if query is not None]
+    if not queries:
+        return matches
+    by_category = {}
+    for index, match in enumerate(matches):
+        if match.get('match_type') == 'exact':
+            continue
+        category = str(match['product'].get('category') or '').strip().casefold()
+        if category:
+            by_category.setdefault(category, []).append(index)
+    ambiguous = {category: positions for category, positions in by_category.items()
+                 if len(positions) >= 2}
+    if not ambiguous:
+        return matches
+    eligible = {matches[index]['product']['id']
+                for positions in ambiguous.values() for index in positions}
+    scores = {}
+    for row in rows:
+        ids = {product['id'] for product in mapping.get(row.get('url'), [])} & eligible
+        if not ids:
+            continue
+        stored = unpack_details(row.get('design_vectors')) \
+            if row.get('design_version') == DESIGN_VERSION else None
+        if stored is None:
+            return matches
+        score = max(
+            float(((query @ stored.T).max(axis=0).mean()
+                   + (query @ stored.T).max(axis=1).mean()) / 2)
+            for query in queries
+        )
+        for product_id in ids:
+            scores[product_id] = max(score, scores.get(product_id, -1))
+    if any(product_id not in scores for product_id in eligible):
+        return matches
+    result = list(matches)
+    evidence = []
+    for category, positions in ambiguous.items():
+        product_ids = [matches[index]['product']['id'] for index in positions]
+        ordered = sorted(product_ids, key=lambda key: (-scores[key], key))
+        margin = scores[ordered[0]] - scores[ordered[1]]
+        winner_match = next(matches[index] for index in positions
+                            if matches[index]['product']['id'] == ordered[0])
+        evidence.append({
+            'category': category,
+            'winner': winner_match['product'].get('sku') or ordered[0],
+            'score': round(scores[ordered[0]], 4),
+            'margin': round(margin, 4),
+        })
+        if scores[ordered[0]] < .55 or margin < .01:
+            continue
+        ordered_matches = sorted(
+            (matches[index] for index in positions),
+            key=lambda match: (-scores[match['product']['id']],
+                               match['product']['id']),
+        )
+        for position, match in zip(positions, ordered_matches):
+            result[position] = ({**match, 'match_type': 'closest'}
+                                if position == positions[0] else match)
+    if diagnostic is not None:
+        diagnostic['regional_detail_candidates'] = evidence
+    return result
+
+
 def load_relations():
     data = json.loads(RELATIONS_PATH.read_text())
     if data.get('version') != 1:
