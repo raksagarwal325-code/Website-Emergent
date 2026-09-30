@@ -137,8 +137,10 @@ def select_region_matches(matches, scores, products, limit=12, force=False):
                    key=lambda i: (-float(consensus[i]), -float(best[i]), products[i]['id']))
     anchor = order[0]
     baseline_score = matches[0]['score'] if matches else 0
-    if (best[anchor] < max(.80, baseline_score + .03)
-            or (matches and products[anchor]['id'] == matches[0]['product']['id'])):
+    minimum = .80 if force else max(.80, baseline_score + .03)
+    if (best[anchor] < minimum
+            or (not force and matches
+                and products[anchor]['id'] == matches[0]['product']['id'])):
         return matches
     primary = int(scores[:, anchor].argmax())
     # Independent, corroborated region winners represent different objects in
