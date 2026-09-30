@@ -5,9 +5,134 @@ persistent production image index are never written by this module.
 """
 import hashlib
 import json
+import re
+import uuid
+import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 
-from customer_visual_features import MAX_BYTES, decode_image, image_hashes
+import numpy as np
+
+from customer_visual_features import EMBEDDING_DIM, MAX_BYTES, decode_image, image_hashes
+
+
+LEARNED_REFERENCE_LIMIT = 500
+LEARNED_REFERENCE_PRODUCT_LIMIT = 12
+LEARNED_REFERENCE_THRESHOLD = .86
+
+
+def _safe_filename(value):
+    name = re.sub(r"[^A-Za-z0-9._ -]+", "", str(value or "")).strip()
+    return name[:120] or "verified-client-image"
+
+
+class LearnedReferenceStore:
+    """Admin-verified examples consumed by the existing image ranker.
+
+    Only hashes and model features are persisted. The uploaded client image is
+    decoded in memory and discarded after the reference has been created.
+    """
+
+    def __init__(self, db, encoder):
+        self.db = db
+        self.encoder = encoder
+
+    @property
+    def collection(self):
+        return getattr(self.db, "customer_image_search_references", None) if self.db is not None else None
+
+    async def create(self, data, filename, product_ids, created_by):
+        if self.collection is None or self.db is None:
+            raise RuntimeError("Verified search examples are temporarily unavailable.")
+        product_ids = list(dict.fromkeys(str(value).strip() for value in product_ids if str(value).strip()))
+        if not 1 <= len(product_ids) <= LEARNED_REFERENCE_PRODUCT_LIMIT:
+            raise ValueError(f"Select between 1 and {LEARNED_REFERENCE_PRODUCT_LIMIT} catalogue products.")
+        products = await self.db.products.find(
+            {"id": {"$in": product_ids}, "status": "published"},
+            {"_id": 0, "id": 1, "sku": 1, "name": 1, "category": 1, "images": 1},
+        ).to_list(None)
+        if {product.get("id") for product in products} != set(product_ids):
+            raise ValueError("Every selected product must exist and be published.")
+        if self.encoder.session is None:
+            raise RuntimeError("Image search is still preparing. Try again in a few minutes.")
+        image = await asyncio.to_thread(decode_image, data)
+        hashes = await asyncio.to_thread(image_hashes, data, image)
+        if await self.collection.find_one({"pixels": hashes["pixels"]}, {"_id": 1}):
+            raise ValueError("This client image is already a verified search example.")
+        vectors = await asyncio.to_thread(self.encoder.encode, image)
+        array = np.asarray(vectors, dtype=np.float32)
+        if array.shape != (2, EMBEDDING_DIM) or not np.isfinite(array).all():
+            raise RuntimeError("The image could not be converted into a search reference.")
+        now = datetime.now(timezone.utc)
+        reference_id = uuid.uuid4().hex
+        await self.collection.insert_one({
+            "_id": reference_id,
+            "filename": _safe_filename(filename),
+            "product_ids": product_ids,
+            "sha256": hashes["sha256"],
+            "pixels": hashes["pixels"],
+            "vectors": vectors,
+            "created_at": now,
+            "created_by": str(created_by or "")[:160],
+        })
+        return {"id": reference_id, "filename": _safe_filename(filename),
+                "product_ids": product_ids, "created_at": now, "products": products}
+
+    async def list(self):
+        if self.collection is None or self.db is None:
+            return []
+        rows = await self.collection.find(
+            {}, {"sha256": 0, "pixels": 0, "vectors": 0}
+        ).sort("created_at", -1).to_list(LEARNED_REFERENCE_LIMIT)
+        ids = {product_id for row in rows for product_id in row.get("product_ids") or []}
+        products = await self.db.products.find(
+            {"id": {"$in": list(ids)}},
+            {"_id": 0, "id": 1, "sku": 1, "name": 1, "category": 1, "images": 1, "status": 1},
+        ).to_list(None) if ids else []
+        by_id = {product["id"]: product for product in products}
+        return [{"id": row["_id"], "filename": row.get("filename"),
+                 "product_ids": row.get("product_ids") or [],
+                 "created_at": row.get("created_at"), "created_by": row.get("created_by"),
+                 "products": [by_id[value] for value in row.get("product_ids") or [] if value in by_id]}
+                for row in rows]
+
+    async def delete(self, reference_id):
+        if self.collection is None:
+            return False
+        result = await self.collection.delete_one({"_id": reference_id})
+        return bool(result.deleted_count)
+
+    async def count(self):
+        if self.collection is None:
+            return 0
+        return await self.collection.count_documents({})
+
+    async def augment(self, rows, mapping, products):
+        """Add valid learned rows to one request without mutating the index."""
+        if self.encoder.session is None or self.collection is None:
+            return rows, mapping
+        documents = await self.collection.find({}, {"created_by": 0}).sort(
+            "created_at", -1
+        ).to_list(LEARNED_REFERENCE_LIMIT)
+        if not documents:
+            return rows, mapping
+        by_id = {product.get("id"): product for product in products
+                 if product.get("id") and product.get("status", "published") == "published"}
+        additional = []
+        augmented = dict(mapping)
+        for document in documents:
+            linked = [by_id[value] for value in document.get("product_ids") or [] if value in by_id]
+            vectors = np.asarray(document.get("vectors") or [], dtype=np.float32)
+            if not linked or vectors.shape != (2, EMBEDDING_DIM) or not np.isfinite(vectors).all():
+                continue
+            url = f"learned-reference:{document['_id']}"
+            additional.append({"url": url, "sha256": document.get("sha256"),
+                               "pixels": document.get("pixels"),
+                               "vectors": document.get("vectors"),
+                               "verified_reference": True,
+                               "verified_threshold": LEARNED_REFERENCE_THRESHOLD})
+            augmented[url] = linked
+        return list(rows) + additional, augmented
 
 
 class ReferenceBundle:
