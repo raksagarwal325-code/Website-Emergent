@@ -181,7 +181,7 @@ describe("convenience wrappers all use the reconciled messages", () => {
     const url = waImageSearchLink(NUMBER);
     const decoded = decodeURIComponent(url.split("?text=")[1]);
     expect(decoded).toBe(WA_MESSAGES.imageSearch);
-    expect(decoded).toMatch(/closest match or a custom alternative/i);
+    expect(decoded).toMatch(/closest catalogue piece or advise whether it can be custom-made/i);
   });
 
   test("waCartLink returns '' when number missing", () => {
