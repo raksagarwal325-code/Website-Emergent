@@ -35,9 +35,12 @@ class RegionSearchTests(unittest.TestCase):
         self.assertTrue(needs_background_region_check([]))
         self.assertFalse(needs_background_region_check([match(.9)]))
 
-    def test_background_regions_add_full_height_views_for_small_room_objects(self):
+    def test_background_regions_add_full_height_and_focused_views_for_small_room_objects(self):
         self.assertGreater(len(BACKGROUND_REGIONS), len(REGIONS))
         self.assertTrue(any(box[1] == 0 and box[3] == 1 for box in BACKGROUND_REGIONS))
+        self.assertTrue(any(round(box[2] - box[0], 2) == .3 and
+                            round(box[3] - box[1], 2) == .3
+                            for box in BACKGROUND_REGIONS))
 
     def test_region_scan_is_bounded_and_deduplicates_shared_products(self):
         encoder = SimpleNamespace(encode=Mock(return_value=vectors()[:1]), encode_query=Mock(return_value=vectors()*3))
@@ -103,7 +106,7 @@ class RegionSearchTests(unittest.TestCase):
         old = [match(.77, identity='a')]
         products = [{'id': 'a'}, {'id': 'b'}]
         for scores in ([[.70, .79]], [[.91, .93]], [[.90, .80]],
-                       [[float('nan'), .90]], [], [[.9]], [[.1,.9]]*5):
+                       [[float('nan'), .90]], [], [[.9]], [[.1,.9]]*6):
             # The .91/.93 case is bypassed below with an already-confident input.
             baseline = [match(.91, identity='a')] if scores == [[.91,.93]] else old
             self.assertIs(select_region_matches(baseline, scores, products), baseline)
@@ -156,12 +159,25 @@ class RegionSearchTests(unittest.TestCase):
         self.assertLess(ids.index('table-lamp'), ids.index('chandelier-variant'))
         self.assertNotIn('weak-floor-lamp', ids)
 
-    def test_more_than_three_regions_are_rejected(self):
+    def test_background_accepts_five_regions_but_rejects_unbounded_evidence(self):
         products = [{'id': 'a'}, {'id': 'b'}]
-        valid = select_region_matches([], [[.86, .72]] * 3, products, force=True)
+        valid = select_region_matches([], [[.86, .72]] * 5, products, force=True)
         self.assertEqual(valid[0]['product']['id'], 'a')
-        invalid = select_region_matches([], [[.86, .72]] * 4, products, force=True)
+        invalid = select_region_matches([], [[.86, .72]] * 6, products, force=True)
         self.assertEqual(invalid, [])
+
+    def test_background_scan_can_refine_five_spatially_separate_regions(self):
+        encoder = SimpleNamespace(encode=Mock(return_value=vectors()[:1]),
+                                  encode_query=Mock(return_value=vectors()*3))
+        regions = tuple((i * .2, 0, i * .2 + .19, .3) for i in range(5))
+        scores, products = collect_region_scores(
+            encoder, Image.new('RGB', (500, 300)),
+            [{'url': 'one', 'vectors': vectors()}],
+            {'one': [{'id': 'a'}]}, time.monotonic()+30, threading.Event(),
+            regions=regions, max_refined=5,
+        )
+        self.assertEqual(scores.shape, (5, 1))
+        self.assertEqual(encoder.encode_query.call_count, 5)
 
     def test_background_scan_can_recover_when_whole_photo_has_no_candidates(self):
         products = [{'id': 'catalogue'}, {'id': 'other'}]
