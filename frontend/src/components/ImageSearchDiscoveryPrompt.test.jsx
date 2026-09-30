@@ -3,8 +3,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import ImageSearchDiscoveryPrompt from "./ImageSearchDiscoveryPrompt";
 
-jest.mock("./CustomerImageSearch", () => function MockImageSearch({ onOpen }) {
-  return <button type="button" onClick={onOpen}>Upload a photo</button>;
+jest.mock("./CustomerImageSearch", () => function MockImageSearch({ onClose }) {
+  return <button type="button" onClick={onClose}>Upload a photo</button>;
 });
 
 beforeEach(() => {
@@ -35,7 +35,7 @@ test("dismisses for the browsing session and stays out of admin", () => {
 
   fireEvent.click(screen.getByRole("button", { name: "Dismiss photo search suggestion" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(window.sessionStorage.getItem("sge-image-search-seen")).toBe("1");
+  expect(window.sessionStorage.getItem("sge-image-search-discovery-dismissed")).toBe("1");
 
   unmount();
   render(
@@ -55,5 +55,5 @@ test("hands off to photo search without leaving the discovery card behind", () =
 
   fireEvent.click(screen.getByRole("button", { name: "Upload a photo" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(window.sessionStorage.getItem("sge-image-search-seen")).toBe("1");
+  expect(window.sessionStorage.getItem("sge-image-search-discovery-dismissed")).toBe("1");
 });

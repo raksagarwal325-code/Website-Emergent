@@ -35,11 +35,19 @@ test("opens one clear search menu with text and photo choices", () => {
     </MemoryRouter>
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Find a light by text or photo" }));
+  fireEvent.click(screen.getByRole("button", { name: "Search products by text or photo" }));
 
-  expect(screen.getByRole("dialog", { name: "Find a light" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Search products" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Upload a photo to find exact or similar products" })).toHaveTextContent("Search with a photo");
   expect(screen.getByText(/same design first, followed by close alternatives/i)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Upload a photo to find exact or similar products" }));
+  expect(screen.getByRole("dialog", { name: "Let a photograph lead the way" })).toBeInTheDocument();
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Upload an image" }));
+  expect(screen.getByRole("dialog", { name: "Let a photograph lead the way" })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Close image search" }));
+  expect(screen.queryByRole("dialog", { name: "Search products" })).not.toBeInTheDocument();
 });
 
 test("submits a header text search to the catalogue query", () => {
@@ -50,12 +58,12 @@ test("submits a header text search to the catalogue query", () => {
     </MemoryRouter>
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Find a light by text or photo" }));
+  fireEvent.click(screen.getByRole("button", { name: "Search products by text or photo" }));
   fireEvent.change(screen.getByLabelText("Search by product name, SKU or type"), {
     target: { value: "SGE-WL-085" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Search catalogue" }));
 
   expect(screen.getByTestId("location")).toHaveTextContent("/catalog?q=SGE-WL-085");
-  expect(screen.queryByRole("dialog", { name: "Find a light" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Search products" })).not.toBeInTheDocument();
 });

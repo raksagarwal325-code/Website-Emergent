@@ -105,6 +105,7 @@ export default function Header() {
   useEffect(() => {
     if (!searchOpen) return undefined;
     const closeFromOutside = (event) => {
+      if (event.target?.closest?.('[data-customer-image-search-overlay="true"]')) return;
       if (!searchMenuRef.current?.contains(event.target)) setSearchOpen(false);
     };
     const closeFromKeyboard = (event) => {
@@ -247,7 +248,7 @@ export default function Header() {
           <div ref={searchMenuRef} className="relative">
             <button
               type="button"
-              aria-label="Find a light by text or photo"
+              aria-label="Search products by text or photo"
               aria-expanded={searchOpen}
               aria-controls="header-product-search-menu"
               data-testid="header-search"
@@ -258,21 +259,21 @@ export default function Header() {
                 <Search size={19} strokeWidth={1.6} aria-hidden="true" />
                 <Camera size={10} strokeWidth={1.8} aria-hidden="true" className="absolute -bottom-1 -right-1.5 text-[#D4AF37]" />
               </span>
-              <span className="hidden whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.18em] text-white/72 group-hover:text-[#D4AF37] xl:inline">Find a light</span>
+              <span className="hidden whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.18em] text-white/72 group-hover:text-[#D4AF37] xl:inline">Search</span>
             </button>
 
             {searchOpen && (
               <div
                 id="header-product-search-menu"
                 role="dialog"
-                aria-label="Find a light"
+                aria-label="Search products"
                 className="fixed left-3 right-3 top-[5.25rem] z-[90] border border-[#D4AF37]/30 bg-[#140910]/[0.98] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.6)] backdrop-blur-xl sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+0.75rem)] sm:w-[370px]"
               >
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_92%_8%,rgba(212,175,55,0.14),transparent_38%)]" />
                 <div className="relative">
-                  <div className="text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">Lighting concierge</div>
-                  <h2 className="mt-2 font-serif text-xl text-[#FFF8ED]">Find the piece you have in mind</h2>
-                  <p className="mt-2 text-sm leading-relaxed text-white/60">Search by name, SKU or product type—or let a photograph lead the way.</p>
+                  <div className="text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">Search our catalogue</div>
+                  <h2 className="mt-2 font-serif text-xl text-[#FFF8ED]">Search by name or photograph</h2>
+                  <p className="mt-2 text-sm leading-relaxed text-white/60">Enter a product name, SKU or category, or upload a photograph to explore matching designs.</p>
 
                   <form onSubmit={submitHeaderSearch} className="mt-4">
                     <label htmlFor="header-product-search-input" className="sr-only">Search by product name, SKU or type</label>
@@ -297,7 +298,7 @@ export default function Header() {
                     <span className="h-px flex-1 bg-white/10" />
                   </div>
 
-                  <CustomerImageSearch variant="menu" onOpen={() => setSearchOpen(false)} />
+                  <CustomerImageSearch variant="menu" onClose={() => setSearchOpen(false)} />
                   <p className="mt-2 text-[10px] leading-relaxed text-white/42">Room photo, screenshot or saved reference—we’ll show the same design first, followed by close alternatives.</p>
                 </div>
               </div>
