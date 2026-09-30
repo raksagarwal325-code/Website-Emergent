@@ -46,6 +46,6 @@ describe("Quotation search by image", () => {
   test("result limit and accepted file types match customer image search", () => {
     expect(source).toContain(".slice(0, 12)");
     expect(source).toContain("file.size > 10 * 1024 * 1024");
-    expect(source).toContain('/^image\\/(jpeg|png|webp)$/');
+    expect(source).toContain("normalizeImageSearchFile(selectedFile)");
   });
 });

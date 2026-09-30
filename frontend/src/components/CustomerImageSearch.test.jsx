@@ -104,6 +104,18 @@ test("rejects unsupported and oversized uploads before sending a request", () =>
   expect(api.searchByImage).not.toHaveBeenCalled();
 });
 
+test.each([
+  ["WhatsApp-light.jpeg", "", "image/jpeg"],
+  ["WhatsApp-light.jpg", "application/octet-stream", "image/jpeg"],
+  ["WhatsApp-light.jpg", "image/jpg", "image/jpeg"],
+])("normalizes Safari and WhatsApp image metadata for %s", async (name, type, expected) => {
+  api.searchByImage.mockResolvedValue({ matches: [], available: true, index_complete: true, similarity_available: true });
+  open();
+  upload(new File(["photo"], name, { type }));
+  await waitFor(() => expect(api.searchByImage).toHaveBeenCalledTimes(1));
+  expect(api.searchByImage.mock.calls[0][0]).toHaveProperty("type", expected);
+});
+
 test("closing cancels an in-flight request and restores focus", async () => {
   api.searchByImage.mockReturnValue(new Promise(() => {}));
   open(); upload();

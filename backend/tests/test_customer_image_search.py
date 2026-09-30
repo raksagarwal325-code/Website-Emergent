@@ -153,7 +153,9 @@ def test_public_upload_endpoint_validates_type_and_size_and_runs_without_admin_s
         assert client.post("/api/search/image", files={"file": ("x.svg", b"x", "image/svg+xml")}).status_code == 400
         assert client.post("/api/search/image", files={"file": ("x.png", b"x" * (MAX_BYTES + 1), "image/png")}).status_code == 413
         assert client.post("/api/search/image", files={"file": ("x.png", photo(), "image/png")}).status_code == 200
-    assert service.search.await_count == 1
+        assert client.post("/api/search/image", files={"file": ("whatsapp.jpeg", photo(), "application/octet-stream")}).status_code == 200
+        assert client.post("/api/search/image", files={"file": ("iphone.jpg", photo(), "image/jpg")}).status_code == 200
+    assert service.search.await_count == 3
 
 
 @pytest.mark.asyncio

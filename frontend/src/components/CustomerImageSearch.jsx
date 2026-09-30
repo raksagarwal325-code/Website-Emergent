@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import { trackWhatsAppClick } from "../lib/analytics";
 import { productPath } from "../lib/productUrl";
 import { waImageSearchLink } from "../lib/whatsapp";
+import { normalizeImageSearchFile } from "../lib/imageSearchFile";
 
 // Decode and re-encode uploaded pixels. Never use uploaded bytes or a blob URL
 // directly as the DOM image source (including files with a spoofed MIME type).
@@ -87,14 +88,15 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen, onC
     if (typeof onClose === "function") onClose();
   };
 
-  const search = async (file) => {
-    if (!file) return;
+  const search = async (selectedFile) => {
+    if (!selectedFile) return;
     const attempt = ++sequence.current;
     controller.current?.abort();
     setBusy(false);
     setResult(null);
     setError("");
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    const file = normalizeImageSearchFile(selectedFile);
+    if (!file) {
       setError("Choose a JPG, PNG or WebP image.");
       return;
     }
@@ -176,7 +178,7 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen, onC
           <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); search(e.dataTransfer.files?.[0]); }} className="mt-6 flex flex-wrap items-center gap-4 border border-dashed border-white/25 p-5">
             {preview && <img src={preview} alt="Your search reference" className="h-24 w-24 object-contain bg-white" />}
             <div><button type="button" onClick={() => input.current?.click()} className="inline-flex items-center gap-2 bg-[#D4AF37] px-5 py-3 text-sm text-black"><Upload size={16} />{preview ? "Choose another photo" : "Choose a photo"}</button><p className="mt-2 text-xs text-white/55">Drag and drop, or choose a photo · JPG, PNG or WebP · Up to 10 MB</p><p className="mt-1 text-xs text-white/55">Tip: crop around one light for a more accurate result. Your photo is deleted automatically after the search.</p></div>
-            <input ref={input} hidden type="file" accept="image/jpeg,image/png,image/webp" aria-label="Upload image for product search" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; search(file); }} />
+            <input ref={input} hidden type="file" accept="image/*,.jpg,.jpeg,.png,.webp" aria-label="Upload image for product search" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; search(file); }} />
           </div>
           {busy && <p role="status" className="mt-6 flex items-center gap-2 text-sm text-[#D4AF37]"><Loader2 className="animate-spin" size={18} />{busyMessage}</p>}
           {error && <p role="alert" className="mt-5 text-sm text-red-300">{error}</p>}
