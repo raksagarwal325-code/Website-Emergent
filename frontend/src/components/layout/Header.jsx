@@ -245,7 +245,7 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
-          <div ref={searchMenuRef} className="relative">
+          <div ref={searchMenuRef} className="group relative">
             <button
               type="button"
               aria-label="Search products by text or photo"
@@ -262,6 +262,17 @@ export default function Header() {
               <span className="hidden whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.18em] text-white/72 group-hover:text-[#D4AF37] xl:inline">Search</span>
             </button>
 
+            {!searchOpen && (
+              <div
+                role="tooltip"
+                className="pointer-events-none absolute right-0 top-[calc(100%+0.7rem)] z-[85] hidden w-72 translate-y-1 border border-[#D4AF37]/30 bg-[#140910]/[0.98] p-4 text-left opacity-0 shadow-[0_18px_50px_rgba(0,0,0,0.5)] transition-[opacity,transform] duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 md:block"
+              >
+                <div className="text-[9px] font-semibold uppercase tracking-[0.26em] text-[#D4AF37]">Search your way</div>
+                <p className="mt-2 text-xs leading-relaxed text-white/72">Type a product name, SKU or category—or upload a room photo or screenshot.</p>
+                <p className="mt-2 text-[10px] leading-relaxed text-white/45">Exact matches appear first, followed by similar designs.</p>
+              </div>
+            )}
+
             {searchOpen && (
               <div
                 id="header-product-search-menu"
@@ -271,9 +282,9 @@ export default function Header() {
               >
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_92%_8%,rgba(212,175,55,0.14),transparent_38%)]" />
                 <div className="relative">
-                  <div className="text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">Search our catalogue</div>
-                  <h2 className="mt-2 font-serif text-xl text-[#FFF8ED]">Search by name or photograph</h2>
-                  <p className="mt-2 text-sm leading-relaxed text-white/60">Enter a product name, SKU or category, or upload a photograph to explore matching designs.</p>
+                  <div className="text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">Search</div>
+                  <h2 className="mt-2 font-serif text-xl text-[#FFF8ED]">How would you like to search?</h2>
+                  <p className="mt-2 text-sm leading-relaxed text-white/60">Enter a product name, SKU or category, or use a photo you already have.</p>
 
                   <form onSubmit={submitHeaderSearch} className="mt-4">
                     <label htmlFor="header-product-search-input" className="sr-only">Search by product name, SKU or type</label>
@@ -299,7 +310,7 @@ export default function Header() {
                   </div>
 
                   <CustomerImageSearch variant="menu" onClose={() => setSearchOpen(false)} />
-                  <p className="mt-2 text-[10px] leading-relaxed text-white/42">Room photo, screenshot or saved reference—we’ll show the same design first, followed by close alternatives.</p>
+                  <p className="mt-2 text-[10px] leading-relaxed text-white/42">Use a room photo, screenshot or saved image. We’ll show exact matches first, followed by similar options.</p>
                 </div>
               </div>
             )}
