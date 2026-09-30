@@ -68,6 +68,25 @@ class RegionSearchTests(unittest.TestCase):
             time.monotonic()+30, threading.Event()))
         encoder.encode.assert_not_called()
 
+    def test_background_threshold_refines_weak_but_spatially_distinct_regions(self):
+        query = np.zeros((1, 384), dtype=np.float32)
+        query[0, 0] = .65
+        query[0, 1] = np.sqrt(1 - .65 ** 2)
+        encoder = SimpleNamespace(
+            encode=Mock(return_value=query),
+            encode_query=Mock(return_value=np.repeat(query, 6, axis=0)),
+        )
+        rows = [{'url': 'one', 'vectors': vectors()}]
+        mapping = {'one': [{'id': 'a'}]}
+        image = Image.new('RGB', (400, 300))
+        self.assertIsNone(collect_region_scores(
+            encoder, image, rows, mapping, time.monotonic()+30, threading.Event()))
+        scores, products = collect_region_scores(
+            encoder, image, rows, mapping, time.monotonic()+30, threading.Event(),
+            coarse_threshold=.55)
+        self.assertEqual(scores.shape, (3, 1))
+        self.assertEqual([product['id'] for product in products], ['a'])
+
 
     def test_multiple_fixture_winners_and_close_variants_lead_without_exact_claims(self):
         old = [match(.77, identity='old')]
