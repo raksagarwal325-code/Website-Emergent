@@ -27,7 +27,7 @@ def needs_background_region_check(matches):
 
 
 def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
-                          diagnostic=None, regions=REGIONS):
+                          diagnostic=None, regions=REGIONS, coarse_threshold=.70):
     """Return complete region scores only; never download or write index data."""
     diagnostic = diagnostic if diagnostic is not None else {}
     diagnostic.update(coarse_regions=0, refined_regions=0)
@@ -73,7 +73,7 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
         return stop('cancelled' if cancelled.is_set() else 'budget_exceeded')
     coarse = np.asarray(scores)
     ranked = [int(index) for index in np.argsort(-coarse.max(axis=1), kind='stable')
-              if coarse[index].max() >= .70]
+              if coarse[index].max() >= coarse_threshold]
     selected = []
     covered_products = set()
     # First preserve spatially separate crops whose strongest catalogue product
@@ -166,7 +166,7 @@ def select_region_matches(matches, scores, products, limit=12, force=False):
 
 
 def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, diagnostic=None,
-                          seconds=None, regions=REGIONS, force=False):
+                          seconds=None, regions=REGIONS, force=False, coarse_threshold=.70):
     diagnostic = diagnostic if diagnostic is not None else {}
     if not force and not needs_region_check(matches):
         diagnostic['outcome'] = 'not_needed'
@@ -176,7 +176,8 @@ def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, dia
     worker = RegionEncoder(encoder, deadline, cancelled)
     try:
         result = collect_region_scores(worker, image, rows, mapping,
-                                       deadline, cancelled, diagnostic, regions)
+                                       deadline, cancelled, diagnostic, regions,
+                                       coarse_threshold=coarse_threshold)
         if result is None:
             return matches
         scores, products = result
