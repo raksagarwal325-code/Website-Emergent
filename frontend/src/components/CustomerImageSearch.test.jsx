@@ -56,6 +56,8 @@ test("uploads a photo and separates matching products from similar designs with 
   expect(screen.getByText("Similar designs")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Glass Chandelier/ })).toHaveAttribute("href", "/product/glass-chandelier-sge-ch-001");
   expect(api.searchByImage).toHaveBeenCalledWith(expect.any(File), expect.any(AbortSignal));
+  expect(screen.getByText(/Not quite the piece you had in mind/i)).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: /Ask our lighting team/i })).toBeInTheDocument();
 });
 
 test("polls a difficult search in the background and renders only its completed results", async () => {
@@ -117,8 +119,8 @@ test("an older response cannot replace results for a newer upload", async () => 
   open(); upload();
   await waitFor(() => expect(api.searchByImage).toHaveBeenCalledTimes(1));
   upload();
-  expect(await screen.findByText(/Still searching for the right light/)).toBeInTheDocument();
-  expect(await screen.findByRole("link", { name: /Let our team find it/i })).toHaveAttribute("href", expect.stringContaining("wa.me/919876543210"));
+  expect(await screen.findByText(/Let us continue the search for you/i)).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: /Ask our lighting team/i })).toHaveAttribute("href", expect.stringContaining("wa.me/919876543210"));
   await act(async () => resolveOld({ matches: [{ product, match_type: "exact" }] }));
   expect(screen.queryByText("Matching products")).not.toBeInTheDocument();
 });
