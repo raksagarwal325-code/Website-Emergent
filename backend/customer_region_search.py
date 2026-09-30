@@ -106,6 +106,7 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
             break
     if not selected:
         return stop('no_promising_regions')
+    diagnostic['selected_regions'] = [list(regions[index]) for index in selected]
     refined = []
     for index in selected:
         if cancelled.is_set() or time.monotonic() >= deadline:
