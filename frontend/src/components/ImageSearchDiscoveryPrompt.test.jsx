@@ -14,6 +14,8 @@ beforeEach(() => {
   Object.defineProperty(window, "scrollY", { configurable: true, value: 900 });
 });
 
+afterEach(() => jest.restoreAllMocks());
+
 test("appears near the bottom with premium photo-search guidance", () => {
   render(
     <MemoryRouter initialEntries={["/catalog"]}>
@@ -36,6 +38,14 @@ test("dismisses for the browsing session and stays out of admin", () => {
   fireEvent.click(screen.getByRole("button", { name: "Dismiss photo search suggestion" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(window.sessionStorage.getItem("sge-image-search-discovery-dismissed:/catalog")).toBe("1");
+
+  jest.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    callback();
+    return 1;
+  });
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 1900 });
+  fireEvent.scroll(window);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
   unmount();
   render(
