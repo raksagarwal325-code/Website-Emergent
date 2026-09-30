@@ -35,6 +35,14 @@ class RegionSearchTests(unittest.TestCase):
         self.assertTrue(needs_background_region_check([]))
         self.assertFalse(needs_background_region_check([match(.9)]))
 
+    def test_close_high_confidence_similars_receive_background_detail_check(self):
+        ambiguous = [match(.86, identity='a'), match(.84, identity='b')]
+        clear = [match(.86, identity='a'), match(.79, identity='b')]
+        exact = [match(1, 'exact', 'a'), match(.99, identity='b')]
+        self.assertTrue(needs_background_region_check(ambiguous))
+        self.assertFalse(needs_background_region_check(clear))
+        self.assertFalse(needs_background_region_check(exact))
+
     def test_background_regions_add_full_height_and_focused_views_for_small_room_objects(self):
         self.assertGreater(len(BACKGROUND_REGIONS), len(REGIONS))
         self.assertTrue(any(box[1] == 0 and box[3] == 1 for box in BACKGROUND_REGIONS))
@@ -184,6 +192,21 @@ class RegionSearchTests(unittest.TestCase):
         result = select_region_matches([], [[.86, .72]], products, force=True)
         self.assertEqual(result[0]['product']['id'], 'catalogue')
         self.assertEqual(result[0]['match_type'], 'closest')
+
+    def test_forced_room_search_can_retain_internal_cross_category_detail_probes(self):
+        products = [
+            {'id': 'chandelier', 'category': 'Chandelier'},
+            {'id': 'chandelier-2', 'category': 'Chandelier'},
+            {'id': 'hanging-visible', 'category': 'Hanging Light'},
+            {'id': 'hanging-detail', 'category': 'Hanging Light'},
+        ]
+        scores = [[.86, .82, .74, .66], [.84, .80, .72, .65]]
+        ordinary = select_region_matches([], scores, products, force=True)
+        probed = select_region_matches([], scores, products, force=True,
+                                       include_detail_probes=True)
+        self.assertFalse(any(item.get('_detail_probe') for item in ordinary))
+        self.assertTrue(any(item['product']['id'] == 'hanging-detail'
+                            and item.get('_detail_probe') for item in probed))
 
     def test_forced_background_scan_can_expand_a_gallery_leader(self):
         old = [match(.86, kind='closest', identity='chandelier')]
