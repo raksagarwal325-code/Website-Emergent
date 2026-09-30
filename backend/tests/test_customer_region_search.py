@@ -46,8 +46,8 @@ class RegionSearchTests(unittest.TestCase):
         mapping = {'one': [{'id': 'a'}, {'id': 'b'}], 'two': [{'id': 'a'}]}
         scores, products = collect_region_scores(encoder, Image.new('RGB', (400, 300)),
             rows, mapping, time.monotonic()+30, threading.Event())
-        self.assertEqual(scores.shape, (4, 2))
-        self.assertEqual(encoder.encode_query.call_count, 4)
+        self.assertEqual(scores.shape, (3, 2))
+        self.assertEqual(encoder.encode_query.call_count, 3)
         self.assertEqual([p['id'] for p in products], ['a', 'b'])
         self.assertEqual(encoder.encode.call_count, len(REGIONS))
         self.assertTrue(np.allclose(scores, 1))
@@ -102,7 +102,6 @@ class RegionSearchTests(unittest.TestCase):
             [.86, .85, .65, .845],
             [.73, .83, .76, .81],
             [.62, .70, .82, .69],
-            [.60, .68, .78, .67],
         ]
         result = select_region_matches([match(.74, identity='old')], scores, products, force=True)
         ids = [item['product']['id'] for item in result]
@@ -111,11 +110,11 @@ class RegionSearchTests(unittest.TestCase):
         self.assertLess(ids.index('table-lamp'), ids.index('variant'))
         self.assertEqual(result[ids.index('table-lamp')]['match_type'], 'closest')
 
-    def test_four_regions_are_valid_but_more_are_rejected(self):
+    def test_more_than_three_regions_are_rejected(self):
         products = [{'id': 'a'}, {'id': 'b'}]
-        valid = select_region_matches([], [[.86, .72]] * 4, products, force=True)
+        valid = select_region_matches([], [[.86, .72]] * 3, products, force=True)
         self.assertEqual(valid[0]['product']['id'], 'a')
-        invalid = select_region_matches([], [[.86, .72]] * 5, products, force=True)
+        invalid = select_region_matches([], [[.86, .72]] * 4, products, force=True)
         self.assertEqual(invalid, [])
 
     def test_background_scan_can_recover_when_whole_photo_has_no_candidates(self):
