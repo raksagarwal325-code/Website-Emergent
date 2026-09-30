@@ -18,7 +18,7 @@ FOCUSED_REGIONS = tuple((x, y, x + .3, y + .3)
                         for x in (0, .175, .35, .525, .7))
 BACKGROUND_REGIONS = REGIONS + TALL_REGIONS + FOCUSED_REGIONS
 REGION_SECONDS = 8.0
-REGION_VERSION = 'multi-product-regions-v6'
+REGION_VERSION = 'multi-product-regions-v7-category-detail-probes'
 
 
 def needs_region_check(matches):
@@ -29,7 +29,26 @@ def needs_region_check(matches):
 
 def needs_background_region_check(matches):
     """Background work may inspect photos whose whole-image rank found nothing."""
-    return not matches or needs_region_check(matches)
+    if not matches:
+        return True
+    if any(match.get('match_type') == 'exact' for match in matches):
+        return False
+    if needs_region_check(matches):
+        return True
+    # A room containing repeated pendants can look confidently like one broad
+    # chandelier to a whole-image embedding.  Close high-scoring alternatives
+    # are therefore still ambiguous and deserve the asynchronous object/detail
+    # pass.  Clear single-product leaders continue to bypass background work.
+    leader = matches[0]
+    return bool(
+        leader.get('match_type') == 'similar'
+        and float(leader.get('score') or 0) < .90
+        and any(
+            candidate.get('match_type') == 'similar'
+            and float(candidate.get('score') or 0) >= float(leader.get('score') or 0) - .035
+            for candidate in matches[1:5]
+        )
+    )
 
 
 def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
@@ -134,7 +153,7 @@ def _category(product):
 
 
 def select_region_matches(matches, scores, products, limit=12, force=False,
-                          diagnostic=None):
+                          diagnostic=None, include_detail_probes=False):
     """Lead with corroborated object winners, then variants and alternatives."""
     if not force and not needs_region_check(matches):
         return matches
@@ -218,14 +237,40 @@ def select_region_matches(matches, scores, products, limit=12, force=False,
     )
     leading = (regional + variants)[:6]
     alternatives = [i for i in order if i not in leading and best[i] >= .72]
-    return [{'product': products[i], 'score': float(best[i]),
-             'match_type': 'closest' if i in leading else 'similar'}
-            for i in (leading + alternatives)[:limit]]
+    selected = (leading + alternatives)[:limit]
+    result = [{'product': products[i], 'score': float(best[i]),
+               'match_type': 'closest' if i in leading else 'similar'}
+              for i in selected]
+    if not (force and include_detail_probes):
+        return result
+
+    # Keep a small, internal-only shortlist from categories that the broad
+    # visual rank would otherwise discard.  Patch/detail comparison can then
+    # recover an individual hanging light from a repeated cluster that broadly
+    # resembles a chandelier.  Probes are never returned to the customer unless
+    # detail evidence promotes one of them.
+    probe_limit = 24
+    anchor_best = float(best[anchor])
+    remaining = [i for i in order if i not in selected
+                 and best[i] >= .55 and best[i] >= anchor_best - .22]
+    by_category = {}
+    for index in remaining:
+        category = _category(products[index])
+        if category:
+            by_category.setdefault(category, []).append(index)
+    probes = []
+    for category in sorted(by_category):
+        probes.extend(by_category[category][:4])
+    probes = sorted(probes, key=lambda i: (-float(consensus[i]), products[i]['id']))[:probe_limit]
+    result.extend({'product': products[i], 'score': float(best[i]),
+                   'match_type': 'probe', '_detail_probe': True}
+                  for i in probes)
+    return result
 
 
 def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, diagnostic=None,
                           seconds=None, regions=REGIONS, force=False, coarse_threshold=.70,
-                          max_refined=3):
+                          max_refined=3, include_detail_probes=False):
     diagnostic = diagnostic if diagnostic is not None else {}
     if not force and not needs_region_check(matches):
         diagnostic['outcome'] = 'not_needed'
@@ -242,7 +287,8 @@ def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, dia
             return matches
         scores, products = result
         selected = select_region_matches(matches, scores, products, force=force,
-                                         diagnostic=diagnostic)
+                                         diagnostic=diagnostic,
+                                         include_detail_probes=include_detail_probes)
         diagnostic['outcome'] = 'matched' if selected is not matches else 'no_improvement'
         return selected
     except RegionDeadline:
