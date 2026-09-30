@@ -143,12 +143,12 @@ def select_region_matches(matches, scores, products, limit=12, force=False):
     primary = int(scores[:, anchor].argmax())
     # Independent, corroborated region winners represent different objects in
     # the room. Put them before alternate catalogue variants of one object.
-    regional = []
+    regional = [anchor]
     for region in sorted(range(len(scores)), key=lambda row: -float(scores[row].max())):
         winner = min(range(len(products)), key=lambda i: (-float(scores[region, i]), products[i]['id']))
         corroboration = np.delete(scores[:, winner], region)
-        if (winner == anchor or (scores[region, winner] >= .75 and corroboration.size
-                                 and corroboration.max() >= .72)):
+        if (scores[region, winner] >= .75 and corroboration.size
+                and corroboration.max() >= .72):
             if winner not in regional:
                 regional.append(winner)
     variants = sorted(
