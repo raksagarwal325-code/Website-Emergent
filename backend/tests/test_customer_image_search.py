@@ -321,11 +321,34 @@ async def test_background_worker_uses_long_budget_and_stores_final_public_result
     })
     assert seen["seconds"] == module.BACKGROUND_REGION_SECONDS
     assert seen["force"] is True
+    assert seen["include_detail_probes"] is True
     assert len(seen["regions"]) > 18
     update = jobs.update_one.await_args.args[1]
     assert update["$set"]["status"] == "complete"
     assert update["$set"]["result"]["matches"] == [{"product": product, "match_type": "closest"}]
     assert update["$unset"]["image"] == ""
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_high_confidence_search_queues_background_detail(monkeypatch):
+    from unittest.mock import Mock
+    service = CustomerImageSearch(None, AsyncMock())
+    products = [
+        {"id": "a", "images": ["/a"]},
+        {"id": "b", "images": ["/b"]},
+    ]
+    service.catalogue = AsyncMock(return_value=products)
+    service.manifest = AsyncMock(return_value={"/a": "a", "/b": "b"})
+    service.rows = AsyncMock(return_value=[
+        {"url": "/a", "vectors": scored_vector(.86)},
+        {"url": "/b", "vectors": scored_vector(.84)},
+    ])
+    service.encoder = SimpleNamespace(session=True, encode_query=Mock(return_value=vector()))
+    service.enqueue_region_search = AsyncMock(return_value="e" * 32)
+    result = await service.search(photo())
+    assert result["search_status"] == "processing"
+    assert result["job_id"] == "e" * 32
+    service.enqueue_region_search.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -79,6 +79,42 @@ class DesignRankingTests(unittest.TestCase):
             promote_regional_detail_matches(matches, [detail(0)], tied[:1], mapping),
             matches)
 
+    def test_regional_detail_can_promote_cross_category_internal_probe(self):
+        chandelier = match('SGE-CH-034', kind='closest')
+        hanging = match('SGE-HL-119', .66, kind='probe', category='Hanging Light')
+        hanging['_detail_probe'] = True
+        matches = [chandelier, hanging]
+        mapping = {item['product']['id']: [item['product']] for item in matches}
+        rows = [
+            {'url': 'SGE-CH-034', 'design_version': DESIGN_VERSION,
+             'design_vectors': detail(1)},
+            {'url': 'SGE-HL-119', 'design_version': DESIGN_VERSION,
+             'design_vectors': detail(0)},
+        ]
+        diagnostic = {}
+        result = promote_regional_detail_matches(
+            matches, [detail(0)], rows, mapping, diagnostic)
+        self.assertEqual([item['product']['id'] for item in result],
+                         ['SGE-HL-119', 'SGE-CH-034'])
+        self.assertEqual(result[0]['match_type'], 'closest')
+        self.assertTrue(diagnostic['regional_detail_probe']['promoted'])
+        self.assertFalse(any(item.get('_detail_probe') for item in result))
+
+    def test_regional_detail_never_leaks_weak_internal_probe(self):
+        chandelier = match('SGE-CH-034', kind='closest')
+        hanging = match('SGE-HL-119', .66, kind='probe', category='Hanging Light')
+        hanging['_detail_probe'] = True
+        matches = [chandelier, hanging]
+        mapping = {item['product']['id']: [item['product']] for item in matches}
+        rows = [
+            {'url': item['product']['id'], 'design_version': DESIGN_VERSION,
+             'design_vectors': detail(0)} for item in matches
+        ]
+        result = promote_regional_detail_matches(
+            matches, [detail(0)], rows, mapping)
+        self.assertEqual([item['product']['id'] for item in result], ['SGE-CH-034'])
+        self.assertFalse(any(item.get('_detail_probe') for item in result))
+
     def test_related_designs_follow_anchor_and_require_available_unambiguous_sku(self):
         a,b,c=match('a'),match('b'),match('c',category='wall')
         result=add_related_designs([a,b],[a['product'],b['product'],c['product']],[{'skus':['a','b','c','missing']}])

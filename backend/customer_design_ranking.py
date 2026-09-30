@@ -86,10 +86,13 @@ def promote_regional_detail_matches(matches, query_data, rows, mapping,
     """Reorder ambiguous products within a category using isolated-room crops."""
     if len(matches) < 2:
         return matches
+    has_probes = any(match.get('_detail_probe') for match in matches)
+    visible = ([match for match in matches if not match.get('_detail_probe')]
+               if has_probes else matches)
     queries = [unpack_details(data) for data in query_data]
     queries = [query for query in queries if query is not None]
     if not queries:
-        return matches
+        return visible
     by_category = {}
     for index, match in enumerate(matches):
         if match.get('match_type') == 'exact':
@@ -99,10 +102,16 @@ def promote_regional_detail_matches(matches, query_data, rows, mapping,
             by_category.setdefault(category, []).append(index)
     ambiguous = {category: positions for category, positions in by_category.items()
                  if len(positions) >= 2}
-    if not ambiguous:
-        return matches
-    eligible = {matches[index]['product']['id']
-                for positions in ambiguous.values() for index in positions}
+    probes = [index for index, match in enumerate(matches)
+              if match.get('_detail_probe')]
+    if not ambiguous and not probes:
+        return visible
+    eligible = ({matches[index]['product']['id']
+                 for positions in ambiguous.values() for index in positions}
+                | {matches[index]['product']['id'] for index in probes})
+    if probes:
+        eligible.update(match['product']['id'] for match in visible
+                        if match.get('match_type') != 'exact')
     scores = {}
     for row in rows:
         ids = {product['id'] for product in mapping.get(row.get('url'), [])} & eligible
@@ -111,7 +120,7 @@ def promote_regional_detail_matches(matches, query_data, rows, mapping,
         stored = unpack_details(row.get('design_vectors')) \
             if row.get('design_version') == DESIGN_VERSION else None
         if stored is None:
-            return matches
+            return visible
         score = max(
             float(((query @ stored.T).max(axis=0).mean()
                    + (query @ stored.T).max(axis=1).mean()) / 2)
@@ -120,7 +129,46 @@ def promote_regional_detail_matches(matches, query_data, rows, mapping,
         for product_id in ids:
             scores[product_id] = max(score, scores.get(product_id, -1))
     if any(product_id not in scores for product_id in eligible):
-        return matches
+        return visible
+
+    if probes:
+        probe_ids = [matches[index]['product']['id'] for index in probes]
+        visible_ids = [match['product']['id'] for match in visible
+                       if match.get('match_type') != 'exact' and match['product']['id'] in scores]
+        probe_winner = min(probe_ids, key=lambda key: (-scores[key], key))
+        visible_winner = min(visible_ids, key=lambda key: (-scores[key], key)) \
+            if visible_ids else None
+        margin = scores[probe_winner] - (scores[visible_winner] if visible_winner else -1)
+        promoted = scores[probe_winner] >= .56 and margin >= .01
+        if diagnostic is not None:
+            probe_match = next(match for match in matches
+                               if match['product']['id'] == probe_winner)
+            diagnostic['regional_detail_probe'] = {
+                'winner': probe_match['product'].get('sku') or probe_winner,
+                'score': round(scores[probe_winner], 4),
+                'margin': round(margin, 4),
+                'promoted': promoted,
+            }
+        if promoted:
+            winner_match = next(match for match in matches
+                                if match['product']['id'] == probe_winner)
+            visible = [{**winner_match, 'match_type': 'closest',
+                        '_detail_probe': False}] + [
+                            match for match in visible
+                            if match['product']['id'] != probe_winner
+                        ]
+        matches = visible
+        by_category = {}
+        for index, match in enumerate(matches):
+            if match.get('match_type') == 'exact':
+                continue
+            category = str(match['product'].get('category') or '').strip().casefold()
+            if category:
+                by_category.setdefault(category, []).append(index)
+        ambiguous = {category: positions for category, positions in by_category.items()
+                     if len(positions) >= 2}
+        if not ambiguous:
+            return matches
     result = list(matches)
     evidence = []
     for category, positions in ambiguous.items():

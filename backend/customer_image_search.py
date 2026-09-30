@@ -346,7 +346,7 @@ class CustomerImageSearch:
                 rescue_region_matches, self.encoder, image, rows, urls, matches,
                 cancelled, diagnostic, seconds=BACKGROUND_REGION_SECONDS,
                 regions=BACKGROUND_REGIONS, force=True, coarse_threshold=.55,
-                max_refined=5,
+                max_refined=5, include_detail_probes=True,
             )
             selected_regions = diagnostic.pop('selected_regions', [])
             if selected_regions and len(matches) >= 2:
@@ -363,6 +363,9 @@ class CustomerImageSearch:
                         detail_rows, urls, diagnostic)
                 except Exception:
                     logger.exception('Regional detail comparison unavailable; retaining regional results')
+            # Internal candidates exist only to give detail comparison category
+            # coverage. They must never become customer-facing suggestions.
+            matches = [match for match in matches if not match.get('_detail_probe')]
             products = {p["id"]: p for values in urls.values() for p in values}
             matches = add_related_designs(matches, list(products.values()), self.design_relations)
             indexed = sum(bool(row.get("vectors")) for row in rows)
