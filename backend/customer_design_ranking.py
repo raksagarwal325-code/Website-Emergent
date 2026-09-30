@@ -104,12 +104,13 @@ def promote_regional_detail_matches(matches, query_data, rows, mapping,
                  if len(positions) >= 2}
     probes = [index for index, match in enumerate(matches)
               if match.get('_detail_probe')]
-    if not ambiguous and not probes:
+    cross_category = len(by_category) >= 2
+    if not ambiguous and not probes and not cross_category:
         return visible
     eligible = ({matches[index]['product']['id']
                  for positions in ambiguous.values() for index in positions}
                 | {matches[index]['product']['id'] for index in probes})
-    if probes:
+    if probes or cross_category:
         eligible.update(match['product']['id'] for match in visible
                         if match.get('match_type') != 'exact')
     scores = {}
@@ -139,39 +140,55 @@ def promote_regional_detail_matches(matches, query_data, rows, mapping,
     if any(product_id not in scores for product_id in eligible):
         return visible
 
-    if probes:
-        probe_ids = [matches[index]['product']['id'] for index in probes]
-        visible_ids = [match['product']['id'] for match in visible
-                       if match.get('match_type') != 'exact' and match['product']['id'] in scores]
+    if probes or cross_category:
+        candidate_ids = [match['product']['id'] for match in matches
+                         if match.get('match_type') != 'exact'
+                         and match['product']['id'] in scores]
+        hidden_ids = {matches[index]['product']['id'] for index in probes}
+        lead_category = next(
+            (str(match['product'].get('category') or '').strip().casefold()
+             for match in visible if match.get('match_type') != 'exact'),
+            '',
+        )
         promoted_ids = []
         evidence = []
         for query_index in range(len(queries)):
-            probe_winner = min(
-                probe_ids,
+            ordered = sorted(
+                candidate_ids,
                 key=lambda key: (-scores_by_query[key][query_index], key),
             )
-            visible_winner = min(
-                visible_ids,
-                key=lambda key: (-scores_by_query[key][query_index], key),
-            ) if visible_ids else None
-            probe_score = scores_by_query[probe_winner][query_index]
-            visible_score = scores_by_query[visible_winner][query_index] \
-                if visible_winner else -1
-            margin = probe_score - visible_score
-            promoted = probe_score >= .56 and margin >= .01
-            probe_match = next(match for match in matches
-                               if match['product']['id'] == probe_winner)
+            winner = ordered[0]
+            winner_score = scores_by_query[winner][query_index]
+            runner_up = scores_by_query[ordered[1]][query_index] \
+                if len(ordered) > 1 else -1
+            margin = winner_score - runner_up
+            winner_match = next(match for match in matches
+                                if match['product']['id'] == winner)
+            winner_category = str(
+                winner_match['product'].get('category') or ''
+            ).strip().casefold()
+            # Same-category visible candidates are handled below without
+            # disturbing unrelated positions. This stage exists to recover a
+            # different fixture category (or a decisive internal probe).
+            promoted = (winner_score >= .56 and margin >= .01
+                        and (winner in hidden_ids
+                             or winner_category != lead_category))
             evidence.append({
                 'region': query_index,
-                'winner': probe_match['product'].get('sku') or probe_winner,
-                'score': round(probe_score, 4),
+                'winner': winner_match['product'].get('sku') or winner,
+                'category': winner_match['product'].get('category'),
+                'score': round(winner_score, 4),
                 'margin': round(margin, 4),
                 'promoted': promoted,
+                'hidden_probe': winner in hidden_ids,
             })
-            if promoted and probe_winner not in promoted_ids:
-                promoted_ids.append(probe_winner)
+            if promoted and winner not in promoted_ids:
+                promoted_ids.append(winner)
         if diagnostic is not None:
-            diagnostic['regional_detail_probes'] = evidence
+            diagnostic['regional_detail_regions'] = evidence
+            diagnostic['regional_detail_probes'] = [
+                item for item in evidence if item['hidden_probe']
+            ]
             if evidence:
                 diagnostic['regional_detail_probe'] = evidence[0]
         if promoted_ids:

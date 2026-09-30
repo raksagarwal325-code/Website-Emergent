@@ -144,6 +144,35 @@ class DesignRankingTests(unittest.TestCase):
         )
         self.assertFalse(any(item.get('_detail_probe') for item in result))
 
+    def test_regional_detail_promotes_visible_cross_category_crop_winners(self):
+        matches = [
+            match('SGE-CH-034', kind='closest'),
+            match('SGE-CH-050', .84),
+            match('SGE-HL-069', .79, category='Hanging Light'),
+            match('SGE-HL-070', .78, category='Hanging Light'),
+        ]
+        mapping = {item['product']['id']: [item['product']] for item in matches}
+        rows = [
+            {'url': 'SGE-CH-034', 'design_version': DESIGN_VERSION,
+             'design_vectors': detail(1)},
+            {'url': 'SGE-CH-050', 'design_version': DESIGN_VERSION,
+             'design_vectors': detail(3)},
+            {'url': 'SGE-HL-069', 'design_version': DESIGN_VERSION,
+             'design_vectors': detail(0)},
+            {'url': 'SGE-HL-070', 'design_version': DESIGN_VERSION,
+             'design_vectors': detail(2)},
+        ]
+        diagnostic = {}
+        result = promote_regional_detail_matches(
+            matches, [detail(0), detail(2)], rows, mapping, diagnostic)
+        self.assertEqual([item['product']['id'] for item in result[:2]],
+                         ['SGE-HL-069', 'SGE-HL-070'])
+        self.assertEqual(
+            [item['winner'] for item in diagnostic['regional_detail_regions']
+             if item['promoted']],
+            ['SGE-HL-069', 'SGE-HL-070'],
+        )
+
     def test_related_designs_follow_anchor_and_require_available_unambiguous_sku(self):
         a,b,c=match('a'),match('b'),match('c',category='wall')
         result=add_related_designs([a,b],[a['product'],b['product'],c['product']],[{'skus':['a','b','c','missing']}])
