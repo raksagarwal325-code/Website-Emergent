@@ -146,15 +146,24 @@ def rank_images(hashes, vectors, rows, products_by_url, limit=12, threshold=0.72
                 and np.isfinite(query).all() and np.isfinite(stored).all()):
             score = float(np.max(query @ stored.T))
             whole_score = float(np.max(query[:2] @ stored.T))
-        strong = exact or score >= threshold
+        verified = bool(row.get("verified_reference"))
+        row_threshold = float(row.get("verified_threshold") or threshold) if verified else threshold
+        strong = exact or score >= row_threshold
+        # Owner-verified references are a high-confidence enhancement only.
+        # Below their stricter gate they disappear completely rather than
+        # weakening the established catalogue fallback.
+        if verified and not strong:
+            continue
         if not strong and whole_score < 0.55:
             continue
         destination = ranked if strong else possible
         for product in products_by_url.get(row["url"], []):
-            candidate = {"product": product, "match_type": "exact" if exact else ("similar" if strong else "possible"),
+            candidate = {"product": product,
+                         "match_type": ("closest" if verified else
+                                        ("exact" if exact else ("similar" if strong else "possible"))),
                          "score": score if strong else whole_score}
             old = destination.get(product["id"])
-            if old is None or (exact, candidate["score"]) > (old["match_type"] == "exact", old["score"]):
+            if old is None or (candidate["match_type"] == "exact", candidate["score"]) > (old["match_type"] == "exact", old["score"]):
                 destination[product["id"]] = candidate
     if ranked:
         return sorted(ranked.values(), key=lambda x: (x["match_type"] != "exact", -x["score"], x["product"]["id"]))[:limit]

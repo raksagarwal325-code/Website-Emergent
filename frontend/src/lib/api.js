@@ -103,6 +103,21 @@ export const api = {
     `/search/image/jobs/${encodeURIComponent(jobId)}`,
     { signal, timeout: 10000 },
   ).then(r => r.data),
+  adminImageSearchReferences: () => client.get(
+    "/admin/customer-image-search/references",
+  ).then(r => r.data),
+  adminAddImageSearchReference: (file, productIds) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("product_ids", JSON.stringify(productIds));
+    return client.post("/admin/customer-image-search/references", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 45000,
+    }).then(r => r.data);
+  },
+  adminDeleteImageSearchReference: (id) => client.delete(
+    `/admin/customer-image-search/references/${encodeURIComponent(id)}`,
+  ).then(r => r.data),
   authMe: () => client.get("/auth/me").then(r => r.data),
   authSession: (session_id) => client.post("/auth/session", { session_id }).then(r => r.data),
   authLogout: () => client.post("/auth/logout").then(r => r.data),

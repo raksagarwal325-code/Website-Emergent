@@ -6736,6 +6736,7 @@ async def root():
 
 # Customer-facing image search has its own service, model and Mongo collections.
 from customer_image_search import CustomerImageSearch, search_router  # noqa: E402
+from customer_visual_features import MAX_BYTES  # noqa: E402
 
 
 async def _load_customer_catalogue_image(url):
@@ -6754,6 +6755,49 @@ api.include_router(search_router(customer_image_search, rate_limit("customer-ima
 @api.get("/admin/customer-image-search/status")
 async def customer_image_search_status(admin: _AdminUser = Depends(require_admin)):
     return await customer_image_search.status()
+
+
+@api.get("/admin/customer-image-search/references")
+async def customer_image_search_references(admin: _AdminUser = Depends(require_admin)):
+    return {"items": await customer_image_search.learned_references.list()}
+
+
+@api.post("/admin/customer-image-search/references")
+async def create_customer_image_search_reference(
+    file: UploadFile = File(...),
+    product_ids: str = Form(...),
+    admin: _AdminUser = Depends(require_admin),
+):
+    try:
+        selected = json.loads(product_ids)
+    except (TypeError, json.JSONDecodeError):
+        raise HTTPException(400, "Select the correct catalogue products.")
+    if not isinstance(selected, list):
+        raise HTTPException(400, "Select the correct catalogue products.")
+    try:
+        data = await file.read(MAX_BYTES + 1)
+        if len(data) > MAX_BYTES:
+            raise HTTPException(413, "Choose an image smaller than 10 MB.")
+        return await customer_image_search.learned_references.create(
+            data, file.filename, selected, admin.email)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    finally:
+        await file.close()
+
+
+@api.delete("/admin/customer-image-search/references/{reference_id}")
+async def delete_customer_image_search_reference(
+    reference_id: str,
+    admin: _AdminUser = Depends(require_admin),
+):
+    if len(reference_id) != 32 or any(char not in "0123456789abcdef" for char in reference_id):
+        raise HTTPException(404, "Verified search example not found.")
+    if not await customer_image_search.learned_references.delete(reference_id):
+        raise HTTPException(404, "Verified search example not found.")
+    return {"deleted": True}
 
 
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon, FolderOpen, RefreshCw, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon, FolderOpen, RefreshCw, AlertTriangle, ShieldCheck, Camera } from "lucide-react";
 import { api } from "../lib/api";
 import { compareBySku } from "../lib/api";
 import { gmailComposeUrl } from "../lib/gmailCompose";
@@ -16,6 +16,7 @@ import QuotationBrandingAdmin from "../components/admin/QuotationBrandingAdmin";
 import CategoryImagesAdmin from "../components/admin/CategoryImagesAdmin";
 import MediaLibraryAdmin from "../components/MediaLibraryAdmin";
 import ProductVersionHistory from "../components/ProductVersionHistory";
+import ImageSearchLearningAdmin from "../components/admin/ImageSearchLearningAdmin";
 import BulkCatalogueManager from "../components/BulkCatalogueManager";
 import InquiryQuotationBuilder from "../components/InquiryQuotationBuilder";
 import { LEGAL_DEFAULT_UPDATED_AT, serializeLegalDefault } from "../lib/legalContent";
@@ -58,6 +59,7 @@ export default function Admin() {
     { key: "products", label: "Products", icon: Package },
     { key: "media-library", label: "Media Library", icon: FolderOpen },
     { key: "image-protection", label: "Image Protection", icon: ShieldCheck },
+    { key: "image-search", label: "Image Search", icon: Camera },
     { key: "reviews", label: "Reviews", icon: Star, badge: reviewCounts.pending },
     { key: "quotations", label: "Quotations", icon: MessageSquare },
     { key: "inquiries", label: "Inquiries", icon: MessageSquare },
@@ -131,6 +133,8 @@ export default function Admin() {
           <WatermarkAdmin settings={settings} onSave={refresh} />
         </section>
       )}
+
+      {tab === "image-search" && <ImageSearchLearningAdmin products={products} />}
 
       {tab === "products" && (
         <ProductsAdmin products={products} categories={categories} refresh={refresh} setEditing={setEditing} editing={editing} />
