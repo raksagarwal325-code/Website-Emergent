@@ -52,10 +52,14 @@ export default function ImageSearchDiscoveryPrompt() {
       const nearBottomDistance = Math.max(500, viewportHeight * 0.75);
       if (distanceFromBottom <= nearBottomDistance) reveal();
     };
-    const onScroll = () => {
-      if (window.scrollY >= 80) hasScrolledRef.current = true;
+    const scheduleCheck = () => {
       if (!frame) frame = window.requestAnimationFrame(checkPosition);
     };
+    const onScroll = () => {
+      if (window.scrollY >= 80) hasScrolledRef.current = true;
+      scheduleCheck();
+    };
+    const onResize = () => scheduleCheck();
 
     const footer = document.querySelector("footer");
     if (footer && "IntersectionObserver" in window) {
@@ -69,13 +73,13 @@ export default function ImageSearchDiscoveryPrompt() {
     }
 
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
+    window.addEventListener("resize", onResize);
 
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       footerObserver?.disconnect();
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("resize", onResize);
     };
   }, [excluded, pathname, storageKey]);
 
