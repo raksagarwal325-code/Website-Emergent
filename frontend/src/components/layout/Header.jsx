@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ArrowUpRight, Camera, Heart, Images, Menu, Search, ShoppingBag, X } from "lucide-react";
 import { useCatalog } from "../../context/CatalogContext";
 import { api } from "../../lib/api";
-import CustomerImageSearch from "../CustomerImageSearch";
+const CustomerImageSearch = lazy(() => import("../CustomerImageSearch"));
 
 const NAV_ITEMS = [
   {
@@ -309,7 +309,7 @@ export default function Header() {
                     <span className="h-px flex-1 bg-white/10" />
                   </div>
 
-                  <CustomerImageSearch variant="menu" onClose={() => setSearchOpen(false)} />
+                  <Suspense fallback={null}><CustomerImageSearch variant="menu" onClose={() => setSearchOpen(false)} /></Suspense>
                   <p className="mt-2 text-[10px] leading-relaxed text-white/42">Use a room photo, screenshot or saved image. We’ll show exact matches first, followed by similar options.</p>
                 </div>
               </div>
