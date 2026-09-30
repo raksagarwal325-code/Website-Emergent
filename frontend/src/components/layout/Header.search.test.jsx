@@ -27,7 +27,7 @@ function LocationProbe() {
   return <output data-testid="location">{location.pathname}{location.search}</output>;
 }
 
-test("opens one clear search menu with text and photo choices", () => {
+test("opens one clear search menu with text and photo choices", async () => {
   render(
     <MemoryRouter>
       <Header />
@@ -41,7 +41,7 @@ test("opens one clear search menu with text and photo choices", () => {
   fireEvent.click(screen.getByRole("button", { name: "Search products by text or photo" }));
 
   expect(screen.getByRole("dialog", { name: "Search products" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Upload a photo to find exact or similar products" })).toHaveTextContent("Search with a photo");
+  expect(await screen.findByRole("button", { name: "Upload a photo to find exact or similar products" })).toHaveTextContent("Search with a photo");
   expect(screen.getByText(/exact matches first, followed by similar options/i)).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Upload a photo to find exact or similar products" }));
