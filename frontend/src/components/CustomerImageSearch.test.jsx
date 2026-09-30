@@ -171,7 +171,8 @@ test("keeps exact and closest designs ahead of reviewed alternatives", async () 
   open(); upload();
   await screen.findByText("The closest expression we found");
   expect(screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent)).toEqual([
-    "Your catalogue match", "The closest expression we found", "In the same design language", "Further pieces to consider"
+    "Your catalogue match", "The closest expression we found", "In the same design language", "Further pieces to consider",
+    "Not quite the piece you had in mind?"
   ]);
   expect(screen.getByText(/confirm scale, light count and finish/i)).toBeInTheDocument();
 });
