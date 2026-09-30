@@ -467,7 +467,10 @@ def search_router(service, rate_dependency):
     @router.post("/search/image", dependencies=[Depends(rate_dependency)])
     async def search_image(file: UploadFile = File(...)):
         try:
-            if (file.content_type or "").split(";")[0].lower() not in {"image/jpeg", "image/png", "image/webp"}:
+            mime = (file.content_type or "").split(";")[0].strip().lower()
+            extension = (file.filename or "").rsplit(".", 1)[-1].lower()
+            allowed_mimes = {"image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/x-png", "image/webp"}
+            if mime not in allowed_mimes and extension not in {"jpg", "jpeg", "png", "webp"}:
                 raise HTTPException(400, "Choose a JPG, PNG or WebP image.")
             data = await file.read(MAX_BYTES + 1)
             if len(data) > MAX_BYTES:
