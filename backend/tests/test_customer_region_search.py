@@ -129,6 +129,33 @@ class RegionSearchTests(unittest.TestCase):
         self.assertLess(ids.index('table-lamp'), ids.index('variant'))
         self.assertEqual(result[ids.index('table-lamp')]['match_type'], 'closest')
 
+    def test_forced_room_search_prefers_repeated_evidence_over_one_crop_spike(self):
+        products = [
+            {'id': 'wrong', 'sku': 'SGE-CH-004', 'category': 'Chandelier'},
+            {'id': 'correct', 'sku': 'SGE-CH-013', 'category': 'Chandelier'},
+        ]
+        scores = [[.89, .84], [.70, .82]]
+        diagnostic = {}
+        result = select_region_matches([], scores, products, force=True,
+                                       diagnostic=diagnostic)
+        self.assertEqual(result[0]['product']['id'], 'correct')
+        self.assertEqual(diagnostic['regional_candidates'][0]['sku'], 'SGE-CH-013')
+        self.assertEqual(diagnostic['regional_candidates'][0]['support'], 2)
+
+    def test_forced_room_search_promotes_credible_second_category_from_one_crop(self):
+        products = [
+            {'id': 'chandelier', 'category': 'Chandelier'},
+            {'id': 'chandelier-variant', 'category': 'Chandelier'},
+            {'id': 'table-lamp', 'category': 'Table Lamp'},
+            {'id': 'weak-floor-lamp', 'category': 'Floor Lamp'},
+        ]
+        scores = [[.86, .85, .63, .55], [.82, .81, .72, .60]]
+        result = select_region_matches([], scores, products, force=True)
+        ids = [item['product']['id'] for item in result]
+        self.assertEqual(ids[0], 'chandelier')
+        self.assertLess(ids.index('table-lamp'), ids.index('chandelier-variant'))
+        self.assertNotIn('weak-floor-lamp', ids)
+
     def test_more_than_three_regions_are_rejected(self):
         products = [{'id': 'a'}, {'id': 'b'}]
         valid = select_region_matches([], [[.86, .72]] * 3, products, force=True)
