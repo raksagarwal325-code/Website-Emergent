@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from customer_region_search import (BACKGROUND_REGIONS, REGIONS, collect_region_scores,
                                     needs_background_region_check, needs_region_check,
                                     select_region_matches, rescue_region_matches)
+from customer_region_encoder import RegionDeadline
 
 
 def match(score=.76, kind='similar', identity='a'):
@@ -186,6 +187,26 @@ class RegionSearchTests(unittest.TestCase):
         )
         self.assertEqual(scores.shape, (5, 1))
         self.assertEqual(encoder.encode_query.call_count, 5)
+
+    def test_completed_refined_regions_survive_a_late_budget_expiry(self):
+        encoder = SimpleNamespace(
+            encode=Mock(return_value=vectors()[:1]),
+            encode_query=Mock(side_effect=[vectors() * 3, RegionDeadline()]),
+        )
+        regions = ((0, 0, .4, .4), (.6, .6, 1, 1))
+        diagnostic = {}
+        scores, products = collect_region_scores(
+            encoder, Image.new('RGB', (500, 300)),
+            [{'url': 'one', 'vectors': vectors()}],
+            {'one': [{'id': 'a'}]}, time.monotonic()+30, threading.Event(),
+            diagnostic=diagnostic, regions=regions, max_refined=2,
+        )
+        self.assertEqual(scores.shape, (1, 1))
+        self.assertEqual([product['id'] for product in products], ['a'])
+        self.assertEqual(diagnostic['refined_regions'], 1)
+        self.assertEqual(diagnostic['requested_refined_regions'], 2)
+        self.assertEqual(diagnostic['partial_reason'], 'budget_exceeded')
+        self.assertEqual(diagnostic['selected_regions'], [list(regions[0])])
 
     def test_background_scan_can_recover_when_whole_photo_has_no_candidates(self):
         products = [{'id': 'catalogue'}, {'id': 'other'}]
