@@ -105,6 +105,7 @@ export default function Header() {
   useEffect(() => {
     if (!searchOpen) return undefined;
     const closeFromOutside = (event) => {
+      if (event.target?.closest?.('[data-customer-image-search-overlay="true"]')) return;
       if (!searchMenuRef.current?.contains(event.target)) setSearchOpen(false);
     };
     const closeFromKeyboard = (event) => {
