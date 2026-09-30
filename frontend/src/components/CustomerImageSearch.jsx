@@ -41,7 +41,7 @@ export function waitForPoll(milliseconds, signal) {
   });
 }
 
-export default function CustomerImageSearch({ variant = "catalogue", onOpen }) {
+export default function CustomerImageSearch({ variant = "catalogue", onOpen, onClose }) {
   const landingTrigger = variant === "landing";
   const menuTrigger = variant === "menu";
   const [open, setOpen] = useState(false);
@@ -84,6 +84,7 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen }) {
     controller.current?.abort();
     setBusy(false);
     setOpen(false);
+    if (typeof onClose === "function") onClose();
   };
 
   const search = async (file) => {
@@ -150,12 +151,6 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen }) {
       ref={trigger}
       type="button"
       onClick={() => {
-        try {
-          window.sessionStorage.setItem("sge-image-search-seen", "1");
-          window.dispatchEvent(new Event("sge:image-search-opened"));
-        } catch (_) {
-          // Search remains available when session storage is blocked.
-        }
         if (typeof onOpen === "function") onOpen();
         setOpen(true);
       }}
