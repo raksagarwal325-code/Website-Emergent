@@ -5,7 +5,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from customer_design_ranking import (DESIGN_VERSION, add_related_designs,
-    needs_detail_check, promote_detail_match, unpack_details)
+    needs_detail_check, promote_detail_match, promote_regional_detail_matches,
+    unpack_details)
 
 
 def detail(axis):
@@ -43,6 +44,40 @@ class DesignRankingTests(unittest.TestCase):
         mapping={m['product']['id']:[m['product']] for m in matches}
         rows=[{'url':k,'design_version':DESIGN_VERSION,'design_vectors':detail(0)} for k in mapping]
         self.assertIs(promote_detail_match(matches,detail(0),rows,mapping),matches)
+
+    def test_regional_details_reorder_only_within_the_same_category(self):
+        matches = [
+            match('SGE-CH-004', kind='closest'),
+            match('SGE-TL-008', kind='closest', category='Table Lamp'),
+            match('SGE-HL-075', kind='closest', category='Hanging Light'),
+            match('SGE-CH-013', .79),
+        ]
+        mapping = {item['product']['id']: [item['product']] for item in matches}
+        rows = [
+            {'url': item['product']['id'], 'design_version': DESIGN_VERSION,
+             'design_vectors': detail(0 if item['product']['id'] == 'SGE-CH-013' else 1)}
+            for item in matches
+        ]
+        diagnostic = {}
+        result = promote_regional_detail_matches(
+            matches, [detail(0)], rows, mapping, diagnostic)
+        self.assertEqual([item['product']['id'] for item in result], [
+            'SGE-CH-013', 'SGE-TL-008', 'SGE-HL-075', 'SGE-CH-004'])
+        self.assertEqual(result[0]['match_type'], 'closest')
+        self.assertEqual(diagnostic['regional_detail_candidates'][0]['winner'],
+                         'SGE-CH-013')
+
+    def test_regional_details_require_complete_and_decisive_evidence(self):
+        matches = [match('a'), match('b', .84)]
+        mapping = {item['product']['id']: [item['product']] for item in matches}
+        tied = [{'url': key, 'design_version': DESIGN_VERSION,
+                 'design_vectors': detail(0)} for key in mapping]
+        self.assertEqual(
+            promote_regional_detail_matches(matches, [detail(0)], tied, mapping),
+            matches)
+        self.assertIs(
+            promote_regional_detail_matches(matches, [detail(0)], tied[:1], mapping),
+            matches)
 
     def test_related_designs_follow_anchor_and_require_available_unambiguous_sku(self):
         a,b,c=match('a'),match('b'),match('c',category='wall')

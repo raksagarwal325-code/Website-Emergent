@@ -19,6 +19,7 @@ from customer_image_references import ReferenceBundle
 from customer_design_ranking import (DESIGN_VERSION, add_related_designs,
                                      encode_details, load_relations,
                                      needs_detail_check, promote_detail_match,
+                                     promote_regional_detail_matches,
                                      unpack_details)
 
 from customer_region_search import (BACKGROUND_REGIONS, REGION_VERSION,
@@ -347,6 +348,21 @@ class CustomerImageSearch:
                 regions=BACKGROUND_REGIONS, force=True, coarse_threshold=.55,
                 max_refined=5,
             )
+            selected_regions = diagnostic.pop('selected_regions', [])
+            if selected_regions and len(matches) >= 2:
+                try:
+                    detail_rows = await self.detail_rows(manifest, urls, matches)
+                    query_details = []
+                    for box in selected_regions:
+                        bounds = tuple(round(value * (image.width if index % 2 == 0 else image.height))
+                                       for index, value in enumerate(box))
+                        query_details.append(await asyncio.to_thread(
+                            encode_details, self.encoder, image.crop(bounds)))
+                    matches = await asyncio.to_thread(
+                        promote_regional_detail_matches, matches, query_details,
+                        detail_rows, urls, diagnostic)
+                except Exception:
+                    logger.exception('Regional detail comparison unavailable; retaining regional results')
             products = {p["id"]: p for values in urls.values() for p in values}
             matches = add_related_designs(matches, list(products.values()), self.design_relations)
             indexed = sum(bool(row.get("vectors")) for row in rows)
