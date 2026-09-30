@@ -10,9 +10,15 @@ from customer_region_encoder import RegionEncoder, RegionDeadline
 REGIONS = tuple((x, y, x + .25, y + .5)
                 for y in (0, .25, .5) for x in (0, .15, .3, .45, .6, .75))
 TALL_REGIONS = tuple((x, 0, x + .33, 1) for x in (0, .13, .27, .4, .53, .67))
-BACKGROUND_REGIONS = REGIONS + TALL_REGIONS
+# Smaller windows isolate table lamps, sconces and individual fixtures from
+# furniture and other lights in wide installation photographs.  They are used
+# only by the asynchronous background pass, never by the fast interactive path.
+FOCUSED_REGIONS = tuple((x, y, x + .3, y + .3)
+                        for y in (0, .233, .466, .7)
+                        for x in (0, .175, .35, .525, .7))
+BACKGROUND_REGIONS = REGIONS + TALL_REGIONS + FOCUSED_REGIONS
 REGION_SECONDS = 8.0
-REGION_VERSION = 'multi-product-regions-v5'
+REGION_VERSION = 'multi-product-regions-v6'
 
 
 def needs_region_check(matches):
@@ -27,7 +33,8 @@ def needs_background_region_check(matches):
 
 
 def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
-                          diagnostic=None, regions=REGIONS, coarse_threshold=.70):
+                          diagnostic=None, regions=REGIONS, coarse_threshold=.70,
+                          max_refined=3):
     """Return complete region scores only; never download or write index data."""
     diagnostic = diagnostic if diagnostic is not None else {}
     diagnostic.update(coarse_regions=0, refined_regions=0)
@@ -86,7 +93,7 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
         if all(region_iou(regions[index], regions[old]) < .3 for old in selected):
             selected.append(index)
             covered_products.add(winner)
-        if len(selected) == 3:
+        if len(selected) == max_refined:
             break
     # Repeated instances of one product are useful corroboration, so use any
     # remaining capacity for the strongest non-overlapping crops.
@@ -95,7 +102,7 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
             continue
         if all(region_iou(regions[index], regions[old]) < .3 for old in selected):
             selected.append(index)
-        if len(selected) == 3:
+        if len(selected) == max_refined:
             break
     if not selected:
         return stop('no_promising_regions')
@@ -131,7 +138,7 @@ def select_region_matches(matches, scores, products, limit=12, force=False,
     if not force and not needs_region_check(matches):
         return matches
     scores = np.asarray(scores, dtype=np.float32)
-    if (scores.ndim != 2 or not 1 <= scores.shape[0] <= 3
+    if (scores.ndim != 2 or not 1 <= scores.shape[0] <= 5
             or scores.shape[1] != len(products) or not products
             or not np.isfinite(scores).all()):
         return matches
@@ -216,7 +223,8 @@ def select_region_matches(matches, scores, products, limit=12, force=False,
 
 
 def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, diagnostic=None,
-                          seconds=None, regions=REGIONS, force=False, coarse_threshold=.70):
+                          seconds=None, regions=REGIONS, force=False, coarse_threshold=.70,
+                          max_refined=3):
     diagnostic = diagnostic if diagnostic is not None else {}
     if not force and not needs_region_check(matches):
         diagnostic['outcome'] = 'not_needed'
@@ -227,7 +235,8 @@ def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, dia
     try:
         result = collect_region_scores(worker, image, rows, mapping,
                                        deadline, cancelled, diagnostic, regions,
-                                       coarse_threshold=coarse_threshold)
+                                       coarse_threshold=coarse_threshold,
+                                       max_refined=max_refined)
         if result is None:
             return matches
         scores, products = result
