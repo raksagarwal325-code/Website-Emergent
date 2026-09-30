@@ -15,7 +15,7 @@ from pymongo import ReturnDocument
 
 from customer_visual_features import INDEX_VERSION, MAX_BYTES, VisualEncoder, decode_image, image_hashes, rank_images
 from media_library import canonical_media_url
-from customer_image_references import ReferenceBundle
+from customer_image_references import LearnedReferenceStore, ReferenceBundle
 from customer_design_ranking import (DESIGN_VERSION, add_related_designs,
                                      encode_details, load_relations,
                                      needs_detail_check, promote_detail_match,
@@ -109,6 +109,7 @@ class CustomerImageSearch:
         self.last_region_search = None
         self.design_relations = load_relations()
         self.references = ReferenceBundle(os.environ.get("CUSTOMER_IMAGE_REFERENCE_MANIFEST"))
+        self.learned_references = LearnedReferenceStore(db, self.encoder)
 
     async def catalogue(self):
         return await self.db.products.find({"status": "published", "images.0": {"$exists": True}}, PUBLIC_FIELDS).to_list(None)
@@ -245,6 +246,7 @@ class CustomerImageSearch:
             "region_search_version": REGION_VERSION,
             "inference_threads": getattr(self.encoder, 'inference_threads', None),
             "last_region_search": self.last_region_search,
+            "learned_references": await self.learned_references.count(),
         }
 
     @property
@@ -329,6 +331,9 @@ class CustomerImageSearch:
             urls = await self.search_urls()
             manifest = await self.manifest(urls)
             rows = await self.rows(manifest)
+            learned_products = [dict(product, status="published") for product in catalogue]
+            regional_rows, regional_urls = await self.learned_references.augment(
+                rows, urls, learned_products)
             matches = job.get("baseline") or []
             gallery_selected = [url for url in urls if url not in catalogue_only]
             gallery_rows = await self.gallery_detail_rows(manifest, gallery_selected)
@@ -343,7 +348,7 @@ class CustomerImageSearch:
             # several catalogue products. Always let the bounded regional pass
             # expand or improve that candidate list before completing the job.
             matches = await asyncio.to_thread(
-                rescue_region_matches, self.encoder, image, rows, urls, matches,
+                rescue_region_matches, self.encoder, image, regional_rows, regional_urls, matches,
                 cancelled, diagnostic, seconds=BACKGROUND_REGION_SECONDS,
                 regions=BACKGROUND_REGIONS, force=True, coarse_threshold=.55,
                 max_refined=5, include_detail_probes=True,
@@ -417,6 +422,10 @@ class CustomerImageSearch:
             indexed = sum(bool(r.get("vectors")) for r in rows)
             vectors = await asyncio.to_thread(self.encoder.encode_query, image) if self.encoder.session is not None else None
             candidate_rows, candidate_urls = self.references.augment(rows, urls)
+            learned_products = [dict(product, status="published") for product in
+                                {p["id"]: p for values in urls.values() for p in values}.values()]
+            candidate_rows, candidate_urls = await self.learned_references.augment(
+                candidate_rows, candidate_urls, learned_products)
             matches = await asyncio.to_thread(rank_images, hashes, vectors, candidate_rows, candidate_urls)
             job_id = None
             background_ready = indexed == len(urls) and self.encoder.session is not None
