@@ -12,7 +12,7 @@ REGIONS = tuple((x, y, x + .25, y + .5)
 TALL_REGIONS = tuple((x, 0, x + .33, 1) for x in (0, .13, .27, .4, .53, .67))
 BACKGROUND_REGIONS = REGIONS + TALL_REGIONS
 REGION_SECONDS = 8.0
-REGION_VERSION = 'multi-product-regions-v4'
+REGION_VERSION = 'multi-product-regions-v5'
 
 
 def needs_region_check(matches):
@@ -121,7 +121,12 @@ def region_iou(a, b):
     return intersection / ((a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - intersection)
 
 
-def select_region_matches(matches, scores, products, limit=12, force=False):
+def _category(product):
+    return str(product.get('category') or '').strip().casefold()
+
+
+def select_region_matches(matches, scores, products, limit=12, force=False,
+                          diagnostic=None):
     """Lead with corroborated object winners, then variants and alternatives."""
     if not force and not needs_region_check(matches):
         return matches
@@ -133,8 +138,24 @@ def select_region_matches(matches, scores, products, limit=12, force=False):
     best = scores.max(axis=0)
     support = np.sum(scores >= np.maximum(.72, best - .08), axis=0)
     consensus = best + .015 * np.maximum(0, support - 1)
-    order = sorted(range(len(products)),
-                   key=lambda i: (-float(consensus[i]), -float(best[i]), products[i]['id']))
+    # A room crop can produce a single high false positive.  During the
+    # background pass, favour a product seen in more than one independent crop
+    # before comparing peak similarity.  Interactive/single-product behaviour
+    # deliberately keeps the established ordering.
+    order = sorted(
+        range(len(products)),
+        key=(lambda i: (-int(support[i]), -float(consensus[i]),
+                        -float(best[i]), products[i]['id'])) if force else
+            (lambda i: (-float(consensus[i]), -float(best[i]), products[i]['id'])),
+    )
+    if diagnostic is not None:
+        diagnostic['regional_candidates'] = [
+            {'sku': products[i].get('sku') or products[i].get('id'),
+             'category': products[i].get('category'),
+             'best': round(float(best[i]), 4),
+             'support': int(support[i])}
+            for i in order[:6]
+        ]
     anchor = order[0]
     baseline_score = matches[0]['score'] if matches else 0
     minimum = .80 if force else max(.80, baseline_score + .03)
@@ -151,6 +172,35 @@ def select_region_matches(matches, scores, products, limit=12, force=False):
         corroboration = np.delete(scores[:, winner], region)
         if (scores[region, winner] >= .75 and corroboration.size
                 and corroboration.max() >= .72):
+            if winner not in regional:
+                regional.append(winner)
+    # A second object in a wide room may be visible in only one refined crop.
+    # Preserve the best credible local winner from another catalogue category
+    # instead of requiring it to beat every chandelier globally.  This is
+    # intentionally limited to forced background searches and to one candidate
+    # per category, with both an absolute and a crop-relative confidence gate.
+    if force:
+        anchor_category = _category(products[anchor])
+        represented = {anchor_category} if anchor_category else set()
+        category_candidates = []
+        for region in range(len(scores)):
+            region_peak = float(scores[region].max())
+            categories = {_category(product) for product in products}
+            for category in categories - {''} - represented:
+                members = [i for i, product in enumerate(products)
+                           if _category(product) == category]
+                winner = min(members,
+                             key=lambda i: (-float(scores[region, i]),
+                                            products[i]['id']))
+                value = float(scores[region, winner])
+                if value >= .68 and value >= region_peak - .12:
+                    category_candidates.append((value, category, winner))
+        for _value, category, winner in sorted(
+                category_candidates,
+                key=lambda item: (-item[0], item[1], products[item[2]]['id'])):
+            if category in represented:
+                continue
+            represented.add(category)
             if winner not in regional:
                 regional.append(winner)
     variants = sorted(
@@ -181,7 +231,8 @@ def rescue_region_matches(encoder, image, rows, mapping, matches, cancelled, dia
         if result is None:
             return matches
         scores, products = result
-        selected = select_region_matches(matches, scores, products, force=force)
+        selected = select_region_matches(matches, scores, products, force=force,
+                                         diagnostic=diagnostic)
         diagnostic['outcome'] = 'matched' if selected is not matches else 'no_improvement'
         return selected
     except RegionDeadline:
