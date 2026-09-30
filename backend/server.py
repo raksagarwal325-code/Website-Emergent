@@ -7,8 +7,9 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import unquote
 from typing import List, Literal, Optional
 
 import mailer
@@ -20,18 +21,21 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument, UpdateOne
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from starlette.middleware.cors import CORSMiddleware
+from starlette.datastructures import Headers
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
 from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E402
 from watermark import apply_watermark  # noqa: E402
+from image_ownership import color_histogram, color_histogram_distance, embed_ownership_metadata, normalized_pixel_fingerprint, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants, salvage_truncated_image  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
 from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
 from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_PREFIX, apply_identity_authority, apply_owner_facts, apply_reference_family, apply_reference_model, automatic_catalogue_model, blocking_identity_notes, catalogue_manifest_row, conversation_facts, extract_catalogue_references, facts_as_notes, find_similar_product, normalize_ai_record, normalize_catalogue_matches, normalize_product_name, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_model, sop_prompt, validate_record  # noqa: E402
 from product_ai import configure_product_chat, product_ai_settings  # noqa: E402
-from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, inspect_media_bytes  # noqa: E402
+from media_library import MEDIA_USAGE_TYPES, asset_id_for_url, build_media_library_report, canonical_media_url, collect_references, inspect_media_bytes, public_url_for_file  # noqa: E402
+from quotation_gallery import linked_project_photos  # noqa: E402
 from product_history import editable_product_snapshot, product_changes  # noqa: E402
 from bulk_catalogue import build_bulk_change_plan, bulk_preview_token  # noqa: E402
 from variant_families import build_variant_family_index, family_for_product, normalized_variant_families  # noqa: E402
@@ -43,6 +47,41 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 APP_NAME = os.environ.get("APP_NAME", "catalog-app")
+
+_quotation_photo_index_task = None
+_quotation_design_tasks = set()
+
+
+async def _index_quotation_photo_rows(rows):
+    """Build missing photo signatures independently of an upload request."""
+    semaphore = asyncio.Semaphore(8)
+
+    async def build(row):
+        path = row["storage_path"]
+        try:
+            async with semaphore:
+                photo_bytes, _ = await asyncio.to_thread(get_object, path)
+                phash, histogram = await asyncio.to_thread(
+                    lambda: (phash_fingerprint(photo_bytes), color_histogram(photo_bytes))
+                )
+            await db.files.update_one(
+                {"storage_path": path},
+                {
+                    "$set": {"visual_phash": phash, "visual_histogram": histogram},
+                    "$unset": {"visual_index_failed_at": ""},
+                },
+            )
+        except Exception as exc:
+            logger.warning("quotation_photo_index_failed path=%s err=%s", path, exc)
+            try:
+                await db.files.update_one(
+                    {"storage_path": path},
+                    {"$set": {"visual_index_failed_at": now_iso()}},
+                )
+            except Exception:
+                logger.exception("quotation_photo_index_failure_record_failed path=%s", path)
+
+    await asyncio.gather(*(build(row) for row in rows))
 
 app = FastAPI(title="Lumière Catalog API")
 api = APIRouter(prefix="/api")
@@ -714,7 +753,8 @@ class Settings(BaseModel):
     business_hours: str = "Mon – Sun: 10:00 AM – 8:00 PM"
     google_maps_url: str = "https://www.google.com/maps?cid=682987565690709677"
     watermark: dict = Field(default_factory=lambda: {
-        "enabled": True,
+        "enabled": False,
+        "explicit_opt_in": False,
         "opacity": 0.15,
         "size_pct": 0.30,
         "position": "center",
@@ -1613,6 +1653,1186 @@ async def update_inquiry_status(inquiry_id: str, status: str = Query(...), admin
     if res.matched_count == 0:
         raise HTTPException(404, "Inquiry not found")
     return {"ok": True}
+
+
+
+
+def _build_quotation_candidate_board(rows: list[dict]) -> tuple[bytes, dict[int, dict]]:
+    """Render candidate catalogue images into one labelled JPEG board.
+
+    The board lets the vision model compare the client photo against multiple
+    saved views of each shortlisted SKU without sending dozens of separate
+    image attachments. All saved product images are considered; when the board
+    would exceed 48 cells, images are sampled evenly per SKU.
+    """
+    import io
+    import math
+    from PIL import Image, ImageDraw, ImageFont, ImageOps
+
+    if not rows:
+        return b"", {}
+
+    # rows: [{"product":..., "image_url":..., "image_bytes":...}, ...]
+    by_product = {}
+    order = []
+    for row in rows:
+        product = row.get("product") or {}
+        product_id = product.get("id") or product.get("sku")
+        if not product_id:
+            continue
+        if product_id not in by_product:
+            by_product[product_id] = []
+            order.append(product_id)
+        by_product[product_id].append(row)
+
+    max_cells = 48
+    selected = []
+    if sum(len(by_product[key]) for key in order) <= max_cells:
+        for key in order:
+            selected.extend(by_product[key])
+    else:
+        per_product = max(1, max_cells // max(1, len(order)))
+        for key in order:
+            product_rows = by_product[key]
+            if len(product_rows) <= per_product:
+                selected.extend(product_rows)
+                continue
+            # Even sampling preserves first/last and different catalogue views.
+            indexes = {
+                round(i * (len(product_rows) - 1) / max(1, per_product - 1))
+                for i in range(per_product)
+            }
+            selected.extend(product_rows[index] for index in sorted(indexes))
+        selected = selected[:max_cells]
+
+    thumb_w, thumb_h = 220, 250
+    label_h = 52
+    try:
+        label_font = ImageFont.truetype("DejaVuSans.ttf", 17)
+    except OSError:
+        label_font = ImageFont.load_default(size=17)
+    cols = min(4, max(1, math.ceil(math.sqrt(len(selected)))))
+    rows_count = math.ceil(len(selected) / cols)
+    board = Image.new("RGB", (cols * thumb_w, rows_count * (thumb_h + label_h)), "white")
+    draw = ImageDraw.Draw(board)
+    mapping = {}
+
+    for cell_index, row in enumerate(selected, start=1):
+        col = (cell_index - 1) % cols
+        row_index = (cell_index - 1) // cols
+        x0 = col * thumb_w
+        y0 = row_index * (thumb_h + label_h)
+        try:
+            with Image.open(io.BytesIO(row["image_bytes"])) as opened:
+                image = ImageOps.exif_transpose(opened).convert("RGB")
+                image.thumbnail((thumb_w - 12, thumb_h - 12), Image.Resampling.LANCZOS)
+                x = x0 + (thumb_w - image.width) // 2
+                y = y0 + (thumb_h - image.height) // 2
+                board.paste(image, (x, y))
+        except Exception:
+            continue
+
+        product = row["product"]
+        sku = str(product.get("sku") or "")
+        image_slot = int(row.get("image_index") or 0) + 1
+        draw.rectangle((x0, y0 + thumb_h, x0 + thumb_w, y0 + thumb_h + label_h), fill="white")
+        draw.text((x0 + 6, y0 + thumb_h + 3), f"C{cell_index:02d} · {sku}", fill="black", font=label_font)
+        draw.text((x0 + 6, y0 + thumb_h + 26), f"catalogue image {image_slot}", fill="black", font=label_font)
+        mapping[cell_index] = row
+
+    output = io.BytesIO()
+    board.save(output, format="JPEG", quality=88, optimize=True)
+    return output.getvalue(), mapping
+
+
+async def _verify_quotation_catalogue_candidates(
+    query_bytes: bytes,
+    query_mime: str,
+    candidates: list[dict],
+) -> list[dict]:
+    """Verify shortlisted SKUs against all of their saved catalogue views."""
+    import base64
+    from emergentintegrations.llm.chat import (
+        ImageContent,
+        LlmChat,
+        StreamDone,
+        TextDelta,
+        UserMessage,
+    )
+
+    if not candidates:
+        return []
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "EMERGENT_LLM_KEY is not configured")
+
+    semaphore = asyncio.Semaphore(10)
+
+    async def _load_one(product, image_url, image_index):
+        try:
+            async with semaphore:
+                image_bytes, mime = await _resolve_product_image(
+                    AIRegenerateRequest(image_url=image_url)
+                )
+            return {
+                "product": product,
+                "image_url": image_url,
+                "image_index": image_index,
+                "image_bytes": image_bytes,
+                "mime": mime or "image/jpeg",
+            }
+        except Exception:
+            return None
+
+    jobs = []
+    for candidate in candidates:
+        product = candidate.get("product") or {}
+        seen_urls = set()
+        for image_index, image_url in enumerate(product.get("images") or []):
+            if not isinstance(image_url, str) or not image_url or image_url in seen_urls:
+                continue
+            seen_urls.add(image_url)
+            jobs.append(_load_one(product, image_url, image_index))
+
+    loaded = await asyncio.gather(*jobs, return_exceptions=False) if jobs else []
+    loaded = [row for row in loaded if row]
+    if not loaded:
+        return []
+
+    board_bytes, mapping = await asyncio.to_thread(
+        _build_quotation_candidate_board, loaded
+    )
+    if not board_bytes or not mapping:
+        return []
+
+    candidate_summary = []
+    seen_candidate_skus = set()
+    for candidate in candidates:
+        product = candidate.get("product") or {}
+        sku = str(product.get("sku") or "").upper()
+        if not sku or sku in seen_candidate_skus:
+            continue
+        seen_candidate_skus.add(sku)
+        candidate_summary.append(
+            f"{sku}: {product.get('name') or ''} · {product.get('category') or ''}"
+        )
+
+    files = [
+        ImageContent(image_base64=base64.b64encode(query_bytes).decode("ascii")),
+        ImageContent(image_base64=base64.b64encode(board_bytes).decode("ascii")),
+    ]
+    prompt = """IMAGE 1 is the client reference photo.
+IMAGE 2 is a labelled contact sheet of saved Samrat Glass catalogue photos.
+
+Find the SAME PRODUCT DESIGN, not merely a visually similar light.
+A SKU may appear in several cells because all of its saved catalogue views are
+being shown. Use every available view for that SKU as evidence.
+
+Ignore background colour, room setting, screenshot borders, WhatsApp
+compression, crop, lighting, bulb state and camera angle. Compare physical
+construction: arm/light count, shade/glass shape, central body, frame geometry,
+crystal/drop arrangement, proportions, mounting/base and distinctive motifs.
+
+A different glass option on the exact same frame may be
+same_fixture_different_glass. A generic resemblance is NOT a match.
+
+If no candidate is genuinely the same fixture, return an empty matches array.
+Never force the closest-looking product.
+
+CANDIDATE SKUS:
+""" + "\n".join(candidate_summary) + """
+
+Return JSON only:
+{"matches":[{"sku":"SGE-XX-000","relation":"same_fixture|same_fixture_different_glass","confidence":0.0,"evidence_cells":["C01","C07"],"reason":"brief factual reason"}]}
+Confidence is 0 to 1."""
+
+    chat = configure_product_chat(
+        LlmChat(
+            api_key=api_key,
+            session_id=f"quotation-candidate-verify-{uuid.uuid4().hex[:12]}",
+            system_message=(
+                "You are a conservative product-identity verifier. "
+                "Prefer no match over a wrong SKU. JSON only."
+            ),
+        )
+    )
+
+    parts = []
+    async for event in chat.stream_message(UserMessage(text=prompt, file_contents=files)):
+        if isinstance(event, TextDelta):
+            parts.append(event.content)
+        elif isinstance(event, StreamDone):
+            break
+
+    raw = "".join(parts).strip()
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not match:
+        return []
+    try:
+        payload = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return []
+
+    candidate_by_sku = {
+        str((candidate.get("product") or {}).get("sku") or "").upper(): candidate
+        for candidate in candidates
+        if (candidate.get("product") or {}).get("sku")
+    }
+    verified = []
+    for item in payload.get("matches") or []:
+        sku = str(item.get("sku") or "").upper().strip()
+        candidate = candidate_by_sku.get(sku)
+        if not candidate:
+            continue
+        relation = str(item.get("relation") or "").strip()
+        if relation not in {"same_fixture", "same_fixture_different_glass"}:
+            continue
+        try:
+            confidence = max(0.0, min(1.0, float(item.get("confidence") or 0)))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        threshold = 0.86 if relation == "same_fixture" else 0.92
+        if confidence < threshold:
+            continue
+
+        product = candidate["product"]
+        evidence_cells = []
+        for raw_cell in item.get("evidence_cells") or []:
+            cell_match = re.fullmatch(r"C(\d{1,2})", str(raw_cell).upper().strip())
+            if not cell_match:
+                continue
+            cell = mapping.get(int(cell_match.group(1)))
+            if cell and str((cell.get("product") or {}).get("sku") or "").upper() == sku:
+                evidence_cells.append(cell)
+        best_image_url = (
+            evidence_cells[0].get("image_url")
+            if evidence_cells
+            else next(
+                (row.get("image_url") for row in loaded if str((row.get("product") or {}).get("sku") or "").upper() == sku),
+                (product.get("images") or [""])[0],
+            )
+        )
+        verified.append({
+            "product": product,
+            "image_url": best_image_url,
+            "relation": relation,
+            "confidence": confidence,
+            "reason": str(item.get("reason") or "").strip()[:240],
+        })
+
+    return sorted(verified, key=lambda row: row["confidence"], reverse=True)
+
+
+def _quotation_visual_thumbnail(content: bytes) -> bytes:
+    from PIL import Image, ImageOps
+
+    with Image.open(io.BytesIO(content)) as opened:
+        thumbnail = ImageOps.exif_transpose(opened).convert("RGB")
+        thumbnail.thumbnail((420, 420), Image.Resampling.LANCZOS)
+        out = io.BytesIO()
+        thumbnail.save(out, format="JPEG", quality=82)
+        return out.getvalue()
+
+
+async def _visually_shortlist_quotation_products(query_bytes: bytes, products: list[dict]) -> list[dict]:
+    """Compare the query with real catalogue photos, independent of names and gallery links."""
+    import base64
+    from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "EMERGENT_LLM_KEY is not configured")
+
+    # Fetch one representative photo from every published product. An image
+    # that cannot be loaded cannot be compared and must never be invented.
+    semaphore = asyncio.Semaphore(12)
+
+    async def load(product):
+        images = product.get("images") or []
+        if not images:
+            return None
+        try:
+            async with semaphore:
+                url = canonical_media_url(images[0])
+                if url.startswith("/api/files/"):
+                    content, _mime = await asyncio.to_thread(get_object, url.removeprefix("/api/files/"))
+                else:
+                    content, _mime = await _resolve_product_image(
+                        AIRegenerateRequest(image_url=images[0])
+                    )
+            return {"product": product, "image_url": images[0], "image_index": 0,
+                    "image_bytes": await asyncio.to_thread(_quotation_visual_thumbnail, content)}
+        except Exception:
+            logger.warning("quotation_visual_image_unavailable sku=%s", product.get("sku"))
+            return None
+
+    loaded = [row for row in await asyncio.gather(*(load(p) for p in products)) if row]
+    logger.info("quotation_visual_catalogue_loaded published=%d loaded=%d", len(products), len(loaded))
+    if not loaded:
+        return []
+
+    query_image = ImageContent(image_base64=base64.b64encode(query_bytes).decode("ascii"))
+    model_semaphore = asyncio.Semaphore(4)
+
+    async def compare_board(rows, max_choices):
+        board, mapping = await asyncio.to_thread(_build_quotation_candidate_board, rows)
+        if not mapping:
+            return []
+        prompt = f"""IMAGE 1 is a client's photo, possibly from WhatsApp or a real installation.
+IMAGE 2 contains labelled catalogue product photos. Inspect the actual lights in
+both images, not the text in the product names. Ignore background, photography,
+bulb state and colour editing. Compare frame, arms, glass shapes, crystal drops,
+light count and proportions. Choose up to {max_choices} closest visible designs,
+including plausible alternatives when the angle or setting differs. Include
+the closest visible lights even if none is identical; these are
+suggestions for a human to inspect, not confirmed identical products. Only use
+cell labels clearly visible in IMAGE 2. Return JSON only:
+{{"candidates":[{{"cell":"C01","confidence":0.0,"reason":"visible shared details"}}]}}
+Confidence measures resemblance within this sheet, from 0 to 1."""
+        chat = configure_product_chat(LlmChat(
+            api_key=api_key, session_id=f"quotation-visual-{uuid.uuid4().hex[:12]}",
+            system_message="Rank photographed lighting by visible design. JSON only.",
+        ))
+        parts = []
+        async with model_semaphore:
+            async for event in chat.stream_message(UserMessage(
+                text=prompt,
+                file_contents=[query_image, ImageContent(image_base64=base64.b64encode(board).decode("ascii"))],
+            )):
+                if isinstance(event, TextDelta):
+                    parts.append(event.content)
+                elif isinstance(event, StreamDone):
+                    break
+        match = re.search(r"\{.*\}", "".join(parts), re.DOTALL)
+        if not match:
+            return []
+        try:
+            entries = json.loads(match.group(0)).get("candidates") or []
+        except (ValueError, TypeError):
+            return []
+        ranked = []
+        seen = set()
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            cell = re.fullmatch(r"C(\d{1,2})", str(entry.get("cell") or "").upper().strip())
+            row = mapping.get(int(cell.group(1))) if cell else None
+            sku = str((row or {}).get("product", {}).get("sku") or "").upper()
+            if not row or not sku or sku in seen:
+                continue
+            seen.add(sku)
+            try:
+                confidence = max(0.0, min(1.0, float(entry.get("confidence") or 0)))
+            except (ValueError, TypeError):
+                confidence = 0.0
+            ranked.append((confidence, row))
+            if len(ranked) >= max_choices:
+                break
+        return ranked
+
+    # Each product is seen visually once, then the shortlists are compared
+    # together so per-sheet confidence numbers do not decide the final ranking.
+    first_pass = await asyncio.gather(*(
+        compare_board(loaded[offset:offset + 32], 2)
+        for offset in range(0, len(loaded), 32)
+    ), return_exceptions=True)
+    finalists = []
+    seen = set()
+    for result in first_pass:
+        if isinstance(result, BaseException):
+            logger.warning("quotation_visual_sheet_failed: %s", result)
+            continue
+        for _confidence, row in result:
+            sku = str(row["product"].get("sku") or "").upper()
+            if sku not in seen:
+                seen.add(sku)
+                finalists.append(row)
+    logger.info("quotation_visual_catalogue_shortlisted sheets=%d finalists=%d", len(first_pass), len(finalists))
+    if len(finalists) > 8:
+        second_pass = await asyncio.gather(*(
+            compare_board(finalists[offset:offset + 40], 8)
+            for offset in range(0, len(finalists), 40)
+        ), return_exceptions=True)
+        ranked = [item for result in second_pass if not isinstance(result, BaseException)
+                  for item in result]
+        finalists = [row for _confidence, row in sorted(ranked, key=lambda item: -item[0])[:12]] or finalists[:12]
+    return [{"product": row["product"], "discovery_relation": "visual_candidate",
+             "discovery_confidence": 0.0, "discovery_reason": "Compared with catalogue photographs"}
+            for row in finalists[:12]]
+
+
+
+async def _quotation_project_photos(products):
+    settings = await db.settings.find_one(
+        {"id": "settings"}, {"_id": 0, "homepage_content.gallery.items": 1}
+    )
+    projects = (((settings or {}).get("homepage_content") or {}).get("gallery") or {}).get("items") or []
+    return linked_project_photos(projects, products)
+
+
+@api.post("/admin/quotations/product-match-diagnostics")
+async def diagnose_quotation_product_match(
+    file: UploadFile = File(...),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Admin-only local diagnosis for quotation image matching.
+
+    This endpoint never calls AI. It reports whether the uploaded image reaches
+    the stored catalogue files/fingerprints and why the normal matcher would
+    fall through to the slower visual fallback.
+    """
+    content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+    if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(400, "Choose a JPG, PNG or WebP image.")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "The uploaded image is empty.")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(413, "Image too large (25MB max).")
+
+    try:
+        query_sha = ownership_fingerprint(data)
+        query_pixel_hash = await asyncio.to_thread(normalized_pixel_fingerprint, data)
+        query_dhash_variants = await asyncio.to_thread(
+            perceptual_fingerprint_variants, data
+        )
+        query_dhash_full = query_dhash_variants[0] if query_dhash_variants else ""
+        query_histogram = await asyncio.to_thread(color_histogram, data)
+        query_phash = await asyncio.to_thread(phash_fingerprint, data)
+    except Exception:
+        raise HTTPException(400, "Could not read that image.")
+
+    products = await db.products.find(
+        {"status": "published", "images": {"$exists": True, "$ne": []}},
+        {"_id": 0, "id": 1, "sku": 1, "name": 1, "category": 1, "images": 1},
+    ).to_list(5000)
+
+    products_by_url = {}
+    for product in products:
+        for image_index, raw_url in enumerate(product.get("images") or []):
+            url = canonical_media_url(raw_url)
+            if url:
+                products_by_url.setdefault(url, []).append((product, image_index))
+
+    project_photos = await _quotation_project_photos(products)
+    for url, linked in project_photos.items():
+        existing = products_by_url.setdefault(url, [])
+        seen = {product["id"] for product, _ in existing}
+        existing.extend((product, -1) for product in linked if product["id"] not in seen)
+
+    all_urls = list(products_by_url)
+    app_urls = [url for url in all_urls if url.startswith("/api/files/")]
+    storage_paths = [url.removeprefix("/api/files/") for url in app_urls]
+
+    file_rows = []
+    if storage_paths:
+        file_rows = await db.files.find(
+            {"storage_path": {"$in": storage_paths}},
+            {
+                "_id": 0,
+                "storage_path": 1,
+                "perceptual_fingerprint": 1,
+                "visual_phash": 1,
+                "visual_histogram": 1,
+                "ownership_fingerprint": 1,
+                "sha256": 1,
+            },
+        ).to_list(len(storage_paths))
+
+    file_by_url = {
+        canonical_media_url(public_url_for_file(row)): row
+        for row in file_rows
+        if public_url_for_file(row)
+    }
+    fingerprinted = [
+        row for row in file_rows if row.get("perceptual_fingerprint")
+    ]
+    photo_scores = []
+    for url, row in file_by_url.items():
+        if not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512:
+            continue
+        try:
+            colour_distance = color_histogram_distance(
+                query_histogram, row["visual_histogram"]
+            )
+            phash_distance = perceptual_distance(query_phash, row["visual_phash"])
+        except (TypeError, ValueError):
+            continue
+        for product, _ in products_by_url.get(url, []):
+            photo_scores.append({
+                "sku": product.get("sku") or "",
+                "colour_distance": round(colour_distance, 3),
+                "phash_distance": phash_distance,
+                "score": round(colour_distance + phash_distance / 64 * 0.25, 3),
+            })
+    photo_scores.sort(key=lambda row: row["score"])
+    photo_best = photo_scores[0] if photo_scores else None
+
+    index_rows = []
+    if all_urls:
+        index_rows = await db.quotation_image_index.find(
+            {"url": {"$in": all_urls}},
+            {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1},
+        ).to_list(len(all_urls))
+    exact_index_rows = [
+        row for row in index_rows
+        if str(row.get("public_sha256") or "") == query_sha
+        or str(row.get("pixel_hash") or "") == query_pixel_hash
+    ]
+
+    product_scores = {}
+    for url, row in file_by_url.items():
+        stored = str(row.get("perceptual_fingerprint") or "")
+        if not stored:
+            continue
+        try:
+            full_distance = perceptual_distance(query_dhash_full, stored)
+            variant_distances = [
+                perceptual_distance(variant, stored)
+                for variant in query_dhash_variants
+                if len(variant) == len(stored)
+            ]
+            if not variant_distances:
+                continue
+            variant_distance = min(variant_distances)
+        except (TypeError, ValueError):
+            continue
+        for product, image_index in products_by_url.get(url, []):
+            product_id = product.get("id")
+            if not product_id:
+                continue
+            candidate = {
+                "product_id": product_id,
+                "sku": product.get("sku") or "",
+                "name": product.get("name") or "",
+                "category": product.get("category") or "",
+                "image_url": url,
+                "image_index": image_index,
+                "full_distance": full_distance,
+                "variant_distance": variant_distance,
+            }
+            current = product_scores.get(product_id)
+            if current is None or (
+                candidate["variant_distance"], candidate["full_distance"]
+            ) < (
+                current["variant_distance"], current["full_distance"]
+            ):
+                product_scores[product_id] = candidate
+
+    ranked = sorted(
+        product_scores.values(),
+        key=lambda row: (row["variant_distance"], row["full_distance"]),
+    )
+    top = ranked[:5]
+    best = top[0] if top else None
+    runner_up = top[1] if len(top) > 1 else None
+
+    if photo_best and photo_best["score"] <= 0.24 and photo_best["colour_distance"] <= 0.16 and photo_best["phash_distance"] <= 24:
+        decision = "strong_photo_signature_match"
+        reason = "A catalogue photograph matches the uploaded image by colour and composition."
+    elif exact_index_rows:
+        decision = "exact_index_match"
+        reason = "The legacy quotation image index contains an exact SHA/pixel match."
+    elif not app_urls:
+        decision = "no_app_owned_product_images"
+        reason = "Published products do not expose application-owned /api/files image URLs."
+    elif not file_rows:
+        decision = "product_images_not_joining_db_files"
+        reason = "Published product image URLs did not resolve to db.files storage_path rows."
+    elif not fingerprinted:
+        decision = "product_files_have_no_perceptual_fingerprints"
+        reason = "Product file rows exist, but none has a perceptual_fingerprint."
+    elif best and best["variant_distance"] <= 18 and (
+        runner_up is None
+        or runner_up["variant_distance"] - best["variant_distance"] >= 5
+    ):
+        decision = "strong_local_fingerprint_match"
+        reason = "The local fingerprint layer has a strong, clearly separated product match."
+    elif best:
+        decision = "local_match_not_confident_enough"
+        reason = "Local fingerprints produced candidates, but the best score/separation is below the current direct-return rule."
+    else:
+        decision = "no_local_fingerprint_candidate"
+        reason = "Fingerprint rows exist, but none could be compared successfully."
+
+    return {
+        "decision": decision,
+        "reason": reason,
+        "query": {
+            "filename": file.filename or "",
+            "sha256_prefix": query_sha[:12],
+            "dhash_variant_count": len(query_dhash_variants),
+        },
+        "catalogue": {
+            "published_products": len(products),
+            "published_image_urls": len(all_urls),
+            "linked_project_image_urls": len(project_photos),
+            "app_owned_image_urls": len(app_urls),
+            "db_file_rows_for_product_images": len(file_rows),
+            "fingerprinted_db_file_rows": len(fingerprinted),
+            "photo_indexed_db_file_rows": len([row for row in file_rows if row.get("visual_phash")]),
+            "unmapped_app_owned_urls": max(0, len(set(app_urls)) - len(file_by_url)),
+            "quotation_image_index_rows": len(index_rows),
+            "exact_index_matches": len(exact_index_rows),
+        },
+        "best": best,
+        "photo_best": photo_best,
+        "runner_up": runner_up,
+        "top_local_candidates": top,
+        "would_enter_ai_fallback": decision not in {
+            "exact_index_match",
+            "strong_photo_signature_match",
+            "strong_local_fingerprint_match",
+        },
+    }
+
+
+@api.post("/admin/quotations/product-match-by-image")
+async def match_quotation_product_by_image(
+    file: UploadFile = File(...),
+    limit: int = Query(5, ge=1, le=10),
+    quick: bool = Query(False),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Find products by stored photo hashes, then compare actual catalogue images.
+
+    Different-angle photos use a background visual shortlist across published
+    products, followed by verification of every saved view of those candidates.
+    """
+    content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+    if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=400, detail="Choose a JPG, PNG or WebP image.")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="The uploaded image is empty.")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image too large (25MB max).")
+
+    try:
+        query_sha = ownership_fingerprint(data)
+        query_pixel_hash = await asyncio.to_thread(
+            normalized_pixel_fingerprint, data
+        )
+        query_dhash_variants = await asyncio.to_thread(
+            perceptual_fingerprint_variants, data
+        )
+        query_dhash_full = query_dhash_variants[0] if query_dhash_variants else ""
+        query_histogram = await asyncio.to_thread(color_histogram, data) if quick else []
+        query_phash = await asyncio.to_thread(phash_fingerprint, data) if quick else ""
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read that image. Try a JPG, PNG or WebP file.",
+        )
+
+    products = await db.products.find(
+        {
+            "status": "published",
+            "images": {"$exists": True, "$ne": []},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "name": 1,
+            "sku": 1,
+            "category": 1,
+            "price": 1,
+            "price_display": 1,
+            "fixed_price": 1,
+            "images": 1,
+            "specs": 1,
+        },
+    ).to_list(5000)
+
+    products_by_url = {}
+    for product in products:
+        for image_index, raw_url in enumerate(product.get("images") or []):
+            url = canonical_media_url(raw_url)
+            if url:
+                products_by_url.setdefault(url, []).append((product, image_index))
+
+    project_photos = await _quotation_project_photos(products)
+    for url, linked in project_photos.items():
+        existing = products_by_url.setdefault(url, [])
+        seen = {product["id"] for product, _ in existing}
+        existing.extend((product, -1) for product in linked if product["id"] not in seen)
+
+    # Exact/decoded-pixel shortcut using already-built quotation hash records.
+    if products_by_url:
+        index_rows = await db.quotation_image_index.find(
+            {"url": {"$in": list(products_by_url.keys())}},
+            {"_id": 0, "url": 1, "public_sha256": 1, "pixel_hash": 1},
+        ).to_list(len(products_by_url))
+
+        exact_urls = [
+            row.get("url")
+            for row in index_rows
+            if str(row.get("public_sha256") or "") == query_sha
+            or str(row.get("pixel_hash") or "") == query_pixel_hash
+        ]
+        exact_matches = []
+        seen_exact = set()
+        for url in exact_urls:
+            for product, image_index in products_by_url.get(url, []):
+                product_id = product.get("id")
+                if not product_id or product_id in seen_exact:
+                    continue
+                seen_exact.add(product_id)
+                images = product.get("images") or []
+                exact_matches.append({
+                    "product_id": product_id,
+                    "sku": product.get("sku") or "",
+                    "name": product.get("name") or "",
+                    "category": product.get("category") or "",
+                    "price": product.get("price") or 0,
+                    "price_display": product.get("price_display") or (
+                        "fixed" if product.get("fixed_price") else "starting_from"
+                    ),
+                    "image_url": (
+                        images[image_index]
+                        if 0 <= image_index < len(images)
+                        else images[0] if images else url
+                    ),
+                    "visual_similarity": 100.0,
+                    "match_label": "exact_image",
+                    "engine": "exact-hash",
+                    "reason": "Exact linked project photograph" if image_index < 0 else "Exact stored catalogue image",
+                })
+        if exact_matches:
+            return {
+                "matches": exact_matches[:limit],
+                "searched_images": len(exact_urls),
+                "index_ready": True,
+                "index_total": 0,
+                "index_indexed": 0,
+                "index_remaining": 0,
+                "indexed_this_request": 0,
+                "index_skipped": 0,
+                "engine": "exact-hash",
+            }
+
+    # Stage 1: use the perceptual fingerprints that already exist in
+    # Admin -> Image Protection for every stored catalogue image.
+    # This is local/database work only and handles WhatsApp recompression,
+    # resizing and many screenshot/crop cases without any model call.
+    perceptual_candidates = []
+    if query_dhash_full:
+        storage_paths = [
+            url.removeprefix("/api/files/")
+            for url in products_by_url
+            if url.startswith("/api/files/")
+        ]
+        if storage_paths:
+            rows = await db.files.find(
+                {
+                    "storage_path": {"$in": storage_paths},
+                    "perceptual_fingerprint": {"$exists": True, "$ne": None},
+                },
+                {"_id": 0, "storage_path": 1, "perceptual_fingerprint": 1},
+            ).to_list(len(storage_paths))
+            for row in rows:
+                stored = str(row.get("perceptual_fingerprint") or "")
+                if not stored:
+                    continue
+                try:
+                    full_distance = perceptual_distance(query_dhash_full, stored)
+                    distances = [
+                        perceptual_distance(variant, stored)
+                        for variant in query_dhash_variants
+                        if len(variant) == len(stored)
+                    ]
+                    if not distances:
+                        continue
+                    variant_distance = min(distances)
+                except (ValueError, TypeError):
+                    continue
+                url = f"/api/files/{row.get('storage_path') or ''}"
+                if url not in products_by_url:
+                    continue
+                perceptual_candidates.append({
+                    "url": url,
+                    "full_distance": full_distance,
+                    "variant_distance": variant_distance,
+                })
+
+    perceptual_candidates.sort(
+        key=lambda row: (row["variant_distance"], row["full_distance"])
+    )
+
+    # A close full-frame match with a clear runner-up gap is a near-identical
+    # copy of an existing catalogue photograph. Return it directly.
+    if perceptual_candidates:
+        full_ranked = sorted(
+            perceptual_candidates,
+            key=lambda row: (row["full_distance"], row["variant_distance"]),
+        )
+        best = full_ranked[0]
+        second = min(
+            (row["full_distance"] for row in full_ranked[1:]),
+            default=999,
+        )
+        if best["full_distance"] <= 18 and second - best["full_distance"] >= 5:
+            fast_matches = []
+            seen_fast = set()
+            for product, image_index in products_by_url.get(best["url"], []):
+                product_id = product.get("id")
+                if not product_id or product_id in seen_fast:
+                    continue
+                seen_fast.add(product_id)
+                images = product.get("images") or []
+                similarity = round(
+                    max(0.0, 100.0 * (1.0 - best["full_distance"] / 256.0)),
+                    1,
+                )
+                fast_matches.append({
+                    "product_id": product_id,
+                    "sku": product.get("sku") or "",
+                    "name": product.get("name") or "",
+                    "category": product.get("category") or "",
+                    "price": product.get("price") or 0,
+                    "price_display": product.get("price_display") or (
+                        "fixed" if product.get("fixed_price") else "starting_from"
+                    ),
+                    "image_url": (
+                        images[image_index]
+                        if 0 <= image_index < len(images)
+                        else images[0] if images else best["url"]
+                    ),
+                    "visual_similarity": similarity,
+                    "match_label": "very_likely",
+                    "engine": "existing-perceptual-fingerprint",
+                    "reason": "Near-identical linked project photograph." if image_index < 0 else "Near-identical existing catalogue photograph.",
+                })
+            if fast_matches:
+                return {
+                    "matches": fast_matches[:limit],
+                    "searched_images": 0,
+                    "index_ready": True,
+                    "index_total": 0,
+                    "index_indexed": 0,
+                    "index_remaining": 0,
+                    "indexed_this_request": 0,
+                    "index_skipped": 0,
+                    "engine": "existing-perceptual-fingerprint",
+                }
+
+    # Prepare a persistent, compact photo index in bounded batches. The old
+    # dHash-only candidate list put unrelated gate lights above an identical
+    # chandelier photo; its low-confidence scores must not be shown as matches.
+    # Linked project and main product images are indexed first. Subsequent searches reuse these signatures.
+    if quick:
+        main_urls = {
+            canonical_media_url((product.get("images") or [""])[0])
+            for product in products
+        }
+        storage_paths = [
+            url.removeprefix("/api/files/")
+            for url in products_by_url
+            if url.startswith("/api/files/")
+        ]
+        rows = await db.files.find(
+            {"storage_path": {"$in": storage_paths}},
+            {"_id": 0, "storage_path": 1, "visual_phash": 1, "visual_histogram": 1,
+             "visual_index_failed_at": 1},
+        ).to_list(len(storage_paths))
+        retry_cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        skipped = sum(
+            1 for row in rows
+            if row.get("visual_index_failed_at", "") > retry_cutoff
+            and (not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512)
+        )
+        missing = [
+            row for row in rows
+            if (not row.get("visual_phash")
+                or len(row.get("visual_histogram") or []) != 512)
+            and row.get("visual_index_failed_at", "") <= retry_cutoff
+        ]
+        missing.sort(key=lambda row: (
+            0 if f"/api/files/{row['storage_path']}" in project_photos
+            else 1 if f"/api/files/{row['storage_path']}" in main_urls else 2,
+            min(
+                (str(p.get("sku") or "") for p, _ in products_by_url.get(
+                    f"/api/files/{row['storage_path']}", []
+                )),
+                default="",
+            ),
+        ))
+        global _quotation_photo_index_task
+        if missing and (
+            _quotation_photo_index_task is None
+            or _quotation_photo_index_task.done()
+        ):
+            _quotation_photo_index_task = asyncio.create_task(
+                _index_quotation_photo_rows(missing)
+            )
+        remaining = len(missing)
+        photo_candidates = []
+        for row in rows:
+            if not row.get("visual_phash") or len(row.get("visual_histogram") or []) != 512:
+                continue
+            try:
+                colour_distance = color_histogram_distance(
+                    query_histogram, row["visual_histogram"]
+                )
+                phash_distance = perceptual_distance(query_phash, row["visual_phash"])
+            except (ValueError, TypeError):
+                continue
+            if colour_distance > 0.45 or phash_distance > 32:
+                continue
+            url = f"/api/files/{row['storage_path']}"
+            photo_candidates.append((
+                colour_distance + (phash_distance / 64.0) * 0.25,
+                colour_distance, phash_distance, url,
+            ))
+        photo_candidates.sort()
+        matches = []
+        seen_products = set()
+        for score, colour_distance, phash_distance, url in photo_candidates:
+            # A partially built index may contain plausible-looking lights
+            # before the actual photograph has been indexed. Show only strong
+            # same-photo evidence; otherwise keep preparing the catalogue.
+            if score > 0.24 or colour_distance > 0.16 or phash_distance > 24:
+                continue
+            for product, image_index in products_by_url.get(url, []):
+                product_id = product.get("id")
+                if not product_id or product_id in seen_products:
+                    continue
+                seen_products.add(product_id)
+                images = product.get("images") or []
+                matches.append({
+                    "product_id": product_id,
+                    "sku": product.get("sku") or "",
+                    "name": product.get("name") or "",
+                    "category": product.get("category") or "",
+                    "price": product.get("price") or 0,
+                    "price_display": product.get("price_display") or (
+                        "fixed" if product.get("fixed_price") else "starting_from"
+                    ),
+                    "image_url": images[image_index] if 0 <= image_index < len(images) else images[0] if images else url,
+                    "match_label": "very_likely",
+                    "engine": "photo-signature",
+                    "reason": "Linked project photograph with matching colour and composition." if image_index < 0 else "Catalogue photograph with matching colour and composition.",
+                    "photo_score": round(score, 3),
+                })
+                if len(matches) >= limit:
+                    break
+            if len(matches) >= limit:
+                break
+        return {
+            "matches": matches,
+            "searched_images": len(rows) - remaining,
+            "engine": "photo-signature",
+            "index_total": len(rows),
+            "index_remaining": remaining,
+            "indexed_this_request": 0,
+            "index_skipped": skipped,
+            "index_in_progress": bool(
+                remaining and _quotation_photo_index_task
+                and not _quotation_photo_index_task.done()
+            ),
+            "needs_verification": not matches and remaining == 0,
+        }
+
+    # Cache only the expensive visual fallback. The signature includes the
+    # published catalogue data used for matching, so product/image/price/name
+    # changes automatically invalidate prior results.
+    catalogue_signature = ownership_fingerprint(json.dumps(
+        {"engine": "visual-catalogue-v2", "products": products, "project_photos": {
+            url: sorted(product["id"] for product in linked)
+            for url, linked in project_photos.items()
+        }}, sort_keys=True, default=str, separators=(",", ":")
+    ).encode("utf-8"))
+    cached = await db.quotation_image_search_cache.find_one(
+        {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
+        {"_id": 0, "response": 1},
+    )
+    if cached and isinstance(cached.get("response"), dict):
+        return cached["response"]
+
+    # A near-image fingerprint can save the full scan. If it does not verify,
+    # compare real photos of every published product instead of asking an AI
+    candidates = []
+    seen_skus = set()
+    nearby = [
+        row for row in perceptual_candidates
+        if row["variant_distance"] <= 34
+    ][:16]
+    for row in nearby:
+        for product, _image_index in products_by_url.get(row["url"], []):
+            sku = str(product.get("sku") or "").upper()
+            if not sku or sku in seen_skus:
+                continue
+            seen_skus.add(sku)
+            candidates.append({
+                "product": product,
+                "discovery_relation": "perceptual_candidate",
+                "discovery_confidence": 0.0,
+                "discovery_reason": "Existing catalogue fingerprint candidate",
+            })
+            if len(candidates) >= 6:
+                break
+        if len(candidates) >= 6:
+            break
+
+    verified = await _verify_quotation_catalogue_candidates(data, content_type, candidates) if candidates else []
+    if not verified:
+        candidates = await _visually_shortlist_quotation_products(data, products)
+        verified = await _verify_quotation_catalogue_candidates(data, content_type, candidates) if candidates else []
+
+    if not candidates:
+        response = {
+            "matches": [],
+            "searched_images": 0,
+            "index_ready": True,
+            "index_total": 0,
+            "index_indexed": 0,
+            "index_remaining": 0,
+            "indexed_this_request": 0,
+            "index_skipped": 0,
+            "engine": "catalogue-visual-comparison",
+        }
+        await db.quotation_image_search_cache.update_one(
+            {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
+            {"$set": {"response": response, "updated_at": now_iso()}},
+            upsert=True,
+        )
+        return response
+
+    matches = []
+    for row in verified[:limit]:
+        product = row["product"]
+        confidence = round(float(row["confidence"]) * 100.0, 1)
+        matches.append({
+            "product_id": product.get("id"),
+            "sku": product.get("sku") or "",
+            "name": product.get("name") or "",
+            "category": product.get("category") or "",
+            "price": product.get("price") or 0,
+            "price_display": product.get("price_display") or (
+                "fixed" if product.get("fixed_price") else "starting_from"
+            ),
+            "image_url": row.get("image_url") or (
+                (product.get("images") or [""])[0]
+            ),
+            "visual_similarity": confidence,
+            "match_label": (
+                "very_likely"
+                if row.get("relation") == "same_fixture" and confidence >= 90
+                else "possible"
+            ),
+            "engine": "catalogue-visual-comparison",
+            "reason": row.get("reason") or "",
+        })
+
+    # A client chooses the SKU. When the verifier cannot confirm identity,
+    # still show the visually shortlisted products as explicitly unconfirmed
+    # options rather than an empty result after examining the whole catalogue.
+    if not matches:
+        for candidate in candidates[:limit]:
+            product = candidate["product"]
+            matches.append({
+                "product_id": product.get("id"),
+                "sku": product.get("sku") or "",
+                "name": product.get("name") or "",
+                "category": product.get("category") or "",
+                "price": product.get("price") or 0,
+                "price_display": product.get("price_display") or (
+                    "fixed" if product.get("fixed_price") else "starting_from"
+                ),
+                "image_url": (product.get("images") or [""])[0],
+                "match_label": "candidate",
+                "engine": "catalogue-visual-comparison",
+                "reason": "Visual candidate; compare its full product photos before adding.",
+            })
+
+    response = {
+        "matches": matches,
+        "searched_images": len(candidates),
+        "index_ready": True,
+        "index_total": 0,
+        "index_indexed": 0,
+        "index_remaining": 0,
+        "indexed_this_request": 0,
+        "index_skipped": 0,
+        "engine": "catalogue-visual-comparison",
+    }
+    await db.quotation_image_search_cache.update_one(
+        {"query_sha": query_sha, "catalogue_signature": catalogue_signature},
+        {"$set": {"response": response, "updated_at": now_iso()}},
+        upsert=True,
+    )
+    return response
+
+
+@api.post("/admin/quotations/product-match-by-image-jobs")
+async def start_quotation_product_match_job(
+    file: UploadFile = File(...),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Run the slower design comparison outside the browser request timeout."""
+    mime = (file.content_type or "").split(";", 1)[0].strip().lower()
+    if mime not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(400, "Choose a JPG, PNG or WebP image.")
+    data = await file.read()
+    if not data or len(data) > 25 * 1024 * 1024:
+        raise HTTPException(400, "Choose an image smaller than 25MB.")
+    job_id = uuid.uuid4().hex
+    await db.quotation_image_search_jobs.insert_one({
+        "id": job_id,
+        "admin_id": admin.user_id,
+        "status": "running",
+        "created_at": now_iso(),
+    })
+
+    async def run():
+        try:
+            upload = UploadFile(
+                file=io.BytesIO(data), filename=file.filename,
+                headers=Headers({"content-type": mime}),
+            )
+            result = await match_quotation_product_by_image(
+                file=upload, limit=5, quick=False, admin=admin
+            )
+            await db.quotation_image_search_jobs.update_one(
+                {"id": job_id},
+                {"$set": {"status": "done", "response": result, "updated_at": now_iso()}},
+            )
+        except Exception:
+            logger.exception("quotation_image_design_comparison_failed job=%s", job_id)
+            await db.quotation_image_search_jobs.update_one(
+                {"id": job_id},
+                {"$set": {"status": "failed", "updated_at": now_iso()}},
+            )
+
+    task = asyncio.create_task(run())
+    _quotation_design_tasks.add(task)
+    task.add_done_callback(_quotation_design_tasks.discard)
+    return {"job_id": job_id, "status": "running"}
+
+
+@api.get("/admin/quotations/product-match-by-image-jobs/{job_id}")
+async def get_quotation_product_match_job(
+    job_id: str, admin: _AdminUser = Depends(require_admin)
+):
+    if not re.fullmatch(r"[0-9a-f]{32}", job_id):
+        raise HTTPException(404, "Search not found")
+    job = await db.quotation_image_search_jobs.find_one(
+        {"id": job_id, "admin_id": admin.user_id},
+        {"_id": 0, "status": 1, "response": 1, "created_at": 1},
+    )
+    if not job:
+        raise HTTPException(404, "Search not found")
+    if job["status"] == "running" and (
+        datetime.now(timezone.utc) - datetime.fromisoformat(job["created_at"])
+    ).total_seconds() > 600:
+        await db.quotation_image_search_jobs.update_one(
+            {"id": job_id, "status": "running"},
+            {"$set": {"status": "failed", "updated_at": now_iso()}},
+        )
+        job["status"] = "failed"
+    return {key: job[key] for key in ("status", "response") if key in job}
 
 
 @api.get("/admin/inquiries/{inquiry_id}/quotations")
@@ -2667,7 +3887,8 @@ async def google_reviews():
 
 # --- Uploads ---
 DEFAULT_WATERMARK = {
-    "enabled": True,
+    "enabled": False,
+    "explicit_opt_in": False,
     "opacity": 0.15,
     "size_pct": 0.30,
     "position": "center",
@@ -2722,13 +3943,18 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
     # Always keep the untouched original (admin-only).
     put_object(original_path, data, file.content_type)
 
-    # Videos are never watermarked — only images run through the watermark helper.
+    # Videos are never watermarked. Public image derivatives receive invisible
+    # ownership metadata whether or not the visible watermark is enabled.
+    ownership_fp = None
+    visual_fp = None
     if is_video:
         public_bytes = data
         wm_enabled_for_record = False
     else:
+        ownership_fp = ownership_fingerprint(data)
+        visual_fp = perceptual_fingerprint(data)
         wm = await _get_watermark_settings()
-        if wm.get("enabled"):
+        if wm.get("enabled") and wm.get("explicit_opt_in"):
             public_bytes = apply_watermark(
                 data,
                 opacity=wm.get("opacity", 0.15),
@@ -2738,7 +3964,14 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
             )
         else:
             public_bytes = data
-        wm_enabled_for_record = bool(wm.get("enabled"))
+        public_bytes = embed_ownership_metadata(
+            public_bytes,
+            content_type=file.content_type,
+            asset_id=file_id,
+            fingerprint=ownership_fp,
+            visual_fingerprint=visual_fp,
+        )
+        wm_enabled_for_record = bool(wm.get("enabled") and wm.get("explicit_opt_in"))
 
     result = put_object(public_path, public_bytes, file.content_type)
     try:
@@ -2762,6 +3995,8 @@ async def upload_image(file: UploadFile = File(...), admin: _AdminUser = Depends
         "watermarked": wm_enabled_for_record,
         "kind": "video" if is_video else "image",
         "sha256": media_metadata.get("sha256"),
+        "ownership_fingerprint": ownership_fp,
+        "perceptual_fingerprint": visual_fp,
         "width": media_metadata.get("width"),
         "height": media_metadata.get("height"),
         "created_at": now_iso(),
@@ -4785,20 +6020,31 @@ async def watermark_reprocess(admin: _AdminUser = Depends(require_admin)):
                 skipped += 1
                 continue
             data, ct = get_object(orig_path)
-            if wm.get("enabled"):
+            content_type = ct or f.get("content_type") or "image/png"
+            fingerprint = ownership_fingerprint(data)
+            if wm.get("enabled") and wm.get("explicit_opt_in"):
                 out = apply_watermark(
                     data,
                     opacity=wm.get("opacity", 0.15),
                     size_pct=wm.get("size_pct", 0.30),
                     adaptive_tone=wm.get("adaptive_tone", True),
-                    content_type=ct or f.get("content_type") or "image/png",
+                    content_type=content_type,
                 )
             else:
                 out = data
-            put_object(public_path, out, ct or f.get("content_type") or "image/png")
+            out = embed_ownership_metadata(
+                out,
+                content_type=content_type,
+                asset_id=f.get("id"),
+                fingerprint=fingerprint,
+            )
+            put_object(public_path, out, content_type)
             await db.files.update_one(
                 {"storage_path": public_path},
-                {"$set": {"watermarked": bool(wm.get("enabled"))}},
+                {"$set": {
+                    "watermarked": bool(wm.get("enabled") and wm.get("explicit_opt_in")),
+                    "ownership_fingerprint": fingerprint,
+                }},
             )
             processed += 1
         except Exception as e:
@@ -4806,6 +6052,650 @@ async def watermark_reprocess(admin: _AdminUser = Depends(require_admin)):
             failed += 1
 
     return {"processed": processed, "skipped": skipped, "failed": failed, "total": len(files)}
+
+
+@api.get("/image-protection/registry")
+async def image_protection_registry(
+    q: str = Query("", max_length=200),
+    scope: Literal["in_use", "products", "projects", "site", "unused", "all"] = Query("in_use"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Searchable evidence registry, defaulting to assets actually in use.
+
+    Stored-but-unreferenced uploads remain available under scope=unused/all,
+    but are not mixed into the default ownership view.
+    """
+    products = await db.products.find(
+        {}, {"_id": 0, "id": 1, "name": 1, "sku": 1, "status": 1, "images": 1}
+    ).to_list(5000)
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    hero_slides = await db.hero_slides.find({}, {"_id": 0}).to_list(500)
+    category_rows = await db.category_featured_images.find({}, {"_id": 0}).to_list(100)
+    category_images = [_cat_out(row) for row in category_rows]
+
+    references = collect_references(
+        products,
+        settings,
+        hero_slides,
+        category_images,
+    )
+    usage_by_url = {
+        canonical_media_url(url): uses
+        for url, uses in references.items()
+    }
+
+    rows = await db.files.find(
+        {
+            "$and": [
+                {"original_path": {"$exists": True, "$ne": None}},
+                {"kind": {"$ne": "video"}},
+                {"content_type": {"$regex": "^image/", "$options": "i"}},
+            ]
+        },
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(5000)
+
+    needle = (q or "").strip().lower()
+    filtered = []
+    for row in rows:
+        public_url = public_url_for_file(row)
+        canonical_url = canonical_media_url(public_url)
+        uses = usage_by_url.get(canonical_url, [])
+        use_types = {str(use.get("type") or "") for use in uses}
+        in_use = bool(uses)
+
+        if scope == "in_use" and not in_use:
+            continue
+        if scope == "products" and "product" not in use_types:
+            continue
+        if scope == "projects" and "project" not in use_types:
+            continue
+        if scope == "site" and not (use_types & {"hero", "category"}):
+            continue
+        if scope == "unused" and in_use:
+            continue
+
+        if needle:
+            search_parts = [
+                str(row.get("original_filename") or ""),
+                str(row.get("id") or ""),
+                str(row.get("storage_path") or ""),
+                str(row.get("ownership_fingerprint") or ""),
+                str(row.get("perceptual_fingerprint") or ""),
+            ]
+            for use in uses:
+                search_parts.extend([
+                    str(use.get("name") or ""),
+                    str(use.get("sku") or ""),
+                    str(use.get("location") or ""),
+                    str(use.get("type") or ""),
+                ])
+            if needle not in " ".join(search_parts).lower():
+                continue
+
+        filtered.append((row, public_url, uses))
+
+    total = len(filtered)
+    start_index = (page - 1) * limit
+    page_rows = filtered[start_index:start_index + limit]
+
+    items = []
+    for row, public_url, uses in page_rows:
+        product_refs = [
+            {
+                "product_id": use.get("id"),
+                "name": use.get("name") or "",
+                "sku": use.get("sku") or "",
+                "status": use.get("status") or "",
+                "slot": use.get("slot"),
+            }
+            for use in uses
+            if use.get("type") == "product"
+        ]
+        project_refs = [
+            {
+                "project_id": use.get("id"),
+                "name": use.get("name") or "",
+                "location": use.get("location") or "",
+                "slot": use.get("slot"),
+            }
+            for use in uses
+            if use.get("type") == "project"
+        ]
+        site_refs = [
+            {
+                "type": use.get("type"),
+                "id": use.get("id"),
+                "name": use.get("name") or "",
+            }
+            for use in uses
+            if use.get("type") in {"hero", "category"}
+        ]
+        items.append({
+            "id": row.get("id"),
+            "original_filename": row.get("original_filename"),
+            "public_url": public_url,
+            "created_at": row.get("created_at"),
+            "protected_at": row.get("ownership_protected_at"),
+            "sha256": row.get("ownership_fingerprint") or row.get("sha256"),
+            "perceptual_hash": row.get("perceptual_fingerprint"),
+            "width": row.get("width"),
+            "height": row.get("height"),
+            "content_type": row.get("content_type"),
+            "watermarked": bool(row.get("watermarked")),
+            "in_use": bool(uses),
+            "usage_types": sorted(use_types),
+            "products": product_refs,
+            "projects": project_refs,
+            "site_refs": site_refs,
+        })
+
+    total_pages = max(1, (total + limit - 1) // limit)
+    return {
+        "items": items,
+        "page": min(page, total_pages),
+        "limit": limit,
+        "total": total,
+        "total_pages": total_pages,
+        "scope": scope,
+    }
+
+
+@api.get("/image-protection/status")
+async def image_protection_status(admin: _AdminUser = Depends(require_admin)):
+    """Return live ownership-protection progress plus in-use health diagnostics."""
+    base_filter = {
+        "$and": [
+            {"original_path": {"$exists": True, "$ne": None}},
+            {"kind": {"$ne": "video"}},
+            {"content_type": {"$regex": "^image/", "$options": "i"}},
+        ]
+    }
+    protected = await db.files.count_documents({
+        "$and": [
+            *base_filter["$and"],
+            {"ownership_protected_at": {"$exists": True}},
+            {"perceptual_fingerprint": {"$exists": True, "$ne": None}},
+        ]
+    })
+    failed = await db.files.count_documents({
+        "$and": [
+            *base_filter["$and"],
+            {"ownership_protection_failed_at": {"$exists": True}},
+        ]
+    })
+    remaining = await db.files.count_documents({
+        "$and": [
+            *base_filter["$and"],
+            {"$or": [
+                {"ownership_protected_at": {"$exists": False}},
+                {"perceptual_fingerprint": {"$exists": False}},
+                {"perceptual_fingerprint": None},
+            ]},
+            {"ownership_protection_failed_at": {"$exists": False}},
+        ]
+    })
+    total = protected + failed + remaining
+    status = (
+        "complete" if remaining == 0 and failed == 0
+        else "complete_with_errors" if remaining == 0
+        else "in_progress" if protected > 0
+        else "not_started"
+    )
+
+    # Protection Health focuses on images that are actually referenced by the
+    # catalogue/site. Stored unused uploads stay visible in the registry but do
+    # not make the operational health percentage look worse.
+    products = await db.products.find(
+        {}, {"_id": 0, "id": 1, "name": 1, "sku": 1, "status": 1, "images": 1}
+    ).to_list(5000)
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    hero_slides = await db.hero_slides.find({}, {"_id": 0}).to_list(500)
+    category_rows = await db.category_featured_images.find({}, {"_id": 0}).to_list(100)
+    category_images = [_cat_out(row) for row in category_rows]
+    references = collect_references(products, settings, hero_slides, category_images)
+
+    file_rows = await db.files.find(base_filter, {"_id": 0}).to_list(5000)
+    file_by_url = {
+        canonical_media_url(public_url_for_file(row)): row
+        for row in file_rows
+        if public_url_for_file(row)
+    }
+
+    in_use_rows = []
+    unresolved_references = 0
+    for url, uses in references.items():
+        row = file_by_url.get(canonical_media_url(url))
+        if not row:
+            # References to non-/api/files assets are outside this ownership
+            # registry; only count app-owned file URLs as missing storage rows.
+            if canonical_media_url(url).startswith("/api/files/"):
+                unresolved_references += 1
+            continue
+        in_use_rows.append((row, uses))
+
+    # One stored file may be referenced multiple times; deduplicate by id/path.
+    deduped = {}
+    for row, uses in in_use_rows:
+        key = row.get("id") or row.get("storage_path")
+        entry = deduped.setdefault(key, {"row": row, "uses": []})
+        entry["uses"].extend(uses)
+    in_use_entries = list(deduped.values())
+
+    fully_protected = 0
+    missing_sha = 0
+    missing_dhash = 0
+    failed_in_use = 0
+    last_protection_at = None
+    failed_items = []
+
+    for entry in in_use_entries:
+        row = entry["row"]
+        uses = entry["uses"]
+        has_sha = bool(row.get("ownership_fingerprint") or row.get("sha256"))
+        has_dhash = bool(row.get("perceptual_fingerprint"))
+        has_protected_at = bool(row.get("ownership_protected_at"))
+        is_failed = bool(row.get("ownership_protection_failed_at"))
+
+        if has_sha and has_dhash and has_protected_at and not is_failed:
+            fully_protected += 1
+        if not has_sha:
+            missing_sha += 1
+        if not has_dhash:
+            missing_dhash += 1
+        if is_failed:
+            failed_in_use += 1
+            if len(failed_items) < 25:
+                failed_items.append({
+                    "id": row.get("id"),
+                    "original_filename": row.get("original_filename"),
+                    "public_url": public_url_for_file(row),
+                    "failed_at": row.get("ownership_protection_failed_at"),
+                    "error": row.get("ownership_protection_error") or "Unknown protection error",
+                    "products": [
+                        {
+                            "product_id": use.get("id"),
+                            "name": use.get("name") or "",
+                            "sku": use.get("sku") or "",
+                        }
+                        for use in uses if use.get("type") == "product"
+                    ],
+                    "projects": [
+                        {
+                            "project_id": use.get("id"),
+                            "name": use.get("name") or "",
+                            "location": use.get("location") or "",
+                        }
+                        for use in uses if use.get("type") == "project"
+                    ],
+                    "usage_types": sorted({
+                        str(use.get("type") or "") for use in uses if use.get("type")
+                    }),
+                })
+
+        protected_at = row.get("ownership_protected_at")
+        if protected_at and (last_protection_at is None or protected_at > last_protection_at):
+            last_protection_at = protected_at
+
+    in_use_total = len(in_use_entries)
+    unused_stored = max(0, len(file_rows) - in_use_total)
+    health_status = (
+        "healthy"
+        if in_use_total > 0 and fully_protected == in_use_total and failed_in_use == 0 and unresolved_references == 0
+        else "attention"
+        if in_use_total > 0
+        else "no_in_use_images"
+    )
+
+    return {
+        "total": total,
+        "protected": protected,
+        "remaining": remaining,
+        "failed": failed,
+        "status": status,
+        "visible_watermark_applied": False,
+        "health": {
+            "status": health_status,
+            "in_use_total": in_use_total,
+            "fully_protected": fully_protected,
+            "missing_sha": missing_sha,
+            "missing_dhash": missing_dhash,
+            "failed_in_use": failed_in_use,
+            "unused_stored": unused_stored,
+            "unresolved_file_references": unresolved_references,
+            "last_protection_at": last_protection_at,
+            "failed_items": failed_items,
+        },
+    }
+
+
+@api.post("/image-protection/reprocess")
+async def image_protection_reprocess(
+    limit: int = Query(10, ge=1, le=25),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Protect a small resumable batch without adding a visible watermark.
+
+    Each call handles only unprotected uploaded images. Progress is committed
+    after every file, so Cloudflare/Emergent timeouts cannot force a full
+    restart. Failed rows are marked and excluded from the automatic loop so
+    one corrupt legacy file cannot block the remaining catalogue.
+    """
+    eligible_filter = {
+        "$and": [
+            {"original_path": {"$exists": True, "$ne": None}},
+            {"kind": {"$ne": "video"}},
+            {"content_type": {"$regex": "^image/", "$options": "i"}},
+            {"$or": [
+                {"ownership_protected_at": {"$exists": False}},
+                {"perceptual_fingerprint": {"$exists": False}},
+                {"perceptual_fingerprint": None},
+            ]},
+            {"ownership_protection_failed_at": {"$exists": False}},
+        ]
+    }
+
+    files = await db.files.find(
+        eligible_filter,
+        {"_id": 0},
+    ).limit(limit).to_list(limit)
+
+    processed = 0
+    skipped = 0
+    failed = 0
+    for f in files:
+        try:
+            orig_path = f.get("original_path")
+            public_path = f.get("storage_path")
+            if not orig_path or not public_path:
+                skipped += 1
+                await db.files.update_one(
+                    {"id": f.get("id")},
+                    {"$set": {
+                        "ownership_protection_failed_at": now_iso(),
+                        "ownership_protection_error": "Missing stored original or public path",
+                    }},
+                )
+                continue
+
+            data, stored_ct = await asyncio.to_thread(get_object, orig_path)
+            content_type = stored_ct or f.get("content_type") or "image/png"
+            if not str(content_type).lower().startswith("image/"):
+                skipped += 1
+                await db.files.update_one(
+                    {"id": f.get("id")},
+                    {"$set": {
+                        "ownership_protection_failed_at": now_iso(),
+                        "ownership_protection_error": "Stored original is not an image",
+                    }},
+                )
+                continue
+
+            fingerprint = ownership_fingerprint(data)
+            visual_fingerprint = await asyncio.to_thread(perceptual_fingerprint, data)
+            out = await asyncio.to_thread(
+                embed_ownership_metadata,
+                data,
+                content_type=content_type,
+                asset_id=f.get("id"),
+                fingerprint=fingerprint,
+                visual_fingerprint=visual_fingerprint,
+            )
+            await asyncio.to_thread(put_object, public_path, out, content_type)
+            await db.files.update_one(
+                {"id": f.get("id")},
+                {
+                    "$set": {
+                        "watermarked": False,
+                        "ownership_fingerprint": fingerprint,
+                        "perceptual_fingerprint": visual_fingerprint,
+                        "ownership_protected_at": now_iso(),
+                    },
+                    "$unset": {
+                        "ownership_protection_failed_at": "",
+                        "ownership_protection_error": "",
+                    },
+                },
+            )
+            processed += 1
+        except Exception as e:
+            logger.error(f"Invisible protection failed for {f.get('storage_path')}: {e}")
+            await db.files.update_one(
+                {"id": f.get("id")},
+                {"$set": {
+                    "ownership_protection_failed_at": now_iso(),
+                    "ownership_protection_error": str(e)[:500],
+                }},
+            )
+            failed += 1
+
+    remaining = await db.files.count_documents(eligible_filter)
+    failed_total = await db.files.count_documents({
+        "ownership_protection_failed_at": {"$exists": True},
+    })
+    protected_total = await db.files.count_documents({
+        "$and": [
+            {"ownership_protected_at": {"$exists": True}},
+            {"perceptual_fingerprint": {"$exists": True, "$ne": None}},
+        ]
+    })
+
+    return {
+        "processed": processed,
+        "skipped": skipped,
+        "failed": failed,
+        "remaining": remaining,
+        "protected_total": protected_total,
+        "failed_total": failed_total,
+        "visible_watermark_applied": False,
+    }
+
+
+@api.post("/image-protection/repair-failed")
+async def repair_failed_image_protection(
+    limit: int = Query(25, ge=1, le=50),
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Retry only failed images that are actively referenced by the site.
+
+    The repair first tries the clean private original. If that object is
+    missing/corrupt, it falls back to the currently published public image.
+    A successful public fallback also heals the private original so future
+    protection/indexing runs do not hit the same broken legacy object again.
+    """
+    products = await db.products.find(
+        {}, {"_id": 0, "id": 1, "name": 1, "sku": 1, "status": 1, "images": 1}
+    ).to_list(5000)
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    hero_slides = await db.hero_slides.find({}, {"_id": 0}).to_list(500)
+    category_rows = await db.category_featured_images.find({}, {"_id": 0}).to_list(100)
+    category_images = [_cat_out(row) for row in category_rows]
+    references = collect_references(products, settings, hero_slides, category_images)
+    referenced_urls = {
+        canonical_media_url(url)
+        for url in references.keys()
+        if canonical_media_url(url).startswith("/api/files/")
+    }
+
+    failed_rows = await db.files.find(
+        {
+            "ownership_protection_failed_at": {"$exists": True},
+            "kind": {"$ne": "video"},
+            "content_type": {"$regex": "^image/", "$options": "i"},
+        },
+        {"_id": 0},
+    ).to_list(5000)
+
+    candidates = []
+    for row in failed_rows:
+        public_url = canonical_media_url(public_url_for_file(row))
+        if public_url and public_url in referenced_urls:
+            candidates.append(row)
+        if len(candidates) >= limit:
+            break
+
+    repaired = 0
+    unrecoverable = 0
+    repaired_from_original = 0
+    repaired_from_public = 0
+    repaired_salvaged = 0
+    items = []
+
+    for row in candidates:
+        file_id = row.get("id")
+        original_path = row.get("original_path")
+        public_path = row.get("storage_path")
+        declared_ct = row.get("content_type") or "image/png"
+
+        source_data = None
+        source_ct = None
+        source_kind = None
+        attempts = []
+
+        for source_kind_try, source_path in (
+            ("original", original_path),
+            ("public", public_path),
+        ):
+            if not source_path:
+                attempts.append(f"{source_kind_try}: missing path")
+                continue
+            try:
+                data, stored_ct = await asyncio.to_thread(get_object, source_path)
+                content_type = stored_ct or declared_ct
+                if not data or not str(content_type).lower().startswith("image/"):
+                    raise ValueError("stored object is not a readable image")
+                try:
+                    # Strict decode first.
+                    await asyncio.to_thread(perceptual_fingerprint, data)
+                    source_data = data
+                    source_ct = content_type
+                    source_kind = source_kind_try
+                    break
+                except Exception as strict_exc:
+                    # Browser-displayable legacy files can be missing trailing
+                    # bytes/EOI while still containing all useful pixels.
+                    # Decode tolerantly once, then re-encode a clean complete
+                    # image and immediately validate it strictly.
+                    salvaged_data, salvaged_ct = await asyncio.to_thread(
+                        salvage_truncated_image, data, content_type
+                    )
+                    await asyncio.to_thread(perceptual_fingerprint, salvaged_data)
+                    source_data = salvaged_data
+                    source_ct = salvaged_ct
+                    source_kind = source_kind_try + "_salvaged"
+                    attempts.append(
+                        f"{source_kind_try}: salvaged after {str(strict_exc)[:140]}"
+                    )
+                    break
+            except Exception as exc:
+                attempts.append(f"{source_kind_try}: {str(exc)[:220]}")
+
+        if source_data is None:
+            error = "Unrecoverable legacy image; " + " | ".join(attempts)
+            await db.files.update_one(
+                {"id": file_id},
+                {"$set": {
+                    "ownership_protection_failed_at": now_iso(),
+                    "ownership_protection_error": error[:500],
+                }},
+            )
+            unrecoverable += 1
+            items.append({
+                "id": file_id,
+                "filename": row.get("original_filename"),
+                "status": "unrecoverable",
+                "error": error[:500],
+            })
+            continue
+
+        try:
+            fingerprint = ownership_fingerprint(source_data)
+            visual_fingerprint = await asyncio.to_thread(
+                perceptual_fingerprint, source_data
+            )
+            out = await asyncio.to_thread(
+                embed_ownership_metadata,
+                source_data,
+                content_type=source_ct,
+                asset_id=file_id,
+                fingerprint=fingerprint,
+                visual_fingerprint=visual_fingerprint,
+            )
+
+            if not public_path:
+                raise ValueError("Missing public storage path")
+
+            # Always repair the published object.
+            await asyncio.to_thread(put_object, public_path, out, source_ct)
+
+            # If we had to salvage from the public object, recreate the private
+            # original too so future backfills/indexing runs have a healthy
+            # source instead of repeating the same 500/truncated-file failure.
+            if original_path and (
+                source_kind == "public"
+                or source_kind.endswith("_salvaged")
+            ):
+                await asyncio.to_thread(
+                    put_object, original_path, source_data, source_ct
+                )
+
+            await db.files.update_one(
+                {"id": file_id},
+                {
+                    "$set": {
+                        "watermarked": False,
+                        "ownership_fingerprint": fingerprint,
+                        "perceptual_fingerprint": visual_fingerprint,
+                        "ownership_protected_at": now_iso(),
+                        "content_type": source_ct,
+                    },
+                    "$unset": {
+                        "ownership_protection_failed_at": "",
+                        "ownership_protection_error": "",
+                    },
+                },
+            )
+            repaired += 1
+            if source_kind.startswith("original"):
+                repaired_from_original += 1
+            else:
+                repaired_from_public += 1
+            if source_kind.endswith("_salvaged"):
+                repaired_salvaged += 1
+            items.append({
+                "id": file_id,
+                "filename": row.get("original_filename"),
+                "status": "repaired",
+                "source": source_kind,
+            })
+        except Exception as exc:
+            error = f"Repair write failed: {str(exc)[:450]}"
+            await db.files.update_one(
+                {"id": file_id},
+                {"$set": {
+                    "ownership_protection_failed_at": now_iso(),
+                    "ownership_protection_error": error,
+                }},
+            )
+            unrecoverable += 1
+            items.append({
+                "id": file_id,
+                "filename": row.get("original_filename"),
+                "status": "unrecoverable",
+                "error": error,
+            })
+
+    return {
+        "attempted": len(candidates),
+        "repaired": repaired,
+        "repaired_from_original": repaired_from_original,
+        "repaired_from_public": repaired_from_public,
+        "repaired_salvaged": repaired_salvaged,
+        "unrecoverable": unrecoverable,
+        "items": items,
+    }
 
 
 # --- Export CSV ---
@@ -4842,6 +6732,29 @@ async def stats(admin: _AdminUser = Depends(require_admin)):
 @api.get("/")
 async def root():
     return {"ok": True, "service": "lumiere-catalog"}
+
+
+# Customer-facing image search has its own service, model and Mongo collections.
+from customer_image_search import CustomerImageSearch, search_router  # noqa: E402
+
+
+async def _load_customer_catalogue_image(url):
+    # URLs come only from published product records, never from a user upload.
+    if url.startswith("/api/files/"):
+        data, _mime = await asyncio.to_thread(get_object, url.removeprefix("/api/files/"))
+        return data
+    response = await asyncio.to_thread(lambda: asyncio.run(_proxy_image_secure(url, admin=None)))
+    return response.body
+
+
+customer_image_search = CustomerImageSearch(db, _load_customer_catalogue_image)
+api.include_router(search_router(customer_image_search, rate_limit("customer-image-search", 20, 300)))
+
+
+@api.get("/admin/customer-image-search/status")
+async def customer_image_search_status(admin: _AdminUser = Depends(require_admin)):
+    return await customer_image_search.status()
+
 
 
 # --- Startup ---
@@ -4891,8 +6804,15 @@ async def startup():
         logger.warning(f"Storage init deferred: {e}")
 
 
+@app.on_event("startup")
+async def start_customer_image_search():
+    if os.environ.get("CUSTOMER_IMAGE_SEARCH_ENABLED", "true").lower() == "true":
+        customer_image_search.start()
+
+
 @app.on_event("shutdown")
 async def shutdown():
+    await customer_image_search.stop()
     client.close()
 
 

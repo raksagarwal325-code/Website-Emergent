@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, NavLink, useLocation } from "react-router-dom";
-import { Heart, ShoppingBag, Search, Menu, X, Images, ArrowUpRight } from "lucide-react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { ArrowUpRight, Camera, Heart, Images, Menu, Search, ShoppingBag, X } from "lucide-react";
 import { useCatalog } from "../../context/CatalogContext";
 import { api } from "../../lib/api";
+const CustomerImageSearch = lazy(() => import("../CustomerImageSearch"));
 
 const NAV_ITEMS = [
   {
@@ -75,7 +76,11 @@ const NAV_ITEMS = [
 export default function Header() {
   const { cart, favorites } = useCatalog();
   const location = useLocation();
+  const navigate = useNavigate();
+  const searchMenuRef = useRef(null);
   const [scrolled, setScrolled] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [brand, setBrand] = useState("Samrat Glass Emporium");
   const [navPreview, setNavPreview] = useState(null);
@@ -94,7 +99,25 @@ export default function Header() {
 
   useEffect(() => {
     setNavPreview(null);
+    setSearchOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+    const closeFromOutside = (event) => {
+      if (event.target?.closest?.('[data-customer-image-search-overlay="true"]')) return;
+      if (!searchMenuRef.current?.contains(event.target)) setSearchOpen(false);
+    };
+    const closeFromKeyboard = (event) => {
+      if (event.key === "Escape") setSearchOpen(false);
+    };
+    document.addEventListener("pointerdown", closeFromOutside);
+    document.addEventListener("keydown", closeFromKeyboard);
+    return () => {
+      document.removeEventListener("pointerdown", closeFromOutside);
+      document.removeEventListener("keydown", closeFromKeyboard);
+    };
+  }, [searchOpen]);
 
   useEffect(() => {
     const onHashChange = () => setProjectTabActive(window.location.hash === "#project-gallery");
@@ -160,6 +183,13 @@ export default function Header() {
     }, 0);
   };
 
+  const submitHeaderSearch = (event) => {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    setSearchOpen(false);
+    navigate(query ? `/catalog?q=${encodeURIComponent(query)}` : "/catalog");
+  };
+
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
   const linkClass = ({ isActive }) =>
@@ -192,7 +222,7 @@ export default function Header() {
           <span className="logo-badge inline-flex h-10 w-10 flex-shrink-0">
             <img src="/logo-header.webp" alt="Samrat Glass Emporium" className="w-full h-full object-cover" />
           </span>
-          <span className="font-serif text-base md:text-lg tracking-wide leading-tight">
+          <span className="hidden font-serif text-base tracking-wide leading-tight sm:block md:text-lg">
             <span className="block text-white">Samrat Glass</span>
             <span className="block text-[10px] tracking-[0.28em] uppercase text-[#BF9972]">Emporium</span>
           </span>
@@ -214,10 +244,77 @@ export default function Header() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-4">
-          <Link to="/catalog" aria-label="Search" data-testid="header-search" className="h-10 w-10 flex items-center justify-center text-white/75 hover:text-[#D4AF37] transition-colors">
-            <Search size={20} strokeWidth={1.6} />
-          </Link>
+        <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
+          <div ref={searchMenuRef} className="group relative">
+            <button
+              type="button"
+              aria-label="Search products by text or photo"
+              aria-expanded={searchOpen}
+              aria-controls="header-product-search-menu"
+              data-testid="header-search"
+              onClick={() => setSearchOpen((current) => !current)}
+              className="group inline-flex h-10 w-10 items-center justify-center gap-2 border border-white/10 text-white/78 transition-[background-color,border-color,color] hover:border-[#D4AF37]/55 hover:bg-[#D4AF37]/[0.08] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37] xl:w-auto xl:px-3"
+            >
+              <span className="relative">
+                <Search size={19} strokeWidth={1.6} aria-hidden="true" />
+                <Camera size={10} strokeWidth={1.8} aria-hidden="true" className="absolute -bottom-1 -right-1.5 text-[#D4AF37]" />
+              </span>
+              <span className="hidden whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.18em] text-white/72 group-hover:text-[#D4AF37] xl:inline">Search</span>
+            </button>
+
+            {!searchOpen && (
+              <div
+                role="tooltip"
+                className="pointer-events-none absolute right-0 top-[calc(100%+0.7rem)] z-[85] hidden w-72 translate-y-1 border border-[#D4AF37]/30 bg-[#140910]/[0.98] p-4 text-left opacity-0 shadow-[0_18px_50px_rgba(0,0,0,0.5)] transition-[opacity,transform] duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 md:block"
+              >
+                <div className="text-[9px] font-semibold uppercase tracking-[0.26em] text-[#D4AF37]">Search your way</div>
+                <p className="mt-2 text-xs leading-relaxed text-white/72">Type a product name, SKU or category—or upload a room photo or screenshot.</p>
+                <p className="mt-2 text-[10px] leading-relaxed text-white/45">Exact matches appear first, followed by similar designs.</p>
+              </div>
+            )}
+
+            {searchOpen && (
+              <div
+                id="header-product-search-menu"
+                role="dialog"
+                aria-label="Search products"
+                className="fixed left-3 right-3 top-[5.25rem] z-[90] border border-[#D4AF37]/30 bg-[#140910]/[0.98] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.6)] backdrop-blur-xl sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+0.75rem)] sm:w-[370px]"
+              >
+                <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_92%_8%,rgba(212,175,55,0.14),transparent_38%)]" />
+                <div className="relative">
+                  <div className="text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">Search</div>
+                  <h2 className="mt-2 font-serif text-xl text-[#FFF8ED]">How would you like to search?</h2>
+                  <p className="mt-2 text-sm leading-relaxed text-white/60">Enter a product name, SKU or category, or use a photo you already have.</p>
+
+                  <form onSubmit={submitHeaderSearch} className="mt-4">
+                    <label htmlFor="header-product-search-input" className="sr-only">Search by product name, SKU or type</label>
+                    <div className="flex border border-white/15 bg-black/20 focus-within:border-[#D4AF37]/65">
+                      <input
+                        id="header-product-search-input"
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        placeholder="Name, SKU or product type"
+                        autoFocus
+                        className="min-w-0 flex-1 bg-transparent px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+                      />
+                      <button type="submit" aria-label="Search catalogue" className="flex w-12 items-center justify-center bg-[#D4AF37] text-black transition-colors hover:bg-[#E3C85F]">
+                        <ArrowUpRight size={17} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </form>
+
+                  <div className="my-4 flex items-center gap-3" aria-hidden="true">
+                    <span className="h-px flex-1 bg-white/10" />
+                    <span className="text-[9px] uppercase tracking-[0.2em] text-white/35">or</span>
+                    <span className="h-px flex-1 bg-white/10" />
+                  </div>
+
+                  <Suspense fallback={null}><CustomerImageSearch variant="menu" onClose={() => setSearchOpen(false)} /></Suspense>
+                  <p className="mt-2 text-[10px] leading-relaxed text-white/42">Use a room photo, screenshot or saved image. We’ll show exact matches first, followed by similar options.</p>
+                </div>
+              </div>
+            )}
+          </div>
           <Link to="/favorites" aria-label="Favorites" data-testid="header-favorites" className="relative h-10 w-10 flex items-center justify-center text-white/75 hover:text-[#D4AF37] transition-colors">
             <Heart size={20} strokeWidth={1.6} />
             {favorites.length > 0 && (

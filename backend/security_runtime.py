@@ -48,6 +48,40 @@ _SOCIAL_PREVIEW_WIDTH = 640
 _PRODUCT_PATH_RE = re.compile(r"^[^/]+/products/(?!.*(?:^|/)originals/)[A-Za-z0-9._/-]+$")
 _IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
 
+# Referrers allowed to display product imagery. Missing Referer is deliberately
+# allowed so search crawlers, social preview bots, privacy browsers and direct
+# customer navigation continue to work. The goal is to stop ordinary third-
+# party websites from hotlinking Samrat assets, not to hide them from search.
+_HOTLINK_ALLOWED_HOSTS = {
+    "samratglass.com",
+    "www.samratglass.com",
+    "google.com",
+    "google.co.in",
+    "bing.com",
+    "duckduckgo.com",
+    "facebook.com",
+    "instagram.com",
+    "pinterest.com",
+    "linkedin.com",
+    "whatsapp.com",
+    "chatgpt.com",
+    "openai.com",
+}
+
+
+def _hotlink_referrer_allowed(referrer: str | None) -> bool:
+    if not referrer:
+        return True
+    try:
+        host = (urlparse(referrer).hostname or "").lower().rstrip(".")
+    except Exception:
+        return False
+    if not host:
+        return True
+    if host.endswith(".emergentagent.com"):
+        return True
+    return any(host == allowed or host.endswith("." + allowed) for allowed in _HOTLINK_ALLOWED_HOSTS)
+
 
 def _find_server_module():
     """Return the partially-imported API module without creating a cycle."""
@@ -343,8 +377,26 @@ def _install_security_headers(server_module) -> None:
     if getattr(app.state, "sge_security_headers_installed", False):
         return
 
+    from starlette.responses import Response
+
     @app.middleware("http")
     async def _security_headers(request, call_next):
+        path = request.url.path
+        product_asset_request = False
+        if path.startswith("/api/files/"):
+            storage_path = path.removeprefix("/api/files/")
+            product_asset_request = _valid_product_path(storage_path)
+        elif path.startswith("/api/image-variant/"):
+            product_asset_request = True
+
+        if product_asset_request and not _hotlink_referrer_allowed(request.headers.get("referer")):
+            return Response(
+                content=b"Hotlinking not allowed",
+                status_code=403,
+                media_type="text/plain",
+                headers={"Cache-Control": "no-store"},
+            )
+
         response = await call_next(request)
         headers = response.headers
         headers.setdefault("X-Content-Type-Options", "nosniff")

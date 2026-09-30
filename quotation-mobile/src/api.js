@@ -5,6 +5,15 @@ import axios from "axios";
 const client = axios.create({ baseURL: "/api", withCredentials: true, headers: { "X-Requested-With": "fetch" } });
 const data = (promise) => promise.then(response => response.data);
 export const api = {
+  searchByImage: (file, signal) => {
+    const form = new FormData();
+    form.append("file", file);
+    return data(client.post("/search/image", form, { signal, timeout: 25000 }));
+  },
+  getImageSearchJob: (jobId, signal) => data(client.get(
+    `/search/image/jobs/${encodeURIComponent(jobId)}`,
+    { signal, timeout: 10000 },
+  )),
   authMe: () => data(client.get("/auth/me")),
   authSession: (session_id) => data(client.post("/auth/session", { session_id })),
   authLogout: () => data(client.post("/auth/logout")),

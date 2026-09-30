@@ -1,0 +1,202 @@
+import io
+
+from PIL import Image
+
+from image_ownership import color_histogram, color_histogram_distance, embed_ownership_metadata, normalized_pixel_fingerprint, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants
+import security_runtime
+
+
+def _jpeg_bytes():
+    image = Image.new("RGB", (64, 48), (120, 80, 40))
+    out = io.BytesIO()
+    image.save(out, format="JPEG", quality=90)
+    return out.getvalue()
+
+
+def _png_bytes():
+    image = Image.new("RGB", (64, 48), (120, 80, 40))
+    out = io.BytesIO()
+    image.save(out, format="PNG")
+    return out.getvalue()
+
+
+def test_fingerprint_is_stable_sha256():
+    data = b"samrat-original-image"
+    first = ownership_fingerprint(data)
+    second = ownership_fingerprint(data)
+    assert first == second
+    assert len(first) == 64
+
+
+def test_jpeg_gets_copyright_and_asset_metadata():
+    source = _jpeg_bytes()
+    fp = ownership_fingerprint(source)
+    stamped = embed_ownership_metadata(
+        source,
+        content_type="image/jpeg",
+        asset_id="asset-123",
+        fingerprint=fp,
+    )
+    with Image.open(io.BytesIO(stamped)) as image:
+        exif = image.getexif()
+        assert exif.get(315) == "Samrat Glass Emporium"
+        assert "Samrat Glass Emporium" in exif.get(33432, "")
+        assert "asset-123" in exif.get(270, "")
+        assert fp in exif.get(270, "")
+
+
+def test_png_gets_invisible_text_metadata():
+    source = _png_bytes()
+    fp = ownership_fingerprint(source)
+    stamped = embed_ownership_metadata(
+        source,
+        content_type="image/png",
+        asset_id="asset-456",
+        fingerprint=fp,
+    )
+    with Image.open(io.BytesIO(stamped)) as image:
+        assert image.info.get("Author") == "Samrat Glass Emporium"
+        assert image.info.get("SGEAssetID") == "asset-456"
+        assert image.info.get("SGEFingerprint") == f"sha256:{fp}"
+
+
+def test_hotlink_policy_allows_own_site_and_discovery_referrers():
+    assert security_runtime._hotlink_referrer_allowed(None)
+    assert security_runtime._hotlink_referrer_allowed("https://samratglass.com/product/test")
+    assert security_runtime._hotlink_referrer_allowed("https://www.google.co.in/search?q=chandelier")
+    assert security_runtime._hotlink_referrer_allowed("https://images.google.com/")
+
+
+def test_hotlink_policy_blocks_unrelated_website_referrer():
+    assert not security_runtime._hotlink_referrer_allowed(
+        "https://copycat-lighting.example/product/123"
+    )
+
+
+def test_perceptual_fingerprint_survives_resize_and_recompression():
+    image = Image.new("RGB", (320, 240))
+    pixels = image.load()
+    for y in range(image.height):
+        for x in range(image.width):
+            pixels[x, y] = (
+                (x * 5 + y * 2) % 256,
+                (x * 3 + y * 7) % 256,
+                (x + y * 4) % 256,
+            )
+
+    original = io.BytesIO()
+    image.save(original, format="PNG")
+
+    resized = image.resize((160, 120), Image.Resampling.LANCZOS)
+    recompressed = io.BytesIO()
+    resized.save(recompressed, format="JPEG", quality=72)
+
+    left = perceptual_fingerprint(original.getvalue())
+    right = perceptual_fingerprint(recompressed.getvalue())
+
+    assert len(left) == 64
+    assert len(right) == 64
+    assert perceptual_distance(left, right) <= 12
+
+
+def test_embedded_png_contains_visual_fingerprint():
+    source = _png_bytes()
+    exact = ownership_fingerprint(source)
+    visual = perceptual_fingerprint(source)
+    stamped = embed_ownership_metadata(
+        source,
+        content_type="image/png",
+        asset_id="asset-visual",
+        fingerprint=exact,
+        visual_fingerprint=visual,
+    )
+    with Image.open(io.BytesIO(stamped)) as image:
+        assert image.info.get("SGEVisualFingerprint") == f"dhash256:{visual}"
+
+
+def test_perceptual_variants_include_full_frame_and_crops():
+    image = Image.new("RGB", (200, 200), "white")
+    for y in range(25, 95):
+        for x in range(70, 130):
+            image.putpixel((x, y), (25, 25, 25))
+    out = io.BytesIO()
+    image.save(out, format="PNG")
+    data = out.getvalue()
+
+    full = perceptual_fingerprint(data)
+    variants = perceptual_fingerprint_variants(data)
+
+    assert variants
+    assert variants[0] == full
+    assert len(variants) > 1
+    assert len(set(variants)) == len(variants)
+
+
+def test_phash_survives_resize_recompression_and_brightness_shift():
+    image = Image.new("RGB", (320, 240))
+    pixels = image.load()
+    for y in range(image.height):
+        for x in range(image.width):
+            pixels[x, y] = (
+                (x * 7 + y * 3) % 256,
+                (x * 2 + y * 9) % 256,
+                (x * 5 + y) % 256,
+            )
+    original = io.BytesIO()
+    image.save(original, format="PNG")
+
+    transformed = image.resize((180, 135), Image.Resampling.LANCZOS)
+    transformed = transformed.point(lambda value: min(255, int(value * 1.08 + 8)))
+    recompressed = io.BytesIO()
+    transformed.save(recompressed, format="JPEG", quality=68)
+
+    left = phash_fingerprint(original.getvalue())
+    right = phash_fingerprint(recompressed.getvalue())
+
+    assert len(left) == 16
+    assert len(right) == 16
+    assert perceptual_distance(left, right) <= 10
+
+
+def test_phash_variants_include_full_frame_and_multiple_crops():
+    image = Image.new("RGB", (240, 180), "white")
+    for y in range(30, 145):
+        for x in range(70, 175):
+            image.putpixel((x, y), ((x * 3) % 255, (y * 5) % 255, 70))
+    out = io.BytesIO()
+    image.save(out, format="PNG")
+
+    full = phash_fingerprint(out.getvalue())
+    variants = phash_fingerprint_variants(out.getvalue())
+
+    assert variants[0] == full
+    assert len(variants) > 1
+    assert len(set(variants)) == len(variants)
+
+
+def test_normalized_pixel_fingerprint_ignores_png_text_metadata():
+    source = _png_bytes()
+    stamped = embed_ownership_metadata(
+        source,
+        content_type="image/png",
+        asset_id="pixel-test",
+        fingerprint=ownership_fingerprint(source),
+    )
+    assert normalized_pixel_fingerprint(source) == normalized_pixel_fingerprint(stamped)
+
+
+def test_colour_signature_survives_resizing_and_jpeg_compression():
+    image = Image.new("RGB", (160, 220), "black")
+    for y in range(35, 170):
+        for x in range(40, 120):
+            image.putpixel((x, y), (210, 162, 95))
+    original = io.BytesIO()
+    image.save(original, format="PNG")
+    altered = io.BytesIO()
+    image.resize((80, 110)).save(altered, format="JPEG", quality=78)
+    unrelated = io.BytesIO()
+    Image.new("RGB", (80, 110), "white").save(unrelated, format="JPEG")
+
+    reference = color_histogram(original.getvalue())
+    assert color_histogram_distance(reference, color_histogram(altered.getvalue())) < 0.25
+    assert color_histogram_distance(reference, color_histogram(unrelated.getvalue())) > 1.0

@@ -2,7 +2,7 @@ import { heritageEyebrow } from "../lib/brandOrigin";
 import React, { useEffect, useRef, useState, Suspense, lazy } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowUpRight, Truck, ShieldCheck, MessageCircle } from "lucide-react";
+import { ArrowUpRight, MessageCircle, ShieldCheck, Truck } from "lucide-react";
 import SEO from "../components/SEO";
 import { api } from "../lib/api";
 import WelcomeIntro from "../components/WelcomeIntro";
@@ -91,7 +91,6 @@ function DeferredSeasonalSpotlight({ eyebrow, title, viewAllText, viewAllLink })
 export default function Home() {
   const { settings, hp } = useSettings();
   const prefersReducedMotion = useReducedMotion();
-
   const waLink = waGeneralLink(settings?.whatsapp_number) || "#";
   const H = hp.hero;
   const F = hp.featured;
@@ -141,6 +140,7 @@ export default function Home() {
 
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#16070f] pointer-events-none" />
       </section>
+
 
       <div className="relative z-10"><CategoryShowcase /></div>
 

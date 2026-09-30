@@ -6,7 +6,7 @@ const origin = "https://quotes.example.netlify.app";
 const request = (path, method = "GET", headers = {}, body) => new Request(`${origin}/api${path}`, { method, headers, body });
 
 test("blocks arbitrary admin API and path traversal", async () => {
-  for (const path of ["/admin/settings", "/admin/products", "/files/originals/secret.jpg", "/admin/quotations/../../settings"]) {
+  for (const path of ["/admin/settings", "/admin/products", "/files/originals/secret.jpg", "/admin/quotations/../../settings", "/search/image/other"]) {
     assert.equal((await gateway(request(path))).status, 404);
   }
 });
@@ -15,6 +15,38 @@ test("requires both same origin and CSRF header on writes", async () => {
   assert.equal((await gateway(request("/admin/quotations", "POST", { "x-requested-with": "fetch" }))).status, 403);
   assert.equal((await gateway(request("/admin/quotations", "POST", { origin: "https://attacker.test", "x-requested-with": "fetch" }))).status, 403);
   assert.equal((await gateway(request("/admin/quotations", "POST", { origin }))).status, 403);
+  assert.equal((await gateway(request("/search/image", "POST", { origin }))).status, 403);
+});
+
+test("proxies only the shared image-search start and job routes", async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, method: init.method, type: init.headers.get("content-type") });
+    return new Response(JSON.stringify(
+      init.method === "POST"
+        ? { search_status: "processing", job_id: "job-123" }
+        : { search_status: "completed", matches: [] },
+    ), { headers: { "content-type": "application/json" } });
+  };
+
+  const start = await gateway(request(
+    "/search/image",
+    "POST",
+    { origin, "x-requested-with": "fetch", "content-type": "multipart/form-data; boundary=test" },
+    "--test--",
+  ));
+  assert.equal(start.status, 200);
+  assert.equal((await start.json()).job_id, "job-123");
+
+  const job = await gateway(request("/search/image/jobs/job-123"));
+  assert.equal(job.status, 200);
+  assert.equal((await job.json()).search_status, "completed");
+  assert.deepEqual(calls, [
+    { url: "https://samratglass.com/api/search/image", method: "POST", type: "multipart/form-data; boundary=test" },
+    { url: "https://samratglass.com/api/search/image/jobs/job-123", method: "GET", type: null },
+  ]);
 });
 
 test("allows only POST for the quotation AI endpoint", async t => {

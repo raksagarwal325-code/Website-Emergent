@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon, FolderOpen, RefreshCw, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Edit3, Upload, X, LayoutDashboard, Package, MessageSquare, Mail, Settings as SettingsIcon, PlusCircle, Home as HomeIcon, Star, Check, Slash, Images, Image as ImageIcon, FolderOpen, RefreshCw, AlertTriangle, ShieldCheck } from "lucide-react";
 import { api } from "../lib/api";
 import { compareBySku } from "../lib/api";
 import { gmailComposeUrl } from "../lib/gmailCompose";
@@ -57,6 +57,7 @@ export default function Admin() {
     { key: "category-images", label: "Category Images", icon: ImageIcon },
     { key: "products", label: "Products", icon: Package },
     { key: "media-library", label: "Media Library", icon: FolderOpen },
+    { key: "image-protection", label: "Image Protection", icon: ShieldCheck },
     { key: "reviews", label: "Reviews", icon: Star, badge: reviewCounts.pending },
     { key: "quotations", label: "Quotations", icon: MessageSquare },
     { key: "inquiries", label: "Inquiries", icon: MessageSquare },
@@ -118,6 +119,18 @@ export default function Admin() {
       {tab === "hero-slider" && <HeroSliderAdmin />}
       {tab === "category-images" && <CategoryImagesAdmin />}
       {tab === "media-library" && <MediaLibraryAdmin />}
+      {tab === "image-protection" && settings && (
+        <section className="space-y-5" data-testid="admin-image-protection-tab">
+          <div>
+            <div className="eyebrow mb-2">Image rights</div>
+            <h2 className="font-serif text-3xl">Image Protection</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/55">
+              Manage invisible ownership protection, fingerprints, the Ownership Registry and the optional visible watermark from one dedicated workspace.
+            </p>
+          </div>
+          <WatermarkAdmin settings={settings} onSave={refresh} />
+        </section>
+      )}
 
       {tab === "products" && (
         <ProductsAdmin products={products} categories={categories} refresh={refresh} setEditing={setEditing} editing={editing} />
@@ -141,7 +154,6 @@ export default function Admin() {
           <SettingsAdmin settings={settings} onSave={refresh} />
           <QuotationBrandingAdmin settings={settings} onSave={refresh} />
           <LegalAdmin settings={settings} onSave={refresh} />
-          <WatermarkAdmin settings={settings} onSave={refresh} />
         </div>
       )}
     </div>
@@ -1668,7 +1680,7 @@ function SettingsAdmin({ settings, onSave }) {
       ].map(([k, label]) => (
         <div key={k}>
           <label className="text-xs uppercase tracking-[0.2em] text-white/50 mb-1 block">{label}</label>
-          <input data-testid={`set-${k}`} value={form[k] || ""} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
+          <input type={k.endsWith("_api_key") ? "password" : "text"} autoComplete={k.endsWith("_api_key") ? "new-password" : undefined} data-testid={`set-${k}`} value={form[k] || ""} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/15 focus:border-[#D4AF37] outline-none px-4 py-3 text-sm" />
         </div>
       ))}
       <button data-testid="save-settings-btn" className="bg-[#D4AF37] text-black px-8 py-3 uppercase text-xs tracking-[0.28em] hover:bg-[#B5952F]">
@@ -1803,7 +1815,8 @@ function LegalAdmin({ settings, onSave }) {
 }
 
 const DEFAULT_WATERMARK = {
-  enabled: true,
+  enabled: false,
+  explicit_opt_in: false,
   opacity: 0.15,
   size_pct: 0.30,
   position: "center",
@@ -1815,7 +1828,54 @@ function WatermarkAdmin({ settings, onSave }) {
   const [previewFile, setPreviewFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [protectionStatus, setProtectionStatus] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [registryOpen, setRegistryOpen] = useState(false);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [registry, setRegistry] = useState(null);
+  const [registryQuery, setRegistryQuery] = useState("");
+  const [registryScope, setRegistryScope] = useState("in_use");
+  const [registryPage, setRegistryPage] = useState(1);
   const debounceRef = React.useRef(null);
+  const visibleWatermarkEnabled = !!wm.enabled && !!wm.explicit_opt_in;
+
+  const refreshProtectionStatus = React.useCallback(async () => {
+    setStatusLoading(true);
+    try {
+      const status = await api.adminImageProtectionStatus();
+      setProtectionStatus(status);
+      return status;
+    } catch {
+      return null;
+    } finally {
+      setStatusLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshProtectionStatus();
+  }, [refreshProtectionStatus]);
+
+  const loadRegistry = React.useCallback(async (page = registryPage, query = registryQuery, scope = registryScope) => {
+    setRegistryLoading(true);
+    try {
+      const data = await api.adminImageOwnershipRegistry({ page, limit: 25, q: query.trim(), scope });
+      setRegistry(data);
+      setRegistryPage(data.page || page);
+      return data;
+    } catch {
+      toast.error("Ownership Registry could not be loaded");
+      return null;
+    } finally {
+      setRegistryLoading(false);
+    }
+  }, [registryPage, registryQuery, registryScope]);
+
+  const openRegistry = async () => {
+    const next = !registryOpen;
+    setRegistryOpen(next);
+    if (next && !registry) await loadRegistry(1, registryQuery, registryScope);
+  };
 
   const runPreview = React.useCallback(async () => {
     if (!previewFile) return;
@@ -1844,22 +1904,116 @@ function WatermarkAdmin({ settings, onSave }) {
   const save = async () => {
     setBusy(true);
     try {
-      await api.updateSettings({ watermark: wm });
-      toast.success("Watermark settings saved");
+      await api.updateSettings({
+        watermark: {
+          ...wm,
+          enabled: visibleWatermarkEnabled,
+          explicit_opt_in: visibleWatermarkEnabled,
+        },
+      });
+      toast.success("Visible watermark settings saved");
       onSave();
     } catch { toast.error("Save failed"); }
     finally { setBusy(false); }
   };
 
-  const reprocess = async () => {
-    if (!window.confirm("Regenerate watermarks for every uploaded image? This may take a moment.")) return;
+  const protectExisting = async () => {
+    if (!window.confirm(
+      "Protect all eligible existing images with invisible ownership metadata and fingerprints? No visible watermark will be added."
+    )) return;
+    setBusy(true);
+    let processed = 0;
+    let skipped = 0;
+    let failed = 0;
+    try {
+      for (let batch = 0; batch < 500; batch += 1) {
+        const j = await api.adminProtectExistingImages(10);
+        processed += Number(j.processed || 0);
+        skipped += Number(j.skipped || 0);
+        failed += Number(j.failed || 0);
+        setProtectionStatus((current) => ({
+          ...(current || {}),
+          protected: Number(j.protected_total || 0),
+          remaining: Number(j.remaining || 0),
+          failed: Number(j.failed_total || 0),
+          total: Number(j.protected_total || 0) + Number(j.remaining || 0) + Number(j.failed_total || 0),
+          status: Number(j.remaining || 0)
+            ? "in_progress"
+            : Number(j.failed_total || 0)
+              ? "complete_with_errors"
+              : "complete",
+          visible_watermark_applied: false,
+        }));
+
+        if (!Number(j.remaining || 0)) {
+          if (failed || Number(j.failed_total || 0)) {
+            toast.error(
+              `Invisible protection finished: ${processed} processed, ${skipped} skipped, ${j.failed_total || failed} failed.`
+            );
+          } else {
+            toast.success(
+              `Invisible protection complete: ${processed} images protected. No visible watermark added.`
+            );
+          }
+          await refreshProtectionStatus();
+          return;
+        }
+      }
+      await refreshProtectionStatus();
+      toast.error("Protection paused after the safety batch limit. Run it again to continue.");
+    } catch (e) {
+      toast.error(
+        processed
+          ? `Protection paused after ${processed} images. Run it again to continue.`
+          : "Invisible image protection failed"
+      );
+    } finally {
+      setBusy(false);
+      await refreshProtectionStatus();
+    }
+  };
+
+  const repairFailedImages = async () => {
+    const count = Number(protectionStatus?.health?.failed_in_use || 0);
+    if (!count) {
+      toast.success("No failed in-use images need repair.");
+      return;
+    }
+    if (!window.confirm(
+      `Repair ${count} failed in-use image${count === 1 ? "" : "s"} now? The repair will try the private original first, then fall back to the currently published image if needed.`
+    )) return;
     setBusy(true);
     try {
-      const API = process.env.REACT_APP_BACKEND_URL;
-      const res = await fetch(`${API}/api/watermark/reprocess`, { method: "POST" });
-      const j = await res.json();
-      toast.success(`Reprocessed ${j.processed} / ${j.total} images (skipped ${j.skipped}, failed ${j.failed})`);
-    } catch { toast.error("Reprocess failed"); }
+      const j = await api.adminRepairFailedImages(Math.max(1, Math.min(25, count)));
+      if (Number(j.unrecoverable || 0) > 0) {
+        toast.error(
+          `Repaired ${j.repaired || 0}; ${j.unrecoverable} still need a replacement source image.`
+        );
+      } else {
+        toast.success(`Repaired ${j.repaired || 0} failed in-use images.`);
+      }
+      await refreshProtectionStatus();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e?.message || "Failed-image repair did not complete.");
+    } finally {
+      setBusy(false);
+      await refreshProtectionStatus();
+    }
+  };
+
+  const reprocessVisible = async () => {
+    if (!visibleWatermarkEnabled) {
+      toast.error("Enable and save Visible Watermark first.");
+      return;
+    }
+    if (!window.confirm(
+      "VISIBLE WATERMARK WARNING: This will regenerate eligible public images with the centered Samrat watermark. Continue?"
+    )) return;
+    setBusy(true);
+    try {
+      const j = await api.adminReprocessVisibleWatermarks();
+      toast.success(`Visible watermark applied to ${j.processed} / ${j.total} images (skipped ${j.skipped}, failed ${j.failed})`);
+    } catch { toast.error("Visible watermark reprocess failed"); }
     finally { setBusy(false); }
   };
 
@@ -1871,25 +2025,343 @@ function WatermarkAdmin({ settings, onSave }) {
   return (
     <div className="max-w-3xl space-y-6 border border-white/10 p-8" data-testid="watermark-admin">
       <div>
-        <div className="eyebrow text-[#D4AF37]">Image watermark</div>
-        <h3 className="font-serif text-xl mt-1">Centered logo watermark for uploaded images</h3>
+        <div className="eyebrow text-[#D4AF37]">Image protection</div>
+        <h3 className="font-serif text-xl mt-1">Invisible ownership protection + optional visible watermark</h3>
         <p className="text-white/50 text-sm mt-1">
-          Applied automatically to every new product & gallery image you upload.
-          Originals are kept privately for admin use only.
+          Every new image receives invisible Samrat ownership metadata and a SHA-256 fingerprint.
+          Private originals are preserved. A visible watermark is optional and requires explicit opt-in.
         </p>
+      </div>
+
+      <div className="border border-[#D4AF37]/25 bg-[#D4AF37]/[0.04] p-5 space-y-3" data-testid="invisible-image-protection">
+        <div>
+          <div className="text-xs uppercase tracking-[0.24em] text-[#D4AF37]">Recommended · Invisible protection</div>
+          <p className="text-sm text-white/65 mt-2 leading-relaxed">
+            Adds copyright ownership metadata and a unique fingerprint without changing how the product photo looks.
+            Running this on existing uploads also rebuilds eligible public images from their clean private originals,
+            so it does not add a visible watermark.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="image-protection-status">
+          <div className="border border-white/10 p-3">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Protected</div>
+            <div className="font-mono text-lg text-white mt-1">{protectionStatus?.protected ?? "—"}</div>
+          </div>
+          <div className="border border-white/10 p-3">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Remaining</div>
+            <div className="font-mono text-lg text-white mt-1">{protectionStatus?.remaining ?? "—"}</div>
+          </div>
+          <div className="border border-white/10 p-3">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Failed</div>
+            <div className="font-mono text-lg text-white mt-1">{protectionStatus?.failed ?? "—"}</div>
+          </div>
+          <div className="border border-white/10 p-3">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Status</div>
+            <div className="text-xs uppercase tracking-[0.14em] text-[#D4AF37] mt-2">
+              {statusLoading
+                ? "Checking…"
+                : protectionStatus?.status === "complete"
+                  ? "Complete"
+                  : protectionStatus?.status === "complete_with_errors"
+                    ? "Complete · errors"
+                    : protectionStatus?.status === "in_progress"
+                      ? "In progress"
+                      : protectionStatus?.status === "not_started"
+                        ? "Not started"
+                        : "Unknown"}
+            </div>
+          </div>
+        </div>
+        <div className="border border-white/10 bg-black/20 p-4 space-y-3" data-testid="image-protection-health">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-white/45">Protection health · in-use images</div>
+              <div className="text-sm mt-1 text-white/70">
+                {statusLoading
+                  ? "Checking protection health…"
+                  : protectionStatus?.health?.status === "healthy"
+                    ? "All referenced stored images are fully protected."
+                    : protectionStatus?.health?.status === "attention"
+                      ? "Some referenced images need attention."
+                      : protectionStatus?.health?.status === "no_in_use_images"
+                        ? "No referenced stored images were detected."
+                        : "Protection health is not available yet."}
+              </div>
+            </div>
+            <div className={
+              "text-[10px] uppercase tracking-[0.16em] px-3 py-1.5 border " +
+              (protectionStatus?.health?.status === "healthy"
+                ? "border-emerald-400/35 text-emerald-300"
+                : "border-[#D4AF37]/35 text-[#D4AF37]")
+            }>
+              {protectionStatus?.health?.status === "healthy" ? "Healthy" : "Review"}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {[
+              ["In use", protectionStatus?.health?.in_use_total],
+              ["Fully protected", protectionStatus?.health?.fully_protected],
+              ["Missing SHA", protectionStatus?.health?.missing_sha],
+              ["Missing dHash", protectionStatus?.health?.missing_dhash],
+              ["Failed in use", protectionStatus?.health?.failed_in_use],
+              ["Unused stored", protectionStatus?.health?.unused_stored],
+            ].map(([label, value]) => (
+              <div key={label} className="border border-white/10 p-3">
+                <div className="text-[9px] uppercase tracking-[0.15em] text-white/35">{label}</div>
+                <div className="font-mono text-base text-white mt-1">{value ?? "—"}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-[10px] text-white/35">
+            <span>
+              Unresolved stored-file references · {protectionStatus?.health?.unresolved_file_references ?? "—"}
+            </span>
+            <span>
+              Last protection · {protectionStatus?.health?.last_protection_at
+                ? new Date(protectionStatus.health.last_protection_at).toLocaleString()
+                : "—"}
+            </span>
+          </div>
+        </div>
+
+        {(protectionStatus?.health?.failed_items || []).length > 0 && (
+          <div className="border border-red-400/20 bg-red-400/[0.03] p-4 space-y-3" data-testid="image-protection-failures">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-red-300">Failed image diagnosis</div>
+              <p className="text-[11px] text-white/45 mt-1">
+                These are referenced images whose invisible-protection job failed. The error is shown so the problem can be fixed without disturbing the rest of the queue.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {(protectionStatus.health.failed_items || []).map((item) => (
+                <div key={item.id || item.public_url} className="grid grid-cols-[56px_1fr] gap-3 border border-white/10 p-3">
+                  <div className="h-14 bg-black/40 overflow-hidden flex items-center justify-center">
+                    {item.public_url ? (
+                      <img src={api.resolveImage(item.public_url)} alt="" className="h-full w-full object-contain" loading="lazy" />
+                    ) : null}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs text-white/75 truncate">{item.original_filename || item.id || "Unknown image"}</div>
+                    <div className="text-[10px] text-white/40 mt-1">
+                      {(item.products || []).length
+                        ? item.products.map((p) => [p.sku, p.name].filter(Boolean).join(" · ")).join(" | ")
+                        : (item.projects || []).length
+                          ? item.projects.map((p) => [p.name, p.location].filter(Boolean).join(" · ")).join(" | ")
+                          : (item.usage_types || []).join(", ") || "Referenced site image"}
+                    </div>
+                    <div className="mt-2 text-[10px] text-red-200/70 break-words">{item.error}</div>
+                    <div className="mt-1 text-[9px] text-white/30">
+                      {item.failed_at ? "Failed " + new Date(item.failed_at).toLocaleString() : ""}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={protectExisting}
+            disabled={busy}
+            className="bg-[#D4AF37] text-black px-6 py-3 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] disabled:opacity-50"
+            data-testid="protect-existing-images"
+          >
+            {busy ? "Protecting…" : "Protect existing images invisibly"}
+          </button>
+          <button
+            type="button"
+            onClick={repairFailedImages}
+            disabled={busy || !Number(protectionStatus?.health?.failed_in_use || 0)}
+            className="border border-red-300/35 text-red-200 hover:border-red-200 px-5 py-3 uppercase text-xs tracking-[0.22em] disabled:opacity-40"
+            data-testid="repair-failed-image-protection"
+          >
+            Repair failed in-use images
+          </button>
+          <button
+            type="button"
+            onClick={refreshProtectionStatus}
+            disabled={busy || statusLoading}
+            className="border border-white/20 hover:border-[#D4AF37] hover:text-[#D4AF37] px-5 py-3 uppercase text-xs tracking-[0.22em] disabled:opacity-50"
+            data-testid="refresh-image-protection-status"
+          >
+            Refresh status
+          </button>
+        </div>
+      </div>
+
+      <div className="border border-white/10 p-5 space-y-4" data-testid="image-ownership-registry">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-[0.24em] text-[#D4AF37]">Ownership Registry</div>
+            <p className="text-[11px] text-white/45 mt-1 max-w-xl">
+              Search the evidence record for uploaded images. Each protected record keeps the exact SHA-256 fingerprint and a visual dHash fingerprint for resized or recompressed copies.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openRegistry}
+            className="border border-[#D4AF37]/50 px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-[#D4AF37]"
+            data-testid="ownership-registry-toggle"
+          >
+            {registryOpen ? "Close registry" : "Open registry"}
+          </button>
+        </div>
+
+        {registryOpen && (
+          <div className="space-y-4">
+            <form
+              className="flex flex-col sm:flex-row gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                loadRegistry(1, registryQuery, registryScope);
+              }}
+            >
+              <input
+                value={registryQuery}
+                onChange={(e) => setRegistryQuery(e.target.value)}
+                placeholder="Search filename, asset ID, SHA or visual hash…"
+                className="flex-1 bg-[#0a0a0a] border border-white/15 px-3 py-2 text-xs outline-none focus:border-[#D4AF37]"
+                data-testid="ownership-registry-search"
+              />
+              <button
+                type="submit"
+                disabled={registryLoading}
+                className="border border-white/20 px-4 py-2 text-[10px] uppercase tracking-[0.18em] disabled:opacity-50"
+              >
+                {registryLoading ? "Searching…" : "Search"}
+              </button>
+            </form>
+
+            <div className="flex flex-wrap gap-2" data-testid="ownership-registry-filters">
+              {[
+                ["in_use", "In use"],
+                ["products", "Products"],
+                ["projects", "Projects"],
+                ["site", "Site content"],
+                ["unused", "Unused uploads"],
+                ["all", "All stored images"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setRegistryScope(value);
+                    setRegistryPage(1);
+                    loadRegistry(1, registryQuery, value);
+                  }}
+                  disabled={registryLoading}
+                  className={
+                    "border px-3 py-2 text-[9px] uppercase tracking-[0.16em] disabled:opacity-40 " +
+                    (registryScope === value
+                      ? "border-[#D4AF37] bg-[#D4AF37]/10 text-[#D4AF37]"
+                      : "border-white/15 text-white/50 hover:border-white/30 hover:text-white/75")
+                  }
+                  data-testid={"ownership-registry-filter-" + value}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="text-[11px] text-white/40">
+              {registry
+                ? registry.total + " image records · " +
+                  (registry.scope === "in_use" ? "in use" :
+                   registry.scope === "products" ? "products" :
+                   registry.scope === "projects" ? "projects" :
+                   registry.scope === "site" ? "site content" :
+                   registry.scope === "unused" ? "unused uploads" : "all stored") +
+                  " · page " + registry.page + " of " + registry.total_pages
+                : "Loading registry…"}
+            </div>
+
+            <div className="space-y-3">
+              {(registry?.items || []).map((item) => (
+                <div key={item.id} className="grid grid-cols-[72px_1fr] gap-3 border border-white/10 p-3">
+                  <div className="h-[72px] bg-black/40 flex items-center justify-center overflow-hidden">
+                    {item.public_url ? (
+                      <img src={api.resolveImage(item.public_url)} alt="" className="w-full h-full object-contain" loading="lazy" />
+                    ) : null}
+                  </div>
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-xs text-white/80 truncate">{item.original_filename || item.id}</div>
+                        <div className="text-[10px] text-white/35 mt-1">
+                          {(item.products || []).length
+                            ? item.products.map((p) => [p.sku, p.name].filter(Boolean).join(" · ")).join(" | ")
+                            : (item.projects || []).length
+                              ? item.projects.map((p) => [p.name, p.location].filter(Boolean).join(" · ")).join(" | ")
+                              : (item.site_refs || []).length
+                                ? item.site_refs.map((ref) => [ref.type, ref.name].filter(Boolean).join(" · ")).join(" | ")
+                                : "Unused upload · no catalogue/site reference"}
+                        </div>
+                      </div>
+                      <div className="text-[9px] uppercase tracking-[0.14em] text-[#D4AF37]">
+                        {item.perceptual_hash ? "Visual fingerprint ready" : "Visual fingerprint pending"}
+                      </div>
+                    </div>
+                    <div className="grid gap-1 text-[10px] font-mono text-white/45">
+                      <div className="truncate" title={item.sha256 || ""}>SHA-256 · {item.sha256 || "Pending"}</div>
+                      <div className="truncate" title={item.perceptual_hash || ""}>dHash-256 · {item.perceptual_hash || "Pending"}</div>
+                      <div className="font-sans text-white/35">
+                        {item.width && item.height ? item.width + " × " + item.height + "px · " : ""}
+                        {item.protected_at ? "Protected " + new Date(item.protected_at).toLocaleString() : "Protection pending"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {registry && registry.total_pages > 1 && (
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  disabled={registryLoading || registry.page <= 1}
+                  onClick={() => loadRegistry(registry.page - 1, registryQuery, registryScope)}
+                  className="border border-white/15 px-4 py-2 text-[10px] uppercase tracking-[0.18em] disabled:opacity-35"
+                >
+                  Previous
+                </button>
+                <span className="text-[10px] text-white/40">{registry.page} / {registry.total_pages}</span>
+                <button
+                  type="button"
+                  disabled={registryLoading || registry.page >= registry.total_pages}
+                  onClick={() => loadRegistry(registry.page + 1, registryQuery, registryScope)}
+                  className="border border-white/15 px-4 py-2 text-[10px] uppercase tracking-[0.18em] disabled:opacity-35"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="pt-2">
+        <div className="text-xs uppercase tracking-[0.24em] text-white/55 mb-3">Optional · Visible watermark</div>
       </div>
 
       <label className="flex items-center gap-3 text-sm text-white/85">
         <input
           type="checkbox"
-          checked={!!wm.enabled}
-          onChange={(e) => setWm({ ...wm, enabled: e.target.checked })}
+          checked={visibleWatermarkEnabled}
+          onChange={(e) => setWm({
+            ...wm,
+            enabled: e.target.checked,
+            explicit_opt_in: e.target.checked,
+          })}
           data-testid="wm-enabled"
         />
         Enable watermark on all future uploads
       </label>
 
-      <fieldset disabled={!wm.enabled} className="space-y-5 disabled:opacity-40">
+      <fieldset disabled={!visibleWatermarkEnabled} className="space-y-5 disabled:opacity-40">
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs uppercase tracking-[0.2em] text-white/60">Opacity</label>
@@ -1984,17 +2456,17 @@ function WatermarkAdmin({ settings, onSave }) {
         </button>
         <button
           type="button"
-          onClick={reprocess}
-          disabled={busy}
+          onClick={reprocessVisible}
+          disabled={busy || !visibleWatermarkEnabled}
           className="border border-white/20 hover:border-[#D4AF37] hover:text-[#D4AF37] px-6 py-3 uppercase text-xs tracking-[0.28em] disabled:opacity-50"
           data-testid="wm-reprocess"
         >
-          Apply to all existing uploads
+          Apply visible watermark to existing uploads
         </button>
       </div>
       <p className="text-[11px] text-white/35">
-        Reprocess re-generates watermarks for images uploaded through this Admin panel (using their stored original).
-        Externally-linked images (Unsplash/CDN URLs) aren&apos;t touched — replace them by re-uploading.
+        The visible-watermark action is separate from invisible protection and is disabled unless you explicitly enable it.
+        Externally-linked images (Unsplash/CDN URLs) are not modified because no private original is stored for them.
       </p>
     </div>
   );

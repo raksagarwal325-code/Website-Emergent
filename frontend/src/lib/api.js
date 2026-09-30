@@ -94,6 +94,15 @@ export const prepareListedProduct = (product, { raw = false } = {}) =>
   raw ? product : sanitizePublicProduct(product);
 
 export const api = {
+  searchByImage: async (file, signal) => {
+    const form = new FormData();
+    form.append("file", file);
+    return (await client.post("/search/image", form, { signal, timeout: 25000 })).data;
+  },
+  getImageSearchJob: (jobId, signal) => client.get(
+    `/search/image/jobs/${encodeURIComponent(jobId)}`,
+    { signal, timeout: 10000 },
+  ).then(r => r.data),
   authMe: () => client.get("/auth/me").then(r => r.data),
   authSession: (session_id) => client.post("/auth/session", { session_id }).then(r => r.data),
   authLogout: () => client.post("/auth/logout").then(r => r.data),
@@ -198,6 +207,39 @@ export const api = {
   aiQuotationCustomisation: (data) => client.post(
     "/ai/quotation-customisation", data,
   ).then(r => r.data),
+  matchQuotationProductByImage: (file, limit = 5, quick = false) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return client.post(
+      "/admin/quotations/product-match-by-image",
+      fd,
+      {
+        params: { limit, quick },
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: quick ? 45000 : 55000,
+      },
+    ).then(r => r.data);
+  },
+  startQuotationImageDetailJob: (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return client.post("/admin/quotations/product-match-by-image-jobs", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 45000,
+    }).then(r => r.data);
+  },
+  getQuotationImageDetailJob: (jobId) => client.get(
+    `/admin/quotations/product-match-by-image-jobs/${encodeURIComponent(jobId)}`,
+  ).then(r => r.data),
+  diagnoseQuotationProductByImage: (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return client.post(
+      "/admin/quotations/product-match-diagnostics",
+      fd,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    ).then(r => r.data);
+  },
 
   createContact: (data) => client.post("/contact", data).then(r => r.data),
   listContact: () => client.get("/contact").then(r => r.data),
@@ -212,6 +254,11 @@ export const api = {
   // google_maps_api_key. Public `/settings` deliberately omits those.
   adminGetSettings: () => client.get("/admin/settings").then(r => r.data),
   updateSettings: (data) => client.put("/settings", data).then(r => r.data),
+  adminImageProtectionStatus: () => client.get("/image-protection/status").then(r => r.data),
+  adminImageOwnershipRegistry: (params = {}) => client.get("/image-protection/registry", { params }).then(r => r.data),
+  adminProtectExistingImages: (limit = 10) => client.post("/image-protection/reprocess", {}, { params: { limit } }).then(r => r.data),
+  adminRepairFailedImages: (limit = 25) => client.post("/image-protection/repair-failed", {}, { params: { limit } }).then(r => r.data),
+  adminReprocessVisibleWatermarks: () => client.post("/watermark/reprocess", {}).then(r => r.data),
   adminUploadQuotationBrandAsset: (kind, file) => {
     const fd = new FormData();
     fd.append("file", file);

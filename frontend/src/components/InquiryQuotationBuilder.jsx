@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Download, History, LoaderCircle, MessageCircle, Save, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
@@ -25,6 +25,30 @@ const errorMessage = (error, fallback) => {
 };
 
 const createLocalId = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+
+const IMAGE_MATCH_LABELS = {
+  exact: "Exact catalogue match",
+  closest: "Closest product match",
+  related: "Same design family",
+  similar: "Similar design",
+  possible: "Possible match",
+};
+
+const waitForImageSearchPoll = (milliseconds, signal) => new Promise((resolve, reject) => {
+  const timer = setTimeout(done, milliseconds);
+  function done() {
+    signal?.removeEventListener("abort", aborted);
+    resolve();
+  }
+  function aborted() {
+    clearTimeout(timer);
+    const error = new Error("Image search cancelled");
+    error.name = "AbortError";
+    reject(error);
+  }
+  if (signal?.aborted) aborted();
+  else signal?.addEventListener("abort", aborted, { once: true });
+});
 const REFERENCE_CATEGORIES = [
   ["shade_design", "Shade design", "SD"],
   ["metal_finish", "Metal finish", "MF"],
@@ -117,6 +141,16 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
   const [catalogue, setCatalogue] = useState([]);
   const [search, setSearch] = useState("");
   const [bottomSearch, setBottomSearch] = useState("");
+  const [productSearchMode, setProductSearchMode] = useState("text");
+  const [imageSearchFile, setImageSearchFile] = useState(null);
+  const [imageSearchPreview, setImageSearchPreview] = useState("");
+  const [imageMatches, setImageMatches] = useState([]);
+  const [imageMatchBusy, setImageMatchBusy] = useState(false);
+  const [imageMatchStatus, setImageMatchStatus] = useState("");
+  const [imageMatchIncomplete, setImageMatchIncomplete] = useState(false);
+  const [imageMatchError, setImageMatchError] = useState("");
+  const imageSearchSequence = useRef(0);
+  const imageSearchController = useRef(null);
   const [aiBusyLineId, setAiBusyLineId] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -124,6 +158,90 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     return () => { alive = false; };
   }, []);
   const addItem = (product = {}) => change({ items: [...form.items, normaliseItem({ product_id: product.id || null, name: product.name || "", sku: product.sku || "", quantity: 1, unit_price: product.price || 0, image: product.images?.[0] || null })] });
+
+  useEffect(() => () => imageSearchController.current?.abort(), []);
+  useEffect(() => () => {
+    if (imageSearchPreview) URL.revokeObjectURL(imageSearchPreview);
+  }, [imageSearchPreview]);
+
+  const chooseImageSearchFile = (file) => {
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      toast.error("Choose a JPG, PNG or WebP image");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image is too large — maximum 10MB");
+      return;
+    }
+    if (imageSearchPreview) URL.revokeObjectURL(imageSearchPreview);
+    setImageSearchFile(file);
+    setImageSearchPreview(URL.createObjectURL(file));
+    setImageMatches([]);
+    setImageMatchError("");
+    setImageMatchStatus("");
+    setImageMatchIncomplete(false);
+    void findImageMatches(file);
+  };
+
+  const findImageMatches = async (selectedFile = imageSearchFile) => {
+    if (!selectedFile) {
+      toast.error("Upload the client image first");
+      return;
+    }
+    const requestId = ++imageSearchSequence.current;
+    imageSearchController.current?.abort();
+    const controller = new AbortController();
+    imageSearchController.current = controller;
+    setImageMatchBusy(true);
+    setImageMatchStatus("Searching the same visual catalogue used on the website…");
+    setImageMatchError("");
+    setImageMatches([]);
+    setImageMatchIncomplete(false);
+    try {
+      let result = await api.searchByImage(selectedFile, controller.signal);
+      if (result.search_status === "processing" && result.job_id) {
+        setImageMatchStatus("Checking the full catalogue for exact and similar designs…");
+        for (let poll = 0; poll < 60 && result.search_status === "processing"; poll += 1) {
+          await waitForImageSearchPoll(result.poll_after_ms ?? 1500, controller.signal);
+          result = await api.getImageSearchJob(result.job_id, controller.signal);
+        }
+        if (result.search_status === "processing") {
+          throw new Error("Detailed image search is taking longer than expected. Try again shortly.");
+        }
+        if (result.search_status === "failed") {
+          throw new Error(result.detail || "Detailed image search could not finish. Try again.");
+        }
+      }
+      if (requestId !== imageSearchSequence.current) return;
+      const matches = (Array.isArray(result?.matches) ? result.matches : [])
+        .filter((match) => match?.product)
+        .slice(0, 12);
+      setImageMatches(matches);
+      setImageMatchIncomplete(!result?.index_complete || !result?.similarity_available);
+      setImageMatchStatus("");
+      if (!matches.length) {
+        setImageMatchError(result?.available
+          ? "No dependable catalogue match was found. Try a clearer crop or search by name / SKU."
+          : "The visual catalogue is still preparing. Try again shortly or search by name / SKU.");
+      }
+    } catch (error) {
+      if (requestId !== imageSearchSequence.current || error?.name === "AbortError") return;
+      const message = errorMessage(error, "Could not search the catalogue by image");
+      setImageMatchStatus("");
+      setImageMatchError(message);
+      toast.error(message);
+    } finally {
+      if (requestId === imageSearchSequence.current) setImageMatchBusy(false);
+    }
+  };
+
+  const addImageMatch = (match) => {
+    const product = match.product;
+    if (!product) return;
+    addItem(product);
+    toast.success(`${product.sku ? product.sku + " · " : ""}${product.name} added to quotation`);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -475,8 +593,120 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
 
             <section>
               <div className="mb-2 eyebrow">Products</div>
-              <input aria-label="Search catalogue for quotation" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search product name or SKU to add" className="mb-2 w-full border border-white/15 bg-black/40 p-3" />
-              {search.trim() && <div className="max-h-48 overflow-auto">{catalogue.filter(p => `${p.name} ${p.sku}`.toLowerCase().includes(search.toLowerCase())).slice(0, 30).map(p => <button type="button" key={p.id} onClick={() => { addItem(p); setSearch(""); }} className="block w-full border-b border-white/10 p-2 text-left text-sm">{p.sku} · {p.name}</button>)}</div>}
+              <div className="mb-3 inline-flex border border-white/15" data-testid="quotation-product-search-tabs">
+                <button
+                  type="button"
+                  onClick={() => setProductSearchMode("text")}
+                  className={`px-4 py-2 text-[10px] uppercase tracking-[0.18em] ${productSearchMode === "text" ? "bg-[#D4AF37] text-black" : "text-white/60"}`}
+                  data-testid="quotation-search-tab-text"
+                >
+                  Name / SKU
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProductSearchMode("image")}
+                  className={`px-4 py-2 text-[10px] uppercase tracking-[0.18em] ${productSearchMode === "image" ? "bg-[#D4AF37] text-black" : "text-white/60"}`}
+                  data-testid="quotation-search-tab-image"
+                >
+                  Search by image
+                </button>
+              </div>
+
+              {productSearchMode === "text" && <>
+                <input aria-label="Search catalogue for quotation" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search product name or SKU to add" className="mb-2 w-full border border-white/15 bg-black/40 p-3" />
+                {search.trim() && <div className="max-h-48 overflow-auto">{catalogue.filter(p => `${p.name} ${p.sku}`.toLowerCase().includes(search.toLowerCase())).slice(0, 30).map(p => <button type="button" key={p.id} onClick={() => { addItem(p); setSearch(""); }} className="block w-full border-b border-white/10 p-2 text-left text-sm">{p.sku} · {p.name}</button>)}</div>}
+              </>}
+
+              {productSearchMode === "image" && (
+                <div className="mb-3 border border-[#D4AF37]/25 bg-black/20 p-4" data-testid="quotation-image-search">
+                  <div className="grid gap-4 md:grid-cols-[150px_1fr]">
+                    <div>
+                      {imageSearchPreview ? (
+                        <a href={imageSearchPreview} target="_blank" rel="noreferrer" title="Open client image full size">
+                          <img src={imageSearchPreview} alt="Client reference preview" className="h-36 w-full border border-white/10 bg-black/30 object-contain" />
+                        </a>
+                      ) : (
+                        <div className="flex h-36 items-center justify-center border border-dashed border-white/20 px-3 text-center text-xs text-white/35">
+                          Client image preview
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm text-white/75">Find catalogue products from a client image</div>
+                      <p className="mt-1 text-xs leading-relaxed text-white/45">
+                        Uses the same proven search as the website. Exact matches appear first, followed by the closest family and similar designs—even from room photos, screenshots or WhatsApp copies.
+                      </p>
+                      <label className="mt-3 block cursor-pointer text-xs text-[#D4AF37]">
+                        {imageSearchFile ? "Replace client image" : "Upload client image"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          aria-label="Client image for catalogue search"
+                          onChange={(event) => chooseImageSearchFile(event.target.files?.[0])}
+                          className="mt-1 block max-w-full text-xs text-white/60"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => findImageMatches()}
+                        disabled={!imageSearchFile || imageMatchBusy}
+                        className="mt-3 bg-[#D4AF37] px-4 py-2.5 text-[10px] uppercase tracking-[0.18em] text-black disabled:opacity-40"
+                        data-testid="quotation-image-search-submit"
+                      >
+                        {imageMatchBusy ? "Searching catalogue…" : "Search again"}
+                      </button>
+                      {imageMatchStatus && (
+                        <div className="mt-3 text-xs text-[#D4AF37]" role="status">{imageMatchStatus}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {imageMatchIncomplete && (
+                    <div className="mt-4 border border-white/10 p-3 text-xs text-white/55">
+                      Some catalogue photos are still being prepared, so these results may be incomplete.
+                    </div>
+                  )}
+
+                  {imageMatchError && (
+                    <div className="mt-4 border border-white/10 p-3 text-xs text-white/55" data-testid="quotation-image-search-empty">
+                      {imageMatchError}
+                    </div>
+                  )}
+
+                  {imageMatches.length > 0 && (
+                    <div className="mt-4 space-y-2" data-testid="quotation-image-search-results">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Exact matches first · then closest and similar designs</div>
+                      {imageMatches.map((match) => {
+                        const product = match.product;
+                        const image = product.images?.[0];
+                        return (
+                          <div key={product.id} className="grid grid-cols-[64px_1fr_auto] items-center gap-3 border border-white/10 p-3">
+                            <div className="h-16 w-16 bg-black/30">
+                              {image ? <a href={api.resolveImage(image)} target="_blank" rel="noreferrer" title="Open catalogue image full size"><img src={api.resolveImage(image)} alt={product.name} className="h-full w-full object-contain" /></a> : null}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate text-sm text-white/80">{product.name}</div>
+                              <div className="mt-1 text-[10px] uppercase tracking-[0.13em] text-[#BF9972]">{product.sku || "No SKU"} · {product.category || "Catalogue product"}</div>
+                              <div className="mt-1 text-[10px] text-white/40">
+                                {IMAGE_MATCH_LABELS[match.match_type] || "Visual match"}
+                                {Number.isFinite(match.score) ? ` · ${Math.round(match.score * 100)}% match` : ""}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => addImageMatch(match)}
+                              className="border border-[#D4AF37]/50 px-3 py-2 text-[9px] uppercase tracking-[0.14em] text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button type="button" onClick={() => addItem()} className="mb-3 text-sm text-[#D4AF37]">+ Add custom item</button>
               <div className="space-y-3">
                 {form.items.map((item, index) => (

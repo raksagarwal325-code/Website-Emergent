@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "name": "Owner-reviewed multi-tier metal-arm chandeliers",
+      "reviewed_on": "2026-09-29",
+      "relationship": "similar_design",
+      "skus": ["SGE-CH-029", "SGE-CH-044", "SGE-CH-051", "SGE-CH-053"]
+    }
+  ]
+}

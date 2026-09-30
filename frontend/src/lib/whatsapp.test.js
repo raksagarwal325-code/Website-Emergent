@@ -18,6 +18,7 @@ import {
   waArchitectsLink,
   waGalleryLink,
   waNotFoundLink,
+  waImageSearchLink,
   waProductLink,
   waGalleryProductLink,
   waCartLink,
@@ -174,6 +175,13 @@ describe("convenience wrappers all use the reconciled messages", () => {
     const url = waNotFoundLink(NUMBER);
     const decoded = decodeURIComponent(url.split("?text=")[1]);
     expect(decoded.startsWith("Hi Samrat Glass Emporium,")).toBe(true);
+  });
+
+  test("waImageSearchLink prepares a human search handoff", () => {
+    const url = waImageSearchLink(NUMBER);
+    const decoded = decodeURIComponent(url.split("?text=")[1]);
+    expect(decoded).toBe(WA_MESSAGES.imageSearch);
+    expect(decoded).toMatch(/closest catalogue piece or advise whether it can be custom-made/i);
   });
 
   test("waCartLink returns '' when number missing", () => {

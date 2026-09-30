@@ -1,0 +1,62 @@
+name: Customer reference evaluation (isolated)
+on:
+  push:
+    branches: [experiment/customer-reference-evaluation]
+    paths:
+      - scripts/evaluate_customer_references.py
+      - tests/fixtures/customer-reference-evaluation/**
+      - .github/workflows/customer-reference-evaluation.yml
+permissions:
+  contents: read
+concurrency:
+  group: customer-reference-evaluation
+  cancel-in-progress: true
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install pinned evaluation dependencies
+        run: |
+          grep -iE '^(numpy|pillow|onnxruntime|huggingface_hub)==' backend/requirements.txt > /tmp/evaluation-requirements.txt
+          pip install -r /tmp/evaluation-requirements.txt
+      - name: Restore downloaded public images
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /tmp/reference-evaluation/images
+            /tmp/reference-evaluation/features
+          key: customer-reference-images-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: customer-reference-images-
+      - name: Read public catalogue and evaluate offline
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+        run: python scripts/evaluate_customer_references.py --output /tmp/reference-evaluation
+      - name: Preserve downloaded public images for retries
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            /tmp/reference-evaluation/images
+            /tmp/reference-evaluation/features
+          key: customer-reference-images-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Attach evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-reference-evaluation
+          path: |
+            /tmp/reference-evaluation/report.*
+            /tmp/reference-evaluation/download-failures.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Publish run summary
+        if: always()
+        run: |
+          if test -f /tmp/reference-evaluation/report.md; then
+            cat /tmp/reference-evaluation/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi

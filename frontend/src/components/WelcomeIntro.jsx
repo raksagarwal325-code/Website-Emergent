@@ -233,7 +233,7 @@ export default function WelcomeIntro() {
                           <picture>
                             <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
                             <img
-                              src={src}
+                              src={critical || ready ? src : BRAND_PLACEHOLDER_HERO}
                               alt=""
                               className="h-full w-full object-cover"
                               draggable="false"
