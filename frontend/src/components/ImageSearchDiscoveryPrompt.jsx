@@ -25,29 +25,35 @@ export default function ImageSearchDiscoveryPrompt() {
   const { pathname } = useLocation();
   const [visible, setVisible] = useState(false);
   const dismissedRef = useRef(false);
+  const hasScrolledRef = useRef(false);
   const storageKey = `${DISCOVERY_KEY}:${pathname || "/"}`;
   const excluded = pathname.startsWith("/admin") || pathname.startsWith("/catalogue");
 
   useEffect(() => {
     setVisible(false);
+    hasScrolledRef.current = false;
     dismissedRef.current = hasSeenImageSearch(storageKey);
     if (excluded || dismissedRef.current) return undefined;
 
     let frame = null;
     let footerObserver = null;
     const reveal = () => {
-      if (!dismissedRef.current) setVisible(true);
+      if (!dismissedRef.current && hasScrolledRef.current) setVisible(true);
     };
     const checkPosition = () => {
       frame = null;
       const pageHeight = document.documentElement.scrollHeight;
       const viewportHeight = window.innerHeight;
-      if (pageHeight - viewportHeight < 400) return;
-      const progress = (window.scrollY + viewportHeight) / pageHeight;
-      const catalogueBrowseDepth = pathname === "/catalog" && window.scrollY >= 1800;
-      if (progress >= 0.78 || catalogueBrowseDepth) reveal();
+      const scrollableHeight = pageHeight - viewportHeight;
+      if (!hasScrolledRef.current || scrollableHeight < 400) return;
+      const minimumBrowseDepth = Math.min(700, Math.max(300, scrollableHeight * 0.35));
+      if (window.scrollY < minimumBrowseDepth) return;
+      const distanceFromBottom = pageHeight - (window.scrollY + viewportHeight);
+      const nearBottomDistance = Math.max(500, viewportHeight * 0.75);
+      if (distanceFromBottom <= nearBottomDistance) reveal();
     };
     const onScroll = () => {
+      if (window.scrollY >= 80) hasScrolledRef.current = true;
       if (!frame) frame = window.requestAnimationFrame(checkPosition);
     };
 
@@ -64,7 +70,6 @@ export default function ImageSearchDiscoveryPrompt() {
 
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
-    checkPosition();
 
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
