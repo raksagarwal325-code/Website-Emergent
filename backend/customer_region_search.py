@@ -86,7 +86,7 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
         if all(region_iou(regions[index], regions[old]) < .3 for old in selected):
             selected.append(index)
             covered_products.add(winner)
-        if len(selected) == 4:
+        if len(selected) == 3:
             break
     # Repeated instances of one product are useful corroboration, so use any
     # remaining capacity for the strongest non-overlapping crops.
@@ -95,7 +95,7 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
             continue
         if all(region_iou(regions[index], regions[old]) < .3 for old in selected):
             selected.append(index)
-        if len(selected) == 4:
+        if len(selected) == 3:
             break
     if not selected:
         return stop('no_promising_regions')
@@ -126,7 +126,7 @@ def select_region_matches(matches, scores, products, limit=12, force=False):
     if not force and not needs_region_check(matches):
         return matches
     scores = np.asarray(scores, dtype=np.float32)
-    if (scores.ndim != 2 or not 1 <= scores.shape[0] <= 4
+    if (scores.ndim != 2 or not 1 <= scores.shape[0] <= 3
             or scores.shape[1] != len(products) or not products
             or not np.isfinite(scores).all()):
         return matches
