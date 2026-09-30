@@ -43,6 +43,8 @@ test("opens one clear search menu with text and photo choices", () => {
 
   fireEvent.click(screen.getByRole("button", { name: "Upload a photo to find exact or similar products" }));
   expect(screen.getByRole("dialog", { name: "Let a photograph lead the way" })).toBeInTheDocument();
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Upload an image" }));
+  expect(screen.getByRole("dialog", { name: "Let a photograph lead the way" })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Close image search" }));
   expect(screen.queryByRole("dialog", { name: "Search products" })).not.toBeInTheDocument();
