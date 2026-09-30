@@ -40,13 +40,16 @@ test("renders a full-width landing-page call to action without catalogue positio
 
 test("renders a labelled photo action for the unified search menu", () => {
   const onOpen = jest.fn();
-  render(<MemoryRouter><CustomerImageSearch variant="menu" onOpen={onOpen} /></MemoryRouter>);
+  const onClose = jest.fn();
+  render(<MemoryRouter><CustomerImageSearch variant="menu" onOpen={onOpen} onClose={onClose} /></MemoryRouter>);
   const button = screen.getByRole("button", { name: "Upload a photo to find exact or similar products" });
   expect(button).toHaveTextContent("Search with a photo");
   expect(button).toHaveClass("w-full");
   fireEvent.click(button);
   expect(onOpen).toHaveBeenCalledTimes(1);
   expect(screen.getByRole("dialog", { name: "Let a photograph lead the way" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Close image search" }));
+  expect(onClose).toHaveBeenCalledTimes(1);
 });
 
 test("uploads a photo and separates matching products from similar designs with working links", async () => {
