@@ -21,9 +21,9 @@ test("appears near the bottom with premium photo-search guidance", () => {
     </MemoryRouter>
   );
 
-  expect(screen.getByRole("dialog", { name: "Find a light from a photo" })).toBeInTheDocument();
-  expect(screen.getByText(/Didn’t find the light you had in mind/i)).toBeInTheDocument();
-  expect(screen.getByText(/room photos, screenshots and saved references/i)).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Search for a product using a photo" })).toBeInTheDocument();
+  expect(screen.getByText(/Seen a light you love/i)).toBeInTheDocument();
+  expect(screen.getByText(/screenshot, room photo or saved image/i)).toBeInTheDocument();
 });
 
 test("dismisses for the browsing session and stays out of admin", () => {
@@ -35,7 +35,7 @@ test("dismisses for the browsing session and stays out of admin", () => {
 
   fireEvent.click(screen.getByRole("button", { name: "Dismiss photo search suggestion" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(window.sessionStorage.getItem("sge-image-search-discovery-dismissed")).toBe("1");
+  expect(window.sessionStorage.getItem("sge-image-search-discovery-dismissed:/catalog")).toBe("1");
 
   unmount();
   render(
@@ -55,5 +55,19 @@ test("hands off to photo search without leaving the discovery card behind", () =
 
   fireEvent.click(screen.getByRole("button", { name: "Upload a photo" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(window.sessionStorage.getItem("sge-image-search-discovery-dismissed")).toBe("1");
+  expect(window.sessionStorage.getItem("sge-image-search-discovery-dismissed:/collections")).toBe("1");
+});
+
+
+test("appears on a long catalogue after meaningful browsing even when the page keeps growing", () => {
+  Object.defineProperty(document.documentElement, "scrollHeight", { configurable: true, value: 10000 });
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 1800 });
+
+  render(
+    <MemoryRouter initialEntries={["/catalog"]}>
+      <ImageSearchDiscoveryPrompt />
+    </MemoryRouter>
+  );
+
+  expect(screen.getByRole("dialog", { name: "Search for a product using a photo" })).toBeInTheDocument();
 });

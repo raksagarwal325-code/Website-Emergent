@@ -35,16 +35,19 @@ test("opens one clear search menu with text and photo choices", () => {
     </MemoryRouter>
   );
 
+  expect(screen.getByRole("tooltip")).toHaveTextContent(/product name, SKU or category/i);
+  expect(screen.getByRole("tooltip")).toHaveTextContent(/room photo or screenshot/i);
+
   fireEvent.click(screen.getByRole("button", { name: "Search products by text or photo" }));
 
   expect(screen.getByRole("dialog", { name: "Search products" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Upload a photo to find exact or similar products" })).toHaveTextContent("Search with a photo");
-  expect(screen.getByText(/same design first, followed by close alternatives/i)).toBeInTheDocument();
+  expect(screen.getByText(/exact matches first, followed by similar options/i)).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Upload a photo to find exact or similar products" }));
-  expect(screen.getByRole("dialog", { name: "Let a photograph lead the way" })).toBeInTheDocument();
-  fireEvent.pointerDown(screen.getByRole("button", { name: "Upload an image" }));
-  expect(screen.getByRole("dialog", { name: "Let a photograph lead the way" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Upload a photo. We’ll find the closest match." })).toBeInTheDocument();
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Choose a photo" }));
+  expect(screen.getByRole("dialog", { name: "Upload a photo. We’ll find the closest match." })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Close image search" }));
   expect(screen.queryByRole("dialog", { name: "Search products" })).not.toBeInTheDocument();

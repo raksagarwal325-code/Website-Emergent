@@ -170,12 +170,12 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen, onC
       <div data-customer-image-search-overlay="true" className="fixed inset-0 z-[100] bg-black/80 p-3 sm:p-8 flex items-start justify-center overflow-y-auto" onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
         <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="image-search-title" onKeyDown={keyDown} className="my-auto w-full max-w-4xl border border-[#D4AF37]/30 bg-[#101010] p-5 sm:p-8 text-white shadow-2xl">
           <div className="flex items-start justify-between gap-4">
-            <div><div className="text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">Visual search concierge</div><h2 id="image-search-title" className="mt-2 font-serif text-2xl sm:text-3xl">Let a photograph lead the way</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">Share a room photo, product image or screenshot. We’ll look for the same design first, then the closest alternatives from our catalogue.</p></div>
+            <div><div className="text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">Search by photo</div><h2 id="image-search-title" className="mt-2 font-serif text-2xl sm:text-3xl">Upload a photo. We’ll find the closest match.</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">Use a product photo, room image or screenshot. Exact matches appear first, followed by similar designs.</p></div>
             <button type="button" onClick={close} aria-label="Close image search" className="p-2 text-white/70 hover:text-white"><X size={22} /></button>
           </div>
           <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); search(e.dataTransfer.files?.[0]); }} className="mt-6 flex flex-wrap items-center gap-4 border border-dashed border-white/25 p-5">
             {preview && <img src={preview} alt="Your search reference" className="h-24 w-24 object-contain bg-white" />}
-            <div><button type="button" onClick={() => input.current?.click()} className="inline-flex items-center gap-2 bg-[#D4AF37] px-5 py-3 text-sm text-black"><Upload size={16} />{preview ? "Choose another image" : "Upload an image"}</button><p className="mt-2 text-xs text-white/55">Or drop it here · JPG, PNG, WebP · Up to 10 MB</p><p className="mt-1 text-xs text-white/55">For best results, crop around one light. Your upload is held temporarily for matching and deleted automatically.</p></div>
+            <div><button type="button" onClick={() => input.current?.click()} className="inline-flex items-center gap-2 bg-[#D4AF37] px-5 py-3 text-sm text-black"><Upload size={16} />{preview ? "Choose another photo" : "Choose a photo"}</button><p className="mt-2 text-xs text-white/55">Drag and drop, or choose a photo · JPG, PNG or WebP · Up to 10 MB</p><p className="mt-1 text-xs text-white/55">Tip: crop around one light for a more accurate result. Your photo is deleted automatically after the search.</p></div>
             <input ref={input} hidden type="file" accept="image/jpeg,image/png,image/webp" aria-label="Upload image for product search" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; search(file); }} />
           </div>
           {busy && <p role="status" className="mt-6 flex items-center gap-2 text-sm text-[#D4AF37]"><Loader2 className="animate-spin" size={18} />{busyMessage}</p>}
@@ -193,17 +193,17 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen, onC
             <div className="relative mt-8 overflow-hidden border border-[#D4AF37]/35 bg-[#D4AF37]/[0.055] p-5 sm:p-6">
               <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_92%_10%,rgba(212,175,55,0.13),transparent_38%)]" />
               <div className="relative">
-                <div className="text-[9px] font-medium uppercase tracking-[0.28em] text-[#D4AF37]">Your search, personally continued</div>
-                <h3 className="mt-2 font-serif text-xl leading-snug text-[#FFF8ED]">{result.matches?.length ? "Not quite the piece you had in mind?" : "Let us continue the search for you."}</h3>
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">Share the reference with our lighting team. We’ll compare its form, glass, finish and proportions, then guide you to the closest catalogue piece—or explore a custom interpretation made in Firozabad.</p>
+                <div className="text-[9px] font-medium uppercase tracking-[0.28em] text-[#D4AF37]">Still looking?</div>
+                <h3 className="mt-2 font-serif text-xl leading-snug text-[#FFF8ED]">{result.matches?.length ? "Not the light you had in mind?" : "No match yet? Let our team take over."}</h3>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">Send us the photo on WhatsApp. We’ll compare the shape, glass, finish and proportions, then suggest the closest piece—or discuss making it to order in Firozabad.</p>
                 {whatsappLink && <a
                   href={whatsappLink}
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => trackWhatsAppClick({ source: "image_search_concierge", page: window.location.pathname })}
                   className="mt-4 inline-flex min-h-11 items-center gap-2 border border-[#D4AF37] bg-[#D4AF37] px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-black transition-colors hover:bg-[#E3C85F]"
-                ><MessageCircle size={16} aria-hidden="true" />Ask our lighting team</a>}
-                <p className="mt-3 text-[10px] leading-relaxed text-white/42">A prepared WhatsApp message will open. Attach the same reference image and our team will take it from there.</p>
+                ><MessageCircle size={16} aria-hidden="true" />Let our team help</a>}
+                <p className="mt-3 text-[10px] leading-relaxed text-white/42">WhatsApp will open with a prepared message. Attach the same photo and send it.</p>
               </div>
             </div>
           </div>}
