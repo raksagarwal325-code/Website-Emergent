@@ -125,21 +125,41 @@ def collect_region_scores(encoder, image, rows, mapping, deadline, cancelled,
             break
     if not selected:
         return stop('no_promising_regions')
-    diagnostic['selected_regions'] = [list(regions[index]) for index in selected]
     refined = []
+    completed = []
     for index in selected:
-        if cancelled.is_set() or time.monotonic() >= deadline:
-            return stop('cancelled' if cancelled.is_set() else 'budget_exceeded')
+        if cancelled.is_set():
+            return stop('cancelled')
+        if time.monotonic() >= deadline:
+            if not refined:
+                return stop('budget_exceeded')
+            diagnostic['partial_reason'] = 'budget_exceeded'
+            break
         bounds = tuple(round(v * (image.width if i % 2 == 0 else image.height))
                        for i, v in enumerate(regions[index]))
-        query = np.asarray(encoder.encode_query(image.crop(bounds), initial=coarse_vectors[index]), dtype=np.float32)
+        try:
+            query = np.asarray(
+                encoder.encode_query(image.crop(bounds), initial=coarse_vectors[index]),
+                dtype=np.float32,
+            )
+        except RegionDeadline:
+            if cancelled.is_set() or not refined:
+                raise
+            diagnostic['partial_reason'] = 'budget_exceeded'
+            break
         if query.shape != (6, EMBEDDING_DIM) or not np.isfinite(query).all():
             return stop('invalid_query_vectors')
         similarity = (query @ catalogue).max(axis=0)
         refined.append([float(similarity[offsets[key]].max()) for key in ordered])
+        completed.append(index)
         diagnostic['refined_regions'] += 1
-    if cancelled.is_set() or time.monotonic() >= deadline:
-        return stop('cancelled' if cancelled.is_set() else 'budget_exceeded')
+    if cancelled.is_set():
+        return stop('cancelled')
+    if not refined:
+        return stop('budget_exceeded' if time.monotonic() >= deadline
+                    else 'no_refined_regions')
+    diagnostic['selected_regions'] = [list(regions[index]) for index in completed]
+    diagnostic['requested_refined_regions'] = len(selected)
     return np.asarray(refined), [products[key] for key in ordered]
 
 
