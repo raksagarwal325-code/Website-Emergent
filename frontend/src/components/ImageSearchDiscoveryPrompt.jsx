@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Camera, Sparkles, X } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import CustomerImageSearch from "./CustomerImageSearch";
@@ -24,16 +24,20 @@ function rememberImageSearch(key) {
 export default function ImageSearchDiscoveryPrompt() {
   const { pathname } = useLocation();
   const [visible, setVisible] = useState(false);
+  const dismissedRef = useRef(false);
   const storageKey = `${DISCOVERY_KEY}:${pathname || "/"}`;
   const excluded = pathname.startsWith("/admin") || pathname.startsWith("/catalogue");
 
   useEffect(() => {
     setVisible(false);
-    if (excluded || hasSeenImageSearch(storageKey)) return undefined;
+    dismissedRef.current = hasSeenImageSearch(storageKey);
+    if (excluded || dismissedRef.current) return undefined;
 
     let frame = null;
     let footerObserver = null;
-    const reveal = () => setVisible(true);
+    const reveal = () => {
+      if (!dismissedRef.current) setVisible(true);
+    };
     const checkPosition = () => {
       frame = null;
       const pageHeight = document.documentElement.scrollHeight;
@@ -73,6 +77,7 @@ export default function ImageSearchDiscoveryPrompt() {
   if (!visible || excluded) return null;
 
   const dismiss = () => {
+    dismissedRef.current = true;
     rememberImageSearch(storageKey);
     setVisible(false);
   };
