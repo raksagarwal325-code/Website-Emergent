@@ -123,6 +123,19 @@ class RegionSearchTests(unittest.TestCase):
         self.assertEqual(result[0]['product']['id'], 'catalogue')
         self.assertEqual(result[0]['match_type'], 'closest')
 
+    def test_forced_background_scan_can_expand_a_gallery_leader(self):
+        old = [match(.86, kind='closest', identity='chandelier')]
+        products = [{'id': key} for key in ('chandelier', 'table-lamp', 'variant')]
+        scores = [[.87, .62, .855], [.83, .80, .81], [.69, .77, .68]]
+        result = select_region_matches(old, scores, products, force=True)
+        self.assertIsNot(result, old)
+        self.assertEqual(result[0]['product']['id'], 'chandelier')
+        self.assertEqual(result[1]['product']['id'], 'table-lamp')
+        self.assertLess(
+            [item['product']['id'] for item in result].index('table-lamp'),
+            [item['product']['id'] for item in result].index('variant'),
+        )
+
     def test_exact_results_do_not_even_start_a_scan(self):
         encoder = SimpleNamespace(encode=Mock(side_effect=AssertionError('must bypass')))
         old = [match(1, 'exact')]
