@@ -77,6 +77,8 @@ const savedQuote = {
 beforeEach(() => {
   sessionStorage.clear();
   jest.clearAllMocks();
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: jest.fn(() => "blob:client-image") });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: jest.fn() });
   mockApi.adminProductsExport.mockResolvedValue([]);
   mockApi.searchByImage.mockReset();
   mockApi.getImageSearchJob.mockReset();
