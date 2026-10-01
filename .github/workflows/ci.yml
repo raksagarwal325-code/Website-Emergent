@@ -304,6 +304,45 @@ jobs:
           echo "All 10 expected category HTML files present:"
           printf '  ✓ %s\n' "${expected_slugs[@]}"
 
+      - name: Start local production server for quality gates
+        run: |
+          set -euo pipefail
+          nohup python3 -m http.server 4173 --bind 127.0.0.1 --directory build             >/tmp/samrat-quality-http.log 2>&1 &
+          echo $! >/tmp/samrat-quality-http.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:4173/ >/dev/null; then
+              echo "quality server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::quality server did not become ready"
+          cat /tmp/samrat-quality-http.log || true
+          exit 1
+
+      - name: Lighthouse CI — performance, accessibility, SEO
+        run: npx --yes @lhci/cli@0.15.x autorun --config=./lighthouserc.json
+
+      - name: Install transient axe runner
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts             @axe-core/playwright@4.11.0 playwright@1.55.0
+
+      - name: axe WCAG accessibility gate
+        run: node scripts/a11y-ci.js
+
+      - name: Broken internal links in prerendered HTML
+        uses: lycheeverse/lychee-action@v2
+        with:
+          workingDirectory: frontend
+          fail: true
+          args: >-
+            --offline
+            --root-dir "${{ github.workspace }}/frontend/build"
+            --no-progress
+            'build/**/*.html'
+
 
   quotation-mobile:
     name: Netlify quotation app
