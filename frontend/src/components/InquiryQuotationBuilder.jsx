@@ -238,10 +238,37 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     }
   };
 
-  const addImageMatch = (match) => {
+  const addImageMatch = async (match) => {
     const product = match.product;
     if (!product) return;
-    addItem(product);
+
+    const matchesCatalogueProduct = (candidate) => (
+      (product.id && candidate?.id === product.id)
+      || (product.sku && candidate?.sku
+        && candidate.sku.trim().toLowerCase() === product.sku.trim().toLowerCase())
+    );
+    let catalogueProduct = catalogue.find(matchesCatalogueProduct);
+
+    // Public image-search results intentionally omit admin pricing. Reconcile the
+    // visual match with the quotation catalogue so its current quoted price is
+    // carried into the line item instead of silently defaulting to zero.
+    if (!catalogueProduct) {
+      try {
+        const response = await api.adminProductsExport();
+        const rows = Array.isArray(response) ? response : response?.items || [];
+        catalogueProduct = rows.find(matchesCatalogueProduct);
+        if (rows.length) setCatalogue(rows);
+      } catch { /* The user can still enter a price manually if the catalogue refresh fails. */ }
+    }
+
+    const quotationProduct = catalogueProduct
+      ? {
+          ...product,
+          ...catalogueProduct,
+          images: catalogueProduct.images?.length ? catalogueProduct.images : product.images,
+        }
+      : product;
+    addItem(quotationProduct);
     toast.success(`${product.sku ? product.sku + " · " : ""}${product.name} added to quotation`);
   };
 
