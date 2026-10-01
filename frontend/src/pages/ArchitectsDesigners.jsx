@@ -23,8 +23,8 @@ export default function ArchitectsDesigners() {
   return (
     <div data-testid="page-architects-designers" className="max-w-7xl mx-auto px-6 py-16">
       <SEO
-        title="Lighting for Architects & Interior Designers · Samrat Glass Emporium"
-        description="A project-friendly lighting partner for bespoke residential, hospitality and commercial interiors. Direct access to Firozabad craftsmanship, custom finishes and project quantities."
+        title="Decorative Lighting for Architects & Interior Designers India | Samrat Glass"
+        description="Project decorative lighting for architects and interior designers in India — chandeliers, custom finishes, coordinated quantities and Firozabad manufacturing support from Samrat Glass Emporium."
         path="/architects-interior-designers"
       />
 
@@ -38,10 +38,10 @@ export default function ArchitectsDesigners() {
           Lighting for Architects &amp; <span className="italic brand-gradient-text">Interior Designers</span>
         </h1>
         <p className="mt-6 text-white/70 max-w-3xl leading-relaxed">
-          A project-friendly lighting partner for bespoke residential, hospitality
-          and commercial interiors. Direct access to the Firozabad workshop, custom
-          finishes on request, and comfortable working from your drawings and
-          references.
+          Decorative lighting support for architects and interior designers working on
+          residential, hospitality and commercial interiors across India. Share drawings,
+          references and project quantities for selected chandeliers, coordinated fixtures,
+          custom finishes and other technically feasible requirements from our Firozabad workshop.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <a
@@ -140,6 +140,17 @@ export default function ArchitectsDesigners() {
       </section>
 
       {/* Lead form ------------------------------------------------------- */}
+      <section className="mb-16 border-t border-white/10 pt-8" data-testid="architects-related-resources">
+        <div className="eyebrow mb-3">Related project resources</div>
+        <h2 className="font-serif text-2xl sm:text-3xl">Manufacturing, custom work and real installations.</h2>
+        <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3">
+          <Link to="/chandelier-manufacturer-india" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 pb-1">Chandelier manufacturing in Firozabad →</Link>
+          <Link to="/custom-lighting-bulk-orders" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 pb-1">Custom lighting & project quantities →</Link>
+          <Link to="/double-height-chandeliers-india" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 pb-1">Double-height chandeliers →</Link>
+          <Link to="/gallery" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 pb-1">Real project installations →</Link>
+        </div>
+      </section>
+
       <CommercialLeadForm
         enquiryType="trade"
         heading="Tell us about your project."
