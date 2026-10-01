@@ -3963,37 +3963,42 @@ async def google_reviews():
 
     try:
         r = requests.get(
-            "https://maps.googleapis.com/maps/api/place/details/json",
-            params={
-                "place_id": place_id,
-                "fields": "name,rating,user_ratings_total,reviews,url",
-                "key": api_key,
-                "reviews_no_translations": "true",
-                "reviews_sort": "newest",
+            f"https://places.googleapis.com/v1/places/{place_id}",
+            headers={
+                "X-Goog-Api-Key": api_key,
+                "X-Goog-FieldMask": "displayName,rating,userRatingCount,reviews,googleMapsUri",
             },
+            params={"languageCode": "en"},
             timeout=10,
         )
         data = r.json()
-        if data.get("status") == "OK":
-            res = data.get("result", {})
+        if r.ok:
             result.update({
                 "enabled": True,
-                "rating": res.get("rating"),
-                "total_ratings": res.get("user_ratings_total"),
+                "rating": data.get("rating"),
+                "total_ratings": data.get("userRatingCount"),
                 "reviews": [
                     {
-                        "author_name": rv.get("author_name"),
-                        "profile_photo_url": rv.get("profile_photo_url"),
+                        "author_name": (rv.get("authorAttribution") or {}).get("displayName"),
+                        "profile_photo_url": (rv.get("authorAttribution") or {}).get("photoUri"),
+                        "author_url": (rv.get("authorAttribution") or {}).get("uri"),
                         "rating": rv.get("rating"),
-                        "relative_time_description": rv.get("relative_time_description"),
-                        "text": rv.get("text"),
+                        "relative_time_description": rv.get("relativePublishTimeDescription"),
+                        "text": (rv.get("text") or {}).get("text"),
+                        "review_url": rv.get("googleMapsUri"),
                     }
-                    for rv in (res.get("reviews") or [])
+                    for rv in (data.get("reviews") or [])
                 ],
-                "view_url": res.get("url") or view_url,
+                "view_url": data.get("googleMapsUri") or view_url,
             })
         else:
-            logger.warning(f"Google Places status: {data.get('status')} - {data.get('error_message')}")
+            error = data.get("error") or {}
+            logger.warning(
+                "Google Places (New) HTTP %s: %s - %s",
+                r.status_code,
+                error.get("status"),
+                error.get("message"),
+            )
     except Exception as e:
         logger.error(f"Google reviews fetch failed: {e}")
 
