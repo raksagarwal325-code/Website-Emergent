@@ -7,7 +7,7 @@ import uuid
 import httpx
 import pytest
 
-from server import _product_discovery_images
+from server import _gallery_sitemap_entries, _product_discovery_images
 
 
 BASE = os.environ.get("BACKEND_BASE_URL", "http://localhost:8001")
@@ -124,4 +124,34 @@ def test_product_discovery_images_include_catalogue_variants_and_dedupe():
         "/api/files/products/original.jpg",
         "/api/files/products/white.jpg",
         "/api/files/products/black.jpg",
+    ]
+
+
+def test_gallery_sitemap_entries_include_real_images_and_dedupe():
+    items = [
+        {
+            "title": "Lucknow Private Residence",
+            "images": [
+                "/api/files/gallery/lucknow-1.jpg",
+                "/api/files/gallery/lucknow-1.jpg",
+                "/api/files/gallery/lucknow-2.jpg",
+            ],
+        },
+        {
+            "title": "Lucknow Private Residence",
+            "images": ["/api/files/gallery/lucknow-3.jpg"],
+        },
+    ]
+    assert _gallery_sitemap_entries(items) == [
+        (
+            "/gallery/lucknow-private-residence",
+            [
+                "/api/files/gallery/lucknow-1.jpg",
+                "/api/files/gallery/lucknow-2.jpg",
+            ],
+        ),
+        (
+            "/gallery/lucknow-private-residence-2",
+            ["/api/files/gallery/lucknow-3.jpg"],
+        ),
     ]

@@ -3325,10 +3325,14 @@ import re
 import unicodedata
 
 
-def _gallery_sitemap_paths(items):
-    """Mirror the frontend's title slug and collision numbering in list order."""
+def _gallery_sitemap_entries(items):
+    """Return gallery paths with their real installation images.
+
+    Slugs mirror the frontend's collision numbering in list order. Images are
+    deduplicated per project so the image sitemap does not repeat the same URL.
+    """
     used = {}
-    paths = []
+    entries = []
     for index, project in enumerate(items if isinstance(items, list) else []):
         if not isinstance(project, dict):
             continue
@@ -3337,10 +3341,24 @@ def _gallery_sitemap_paths(items):
         base = re.sub(r"[\u0300-\u036f]", "", base)
         base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")[:80] or f"project-{index + 1}"
         used[base] = used.get(base, 0) + 1
-        if title.strip() or any(project.get("images") or []):
+        raw_images = project.get("images") or []
+        if title.strip() or any(raw_images):
             slug = base if used[base] == 1 else f"{base}-{used[base]}"
-            paths.append(f"/gallery/{slug}")
-    return paths
+            seen = set()
+            images = []
+            for raw in raw_images:
+                value = str(raw or "").strip()
+                if not value or value in seen:
+                    continue
+                seen.add(value)
+                images.append(value)
+            entries.append((f"/gallery/{slug}", images))
+    return entries
+
+
+def _gallery_sitemap_paths(items):
+    """Backward-compatible path-only helper used by older callers/tests."""
+    return [path for path, _ in _gallery_sitemap_entries(items)]
 
 
 def _absolute_image_url(url: str) -> str:
@@ -3387,12 +3405,23 @@ async def sitemap_xml():
         {"id": "settings"}, {"_id": 0, "homepage_content.gallery.items": 1}
     ) or {}
     gallery_items = ((settings.get("homepage_content") or {}).get("gallery") or {}).get("items")
-    for path in _gallery_sitemap_paths(gallery_items):
+    for path, project_images in _gallery_sitemap_entries(gallery_items):
         if path not in seen_paths:
             seen_paths.add(path)
+            image_tags = ""
+            for raw in project_images:
+                abs_url = _absolute_image_url(raw)
+                if not abs_url:
+                    continue
+                image_tags += (
+                    "<image:image>"
+                    f"<image:loc>{xml_escape(abs_url)}</image:loc>"
+                    "</image:image>"
+                )
             parts.append(
                 f"<url><loc>{_SITE_ORIGIN}{xml_escape(path)}</loc>"
-                "<changefreq>monthly</changefreq><priority>0.6</priority></url>"
+                "<changefreq>monthly</changefreq><priority>0.6</priority>"
+                f"{image_tags}</url>"
             )
     cursor = db.products.find(
         {"status": "published"},
