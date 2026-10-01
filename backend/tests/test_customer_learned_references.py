@@ -113,6 +113,38 @@ class LearnedReferenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await self.store.delete(created["id"]))
         self.assertFalse(await self.store.delete(created["id"]))
 
+    async def test_similar_relationship_is_stored_and_augmented_safely(self):
+        created = await self.store.create(
+            image_bytes(), "alternative.jpg",
+            [{"id": "one", "relationship": "similar"}], "owner@example.com")
+        self.assertEqual(created["relationship"], "similar")
+        listed = await self.store.list()
+        self.assertEqual(listed[0]["relationship"], "similar")
+        rows, _mapping = await self.store.augment([], {}, self.db.products.documents)
+        self.assertEqual(rows[0]["verified_reference_kind"], "similar")
+        self.assertEqual(rows[0]["verified_threshold"], .88)
+
+    async def test_unknown_relationship_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "exact or similar"):
+            await self.store.create(
+                image_bytes(), "client.jpg",
+                [{"id": "one", "relationship": "maybe"}], "owner@example.com")
+
+    async def test_one_photo_can_label_exact_and_similar_products_separately(self):
+        created = await self.store.create(
+            image_bytes(), "mixed-room.jpg", [
+                {"id": "one", "relationship": "exact"},
+                {"id": "two", "relationship": "similar"},
+            ], "owner@example.com")
+        self.assertEqual(created["relationship"], "mixed")
+        rows, mapping = await self.store.augment([], {}, self.db.products.documents)
+        self.assertEqual({row["verified_reference_kind"] for row in rows}, {"exact", "similar"})
+        products_by_kind = {
+            row["verified_reference_kind"]: {product["id"] for product in mapping[row["url"]]}
+            for row in rows
+        }
+        self.assertEqual(products_by_kind, {"exact": {"one"}, "similar": {"two"}})
+
     def test_verified_reference_uses_strict_gate_and_never_claims_exact_product(self):
         query = [[1.0] + [0.0] * 383, [1.0] + [0.0] * 383]
         def vector(score):
@@ -130,6 +162,16 @@ class LearnedReferenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result[0]["match_type"], "closest")
         exact_pixels = [{**strong[0], "pixels": "query-pixels"}]
         self.assertEqual(rank_images(hashes, query, exact_pixels, mapping)[0]["match_type"], "closest")
+
+    def test_verified_similar_reference_never_becomes_closest(self):
+        query = [[1.0] + [0.0] * 383, [1.0] + [0.0] * 383]
+        product = {"id": "one", "sku": "SGE-HL-069"}
+        rows = [{"url": "learned", "sha256": "other", "pixels": "other",
+                 "vectors": query, "verified_reference": True,
+                 "verified_reference_kind": "similar", "verified_threshold": .88}]
+        result = rank_images(
+            {"sha256": "query", "pixels": "query-pixels"}, query, rows, {"learned": [product]})
+        self.assertEqual(result[0]["match_type"], "similar")
 
 
 if __name__ == "__main__":
