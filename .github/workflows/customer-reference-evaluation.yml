@@ -25,7 +25,7 @@ jobs:
           grep -iE '^(numpy|pillow|onnxruntime|huggingface_hub)==' backend/requirements.txt > /tmp/evaluation-requirements.txt
           pip install -r /tmp/evaluation-requirements.txt
       - name: Restore downloaded public images
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             /tmp/reference-evaluation/images
@@ -38,7 +38,7 @@ jobs:
         run: python scripts/evaluate_customer_references.py --output /tmp/reference-evaluation
       - name: Preserve downloaded public images for retries
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             /tmp/reference-evaluation/images
