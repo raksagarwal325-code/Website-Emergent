@@ -33,7 +33,7 @@ export default function CustomLighting() {
           className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-tight"
           data-testid="custom-lighting-h1"
         >
-          Custom Chandeliers &amp; <span className="italic brand-gradient-text">Decorative Lighting</span>
+          Custom Lighting, Chandeliers &amp; <span className="italic brand-gradient-text">Bulk Orders</span>
         </h1>
         <p className="mt-6 text-white/70 max-w-3xl leading-relaxed">
           Made-to-order chandeliers and decorative lighting for residences, hospitality,
