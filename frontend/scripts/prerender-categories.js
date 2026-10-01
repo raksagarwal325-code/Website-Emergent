@@ -43,6 +43,17 @@ function slugifyProductPart(value = "") {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/-{2,}/g, "-");
 }
 
+function productImageAltText(p = {}) {
+  const name = String(p.name || "").trim();
+  const category = String(p.category || "").trim();
+  const sku = String(p.sku || "").trim();
+  const parts = [name];
+  if (category && !name.toLowerCase().includes(category.toLowerCase())) parts.push(category);
+  if (sku) parts.push(sku);
+  parts.push("Samrat Glass Emporium");
+  return parts.filter(Boolean).join(" · ");
+}
+
 function productPath(p) {
   const sku = slugifyProductPart(p.sku);
   const usableSku = sku && !["tbd", "na", "n-a", "unknown"].includes(sku);
@@ -162,7 +173,7 @@ function productTilesHtml(products, apiBase) {
       const img = resolveImage((p.images || [])[0], apiBase);
       const href = productPath(p);
       return `<li class="prerender-tile"><a href="${escapeHtml(href)}">${
-        img ? `<img loading="lazy" decoding="async" src="${escapeHtml(img)}" alt="${escapeHtml(p.name)}"/>` : ""
+        img ? `<img loading="lazy" decoding="async" src="${escapeHtml(img)}" alt="${escapeHtml(productImageAltText(p))}"/>` : ""
       }<span class="prerender-tile-name">${escapeHtml(p.name)}</span>${
         p.sku ? `<span class="prerender-tile-sku">${escapeHtml(p.sku)}</span>` : ""
       }</a></li>`;
