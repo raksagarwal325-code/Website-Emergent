@@ -3935,10 +3935,8 @@ async def proxy_image(url: str, admin: _AdminUser = Depends(require_admin)):
 
 
 # --- Google Reviews ---
-@api.get("/google/reviews")
-async def google_reviews():
-    raw = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
-    doc = {**Settings().model_dump(), **raw}
+def _google_reviews_snapshot(doc: dict) -> tuple[dict, dict]:
+    """Fetch Google review data plus a secret-free diagnostic snapshot."""
     cid = doc.get("google_cid", "")
     place_id = doc.get("google_place_id", "")
     api_key = doc.get("google_maps_api_key", "")
@@ -3957,12 +3955,26 @@ async def google_reviews():
         "total_ratings": None,
         "reviews": [],
     }
+    diagnostic = {
+        "configured": bool(place_id and api_key),
+        "place_id_set": bool(place_id),
+        "api_key_set": bool(api_key),
+        "http_status": None,
+        "places_status": None,
+        "error_message": None,
+        "rating": None,
+        "total_ratings": None,
+        "reviews_returned": 0,
+    }
 
     if not (place_id and api_key):
-        return result
+        diagnostic["error_message"] = (
+            "Google Place ID is missing" if not place_id else "Google Maps API key is missing"
+        )
+        return result, diagnostic
 
     try:
-        r = requests.get(
+        response = requests.get(
             "https://maps.googleapis.com/maps/api/place/details/json",
             params={
                 "place_id": place_id,
@@ -3973,31 +3985,63 @@ async def google_reviews():
             },
             timeout=10,
         )
-        data = r.json()
+        diagnostic["http_status"] = response.status_code
+        data = response.json()
+        diagnostic["places_status"] = data.get("status")
+
         if data.get("status") == "OK":
             res = data.get("result", {})
+            reviews = [
+                {
+                    "author_name": rv.get("author_name"),
+                    "profile_photo_url": rv.get("profile_photo_url"),
+                    "rating": rv.get("rating"),
+                    "relative_time_description": rv.get("relative_time_description"),
+                    "text": rv.get("text"),
+                }
+                for rv in (res.get("reviews") or [])
+            ]
             result.update({
                 "enabled": True,
                 "rating": res.get("rating"),
                 "total_ratings": res.get("user_ratings_total"),
-                "reviews": [
-                    {
-                        "author_name": rv.get("author_name"),
-                        "profile_photo_url": rv.get("profile_photo_url"),
-                        "rating": rv.get("rating"),
-                        "relative_time_description": rv.get("relative_time_description"),
-                        "text": rv.get("text"),
-                    }
-                    for rv in (res.get("reviews") or [])
-                ],
+                "reviews": reviews,
                 "view_url": res.get("url") or view_url,
             })
+            diagnostic.update({
+                "rating": res.get("rating"),
+                "total_ratings": res.get("user_ratings_total"),
+                "reviews_returned": len(reviews),
+            })
         else:
-            logger.warning(f"Google Places status: {data.get('status')} - {data.get('error_message')}")
-    except Exception as e:
-        logger.error(f"Google reviews fetch failed: {e}")
+            diagnostic["error_message"] = str(data.get("error_message") or "").strip() or None
+            logger.warning(
+                "Google Places status: %s - %s",
+                diagnostic["places_status"],
+                diagnostic["error_message"],
+            )
+    except Exception as exc:
+        diagnostic["error_message"] = type(exc).__name__
+        logger.error("Google reviews fetch failed: %s", exc)
 
+    return result, diagnostic
+
+
+@api.get("/google/reviews")
+async def google_reviews():
+    raw = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    doc = {**Settings().model_dump(), **raw}
+    result, _ = _google_reviews_snapshot(doc)
     return result
+
+
+@api.get("/admin/google/reviews/diagnostics")
+async def admin_google_reviews_diagnostics(admin: _AdminUser = Depends(require_admin)):
+    """Secret-free live Google Places review diagnostics for the admin."""
+    raw = await db.settings.find_one({"id": "settings"}, {"_id": 0}) or {}
+    doc = {**Settings().model_dump(), **raw}
+    _, diagnostic = _google_reviews_snapshot(doc)
+    return diagnostic
 
 
 # --- Uploads ---
