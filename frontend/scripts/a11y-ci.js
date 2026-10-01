@@ -18,9 +18,13 @@ const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
   });
 
   let failures = 0;
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+  });
+
   try {
     for (const url of urls) {
-      const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+      const page = await context.newPage();
       await page.goto(url, { waitUntil: "networkidle", timeout: 90000 });
       await page.waitForTimeout(750);
 
@@ -45,6 +49,7 @@ const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
       await page.close();
     }
   } finally {
+    await context.close();
     await browser.close();
   }
 
