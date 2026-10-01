@@ -197,6 +197,21 @@ describe("Product JSON-LD — merchant listing fields", () => {
     });
   });
 
+  test("includes dedicated catalogue light-on/light-off variants in Product ImageObject data", async () => {
+    api.getProduct.mockResolvedValueOnce({
+      ...fixtureProduct,
+      images: ["https://samratglass.com/api/files/lumiere-catalog/products/original.jpg"],
+      catalog_image_off: "https://samratglass.com/api/files/lumiere-catalog/products/white-off.jpg",
+      catalog_image_on: "https://samratglass.com/api/files/lumiere-catalog/products/black-on.jpg",
+    });
+    const ld = await renderAndGetProductJsonLd();
+    expect(ld.image.map((item) => item.contentUrl)).toEqual([
+      "https://samratglass.com/api/files/lumiere-catalog/products/original.jpg",
+      "https://samratglass.com/api/files/lumiere-catalog/products/white-off.jpg",
+      "https://samratglass.com/api/files/lumiere-catalog/products/black-on.jpg",
+    ]);
+  });
+
   test("omits Product markup when the public price is zero and there are no reviews", async () => {
     api.getProduct.mockResolvedValueOnce({ ...fixtureProduct, price: 0 });
     const ld = await renderAndGetProductJsonLd({ requireProduct: false });
