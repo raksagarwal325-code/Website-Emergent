@@ -50,6 +50,48 @@ const _dispatch = (name, params, pathname) => {
   _safe(() => window.gtag("event", name, params || {}));
 };
 
+const AI_REFERRAL_SESSION_KEY = "sge_ai_referral_source";
+
+export const detectAIReferralSource = ({ href = "", referrer = "" } = {}) => {
+  const normalizedHref = String(href || "");
+  const normalizedReferrer = String(referrer || "");
+  let utmSource = "";
+  try {
+    utmSource = new URL(normalizedHref, "https://samratglass.com").searchParams.get("utm_source") || "";
+  } catch (_) { /* ignore malformed URL */ }
+
+  const source = utmSource.toLowerCase();
+  if (source.includes("chatgpt") || source.includes("openai")) return "chatgpt";
+  if (source.includes("perplexity")) return "perplexity";
+  if (source.includes("copilot")) return "copilot";
+  if (source.includes("gemini")) return "gemini";
+
+  let host = "";
+  try { host = new URL(normalizedReferrer).hostname.toLowerCase(); } catch (_) { return ""; }
+  if (host === "chatgpt.com" || host.endsWith(".chatgpt.com") || host === "chat.openai.com") return "chatgpt";
+  if (host === "perplexity.ai" || host.endsWith(".perplexity.ai")) return "perplexity";
+  if (host === "copilot.microsoft.com" || host.endsWith(".copilot.microsoft.com")) return "copilot";
+  if (host === "gemini.google.com") return "gemini";
+  return "";
+};
+
+const _currentAIReferralSource = () => {
+  if (!_hasWindow()) return "";
+  const detected = detectAIReferralSource({
+    href: window.location?.href || "",
+    referrer: typeof document !== "undefined" ? document.referrer : "",
+  });
+  if (detected) {
+    _safe(() => window.sessionStorage.setItem(AI_REFERRAL_SESSION_KEY, detected));
+    return detected;
+  }
+  try {
+    return window.sessionStorage.getItem(AI_REFERRAL_SESSION_KEY) || "";
+  } catch (_) {
+    return "";
+  }
+};
+
 // OpenAI Ads conversion tracking is intentionally narrower than GA4: only
 // genuine enquiry actions are measured. The payload is a fixed, PII-free
 // event defined in Ads Manager; names, phones, emails and messages never
@@ -113,14 +155,22 @@ export const pageView = ({ path, search, title } = {}) => {
   if (key === _lastPageViewKey) return; // dedupe consecutive identical route entries
   _lastPageViewKey = key;
 
+  const aiReferralSource = _currentAIReferralSource();
   _safe(() =>
     window.gtag("event", "page_view", {
       page_path: key,
       page_location: window.location.href,
       page_title: title || document.title,
+      ...(aiReferralSource ? { ai_referral_source: aiReferralSource } : {}),
       send_to: MEASUREMENT_ID,
     }),
   );
+  if (aiReferralSource) {
+    _dispatch("ai_referral_visit", {
+      source: aiReferralSource,
+      landing_path: key.slice(0, 120),
+    }, pathname);
+  }
 };
 
 // Public reset — only for tests. Never called from app code.
@@ -128,6 +178,9 @@ export const _resetLastPageViewKeyForTests = () => { _lastPageViewKey = null; };
 export const _resetOpenAILeadDedupeForTests = () => {
   _lastOpenAILeadAt = null;
   _safe(() => window.sessionStorage.removeItem(OPENAI_LEAD_DEDUPE_KEY));
+};
+export const _resetAIReferralForTests = () => {
+  _safe(() => window.sessionStorage.removeItem(AI_REFERRAL_SESSION_KEY));
 };
 
 // ---------- Generic event ------------------------------------------------
