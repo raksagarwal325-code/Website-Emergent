@@ -7,6 +7,7 @@ import { api, formatProductPrice } from "../lib/api";
 import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
 import { applyImageFrameColor } from "../lib/imageFrame";
 import { productPath } from "../lib/productUrl";
+import { productImageAlt } from "../lib/imageSeo";
 import {
   CATALOGUE_LIGHT_MODE_EVENT,
   getCatalogueLightImages,
@@ -161,7 +162,7 @@ export default function ProductCard({ product, index = 0, matchingFamily = null 
       </button>
       <Link to={productPath(product)} className="block" data-testid={`product-link-${product.id}`}>
         <div className="overflow-hidden bg-[#0e0510] flex items-center justify-center relative transition-[aspect-ratio] duration-500" {...containerGuardProps} style={{ ...containerGuardStyle, aspectRatio: mediaAspect }}>
-          {img ? <img src={img} alt={product.name} className="product-image block h-full w-full object-contain object-center p-1.5 opacity-95 group-hover:opacity-100 sm:p-3" loading="lazy" onLoad={handleImageLoad} {...imgGuardProps} style={imgGuardStyle} /> : <ProductPlaceholder name={product.name} />}
+          {img ? <img src={img} alt={productImageAlt({ name: product.name, category: product.category, sku: product.sku })} className="product-image block h-full w-full object-contain object-center p-1.5 opacity-95 group-hover:opacity-100 sm:p-3" loading="lazy" onLoad={handleImageLoad} {...imgGuardProps} style={imgGuardStyle} /> : <ProductPlaceholder name={product.name} />}
           {projectCount > 0 && <div data-testid={`product-projects-badge-${product.id}`} className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 inline-flex items-center gap-1 border border-[#D4AF37]/40 bg-black/70 backdrop-blur-sm px-2 py-1 text-[8px] sm:text-[10px] uppercase tracking-[0.16em] sm:tracking-[0.2em] text-[#D4AF37]" title={`Featured in ${projectCount} real installation${projectCount === 1 ? "" : "s"}`}><Sparkles size={9} strokeWidth={1.6} /><span className="hidden sm:inline">Featured in </span>{projectCount} project{projectCount === 1 ? "" : "s"}</div>}
 
           <div
