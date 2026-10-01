@@ -323,6 +323,19 @@ jobs:
       - name: Lighthouse CI — performance, accessibility, SEO
         run: npx --yes @lhci/cli@0.15.x autorun --config=./lighthouserc.json
 
+      - name: Summarize Lighthouse performance bottlenecks
+        if: always()
+        run: node scripts/lighthouse-diagnostics.js
+
+      - name: Preserve Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse-ci-reports
+          path: frontend/.lighthouseci/
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Install transient axe runner
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
