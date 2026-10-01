@@ -66,7 +66,7 @@ const PAGES = [
     route: "/custom-lighting-bulk-orders",
     title: "Custom Chandelier & Decorative Lighting Manufacturer India | Samrat Glass",
     description: "Custom chandeliers and made-to-order decorative lighting from Firozabad, India — selected sizes, finishes, glass colours, light counts and project quantities by Samrat Glass Emporium.",
-    h1: "Custom Chandeliers & Decorative Lighting",
+    h1: "Custom Lighting, Chandeliers & Bulk Orders",
     intro: "Made-to-order chandeliers and decorative lighting for residences, hospitality, retail and large-scale projects across India. Selected designs can be evaluated for changes in scale, finish, glass colour, light count or configuration through our Firozabad workshop.",
     links: [["/chandelier-manufacturer-india", "Chandelier manufacturer in India"], ["/double-height-chandeliers-india", "Double-height chandeliers"], ["/architects-interior-designers", "For architects & designers"], ["/gallery", "Real installations"], ["/catalog", "Explore designs"]],
   },
