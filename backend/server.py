@@ -1,6 +1,7 @@
 """Product Catalog API - Lumière."""
 import asyncio
 import csv
+import gzip
 import io
 import json
 import logging
@@ -30,7 +31,7 @@ from storage import MIME_TYPES, get_object, init_storage, put_object  # noqa: E4
 from watermark import apply_watermark  # noqa: E402
 from image_ownership import color_histogram, color_histogram_distance, embed_ownership_metadata, normalized_pixel_fingerprint, ownership_fingerprint, perceptual_distance, perceptual_fingerprint, perceptual_fingerprint_variants, phash_fingerprint, phash_fingerprint_variants, salvage_truncated_image  # noqa: E402
 from seed_data import build_seed_docs  # noqa: E402
-from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed  # noqa: E402
+from commerce_feed import REQUIRED_FIELDS as COMMERCE_FEED_FIELDS, build_feed, build_openai_feed  # noqa: E402
 from catalogue_search import catalogue_search_filter, resolve_catalogue_query  # noqa: E402
 from product_upload_sop import SCHEMAS as PRODUCT_SOP_SCHEMAS, SOP_VERSION, SKU_PREFIX, apply_identity_authority, apply_owner_facts, apply_reference_family, apply_reference_model, automatic_catalogue_model, blocking_identity_notes, catalogue_manifest_row, conversation_facts, extract_catalogue_references, facts_as_notes, find_similar_product, normalize_ai_record, normalize_catalogue_matches, normalize_product_name, owner_facts, product_sop_registry, reference_category_for_notes, shared_reference_category, shared_reference_model, sop_prompt, validate_record  # noqa: E402
 from product_ai import configure_product_chat, product_ai_settings  # noqa: E402
@@ -1445,11 +1446,52 @@ async def admin_commerce_products_feed(admin: _AdminUser = Depends(require_admin
     )
 
 
+@api.get("/admin/commerce/openai-products.jsonl.gz")
+async def admin_openai_products_feed(admin: _AdminUser = Depends(require_admin)):
+    """Admin-only OpenAI-native discovery feed snapshot.
+
+    OpenAI onboarding currently requires an approved feed integration. This
+    endpoint prepares the stable native schema without publicly exposing the
+    full catalogue or enabling checkout/ads.
+    """
+    docs = await db.products.find(
+        {"status": "published"}, {"_id": 0}
+    ).sort("sku", 1).to_list(length=10000)
+    rows, _, _ = build_openai_feed(
+        docs,
+        site_origin=_SITE_ORIGIN,
+        slug_builder=product_slug,
+        image_url_builder=_absolute_image_url,
+    )
+    payload = "\n".join(
+        json.dumps({k: v for k, v in row.items() if k != "_warnings"}, ensure_ascii=False, separators=(",", ":"))
+        for row in rows
+    )
+    if payload:
+        payload += "\n"
+    body = gzip.compress(payload.encode("utf-8"))
+    return Response(
+        content=body,
+        media_type="application/gzip",
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": 'attachment; filename="samrat-glass-openai-products.jsonl.gz"',
+            "X-Commerce-Eligible-Products": str(len(rows)),
+        },
+    )
+
+
 @api.get("/admin/commerce/readiness")
 async def admin_commerce_readiness(admin: _AdminUser = Depends(require_admin)):
     """Admin-only feed readiness report with per-product exclusion reasons."""
     docs = await db.products.find({}, {"_id": 0}).sort("sku", 1).to_list(length=10000)
     rows, excluded, reason_counts = build_feed(
+        docs,
+        site_origin=_SITE_ORIGIN,
+        slug_builder=product_slug,
+        image_url_builder=_absolute_image_url,
+    )
+    openai_rows, openai_excluded, openai_reason_counts = build_openai_feed(
         docs,
         site_origin=_SITE_ORIGIN,
         slug_builder=product_slug,
@@ -1472,6 +1514,14 @@ async def admin_commerce_readiness(admin: _AdminUser = Depends(require_admin)):
         "warning_counts": warning_counts,
         "warning_items": warning_items,
         "feed_url": f"{_SITE_ORIGIN}/api/admin/commerce/products.csv",
+        "openai_native": {
+            "eligible": len(openai_rows),
+            "excluded": len(openai_excluded),
+            "reason_counts": openai_reason_counts,
+            "feed_url": f"{_SITE_ORIGIN}/api/admin/commerce/openai-products.jsonl.gz",
+            "format": "OpenAI stable discovery JSONL gzip",
+            "onboarding_required": True,
+        },
     }
 
 
