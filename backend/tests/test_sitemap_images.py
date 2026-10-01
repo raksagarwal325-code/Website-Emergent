@@ -7,6 +7,8 @@ import uuid
 import httpx
 import pytest
 
+from server import _product_discovery_images
+
 
 BASE = os.environ.get("BACKEND_BASE_URL", "http://localhost:8001")
 SITEMAP_URL = f"{BASE}/api/sitemap.xml"
@@ -108,3 +110,18 @@ def test_sitemap_excludes_draft_products():
         )
     finally:
         httpx.delete(f"{BASE}/api/products/{pid}", headers=headers, timeout=20)
+
+
+def test_product_discovery_images_include_catalogue_variants_and_dedupe():
+    doc = {
+        "images": ["/api/files/products/original.jpg", "/api/files/products/white.jpg"],
+        "specs": {
+            "_catalog_image_off": "/api/files/products/white.jpg",
+            "_catalog_image_on": "/api/files/products/black.jpg",
+        },
+    }
+    assert _product_discovery_images(doc) == [
+        "/api/files/products/original.jpg",
+        "/api/files/products/white.jpg",
+        "/api/files/products/black.jpg",
+    ]

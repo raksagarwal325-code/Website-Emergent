@@ -188,9 +188,14 @@ export default function ProductDetail() {
   const siteOrigin =
     (typeof window !== "undefined" && window.location?.origin) ||
     "https://samratglass.com";
-  const structuredProductImages = (product.images || [])
-    .map((url) => api.resolveImage(url))
+  const structuredProductImages = [...new Set([
+    ...(product.images || []),
+    product.catalog_image_off,
+    product.catalog_image_on,
+  ]
     .filter(Boolean)
+    .map((url) => api.resolveImage(url))
+    .filter(Boolean))]
     .map((url, index) => ({
       "@type": "ImageObject",
       "@id": `${siteOrigin}${productPath(product)}#image-${index + 1}`,

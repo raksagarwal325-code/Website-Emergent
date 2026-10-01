@@ -322,6 +322,32 @@ def product_slug(doc: dict) -> str:
     return f"{name}-{identity}" if identity else name
 
 
+def _product_discovery_images(doc: dict) -> list[str]:
+    """Return all public product-image variants that search should discover.
+
+    The public product sanitizer exposes explicit catalogue light-on/light-off
+    images stored in legacy spec keys. Those exact catalogue visuals can differ
+    from the product gallery, so include them in image discovery signals too.
+    """
+    from public_product_sanitizer import sanitize_public_product
+
+    public_doc = sanitize_public_product(doc) or {}
+    candidates = [
+        *(public_doc.get("images") or []),
+        public_doc.get("catalog_image_off"),
+        public_doc.get("catalog_image_on"),
+    ]
+    seen = set()
+    result = []
+    for value in candidates:
+        value = str(value or "").strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
 class Product(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -3320,7 +3346,17 @@ async def sitemap_xml():
             )
     cursor = db.products.find(
         {"status": "published"},
-        {"_id": 0, "id": 1, "name": 1, "sku": 1, "images": 1, "updated_at": 1},
+        {
+            "_id": 0,
+            "id": 1,
+            "name": 1,
+            "sku": 1,
+            "images": 1,
+            "specs": 1,
+            "catalog_image_off": 1,
+            "catalog_image_on": 1,
+            "updated_at": 1,
+        },
     )
     async for doc in cursor:
         slug = product_slug(doc)
@@ -3329,7 +3365,7 @@ async def sitemap_xml():
         lastmod = doc.get("updated_at") or ""
         lastmod_tag = f"<lastmod>{lastmod[:10]}</lastmod>" if lastmod else ""
         image_tags = ""
-        for raw in (doc.get("images") or []):
+        for raw in _product_discovery_images(doc):
             abs_url = _absolute_image_url(raw)
             if not abs_url:
                 continue

@@ -76,6 +76,20 @@ function socialPreviewUrl(value, apiBase) {
   }
 }
 
+function productDiscoveryImages(product, apiBase) {
+  const candidates = [
+    ...(product.images || []),
+    product.catalog_image_off,
+    product.catalog_image_on,
+  ];
+  return [...new Set(
+    candidates
+      .filter(Boolean)
+      .map((value) => absoluteUrl(value, apiBase, ""))
+      .filter(Boolean),
+  )];
+}
+
 function metaDescription(product) {
   const source = product.short_description || product.description ||
     `${product.name} by Samrat Glass Emporium, handcrafted in Firozabad, India.`;
@@ -150,9 +164,7 @@ function injectProduct(template, product, apiBase) {
   const title = `${product.name} · Samrat Glass Emporium`;
   const description = metaDescription(product);
   const shareImage = socialPreviewUrl((product.images || [])[0], apiBase);
-  const originalImages = (product.images || [])
-    .map((value) => absoluteUrl(value, apiBase, ""))
-    .filter(Boolean);
+  const originalImages = productDiscoveryImages(product, apiBase);
   const primaryOriginalImage = originalImages[0] || DEFAULT_SHARE_IMAGE;
   const schema = productSchema(product, canonical, originalImages, description);
 
@@ -303,6 +315,7 @@ module.exports = {
   imageObject,
   metaDescription,
   productSchema,
+  productDiscoveryImages,
   runPrerenderProducts,
   DEFAULT_SHARE_IMAGE,
   PAGE_SIZE,

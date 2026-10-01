@@ -6,6 +6,7 @@ const {
   fetchPublishedProducts,
   injectProduct,
   injectLegacyRedirect,
+  productDiscoveryImages,
   runPrerenderProducts,
 } = require("../../scripts/prerender-products");
 const { productPath } = require("../../scripts/prerender-categories");
@@ -75,6 +76,36 @@ describe("product social prerender", () => {
       creditText: "Samrat Glass Emporium",
     });
     expect(data.image[0].contentUrl).not.toContain("/api/social-preview/");
+  });
+
+  test("adds dedicated catalogue light-on/light-off variants to Product image discovery", () => {
+    const product = {
+      ...PRODUCT,
+      images: ["/api/files/lumiere-catalog/products/original.webp"],
+      catalog_image_off: "/api/files/lumiere-catalog/products/white-off.webp",
+      catalog_image_on: "/api/files/lumiere-catalog/products/black-on.webp",
+    };
+    expect(productDiscoveryImages(product, "https://samratglass.com")).toEqual([
+      "https://samratglass.com/api/files/lumiere-catalog/products/original.webp",
+      "https://samratglass.com/api/files/lumiere-catalog/products/white-off.webp",
+      "https://samratglass.com/api/files/lumiere-catalog/products/black-on.webp",
+    ]);
+    const html = injectProduct(TEMPLATE, product, "https://samratglass.com");
+    const script = html.split('data-schema="prerender-product">')[1]?.split("</script>")[0];
+    const data = JSON.parse(script);
+    expect(data.image.map((item) => item.contentUrl)).toEqual(
+      productDiscoveryImages(product, "https://samratglass.com")
+    );
+  });
+
+  test("deduplicates catalogue variants already present in the gallery", () => {
+    const product = {
+      ...PRODUCT,
+      images: ["/api/files/lumiere-catalog/products/original.webp", "/api/files/lumiere-catalog/products/white-off.webp"],
+      catalog_image_off: "/api/files/lumiere-catalog/products/white-off.webp",
+      catalog_image_on: "/api/files/lumiere-catalog/products/original.webp",
+    };
+    expect(productDiscoveryImages(product, "https://samratglass.com")).toHaveLength(2);
   });
 
   test("builds a canonical fallback page for a legacy UUID route", () => {
