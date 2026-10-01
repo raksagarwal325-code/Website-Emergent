@@ -21,8 +21,8 @@ export default function CustomLighting() {
   return (
     <div data-testid="page-custom-lighting" className="max-w-7xl mx-auto px-6 py-16">
       <SEO
-        title="Custom Lighting & Bulk Orders · Samrat Glass Emporium"
-        description="Made-to-order decorative lighting from Firozabad — custom sizes, finishes, glass colours and light counts for residences, hospitality, retail and large-scale projects."
+        title="Custom Chandelier & Decorative Lighting Manufacturer India | Samrat Glass"
+        description="Custom chandeliers and made-to-order decorative lighting from Firozabad, India — selected sizes, finishes, glass colours, light counts and project quantities by Samrat Glass Emporium."
         path="/custom-lighting-bulk-orders"
       />
 
@@ -33,12 +33,13 @@ export default function CustomLighting() {
           className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-tight"
           data-testid="custom-lighting-h1"
         >
-          Custom Lighting &amp; <span className="italic brand-gradient-text">Bulk Orders</span>
+          Custom Lighting, Chandeliers &amp; <span className="italic brand-gradient-text">Bulk Orders</span>
         </h1>
         <p className="mt-6 text-white/70 max-w-3xl leading-relaxed">
-          Made-to-order decorative lighting for residences, hospitality, retail
-          and large-scale projects. Handcrafted and hand-assembled in Firozabad,
-          with glass-working, cutting and finishing processes varying by design.
+          Made-to-order chandeliers and decorative lighting for residences, hospitality,
+          retail and large-scale projects across India. Selected designs can be evaluated
+          for changes in scale, finish, glass colour, light count or configuration, with
+          production coordinated through our Firozabad workshop.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <a
@@ -138,6 +139,17 @@ export default function CustomLighting() {
             </li>
           ))}
         </ol>
+      </section>
+
+      <section className="mb-16 border-t border-white/10 pt-8" data-testid="custom-lighting-related-resources">
+        <div className="eyebrow mb-3">Related project resources</div>
+        <h2 className="font-serif text-2xl sm:text-3xl">Continue with the most relevant planning page.</h2>
+        <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3">
+          <Link to="/chandelier-manufacturer-india" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 pb-1">Chandelier manufacturer in India →</Link>
+          <Link to="/double-height-chandeliers-india" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 pb-1">Double-height chandelier planning →</Link>
+          <Link to="/architects-interior-designers" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 pb-1">For architects & interior designers →</Link>
+          <Link to="/gallery" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 pb-1">Real installations →</Link>
+        </div>
       </section>
 
       {/* Lead form ------------------------------------------------------- */}

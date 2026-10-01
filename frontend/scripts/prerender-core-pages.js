@@ -12,7 +12,7 @@ const PAGES = [
     description: "Handcrafted chandeliers, hanging lights, wall lights, table lamps and decorative glass lighting from Firozabad — by Samrat Glass Emporium, established in 1981.",
     h1: "Luxury decorative lighting that turns houses into homes.",
     intro: "A curated catalog of crystal chandeliers, pendant lights, wall sconces, table lamps and decorative lighting, handcrafted and hand-assembled by our artisans in Firozabad, with processes varying by design.",
-    links: [["/catalog", "Explore the catalog"], ["/category/chandeliers", "Chandeliers"], ["/gallery", "Real installations"], ["/craft", "Our craft"], ["/contact", "Contact us"]],
+    links: [["/catalog", "Explore the catalog"], ["/chandelier-manufacturer-india", "Chandelier manufacturer in India"], ["/custom-lighting-bulk-orders", "Custom chandeliers & decorative lighting"], ["/double-height-chandeliers-india", "Double-height chandeliers"], ["/architects-interior-designers", "For architects & interior designers"], ["/gallery", "Real installations"], ["/craft", "Our craft"]],
   },
   {
     route: "/catalog",
@@ -64,19 +64,19 @@ const PAGES = [
   },
   {
     route: "/custom-lighting-bulk-orders",
-    title: "Custom Lighting & Bulk Orders · Samrat Glass Emporium",
-    description: "Made-to-order decorative lighting from Firozabad — custom sizes, finishes, glass colours and light counts for residences, hospitality, retail and large-scale projects.",
-    h1: "Custom Lighting & Bulk Orders",
-    intro: "Made-to-order decorative lighting for residences, hospitality, retail and large-scale projects. Handcrafted and hand-assembled in Firozabad, with glass-working, cutting and finishing processes varying by design.",
-    links: [["/gallery", "Real installations"], ["/catalog", "Explore designs"], ["/contact", "Discuss your requirement"]],
+    title: "Custom Chandelier & Decorative Lighting Manufacturer India | Samrat Glass",
+    description: "Custom chandeliers and made-to-order decorative lighting from Firozabad, India — selected sizes, finishes, glass colours, light counts and project quantities by Samrat Glass Emporium.",
+    h1: "Custom Lighting, Chandeliers & Bulk Orders",
+    intro: "Made-to-order chandeliers and decorative lighting for residences, hospitality, retail and large-scale projects across India. Selected designs can be evaluated for changes in scale, finish, glass colour, light count or configuration through our Firozabad workshop.",
+    links: [["/chandelier-manufacturer-india", "Chandelier manufacturer in India"], ["/double-height-chandeliers-india", "Double-height chandeliers"], ["/architects-interior-designers", "For architects & designers"], ["/gallery", "Real installations"], ["/catalog", "Explore designs"]],
   },
   {
     route: "/architects-interior-designers",
-    title: "Lighting for Architects & Interior Designers · Samrat Glass Emporium",
-    description: "A project-friendly lighting partner for bespoke residential, hospitality and commercial interiors. Direct access to Firozabad craftsmanship, custom finishes and project quantities.",
+    title: "Decorative Lighting for Architects & Interior Designers India | Samrat Glass",
+    description: "Project decorative lighting for architects and interior designers in India — chandeliers, custom finishes, coordinated quantities and Firozabad manufacturing support from Samrat Glass Emporium.",
     h1: "Lighting for Architects & Interior Designers",
-    intro: "A project-friendly lighting partner for bespoke residential, hospitality and commercial interiors. Work with our Firozabad workshop on selected custom finishes, drawings and references.",
-    links: [["/gallery", "View installations"], ["/custom-lighting-bulk-orders", "Custom lighting"], ["/contact", "Discuss a project"]],
+    intro: "Decorative lighting support for architects and interior designers working on residential, hospitality and commercial interiors across India, with selected custom finishes, coordinated quantities, drawings and references handled through our Firozabad workshop.",
+    links: [["/chandelier-manufacturer-india", "Chandelier manufacturing"], ["/custom-lighting-bulk-orders", "Custom lighting & project quantities"], ["/double-height-chandeliers-india", "Double-height chandeliers"], ["/gallery", "View installations"]],
   },
 ];
 

@@ -144,6 +144,20 @@ export default function Home() {
 
       <div className="relative z-10"><CategoryShowcase /></div>
 
+      <section data-testid="home-project-routing" className="max-w-7xl mx-auto px-6 py-10 border-t border-white/10">
+        <div className="eyebrow mb-3">Manufacturing & project resources</div>
+        <h2 className="font-serif text-2xl sm:text-3xl max-w-3xl">Go directly to the right Samrat Glass resource for your requirement.</h2>
+        <p className="mt-3 text-sm text-white/55 max-w-3xl leading-relaxed">
+          Explore our Firozabad manufacturing story, made-to-order decorative lighting, double-height chandelier guidance and project support for architects and interior designers.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3">
+          <Link to="/chandelier-manufacturer-india" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 hover:border-[#D4AF37] pb-1">Chandelier manufacturer in India →</Link>
+          <Link to="/custom-lighting-bulk-orders" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 hover:border-[#D4AF37] pb-1">Custom chandeliers & decorative lighting →</Link>
+          <Link to="/double-height-chandeliers-india" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 hover:border-[#D4AF37] pb-1">Double-height chandeliers →</Link>
+          <Link to="/architects-interior-designers" className="text-sm text-[#BF9972] hover:text-[#D4AF37] border-b border-white/10 hover:border-[#D4AF37] pb-1">Lighting for architects & interior designers →</Link>
+        </div>
+      </section>
+
       <DeferredSection minHeight={650} rootMargin="350px 0px">
         <Suspense fallback={<div aria-hidden="true" className="min-h-[650px]" />}><ShopBySpaceSection /></Suspense>
       </DeferredSection>

@@ -185,14 +185,14 @@ export default function ChandelierManufacturerIndia() {
         <h2 className="font-serif text-3xl sm:text-4xl mb-8">Explore the range, then discuss the right scale for your space.</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[
-            ["Glass Chandeliers", "Decorative glass shades, bowls, drops and ornamental glasswork."],
-            ["Crystal Chandeliers", "Statement pieces with layered crystal and decorative detailing."],
-            ["Traditional & Heritage Styles", "Classic forms influenced by Indian decorative-lighting traditions."],
-            ["Multi-Tier Chandeliers", "Larger compositions for rooms with the scale to carry them."],
-            ["Double-Height Chandeliers", "Vertically proportioned pieces for staircases, foyers and tall living spaces."],
-            ["Custom Chandeliers", "Selected size, finish or configuration requirements evaluated project by project."],
-          ].map(([title, body], index) => (
-            <Link key={title} to={index === 5 ? "/custom-lighting-bulk-orders" : "/category/chandeliers"} className="group border border-white/10 p-6 hover:border-[#D4AF37]/60 transition-colors">
+            ["Glass Chandeliers", "Decorative glass shades, bowls, drops and ornamental glasswork.", "/category/chandeliers"],
+            ["Crystal Chandeliers", "Statement pieces with layered crystal and decorative detailing.", "/category/chandeliers"],
+            ["Traditional & Heritage Styles", "Classic forms influenced by Indian decorative-lighting traditions.", "/category/chandeliers"],
+            ["Multi-Tier Chandeliers", "Larger compositions for rooms with the scale to carry them.", "/category/chandeliers"],
+            ["Double-Height Chandeliers", "Vertically proportioned pieces for staircases, foyers and tall living spaces.", "/double-height-chandeliers-india"],
+            ["Custom Chandeliers", "Selected size, finish or configuration requirements evaluated project by project.", "/custom-lighting-bulk-orders"],
+          ].map(([title, body, route]) => (
+            <Link key={title} to={route} className="group border border-white/10 p-6 hover:border-[#D4AF37]/60 transition-colors">
               <h3 className="font-serif text-xl group-hover:text-[#D4AF37]">{title}</h3>
               <p className="mt-2 text-sm text-white/55 leading-relaxed">{body}</p>
               <span className="mt-5 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[#D4AF37]">Explore <ArrowRight size={12} /></span>
