@@ -27,6 +27,8 @@ import {
   trackSearch,
   _resetLastPageViewKeyForTests,
   _resetOpenAILeadDedupeForTests,
+  _resetAIReferralForTests,
+  detectAIReferralSource,
 } from "./analytics";
 
 const setLocation = (pathname, search = "") => {
@@ -44,6 +46,7 @@ beforeEach(() => {
   setLocation("/");
   _resetLastPageViewKeyForTests();
   _resetOpenAILeadDedupeForTests();
+  _resetAIReferralForTests();
 });
 
 // ---------- 1. Script initialization behaviour --------------------------
@@ -105,6 +108,38 @@ describe("SPA page_view tracking", () => {
     pageView({ path: "/catalog", search: "" });
     pageView({ path: "/contact", search: "" });
     expect(window.gtag).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("AI referral attribution", () => {
+  test("detects ChatGPT from utm_source", () => {
+    expect(detectAIReferralSource({
+      href: "https://samratglass.com/product/x?utm_source=chatgpt.com",
+      referrer: "",
+    })).toBe("chatgpt");
+  });
+
+  test("detects major AI referrer hosts without classifying generic search", () => {
+    expect(detectAIReferralSource({ referrer: "https://www.perplexity.ai/search?q=lights" })).toBe("perplexity");
+    expect(detectAIReferralSource({ referrer: "https://copilot.microsoft.com/" })).toBe("copilot");
+    expect(detectAIReferralSource({ referrer: "https://gemini.google.com/app/abc" })).toBe("gemini");
+    expect(detectAIReferralSource({ referrer: "https://www.google.com/search?q=lights" })).toBe("");
+    expect(detectAIReferralSource({ referrer: "https://www.bing.com/search?q=lights" })).toBe("");
+  });
+
+  test("page_view carries a PII-free AI referral dimension when UTM identifies ChatGPT", () => {
+    setLocation("/product/example", "?utm_source=chatgpt.com");
+    pageView({ path: "/product/example", search: "?utm_source=chatgpt.com" });
+    expect(window.gtag).toHaveBeenCalledWith(
+      "event",
+      "page_view",
+      expect.objectContaining({ ai_referral_source: "chatgpt" }),
+    );
+    expect(window.gtag).toHaveBeenCalledWith(
+      "event",
+      "ai_referral_visit",
+      expect.objectContaining({ source: "chatgpt" }),
+    );
   });
 });
 

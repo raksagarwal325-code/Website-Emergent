@@ -289,6 +289,9 @@ export default function ProductDetail() {
             image={api.resolveImage(product.images?.[0])}
             path={productPath(product)}
             type="product"
+            productPrice={visiblePrice.onRequest ? undefined : product.price}
+            productCurrency="INR"
+            productBrand="Samrat Glass Emporium"
           />
           <SchemaLD id={`product-${product.id}`} data={productSchema} />
         </>

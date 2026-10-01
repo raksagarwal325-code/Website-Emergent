@@ -63,6 +63,16 @@ describe("product social prerender", () => {
     expect((html.match(/property="og:image"/g) || [])).toHaveLength(1);
   });
 
+  test("emits product price metadata for public-price products", () => {
+    const html = injectProduct(TEMPLATE, PRODUCT, "https://samratglass.com");
+    expect(html).toContain('<meta property="product:price:amount" content="36000.00" />');
+    expect(html).toContain('<meta property="product:price:currency" content="INR" />');
+    expect(html).toContain('<meta property="og:brand" content="Samrat Glass Emporium" />');
+
+    const por = injectProduct(TEMPLATE, { ...PRODUCT, price_display: "on_request" }, "https://samratglass.com");
+    expect(por).not.toContain('property="product:price:amount"');
+  });
+
   test("uses original images in crawler HTML and Product schema, not the resized social preview", () => {
     const html = injectProduct(TEMPLATE, PRODUCT, "https://samratglass.com");
     const original = "https://samratglass.com/api/files/lumiere-catalog/products/rajdarbar.webp";

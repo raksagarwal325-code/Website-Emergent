@@ -1,6 +1,12 @@
 from datetime import date
 
-from commerce_feed import REQUIRED_FIELDS, build_feed, build_feed_row
+from commerce_feed import (
+    OPENAI_REQUIRED_FIELDS,
+    REQUIRED_FIELDS,
+    build_feed,
+    build_feed_row,
+    build_openai_feed_row,
+)
 
 
 def slug(doc):
@@ -92,3 +98,31 @@ def test_readiness_summary_counts_each_reason():
     assert len(rows) == 1
     assert len(excluded) == 1
     assert counts == {"price_on_request": 1}
+
+
+def test_openai_native_discovery_row_uses_current_field_names():
+    row, reasons = build_openai_feed_row(
+        product(
+            images=["/api/media/main.jpg", "/api/media/side.jpg"],
+            specs={"_catalog_image_on": "/api/media/black-on.jpg"},
+        ),
+        site_origin="https://samratglass.com",
+        slug_builder=slug,
+        image_url_builder=image,
+        as_of_date=date(2026, 9, 1),
+    )
+    assert reasons == []
+    assert all(row[field] for field in OPENAI_REQUIRED_FIELDS)
+    assert row["item_id"] == "SGE-CH-001"
+    assert row["url"].endswith("/product/sample-sge-ch-001")
+    assert row["image_url"] == "https://samratglass.com/api/media/main.jpg"
+    assert row["availability"] == "pre_order"
+    assert row["seller_name"] == "Samrat Glass Emporium"
+    assert row["is_eligible_search"] is True
+    assert row["is_eligible_checkout"] is False
+    assert row["accepts_returns"] is False
+    assert row["return_policy"].endswith("/legal/returns")
+    assert row["additional_image_urls"] == [
+        "https://samratglass.com/api/media/side.jpg",
+        "https://samratglass.com/api/media/black-on.jpg",
+    ]

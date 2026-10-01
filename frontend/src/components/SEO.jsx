@@ -64,6 +64,9 @@ export default function SEO({
   path,
   type = "website",
   noindex = false,
+  productPrice,
+  productCurrency = "INR",
+  productBrand,
 }) {
   useEffect(() => {
     if (title) document.title = title;
@@ -91,6 +94,21 @@ export default function SEO({
     setMeta('name="twitter:title"', "name", "twitter:title", title);
     setMeta('name="twitter:description"', "name", "twitter:description", description);
     setMeta('name="twitter:image"', "name", "twitter:image", shareImage);
+
+    const productMetaSelectors = [
+      'meta[property="product:price:amount"]',
+      'meta[property="product:price:currency"]',
+      'meta[property="og:brand"]',
+    ];
+    productMetaSelectors.forEach((selector) => {
+      const node = document.head.querySelector(selector);
+      if (node) node.remove();
+    });
+    if (type === "product" && productPrice != null && Number(productPrice) > 0) {
+      setMeta('property="product:price:amount"', "property", "product:price:amount", Number(productPrice).toFixed(2));
+      setMeta('property="product:price:currency"', "property", "product:price:currency", productCurrency || "INR");
+      setMeta('property="og:brand"', "property", "og:brand", productBrand || "Samrat Glass Emporium");
+    }
     // Per-page robots directive. `noindex` pages must set noindex,follow so
     // link equity still flows to indexable products but the page itself is
     // kept out of the SERP. On unmount we REMOVE the tag so subsequent pages
@@ -108,6 +126,13 @@ export default function SEO({
     } else if (robotsEl) {
       robotsEl.remove();
     }
-  }, [title, description, image, path, type, noindex]);
+    return () => {
+      [
+        'meta[property="product:price:amount"]',
+        'meta[property="product:price:currency"]',
+        'meta[property="og:brand"]',
+      ].forEach((selector) => document.head.querySelector(selector)?.remove());
+    };
+  }, [title, description, image, path, type, noindex, productPrice, productCurrency, productBrand]);
   return null;
 }

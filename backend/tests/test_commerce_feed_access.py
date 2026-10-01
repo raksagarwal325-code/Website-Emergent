@@ -16,3 +16,11 @@ def test_old_public_commerce_feed_is_not_exposed():
 def test_admin_commerce_feed_requires_authentication():
     response = httpx.get(f"{BASE}/api/admin/commerce/products.csv", timeout=20)
     assert response.status_code == 401
+
+
+def test_openai_native_feed_requires_authentication():
+    response = httpx.get(
+        f"{BASE}/api/admin/commerce/openai-products.jsonl.gz",
+        timeout=20,
+    )
+    assert response.status_code == 401
