@@ -327,7 +327,8 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: |
-          npm install --no-save --package-lock=false --ignore-scripts             @axe-core/playwright@4.11.0 playwright@1.55.0
+          npm install --no-save --package-lock=false --ignore-scripts --legacy-peer-deps \
+            @axe-core/playwright@4.11.0 playwright@1.55.0
 
       - name: axe WCAG accessibility gate
         run: node scripts/a11y-ci.js
