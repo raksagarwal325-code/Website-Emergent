@@ -176,11 +176,17 @@ function injectProduct(template, product, apiBase) {
     );
   html = removeShareMetadata(html);
 
+  const hasPublicPrice = product.price_display !== "on_request" && Number(product.price) > 0;
   const shareMetadata = [
     `<meta property="og:title" content="${escapeHtml(title)}" />`,
     `<meta property="og:description" content="${escapeHtml(description)}" />`,
     `<meta property="og:type" content="product" />`,
     `<meta property="og:url" content="${canonical}" />`,
+    ...(hasPublicPrice ? [
+      `<meta property="product:price:amount" content="${Number(product.price).toFixed(2)}" />`,
+      `<meta property="product:price:currency" content="INR" />`,
+      `<meta property="og:brand" content="Samrat Glass Emporium" />`,
+    ] : []),
     `<meta property="og:image" content="${escapeHtml(shareImage.url)}" />`,
     `<meta property="og:image:secure_url" content="${escapeHtml(shareImage.url)}" />`,
     ...(shareImage.type ? [`<meta property="og:image:type" content="${shareImage.type}" />`] : []),
