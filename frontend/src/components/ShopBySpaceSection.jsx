@@ -109,7 +109,14 @@ export default function ShopBySpaceSection() {
           </div>
         </motion.div>
 
-        <div className="mt-5 h-1.5 overflow-hidden bg-white/15" aria-label={`Space ${active + 1} of ${total}`}>
+        <div
+          className="mt-5 h-1.5 overflow-hidden bg-white/15"
+          role="progressbar"
+          aria-label={`Space ${active + 1} of ${total}`}
+          aria-valuemin={1}
+          aria-valuemax={total}
+          aria-valuenow={active + 1}
+        >
           <motion.div className="h-full bg-[#D4AF37]" animate={{ width: `${((active + 1) / total) * 100}%` }} transition={{ duration: .5, ease: LUXURY_EASE }} />
         </div>
       </div>

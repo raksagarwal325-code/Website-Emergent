@@ -1,4 +1,4 @@
-const { inject, bodyHtml, schemas, page } = require("../../scripts/prerender-spaces");
+const { inject, bodyHtml, schemas, page, pages, injectIndex, indexSchemas } = require("../../scripts/prerender-spaces");
 
 describe("double-height space prerender", () => {
   const template = '<!doctype html><html><head><title>orig</title><meta name="description" content="orig"/></head><body><div id="root"></div></body></html>';
@@ -24,5 +24,40 @@ describe("double-height space prerender", () => {
   test("emits WebPage and BreadcrumbList schemas", () => {
     const types = schemas().map(({ data }) => data["@type"]);
     expect(types).toEqual(["WebPage", "BreadcrumbList"]);
+  });
+});
+
+
+describe("all Shop by Space prerenders", () => {
+  const template = '<!doctype html><html><head><title>orig</title><meta name="description" content="orig"/></head><body><div id="root"></div></body></html>';
+
+  test("covers every public space route", () => {
+    expect(pages.map((item) => item.slug)).toEqual([
+      "space/living-room",
+      "space/dining-room",
+      "space/double-height-staircase",
+      "space/foyer-entrance",
+      "space/bedroom",
+      "space/hotel-hospitality",
+      "space/restaurant",
+      "space/retail-showroom",
+      "space/banquet-event-space",
+    ]);
+    for (const target of pages) {
+      const html = inject(template, target);
+      expect(html).toContain(`<link rel="canonical" href="https://samratglass.com/${target.slug}" />`);
+      expect(html).toContain("<h1>");
+      expect(html).toContain('href="/spaces"');
+    }
+  });
+
+  test("prerenders the Shop by Space index with all nine destinations", () => {
+    const html = injectIndex(template);
+    expect(html).toContain('<link rel="canonical" href="https://samratglass.com/spaces" />');
+    expect(html).toContain("<h1>Shop by Space</h1>");
+    for (const target of pages) {
+      expect(html).toContain(`href="/${target.slug}"`);
+    }
+    expect(indexSchemas()[0].data.numberOfItems).toBe(9);
   });
 });
