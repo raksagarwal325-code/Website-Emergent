@@ -132,6 +132,7 @@ class VisualEncoder:
 
 def rank_images(hashes, vectors, rows, products_by_url, limit=12, threshold=0.72):
     """Deduplicate by product, reserve exact labels for byte/pixel identity."""
+    match_priority = {"possible": 0, "similar": 1, "closest": 2, "exact": 3}
     ranked = {}
     possible = {}
     query = np.asarray(vectors, dtype=np.float32) if vectors else None
@@ -158,15 +159,21 @@ def rank_images(hashes, vectors, rows, products_by_url, limit=12, threshold=0.72
             continue
         destination = ranked if strong else possible
         for product in products_by_url.get(row["url"], []):
+            verified_kind = row.get("verified_reference_kind") if verified else None
             candidate = {"product": product,
-                         "match_type": ("closest" if verified else
+                         "match_type": (("similar" if verified_kind == "similar" else "closest") if verified else
                                         ("exact" if exact else ("similar" if strong else "possible"))),
                          "score": score if strong else whole_score}
             old = destination.get(product["id"])
-            if old is None or (candidate["match_type"] == "exact", candidate["score"]) > (old["match_type"] == "exact", old["score"]):
+            if old is None or (match_priority[candidate["match_type"]], candidate["score"]) > (
+                    match_priority[old["match_type"]], old["score"]):
                 destination[product["id"]] = candidate
     if ranked:
-        return sorted(ranked.values(), key=lambda x: (x["match_type"] != "exact", -x["score"], x["product"]["id"]))[:limit]
+        return sorted(ranked.values(), key=lambda x: (
+            -match_priority[x["match_type"]],
+            -x["score"],
+            x["product"]["id"],
+        ))[:limit]
     # A small, explicitly uncertain fallback. Use whole-photo scores only:
     # an incidental object in a regional crop must not create a weak suggestion.
     if not possible:
