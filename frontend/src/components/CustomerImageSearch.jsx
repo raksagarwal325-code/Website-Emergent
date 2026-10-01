@@ -5,6 +5,7 @@ import { Camera, Upload, X, Loader2, MessageCircle } from "lucide-react";
 import { api } from "../lib/api";
 import { trackWhatsAppClick } from "../lib/analytics";
 import { productPath } from "../lib/productUrl";
+import { productImageAlt } from "../lib/imageSeo";
 import { waImageSearchLink } from "../lib/whatsapp";
 import { normalizeImageSearchFile } from "../lib/imageSearchFile";
 
@@ -189,7 +190,7 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen, onC
               const items = (result.matches || []).filter((match) => match.match_type === type);
               if (!items.length) return null;
               return <div key={type} className="mt-7"><h3 className="font-serif text-xl">{type === "exact" ? "Your catalogue match" : type === "closest" ? "The closest expression we found" : type === "related" ? "In the same design language" : type === "similar" ? "Further pieces to consider" : "Possibilities worth exploring"}</h3>{type === "closest" && <p className="mt-1 text-xs leading-relaxed text-white/55">The strongest visual relationship in form and detailing. Please confirm scale, light count and finish.</p>}{type === "related" && <p className="mt-1 text-xs leading-relaxed text-white/55">Curated around the leading design; proportions, glass, light count or finish may vary.</p>}{type === "similar" && <p className="mt-1 text-xs leading-relaxed text-white/55">Selected for a related silhouette or decorative character; individual details may differ.</p>}{type === "possible" && <p className="mt-1 text-sm leading-relaxed text-white/65">The photograph did not allow a confident match. Consider these as starting points, or let our team continue the search.</p>}<div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {items.map(({ product }) => <Link key={product.id} to={productPath(product)} onClick={close} className="group border border-white/10 p-3 hover:border-[#D4AF37]/60"><img src={api.resolveImage(product.images?.[0])} alt={product.name} loading="lazy" className="h-36 sm:h-48 w-full object-contain" /><p className="mt-3 font-serif text-sm sm:text-base group-hover:text-[#D4AF37]">{product.name}</p><p className="mt-1 text-xs text-white/50">{product.sku}</p><p className="mt-3 text-xs text-[#D4AF37]">View product →</p></Link>)}
+                {items.map(({ product }) => <Link key={product.id} to={productPath(product)} onClick={close} className="group border border-white/10 p-3 hover:border-[#D4AF37]/60"><img src={api.resolveImage(product.images?.[0])} alt={productImageAlt({ name: product.name, category: product.category, sku: product.sku })} loading="lazy" className="h-36 sm:h-48 w-full object-contain" /><p className="mt-3 font-serif text-sm sm:text-base group-hover:text-[#D4AF37]">{product.name}</p><p className="mt-1 text-xs text-white/50">{product.sku}</p><p className="mt-3 text-xs text-[#D4AF37]">View product →</p></Link>)}
               </div></div>;
             })}
             <div className="relative mt-8 overflow-hidden border border-[#D4AF37]/35 bg-[#D4AF37]/[0.055] p-5 sm:p-6">
