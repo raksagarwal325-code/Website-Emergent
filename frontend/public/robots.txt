@@ -9,6 +9,12 @@ Allow: /
 Disallow: /admin
 Disallow: /catalogue
 
+# OpenAI ad landing-page validation. Public product and image URLs remain crawlable.
+User-agent: OAI-AdsBot
+Allow: /
+Disallow: /admin
+Disallow: /catalogue
+
 User-agent: ChatGPT-User
 Allow: /
 Disallow: /admin
