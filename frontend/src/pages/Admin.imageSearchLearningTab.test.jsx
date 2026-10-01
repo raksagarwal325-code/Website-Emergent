@@ -10,6 +10,10 @@ test("admin manages learned examples inside the existing image search", () => {
   expect(admin).toContain("<ImageSearchLearningAdmin products={products} />");
   expect(panel).toContain("Add to existing search");
   expect(panel).toContain("select every correct catalogue product");
+  expect(panel).toContain("Exact design");
+  expect(panel).toContain("Similar design");
+  expect(panel).toContain('alt="Selected client reference"');
   expect(api).toContain("adminAddImageSearchReference");
+  expect(api).toContain("relationship: relationships[id]");
   expect(api).toContain("adminDeleteImageSearchReference");
 });

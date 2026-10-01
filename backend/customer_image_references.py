@@ -19,6 +19,8 @@ from customer_visual_features import EMBEDDING_DIM, MAX_BYTES, decode_image, ima
 LEARNED_REFERENCE_LIMIT = 500
 LEARNED_REFERENCE_PRODUCT_LIMIT = 12
 LEARNED_REFERENCE_THRESHOLD = .86
+LEARNED_SIMILAR_THRESHOLD = .88
+LEARNED_REFERENCE_KINDS = {"exact", "similar"}
 
 
 def _safe_filename(value):
@@ -44,7 +46,20 @@ class LearnedReferenceStore:
     async def create(self, data, filename, product_ids, created_by):
         if self.collection is None or self.db is None:
             raise RuntimeError("Verified search examples are temporarily unavailable.")
-        product_ids = list(dict.fromkeys(str(value).strip() for value in product_ids if str(value).strip()))
+        relationship_by_product = {}
+        for value in product_ids:
+            if isinstance(value, dict):
+                product_id = str(value.get("id") or "").strip()
+                relationship = str(value.get("relationship") or "").strip().lower()
+            else:
+                product_id = str(value or "").strip()
+                relationship = "exact"
+            if not product_id:
+                continue
+            if relationship not in LEARNED_REFERENCE_KINDS:
+                raise ValueError("Choose whether every product is an exact or similar design match.")
+            relationship_by_product.setdefault(product_id, relationship)
+        product_ids = list(relationship_by_product)
         if not 1 <= len(product_ids) <= LEARNED_REFERENCE_PRODUCT_LIMIT:
             raise ValueError(f"Select between 1 and {LEARNED_REFERENCE_PRODUCT_LIMIT} catalogue products.")
         products = await self.db.products.find(
@@ -69,13 +84,17 @@ class LearnedReferenceStore:
             "_id": reference_id,
             "filename": _safe_filename(filename),
             "product_ids": product_ids,
+            "relationships": relationship_by_product,
             "sha256": hashes["sha256"],
             "pixels": hashes["pixels"],
             "vectors": vectors,
             "created_at": now,
             "created_by": str(created_by or "")[:160],
         })
+        kinds = set(relationship_by_product.values())
         return {"id": reference_id, "filename": _safe_filename(filename),
+                "relationship": next(iter(kinds)) if len(kinds) == 1 else "mixed",
+                "relationships": relationship_by_product,
                 "product_ids": product_ids, "created_at": now, "products": products}
 
     async def list(self):
@@ -90,11 +109,25 @@ class LearnedReferenceStore:
             {"_id": 0, "id": 1, "sku": 1, "name": 1, "category": 1, "images": 1, "status": 1},
         ).to_list(None) if ids else []
         by_id = {product["id"]: product for product in products}
-        return [{"id": row["_id"], "filename": row.get("filename"),
+        results = []
+        for row in rows:
+            relationships = row.get("relationships") if isinstance(row.get("relationships"), dict) else {}
+            relationships = {
+                product_id: (relationships.get(product_id)
+                             if relationships.get(product_id) in LEARNED_REFERENCE_KINDS
+                             else (row.get("relationship")
+                                   if row.get("relationship") in LEARNED_REFERENCE_KINDS else "exact"))
+                for product_id in row.get("product_ids") or []
+            }
+            kinds = set(relationships.values())
+            results.append({"id": row["_id"], "filename": row.get("filename"),
+                 "relationship": next(iter(kinds)) if len(kinds) == 1 else "mixed",
+                 "relationships": relationships,
                  "product_ids": row.get("product_ids") or [],
                  "created_at": row.get("created_at"), "created_by": row.get("created_by"),
                  "products": [by_id[value] for value in row.get("product_ids") or [] if value in by_id]}
-                for row in rows]
+            )
+        return results
 
     async def delete(self, reference_id):
         if self.collection is None:
@@ -125,13 +158,24 @@ class LearnedReferenceStore:
             vectors = np.asarray(document.get("vectors") or [], dtype=np.float32)
             if not linked or vectors.shape != (2, EMBEDDING_DIM) or not np.isfinite(vectors).all():
                 continue
-            url = f"learned-reference:{document['_id']}"
-            additional.append({"url": url, "sha256": document.get("sha256"),
-                               "pixels": document.get("pixels"),
-                               "vectors": document.get("vectors"),
-                               "verified_reference": True,
-                               "verified_threshold": LEARNED_REFERENCE_THRESHOLD})
-            augmented[url] = linked
+            relationships = document.get("relationships") if isinstance(document.get("relationships"), dict) else {}
+            fallback = (document.get("relationship")
+                        if document.get("relationship") in LEARNED_REFERENCE_KINDS else "exact")
+            for relationship in LEARNED_REFERENCE_KINDS:
+                matched = [product for product in linked
+                           if relationships.get(product["id"], fallback) == relationship]
+                if not matched:
+                    continue
+                url = f"learned-reference:{document['_id']}:{relationship}"
+                additional.append({"url": url, "sha256": document.get("sha256"),
+                                   "pixels": document.get("pixels"),
+                                   "vectors": document.get("vectors"),
+                                   "verified_reference": True,
+                                   "verified_reference_kind": relationship,
+                                   "verified_threshold": (LEARNED_SIMILAR_THRESHOLD
+                                                          if relationship == "similar"
+                                                          else LEARNED_REFERENCE_THRESHOLD)})
+                augmented[url] = matched
         return list(rows) + additional, augmented
 
 

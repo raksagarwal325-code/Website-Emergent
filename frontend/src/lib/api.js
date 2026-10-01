@@ -106,10 +106,13 @@ export const api = {
   adminImageSearchReferences: () => client.get(
     "/admin/customer-image-search/references",
   ).then(r => r.data),
-  adminAddImageSearchReference: (file, productIds) => {
+  adminAddImageSearchReference: (file, productIds, relationships = {}) => {
     const form = new FormData();
     form.append("file", file);
-    form.append("product_ids", JSON.stringify(productIds));
+    form.append("product_ids", JSON.stringify(productIds.map((id) => ({
+      id,
+      relationship: relationships[id] || "exact",
+    }))));
     return client.post("/admin/customer-image-search/references", form, {
       headers: { "Content-Type": "multipart/form-data" },
       timeout: 45000,
