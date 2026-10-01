@@ -8,6 +8,8 @@ const mockApi = {
   resolveImage: value => value,
   listInquiryQuotations: jest.fn(),
   adminProductsExport: jest.fn().mockResolvedValue([]),
+  searchByImage: jest.fn(),
+  getImageSearchJob: jest.fn(),
   listStandaloneQuotations: jest.fn().mockResolvedValue([]),
   createStandaloneQuotation: jest.fn(),
   createInquiryQuotation: jest.fn(),
@@ -76,6 +78,8 @@ beforeEach(() => {
   sessionStorage.clear();
   jest.clearAllMocks();
   mockApi.adminProductsExport.mockResolvedValue([]);
+  mockApi.searchByImage.mockReset();
+  mockApi.getImageSearchJob.mockReset();
   mockApi.listStandaloneQuotations.mockResolvedValue([]);
   MockJsPDF.mockImplementation(() => mockPdfDocument());
   mockApi.listInquiryQuotations.mockResolvedValue([]);
@@ -170,6 +174,41 @@ test("adds a catalogue SKU to a standalone quote", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "SGE-HL-001 · Glass shade" }));
   expect(screen.getByLabelText("Product 1")).toHaveValue("Glass shade");
   expect(screen.getByLabelText("Unit price 1")).toHaveValue(900);
+});
+
+test("uses the current catalogue price when adding a public image-search match", async () => {
+  mockApi.adminProductsExport.mockResolvedValue([{
+    id: "wall-light-113",
+    sku: "SGE-WL-113",
+    name: "Pushpalekha Picture Wall Light",
+    price: 12500,
+    images: ["/api/files/wall-light-113.webp"],
+  }]);
+  mockApi.searchByImage.mockResolvedValue({
+    matches: [{
+      product: {
+        id: "wall-light-113",
+        sku: "SGE-WL-113",
+        name: "Pushpalekha Picture Wall Light",
+        category: "Wall Light",
+        images: ["/api/files/wall-light-113.webp"],
+      },
+      match_type: "exact",
+      score: 0.99,
+    }],
+    index_complete: true,
+    similarity_available: true,
+  });
+
+  render(<InquiryQuotationBuilder />);
+  await screen.findByRole("button", { name: "Saved quotations (0)" });
+  fireEvent.click(screen.getByTestId("quotation-search-tab-image"));
+  fireEvent.change(screen.getByLabelText("Client image for catalogue search"), {
+    target: { files: [new File(["image"], "client.png", { type: "image/png" })] },
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+
+  expect(await screen.findByLabelText("Unit price 1")).toHaveValue(12500);
 });
 
 test("adds another catalogue or custom item from the bottom product control", async () => {
