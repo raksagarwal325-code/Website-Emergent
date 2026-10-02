@@ -53,7 +53,7 @@ function DeferredSection({ children, minHeight = 480, rootMargin = "500px 0px" }
   }, [ready, rootMargin]);
 
   return (
-    <div ref={ref} style={!ready ? { minHeight } : undefined}>
+    <div ref={ref} style={{ minHeight }}>
       {ready ? children : null}
     </div>
   );
