@@ -10,15 +10,25 @@ describe("layout stability guards", () => {
     expect(source).toContain('className="aspect-[4/3] overflow-hidden');
     expect(source).not.toContain("setMediaAspect");
     expect(source).not.toContain("handleImageLoad");
+    test("Google fonts avoid late metric swaps", () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, "..", "..", "public", "index.html"),
+      "utf8",
+    );
+    expect(source).toContain("&display=optional");
+    expect(source).not.toContain("&display=swap");
   });
+});
 
-  test("catalogue reserves first-load grid space", () => {
+  test("catalogue mirrors the full first-load grid", () => {
     const source = fs.readFileSync(
       path.join(__dirname, "..", "components", "CatalogueBrowser.jsx"),
       "utf8",
     );
-    expect(source).toContain('loading && products.length === 0 ? "min-h-[900px] sm:min-h-[1200px]"');
-    expect(source).toContain('aria-busy={loading ? "true" : undefined}');
+    expect(source).toContain("function CatalogueLoadingSkeleton()");
+    expect(source).toContain('data-testid="catalogue-loading-skeleton"');
+    expect(source).toContain("Array.from({ length: PAGE_SIZE }");
+    expect(source).toContain('className="aspect-[4/5] bg-[#0e0510]"');
   });
 
   test("product cards keep a fixed media aspect ratio", () => {
