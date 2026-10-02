@@ -16,6 +16,7 @@
  *   trackRemoveFromCart(item)          - basket remove
  *   trackGenerateLead(source)          - contact submit / inquiry submit (post-success)
  *   trackWhatsAppClick(payload)        - any WhatsApp CTA
+ *   trackPhoneClick(payload)           - any public tel: CTA
  *   trackCatalogueDownload(source?)    - catalogue PDF / lookbook actions
  *   trackSearch(term)                  - catalog search
  *
@@ -48,6 +49,127 @@ const _safe = (fn) => {
 const _dispatch = (name, params, pathname) => {
   if (!isTrackingEnabled(pathname)) return;
   _safe(() => window.gtag("event", name, params || {}));
+};
+
+
+const ATTRIBUTION_FIRST_TOUCH_KEY = "sge_attribution_first_touch";
+const ATTRIBUTION_SESSION_KEY = "sge_attribution_session";
+
+const _cleanAttributionValue = (value, max = 80) =>
+  String(value || "").trim().slice(0, max);
+
+const _safeMarketingToken = (value, max = 80) => {
+  const token = _cleanAttributionValue(value, max);
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(token) ? token : "";
+};
+
+const _readJsonStorage = (storage, key) => {
+  try {
+    const value = JSON.parse(storage.getItem(key));
+    return value && typeof value === "object" ? value : null;
+  } catch (_) {
+    return null;
+  }
+};
+
+const _externalReferrerHost = () => {
+  if (typeof document === "undefined" || !document.referrer) return "";
+  try {
+    const referrer = new URL(document.referrer);
+    const currentHost = window.location?.hostname || "";
+    if (!referrer.hostname || referrer.hostname === currentHost) return "";
+    return referrer.hostname.toLowerCase().replace(/^www\./, "");
+  } catch (_) {
+    return "";
+  }
+};
+
+export const detectMarketingAttribution = ({ href = "", referrerHost = "" } = {}) => {
+  let params;
+  try {
+    params = new URL(href || "https://samratglass.com", "https://samratglass.com").searchParams;
+  } catch (_) {
+    params = new URLSearchParams();
+  }
+
+  const utmSource = _safeMarketingToken(params.get("utm_source"), 50);
+  const utmMedium = _safeMarketingToken(params.get("utm_medium"), 50);
+  const utmCampaign = _safeMarketingToken(params.get("utm_campaign"), 80);
+  const hasGoogleClickId = Boolean(params.get("gclid") || params.get("gbraid") || params.get("wbraid"));
+  const hasMetaClickId = Boolean(params.get("fbclid"));
+
+  let source = utmSource;
+  let medium = utmMedium;
+  let paidPlatform = "";
+
+  if (hasGoogleClickId) {
+    source = source || "google";
+    medium = medium || "cpc";
+    paidPlatform = "google";
+  } else if (hasMetaClickId) {
+    source = source || "meta";
+    medium = medium || "paid_social";
+    paidPlatform = "meta";
+  }
+
+  const host = _cleanAttributionValue(referrerHost, 80).toLowerCase();
+  if (!source && host) {
+    source = host;
+    medium = "referral";
+  }
+  if (!source) {
+    source = "direct";
+    medium = "none";
+  }
+
+  return {
+    source: source.toLowerCase(),
+    medium: (medium || "unknown").toLowerCase(),
+    campaign: utmCampaign,
+    paid_platform: paidPlatform,
+  };
+};
+
+export const captureMarketingAttribution = () => {
+  if (!_hasWindow()) return { firstTouch: null, session: null };
+
+  const current = detectMarketingAttribution({
+    href: window.location?.href || "",
+    referrerHost: _externalReferrerHost(),
+  });
+  let firstTouch = _readJsonStorage(window.localStorage, ATTRIBUTION_FIRST_TOUCH_KEY);
+  let session = _readJsonStorage(window.sessionStorage, ATTRIBUTION_SESSION_KEY);
+
+  if (!firstTouch) {
+    firstTouch = current;
+    _safe(() => window.localStorage.setItem(ATTRIBUTION_FIRST_TOUCH_KEY, JSON.stringify(firstTouch)));
+  }
+
+  const hasCampaignSignal =
+    current.source !== "direct" ||
+    current.medium !== "none" ||
+    Boolean(current.campaign) ||
+    Boolean(current.paid_platform);
+
+  if (!session || hasCampaignSignal) {
+    session = current;
+    _safe(() => window.sessionStorage.setItem(ATTRIBUTION_SESSION_KEY, JSON.stringify(session)));
+  }
+
+  return { firstTouch, session };
+};
+
+const _leadAttributionParams = () => {
+  const { firstTouch, session } = captureMarketingAttribution();
+  const out = {};
+  if (firstTouch?.source) out.first_touch_source = firstTouch.source;
+  if (firstTouch?.medium) out.first_touch_medium = firstTouch.medium;
+  if (firstTouch?.campaign) out.first_touch_campaign = firstTouch.campaign;
+  if (session?.source) out.session_source = session.source;
+  if (session?.medium) out.session_medium = session.medium;
+  if (session?.campaign) out.session_campaign = session.campaign;
+  if (session?.paid_platform) out.paid_platform = session.paid_platform;
+  return out;
 };
 
 const AI_REFERRAL_SESSION_KEY = "sge_ai_referral_source";
@@ -155,6 +277,7 @@ export const pageView = ({ path, search, title } = {}) => {
   if (key === _lastPageViewKey) return; // dedupe consecutive identical route entries
   _lastPageViewKey = key;
 
+  captureMarketingAttribution();
   const aiReferralSource = _currentAIReferralSource();
   _safe(() =>
     window.gtag("event", "page_view", {
@@ -181,6 +304,10 @@ export const _resetOpenAILeadDedupeForTests = () => {
 };
 export const _resetAIReferralForTests = () => {
   _safe(() => window.sessionStorage.removeItem(AI_REFERRAL_SESSION_KEY));
+};
+export const _resetMarketingAttributionForTests = () => {
+  _safe(() => window.sessionStorage.removeItem(ATTRIBUTION_SESSION_KEY));
+  _safe(() => window.localStorage.removeItem(ATTRIBUTION_FIRST_TOUCH_KEY));
 };
 
 // ---------- Generic event ------------------------------------------------
@@ -229,7 +356,7 @@ export const trackRemoveFromCart = (item) => {
 // Contact / cart submissions call this AFTER the network request succeeds.
 // Only opaque, non-personal identifiers are accepted.
 export const trackGenerateLead = ({ source, enquiry_type, cart_size } = {}) => {
-  const params = {};
+  const params = { ..._leadAttributionParams() };
   if (source) params.source = String(source).slice(0, 40);
   if (enquiry_type) params.enquiry_type = String(enquiry_type).slice(0, 20);
   if (cart_size != null) params.cart_size = Number(cart_size) || 0;
@@ -238,12 +365,20 @@ export const trackGenerateLead = ({ source, enquiry_type, cart_size } = {}) => {
 };
 
 export const trackWhatsAppClick = ({ source, page, product } = {}) => {
-  const params = {};
+  const params = { ..._leadAttributionParams() };
   if (source) params.source = String(source).slice(0, 40);
   if (page) params.page = String(page).slice(0, 60);
   if (product?.id) params.item_id = product.id;
   if (product?.sku) params.item_sku = product.sku;
   _dispatch("whatsapp_click", params);
+};
+
+
+export const trackPhoneClick = ({ source, page } = {}) => {
+  const params = { ..._leadAttributionParams() };
+  if (source) params.source = String(source).slice(0, 40);
+  if (page) params.page = String(page).slice(0, 60);
+  _dispatch("phone_click", params);
 };
 
 /**
@@ -290,6 +425,35 @@ export const installWhatsAppClickListener = () => {
       });
     },
     true, // capture phase — fires even if child handlers stopPropagation
+  );
+};
+
+
+let _phoneListenerAttached = false;
+export const installPhoneClickListener = () => {
+  if (_phoneListenerAttached) return;
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  _phoneListenerAttached = true;
+  document.addEventListener(
+    "click",
+    (e) => {
+      let el = e.target;
+      while (el && el !== document.body && el.tagName !== "A") {
+        el = el.parentElement;
+      }
+      if (!el || el.tagName !== "A") return;
+      const href = el.getAttribute("href") || "";
+      if (!/^tel:/i.test(href)) return;
+      const source =
+        el.getAttribute("data-testid") ||
+        el.getAttribute("data-source") ||
+        "unknown";
+      trackPhoneClick({
+        source,
+        page: window.location?.pathname || undefined,
+      });
+    },
+    true,
   );
 };
 

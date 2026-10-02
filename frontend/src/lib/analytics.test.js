@@ -23,12 +23,16 @@ import {
   trackRemoveFromCart,
   trackGenerateLead,
   trackWhatsAppClick,
+  trackPhoneClick,
   trackCatalogueDownload,
   trackSearch,
   _resetLastPageViewKeyForTests,
   _resetOpenAILeadDedupeForTests,
   _resetAIReferralForTests,
+  _resetMarketingAttributionForTests,
   detectAIReferralSource,
+  detectMarketingAttribution,
+  captureMarketingAttribution,
 } from "./analytics";
 
 const setLocation = (pathname, search = "") => {
@@ -47,6 +51,7 @@ beforeEach(() => {
   _resetLastPageViewKeyForTests();
   _resetOpenAILeadDedupeForTests();
   _resetAIReferralForTests();
+  _resetMarketingAttributionForTests();
 });
 
 // ---------- 1. Script initialization behaviour --------------------------
@@ -108,6 +113,85 @@ describe("SPA page_view tracking", () => {
     pageView({ path: "/catalog", search: "" });
     pageView({ path: "/contact", search: "" });
     expect(window.gtag).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("marketing attribution", () => {
+  test("classifies Google click ids without forwarding the raw id", () => {
+    const result = detectMarketingAttribution({
+      href: "https://samratglass.com/?gclid=secret-click-id&utm_campaign=Diwali",
+      referrerHost: "",
+    });
+    expect(result).toEqual({
+      source: "google",
+      medium: "cpc",
+      campaign: "Diwali",
+      paid_platform: "google",
+    });
+    expect(JSON.stringify(result)).not.toContain("secret-click-id");
+  });
+
+  test("classifies Meta click ids without forwarding the raw id", () => {
+    const result = detectMarketingAttribution({
+      href: "https://samratglass.com/?fbclid=meta-secret",
+      referrerHost: "",
+    });
+    expect(result.source).toBe("meta");
+    expect(result.medium).toBe("paid_social");
+    expect(result.paid_platform).toBe("meta");
+    expect(JSON.stringify(result)).not.toContain("meta-secret");
+  });
+
+  test("drops unsafe UTM values that could contain personal data", () => {
+    const result = detectMarketingAttribution({
+      href: "https://samratglass.com/?utm_source=raks@example.com&utm_medium=+919892039293&utm_campaign=Rakshit%20Agarwal",
+      referrerHost: "",
+    });
+    expect(result.source).toBe("direct");
+    expect(result.medium).toBe("none");
+    expect(result.campaign).toBe("");
+    expect(JSON.stringify(result)).not.toContain("raks@example.com");
+    expect(JSON.stringify(result)).not.toContain("9892039293");
+    expect(JSON.stringify(result)).not.toContain("Rakshit");
+  });
+
+  test("keeps first touch while session attribution can update from a campaign", () => {
+    setLocation("/");
+    const first = captureMarketingAttribution();
+    expect(first.firstTouch.source).toBe("direct");
+
+    setLocation("/", "?utm_source=instagram&utm_medium=social&utm_campaign=festive");
+    const second = captureMarketingAttribution();
+    expect(second.firstTouch.source).toBe("direct");
+    expect(second.session).toEqual(expect.objectContaining({
+      source: "instagram",
+      medium: "social",
+      campaign: "festive",
+    }));
+  });
+
+  test("lead and phone events carry PII-free source attribution", () => {
+    setLocation("/", "?utm_source=google&utm_medium=cpc&utm_campaign=brand");
+    trackGenerateLead({ source: "contact_form" });
+    trackPhoneClick({ source: "footer-phone", page: "/" });
+
+    expect(window.gtag).toHaveBeenCalledWith(
+      "event",
+      "generate_lead",
+      expect.objectContaining({
+        session_source: "google",
+        session_medium: "cpc",
+        session_campaign: "brand",
+      }),
+    );
+    expect(window.gtag).toHaveBeenCalledWith(
+      "event",
+      "phone_click",
+      expect.objectContaining({
+        source: "footer-phone",
+        session_source: "google",
+      }),
+    );
   });
 });
 
@@ -187,7 +271,12 @@ describe("successful lead events", () => {
   test("trackGenerateLead from inquiry_basket includes cart_size but nothing else", () => {
     trackGenerateLead({ source: "inquiry_basket", cart_size: 3 });
     const [, , params] = window.gtag.mock.calls[0];
-    expect(params).toEqual({ source: "inquiry_basket", cart_size: 3 });
+    expect(params).toEqual(expect.objectContaining({
+      source: "inquiry_basket",
+      cart_size: 3,
+      first_touch_source: "direct",
+      session_source: "direct",
+    }));
   });
 
   test("OpenAI lead includes an event_id for platform deduplication", () => {
@@ -358,7 +447,9 @@ describe("analytics failure is swallowed", () => {
     window.oaiq = jest.fn(() => { throw new Error("blocked by extension"); });
     expect(() => trackGenerateLead({ source: "contact_form" })).not.toThrow();
     expect(window.gtag).toHaveBeenCalledWith(
-      "event", "generate_lead", { source: "contact_form" },
+      "event",
+      "generate_lead",
+      expect.objectContaining({ source: "contact_form" }),
     );
   });
 });
