@@ -255,7 +255,7 @@ export default function Header() {
               onClick={() => setSearchOpen((current) => !current)}
               className="group inline-flex h-10 w-10 items-center justify-center gap-2 border border-white/10 text-white/78 transition-[background-color,border-color,color] hover:border-[#D4AF37]/55 hover:bg-[#D4AF37]/[0.08] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37] xl:w-auto xl:px-3"
             >
-              <span className="relative">
+              <span className="photo-search-header-glyph relative">
                 <Search size={19} strokeWidth={1.6} aria-hidden="true" />
                 <Camera size={10} strokeWidth={1.8} aria-hidden="true" className="absolute -bottom-1 -right-1.5 text-[#D4AF37]" />
               </span>
@@ -265,7 +265,7 @@ export default function Header() {
             {!searchOpen && (
               <div
                 role="tooltip"
-                className="pointer-events-none absolute right-0 top-[calc(100%+0.7rem)] z-[85] hidden w-72 translate-y-1 border border-[#D4AF37]/30 bg-[#140910]/[0.98] p-4 text-left opacity-0 shadow-[0_18px_50px_rgba(0,0,0,0.5)] transition-[opacity,transform] duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 md:block"
+                className="premium-search-tooltip pointer-events-none absolute right-0 top-[calc(100%+0.7rem)] z-[85] hidden w-72 translate-y-1 border border-[#D4AF37]/30 bg-[#140910]/[0.98] p-4 text-left opacity-0 shadow-[0_18px_50px_rgba(0,0,0,0.5)] transition-[opacity,transform] duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 md:block"
               >
                 <div className="text-[9px] font-semibold uppercase tracking-[0.26em] text-[#D4AF37]">Search your way</div>
                 <p className="mt-2 text-xs leading-relaxed text-white/72">Type a product name, SKU or category—or upload a room photo or screenshot.</p>
@@ -278,7 +278,7 @@ export default function Header() {
                 id="header-product-search-menu"
                 role="dialog"
                 aria-label="Search products"
-                className="fixed left-3 right-3 top-[5.25rem] z-[90] border border-[#D4AF37]/30 bg-[#140910]/[0.98] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.6)] backdrop-blur-xl sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+0.75rem)] sm:w-[370px]"
+                className="premium-search-menu fixed left-3 right-3 top-[5.25rem] z-[90] overflow-hidden border border-[#D4AF37]/30 bg-[#140910]/[0.98] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.6)] backdrop-blur-xl sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+0.75rem)] sm:w-[370px]"
               >
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_92%_8%,rgba(212,175,55,0.14),transparent_38%)]" />
                 <div className="relative">
