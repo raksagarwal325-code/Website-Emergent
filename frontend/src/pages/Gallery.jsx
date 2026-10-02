@@ -82,7 +82,7 @@ function ProjectCard({ project, index, slug, linkedProducts }) {
 }
 
 export default function Gallery() {
-  const { hp } = useSettings();
+  const { hp, settingsReady } = useSettings();
   const g = hp.gallery || {};
   const items = (g.items || []).filter((p) => (p?.title || "").trim() || (p?.images || []).some(Boolean));
   const slugs = buildProjectSlugs(items);
@@ -128,7 +128,25 @@ export default function Gallery() {
           <div className="text-[10px] uppercase tracking-[0.22em] text-white/40">{items.length} project{items.length === 1 ? "" : "s"}</div>
         </div>
 
-        {items.length > 0 ? (
+        {!settingsReady ? (
+          <div
+            className="grid min-h-screen grid-cols-1 gap-5 md:gap-6 sm:grid-cols-2 lg:grid-cols-3"
+            aria-hidden="true"
+            data-testid="gallery-loading-skeleton"
+          >
+            {Array.from({ length: 6 }, (_, index) => (
+              <div key={index} className="overflow-hidden border border-white/8 bg-[#0e0510]">
+                <div className="aspect-[4/3] bg-[#12060d]" />
+                <div className="p-5 md:p-6">
+                  <div className="mb-3 h-2.5 w-24 bg-white/5" />
+                  <div className="h-6 w-10/12 bg-white/5" />
+                  <div className="mt-2 h-6 w-7/12 bg-white/5" />
+                  <div className="mt-5 h-3 w-28 bg-[#D4AF37]/10" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : items.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
             {items.map((p, i) => (
               <ProjectCard key={i} project={p} index={i} slug={slugs[i]} linkedProducts={productsByProject[i]} />
