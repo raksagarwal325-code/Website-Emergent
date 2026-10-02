@@ -34,6 +34,7 @@ describe("layout stability guards", () => {
     expect(source).toContain('imageVariantUrl(img, 640)');
     expect(source).toContain('imageVariantSrcSet(img, [320, 640, 960])');
     expect(source).toContain('sizes="(max-width: 1279px) 50vw, (max-width: 1535px) 33vw, 25vw"');
+    expect(source).toContain('preloader.src = imageVariantUrl(alternateUrl, 640)');
   });
 
   test("deferred homepage sections retain their reserved minimum height after mount", () => {
