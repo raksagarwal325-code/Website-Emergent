@@ -52,10 +52,9 @@
           })();
         </script>
 
-        <!-- OpenAI Ads pixel — loaded once on public pages only. Lead events
-             are dispatched from src/lib/analytics.js after a successful
-             enquiry submission or an intentional WhatsApp enquiry click.
-             No customer-entered values are included in our event payload. -->
+        <!-- OpenAI Ads pixel — queue is available immediately, while the
+             network SDK is deferred so it does not compete with first render.
+             Lead events dispatched before the SDK arrives stay queued. -->
         <script>
           (function () {
             try {
@@ -64,18 +63,34 @@
               var path = (window.location && window.location.pathname) || '/';
               if (dnt || path.indexOf('/admin') === 0 || window.__OAI_PIXEL_LOADED__) return;
               window.__OAI_PIXEL_LOADED__ = true;
-              !function(w,d,s,u){
-                if(w.oaiq)return;
-                var q=function(){q.q.push(arguments)};
-                q.q=[];
-                w.oaiq=q;
-                var j=d.createElement(s);
-                j.async=1;
-                j.src=u;
-                var f=d.getElementsByTagName(s)[0];
-                f.parentNode.insertBefore(j,f);
-              }(window,document,'script','https://bzrcdn.openai.com/sdk/oaiq.min.js');
-              oaiq('init', { pixelId: '3KaeL8X9cQfcmnHL5J6TCF' });
+
+              if (!window.oaiq) {
+                var q = function () { q.q.push(arguments); };
+                q.q = [];
+                window.oaiq = q;
+              }
+              window.oaiq('init', { pixelId: '3KaeL8X9cQfcmnHL5J6TCF' });
+
+              var loadOaiPixel = function () {
+                if (window.__OAI_PIXEL_SCRIPT_STARTED__) return;
+                window.__OAI_PIXEL_SCRIPT_STARTED__ = true;
+                var j = document.createElement('script');
+                j.async = true;
+                j.src = 'https://bzrcdn.openai.com/sdk/oaiq.min.js';
+                var firstScript = document.getElementsByTagName('script')[0];
+                firstScript.parentNode.insertBefore(j, firstScript);
+              };
+
+              var scheduleOaiPixel = function () {
+                window.setTimeout(loadOaiPixel, 8000);
+              };
+
+              if (document.readyState === 'complete') scheduleOaiPixel();
+              else window.addEventListener('load', scheduleOaiPixel, { once: true });
+
+              ['pointerdown', 'keydown', 'touchstart'].forEach(function (eventName) {
+                window.addEventListener(eventName, loadOaiPixel, { once: true, passive: true });
+              });
             } catch (e) { /* conversion tracking must never break the app */ }
           })();
         </script>
