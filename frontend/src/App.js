@@ -6,7 +6,6 @@ import { CatalogProvider } from "@/context/CatalogContext";
 import { SettingsProvider } from "@/context/SettingsContext";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import Home from "@/pages/Home";
 import FloatingActions from "@/components/FloatingActions";
 import MobileReachStrip from "@/components/MobileReachStrip";
 import ImageSearchDiscoveryPrompt from "@/components/ImageSearchDiscoveryPrompt";
@@ -14,6 +13,7 @@ import AnalyticsRouteTracker from "@/components/AnalyticsRouteTracker";
 import ScrollToTop from "@/components/ScrollToTop";
 
 const Toaster = React.lazy(() => import("sonner").then((module) => ({ default: module.Toaster })));
+const Home = React.lazy(() => import("@/pages/Home"));
 const AdminAuthGate = React.lazy(() => import("@/components/AdminAuthGate"));
 const WebsiteHealthAdmin = React.lazy(() => import("@/components/admin/WebsiteHealthAdmin"));
 const Catalog = React.lazy(() => import("@/pages/Catalog"));
