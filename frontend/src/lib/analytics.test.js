@@ -142,6 +142,19 @@ describe("marketing attribution", () => {
     expect(JSON.stringify(result)).not.toContain("meta-secret");
   });
 
+  test("drops unsafe UTM values that could contain personal data", () => {
+    const result = detectMarketingAttribution({
+      href: "https://samratglass.com/?utm_source=raks@example.com&utm_medium=+919892039293&utm_campaign=Rakshit%20Agarwal",
+      referrerHost: "",
+    });
+    expect(result.source).toBe("direct");
+    expect(result.medium).toBe("none");
+    expect(result.campaign).toBe("");
+    expect(JSON.stringify(result)).not.toContain("raks@example.com");
+    expect(JSON.stringify(result)).not.toContain("9892039293");
+    expect(JSON.stringify(result)).not.toContain("Rakshit");
+  });
+
   test("keeps first touch while session attribution can update from a campaign", () => {
     setLocation("/");
     const first = captureMarketingAttribution();
