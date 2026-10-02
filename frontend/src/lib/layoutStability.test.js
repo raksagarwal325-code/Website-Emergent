@@ -10,15 +10,7 @@ describe("layout stability guards", () => {
     expect(source).toContain('className="aspect-[4/3] overflow-hidden');
     expect(source).not.toContain("setMediaAspect");
     expect(source).not.toContain("handleImageLoad");
-    test("Google fonts avoid late metric swaps", () => {
-    const source = fs.readFileSync(
-      path.join(__dirname, "..", "..", "public", "index.html"),
-      "utf8",
-    );
-    expect(source).toContain("&display=optional");
-    expect(source).not.toContain("&display=swap");
   });
-});
 
   test("catalogue mirrors the full first-load grid", () => {
     const source = fs.readFileSync(
@@ -39,5 +31,14 @@ describe("layout stability guards", () => {
     expect(source).toContain('className="aspect-[4/5] overflow-hidden');
     expect(source).not.toContain("setMediaAspect");
     expect(source).not.toContain("aspectRatio: mediaAspect");
+  });
+
+  test("Google fonts avoid late metric swaps", () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, "..", "..", "public", "index.html"),
+      "utf8",
+    );
+    expect(source).toContain("&display=optional");
+    expect(source).not.toContain("&display=swap");
   });
 });
