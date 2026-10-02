@@ -13,6 +13,37 @@ const FALLBACK_PRICE_CEILING = 60000;
 const VALID_SORTS = new Set(["newest", "price_asc", "price_desc", "rating", "name"]);
 const normalizeSort = (value) => (VALID_SORTS.has(value) ? value : "newest");
 
+
+function CatalogueLoadingSkeleton() {
+  return (
+    <div
+      className="grid grid-cols-2 gap-3 sm:gap-7 xl:grid-cols-3 2xl:grid-cols-4"
+      aria-hidden="true"
+      data-testid="catalogue-loading-skeleton"
+    >
+      <div className="col-span-full mb-1 min-h-[62px] border border-white/10 bg-[#11070e]/70 p-2.5 sm:min-h-[72px] sm:p-3" />
+      {Array.from({ length: PAGE_SIZE }, (_, index) => (
+        <div
+          key={index}
+          className="flex h-full flex-col border border-white/8 bg-[#1a0a17]/40"
+        >
+          <div className="aspect-[4/5] bg-[#0e0510]" />
+          <div className="flex min-h-[190px] flex-1 flex-col p-3 sm:min-h-[210px] sm:p-5">
+            <div className="mb-3 h-2.5 w-20 bg-white/5" />
+            <div className="h-4 w-11/12 bg-white/5" />
+            <div className="mt-2 h-4 w-8/12 bg-white/5" />
+            <div className="mt-5 h-5 w-24 bg-[#D4AF37]/10" />
+            <div className="mt-auto grid grid-cols-2 gap-1.5 pt-5 sm:gap-2">
+              <div className="h-9 bg-white/5" />
+              <div className="h-9 border border-white/5" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function CatalogueBrowser({ lockedCategory = null, initialProducts = [], initialTotal = 0, dynamicCategories = null, onListingChange = null }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState(initialProducts);
@@ -244,7 +275,11 @@ export default function CatalogueBrowser({ lockedCategory = null, initialProduct
         )}
         <div className="mb-6 flex items-center justify-between text-xs uppercase tracking-widest text-white/50"><span data-testid="results-count">{loading ? "Loading…" : total === 0 ? "0 pieces" : `Showing ${startIdx}–${endIdx} of ${total} piece${total === 1 ? "" : "s"}`}</span>{totalPages > 1 && !loading && <span data-testid="page-indicator" className="text-white/40">Page {currentPage} of {totalPages}</span>}</div>
         {total === 0 && !loading ? <div className="border border-white/10 px-6 py-20 text-center text-white/50"><div className="mb-2 font-serif text-2xl text-white/75">Nothing matches.</div><div className="text-sm">Try a product type, colour, style or SKU—or clear the current search and filters.</div><button type="button" data-testid="zero-results-clear" onClick={clearFilters} className="mt-6 border border-[#D4AF37]/60 px-5 py-3 text-xs uppercase tracking-[0.2em] text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black">Clear search &amp; filters</button></div> : <>
-          <div className={`grid grid-cols-2 gap-3 sm:gap-7 xl:grid-cols-3 2xl:grid-cols-4 ${loading && products.length === 0 ? "min-h-[900px] sm:min-h-[1200px]" : ""}`} aria-busy={loading ? "true" : undefined}>{products.map((p, i) => <ProductCard key={p.id} product={p} index={i} matchingFamily={variantIndex[p.id]} />)}</div>
+          {loading && products.length === 0 ? (
+            <CatalogueLoadingSkeleton />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:gap-7 xl:grid-cols-3 2xl:grid-cols-4" aria-busy={loading ? "true" : undefined}>{products.map((p, i) => <ProductCard key={p.id} product={p} index={i} matchingFamily={variantIndex[p.id]} />)}</div>
+          )}
           {totalPages > 1 && <nav aria-label="Catalog pagination" data-testid="catalog-pagination" className="mt-14 flex flex-wrap items-center justify-center gap-2 no-print"><button type="button" data-testid="pagination-prev" onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1 || loading} className="inline-flex items-center gap-1 border border-white/15 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/80 hover:border-[#D4AF37] hover:text-[#D4AF37] disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft aria-hidden="true" size={14} /> Previous</button>{pageWindow.map((n, idx) => { const prev = pageWindow[idx - 1]; const showGap = prev !== undefined && n - prev > 1; return <React.Fragment key={n}>{showGap && <span aria-hidden="true" data-testid={`pagination-gap-${prev}-${n}`} className="select-none px-2 text-white/40">…</span>}<button type="button" aria-label={`Page ${n}`} data-testid={`pagination-page-${n}`} onClick={() => goToPage(n)} disabled={loading} aria-current={n === currentPage ? "page" : undefined} className={`min-w-[40px] border px-3 py-2 text-xs uppercase tracking-[0.24em] transition-colors ${n === currentPage ? "border-[#D4AF37] bg-[#D4AF37]/10 text-[#D4AF37]" : "border-white/15 text-white/70 hover:border-[#D4AF37] hover:text-[#D4AF37]"}`}>{n}</button></React.Fragment>; })}<button type="button" data-testid="pagination-next" onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages || loading} className="inline-flex items-center gap-1 border border-white/15 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/80 hover:border-[#D4AF37] hover:text-[#D4AF37] disabled:cursor-not-allowed disabled:opacity-40">Next <ChevronRight aria-hidden="true" size={14} /></button></nav>}
         </>}
       </div>
