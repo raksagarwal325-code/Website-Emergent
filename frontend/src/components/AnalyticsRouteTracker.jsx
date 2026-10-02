@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { pageView, installWhatsAppClickListener } from "../lib/analytics";
+import { pageView, installWhatsAppClickListener, installPhoneClickListener } from "../lib/analytics";
 import { installProductNotFoundSeoGuard } from "../lib/productNotFoundSeo";
 
 /**
@@ -9,14 +9,15 @@ import { installProductNotFoundSeoGuard } from "../lib/productNotFoundSeo";
  * so it can access `useLocation`. The `pageView` helper itself dedupes
  * consecutive identical route entries, skips /admin, and respects DNT.
  *
- * Also installs the global WhatsApp click listener once on mount so
- * every public `wa.me/` CTA on the site fires the `whatsapp_click`
- * custom event (previously only 2 of ~14 CTAs did).
+ * Also installs global WhatsApp and phone click listeners once on mount so
+ * every public `wa.me/` or `tel:` CTA is covered without wiring each
+ * individual link by hand.
  */
 export default function AnalyticsRouteTracker() {
   const location = useLocation();
   useEffect(() => {
     installWhatsAppClickListener();
+    installPhoneClickListener();
     return installProductNotFoundSeoGuard();
   }, []);
   useEffect(() => {
