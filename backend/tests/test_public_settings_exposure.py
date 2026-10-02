@@ -55,6 +55,15 @@ def _mongo():
                 mongo_url = line.split("=", 1)[1].strip().strip('"').strip("'")
             elif line.startswith("DB_NAME="):
                 db_name = line.split("=", 1)[1].strip().strip('"').strip("'")
+
+    safe_db = db_name == "test_database" or db_name.startswith("test_ci_")
+    safe_mongo = (
+        mongo_url.startswith("mongodb://localhost:")
+        or mongo_url.startswith("mongodb://127.0.0.1:")
+    )
+    if not (safe_db and safe_mongo):
+        pytest.skip("Refusing mutating settings test outside isolated local test database")
+
     return mongo_url, db_name
 
 
