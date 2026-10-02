@@ -8,13 +8,16 @@ const SettingsContext = createContext(null);
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(null);
+  const [settingsReady, setSettingsReady] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       const s = await api.getSettings();
       setSettings(normalizePublicSettings(s));
     } catch (e) {
-      /* ignore */
+      /* keep defaults when public settings are temporarily unavailable */
+    } finally {
+      setSettingsReady(true);
     }
   }, []);
 
@@ -25,7 +28,7 @@ export function SettingsProvider({ children }) {
   const hp = normalizeHomepageClaims(mergeHomepage(settings?.homepage_content));
 
   return (
-    <SettingsContext.Provider value={{ settings, hp, refresh }}>
+    <SettingsContext.Provider value={{ settings, hp, refresh, settingsReady }}>
       {children}
     </SettingsContext.Provider>
   );
