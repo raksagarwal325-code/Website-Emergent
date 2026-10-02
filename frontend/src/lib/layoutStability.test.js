@@ -54,4 +54,20 @@ describe("layout stability guards", () => {
     expect(source).toContain("&display=optional");
     expect(source).not.toContain("&display=swap");
   });
+  test("gallery waits for public settings before rendering the archive", () => {
+    const gallery = fs.readFileSync(
+      path.join(__dirname, "..", "pages", "Gallery.jsx"),
+      "utf8",
+    );
+    const settings = fs.readFileSync(
+      path.join(__dirname, "..", "context", "SettingsContext.jsx"),
+      "utf8",
+    );
+    expect(gallery).toContain("settingsReady");
+    expect(gallery).toContain('data-testid="gallery-loading-skeleton"');
+    expect(gallery).toContain("min-h-screen");
+    expect(settings).toContain("const [settingsReady, setSettingsReady] = useState(false)");
+    expect(settings).toContain("setSettingsReady(true)");
+  });
+
 });
