@@ -20,4 +20,14 @@ describe("layout stability guards", () => {
     expect(source).toContain('loading && products.length === 0 ? "min-h-[900px] sm:min-h-[1200px]"');
     expect(source).toContain('aria-busy={loading ? "true" : undefined}');
   });
+
+  test("product cards keep a fixed media aspect ratio", () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, "..", "components", "ProductCard.jsx"),
+      "utf8",
+    );
+    expect(source).toContain('className="aspect-[4/5] overflow-hidden');
+    expect(source).not.toContain("setMediaAspect");
+    expect(source).not.toContain("aspectRatio: mediaAspect");
+  });
 });
