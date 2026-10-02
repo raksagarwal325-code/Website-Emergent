@@ -92,7 +92,7 @@ export default function ProductCard({ product, index = 0, matchingFamily = null 
 
     const preloader = new window.Image();
     preloader.decoding = "async";
-    preloader.src = alternateUrl;
+    preloader.src = imageVariantUrl(alternateUrl, 640);
     return () => {
       preloader.onload = null;
       preloader.onerror = null;
