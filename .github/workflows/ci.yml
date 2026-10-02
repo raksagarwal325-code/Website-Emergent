@@ -332,8 +332,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: lighthouse-ci-reports
-          path: .lighthouseci/
-          if-no-files-found: warn
+          path: frontend/.lighthouseci/
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 14
 
       - name: Install transient axe runner
