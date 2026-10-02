@@ -44,7 +44,6 @@ export default function ProductCard({ product, index = 0, matchingFamily = null 
   const lightImages = useMemo(() => getCatalogueLightImages(product), [product]);
   const selectedImage = lightMode === "on" ? lightImages.on : lightImages.off;
   const img = api.resolveImage(selectedImage);
-  const [mediaAspect, setMediaAspect] = useState(4 / 5);
   const [glanceOpen, setGlanceOpen] = useState(false);
   const hoverTimerRef = useRef(null);
 
@@ -109,12 +108,6 @@ export default function ProductCard({ product, index = 0, matchingFamily = null 
   }, [hp, product.id]);
 
   const handleImageLoad = (event) => {
-    const naturalWidth = event.currentTarget?.naturalWidth || 0;
-    const naturalHeight = event.currentTarget?.naturalHeight || 0;
-    if (!naturalWidth || !naturalHeight) return;
-    const sourceAspect = naturalWidth / naturalHeight;
-    const controlledAspect = Math.min(1.15, Math.max(0.68, sourceAspect));
-    setMediaAspect((current) => Math.abs(current - controlledAspect) > 0.01 ? controlledAspect : current);
     applyImageFrameColor(event.currentTarget, event.currentTarget.parentElement);
   };
 
@@ -161,7 +154,7 @@ export default function ProductCard({ product, index = 0, matchingFamily = null 
         <Heart size={17} className="hidden sm:block" fill={fav ? "#D4AF37" : "none"} strokeWidth={1.6} />
       </button>
       <Link to={productPath(product)} className="block" data-testid={`product-link-${product.id}`}>
-        <div className="overflow-hidden bg-[#0e0510] flex items-center justify-center relative transition-[aspect-ratio] duration-500" {...containerGuardProps} style={{ ...containerGuardStyle, aspectRatio: mediaAspect }}>
+        <div className="aspect-[4/5] overflow-hidden bg-[#0e0510] flex items-center justify-center relative" {...containerGuardProps} style={containerGuardStyle}>
           {img ? <img src={img} alt={productImageAlt({ name: product.name, category: product.category, sku: product.sku })} className="product-image block h-full w-full object-contain object-center p-1.5 opacity-95 group-hover:opacity-100 sm:p-3" loading="lazy" onLoad={handleImageLoad} {...imgGuardProps} style={imgGuardStyle} /> : <ProductPlaceholder name={product.name} />}
           {projectCount > 0 && <div data-testid={`product-projects-badge-${product.id}`} className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 inline-flex items-center gap-1 border border-[#D4AF37]/40 bg-black/70 backdrop-blur-sm px-2 py-1 text-[8px] sm:text-[10px] uppercase tracking-[0.16em] sm:tracking-[0.2em] text-[#D4AF37]" title={`Featured in ${projectCount} real installation${projectCount === 1 ? "" : "s"}`}><Sparkles size={9} strokeWidth={1.6} /><span className="hidden sm:inline">Featured in </span>{projectCount} project{projectCount === 1 ? "" : "s"}</div>}
 
