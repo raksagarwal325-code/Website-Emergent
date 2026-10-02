@@ -58,6 +58,11 @@ const ATTRIBUTION_SESSION_KEY = "sge_attribution_session";
 const _cleanAttributionValue = (value, max = 80) =>
   String(value || "").trim().slice(0, max);
 
+const _safeMarketingToken = (value, max = 80) => {
+  const token = _cleanAttributionValue(value, max);
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(token) ? token : "";
+};
+
 const _readJsonStorage = (storage, key) => {
   try {
     const value = JSON.parse(storage.getItem(key));
@@ -87,9 +92,9 @@ export const detectMarketingAttribution = ({ href = "", referrerHost = "" } = {}
     params = new URLSearchParams();
   }
 
-  const utmSource = _cleanAttributionValue(params.get("utm_source"), 50);
-  const utmMedium = _cleanAttributionValue(params.get("utm_medium"), 50);
-  const utmCampaign = _cleanAttributionValue(params.get("utm_campaign"), 80);
+  const utmSource = _safeMarketingToken(params.get("utm_source"), 50);
+  const utmMedium = _safeMarketingToken(params.get("utm_medium"), 50);
+  const utmCampaign = _safeMarketingToken(params.get("utm_campaign"), 80);
   const hasGoogleClickId = Boolean(params.get("gclid") || params.get("gbraid") || params.get("wbraid"));
   const hasMetaClickId = Boolean(params.get("fbclid"));
 
