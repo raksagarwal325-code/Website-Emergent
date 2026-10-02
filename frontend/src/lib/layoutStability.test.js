@@ -23,7 +23,7 @@ describe("layout stability guards", () => {
     expect(source).toContain('className="aspect-[4/5] bg-[#0e0510]"');
   });
 
-  test("product cards keep a fixed media aspect ratio", () => {
+  test("product cards keep a fixed media aspect ratio and use responsive variants", () => {
     const source = fs.readFileSync(
       path.join(__dirname, "..", "components", "ProductCard.jsx"),
       "utf8",
@@ -31,6 +31,18 @@ describe("layout stability guards", () => {
     expect(source).toContain('className="aspect-[4/5] overflow-hidden');
     expect(source).not.toContain("setMediaAspect");
     expect(source).not.toContain("aspectRatio: mediaAspect");
+    expect(source).toContain('imageVariantUrl(img, 640)');
+    expect(source).toContain('imageVariantSrcSet(img, [320, 640, 960])');
+    expect(source).toContain('sizes="(max-width: 1279px) 50vw, (max-width: 1535px) 33vw, 25vw"');
+  });
+
+  test("deferred homepage sections retain their reserved minimum height after mount", () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, "..", "pages", "Home.jsx"),
+      "utf8",
+    );
+    expect(source).toContain('<div ref={ref} style={{ minHeight }}>');
+    expect(source).not.toContain('style={!ready ? { minHeight } : undefined}');
   });
 
   test("Google fonts avoid late metric swaps", () => {
