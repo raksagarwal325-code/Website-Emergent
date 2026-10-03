@@ -149,6 +149,17 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen, onC
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   };
 
+  const cameraGlyph = (
+    <span
+      aria-hidden="true"
+      className={`photo-search-glyph${landingTrigger ? " photo-search-glyph--prominent" : ""}`}
+    >
+      <Camera size={landingTrigger ? 18 : menuTrigger ? 17 : 16} strokeWidth={1.7} />
+      <span className="photo-search-glyph__orbit" />
+      <span className="photo-search-glyph__glint" />
+    </span>
+  );
+
   return <>
     <button
       ref={trigger}
@@ -166,17 +177,19 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen, onC
           : "absolute right-1.5 top-1/2 inline-flex h-9 -translate-y-1/2 items-center gap-2 border border-[#D4AF37] bg-[#D4AF37] px-3 text-xs font-semibold uppercase tracking-[0.08em] text-black shadow-[0_0_18px_rgba(212,175,55,0.18)] transition-colors hover:bg-[#ead06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37]"}
     >
       {landingTrigger && <span aria-hidden="true" className="absolute inset-y-0 -left-1/2 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/45 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-[500%]" />}
-      <Camera size={landingTrigger ? 18 : menuTrigger ? 17 : 16} aria-hidden="true" className={landingTrigger ? "relative z-10" : undefined} />
+      {cameraGlyph}
       <span className={landingTrigger ? "relative z-10" : undefined}>{landingTrigger ? "Upload a photo" : menuTrigger ? "Search with a photo" : "Upload photo"}</span>
     </button>
     {open && createPortal(
-      <div data-customer-image-search-overlay="true" className="fixed inset-0 z-[100] bg-black/80 p-3 sm:p-8 flex items-start justify-center overflow-y-auto" onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
-        <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="image-search-title" onKeyDown={keyDown} className="my-auto w-full max-w-4xl border border-[#D4AF37]/30 bg-[#101010] p-5 sm:p-8 text-white shadow-2xl">
+      <div data-customer-image-search-overlay="true" className="image-search-overlay fixed inset-0 z-[100] bg-black/80 p-3 sm:p-8 flex items-start justify-center overflow-y-auto" onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
+        <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="image-search-title" onKeyDown={keyDown} className="image-search-dialog grain relative my-auto w-full max-w-4xl overflow-hidden border border-[#D4AF37]/30 bg-[#101010] p-5 sm:p-8 text-white shadow-2xl">
+          <div aria-hidden="true" className="image-search-dialog__ambient pointer-events-none absolute inset-0" />
+          <div className="relative z-10">
           <div className="flex items-start justify-between gap-4">
-            <div><div className="text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">Search by photo</div><h2 id="image-search-title" className="mt-2 font-serif text-2xl sm:text-3xl">Upload a photo. We’ll find the closest match.</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">Use a product photo, room image or screenshot. Exact matches appear first, followed by similar designs.</p></div>
+            <div><div className="flex items-center gap-2 text-[9px] font-medium uppercase tracking-[0.3em] text-[#D4AF37]">{cameraGlyph}<span>Search by photo</span></div><h2 id="image-search-title" className="mt-2 font-serif text-2xl sm:text-3xl">Upload a photo. We’ll find the closest match.</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">Use a product photo, room image or screenshot. Exact matches appear first, followed by similar designs.</p></div>
             <button type="button" onClick={close} aria-label="Close image search" className="p-2 text-white/70 hover:text-white"><X size={22} /></button>
           </div>
-          <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); search(e.dataTransfer.files?.[0]); }} className="mt-6 flex flex-wrap items-center gap-4 border border-dashed border-white/25 p-5">
+          <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); search(e.dataTransfer.files?.[0]); }} className="image-search-dropzone mt-6 flex flex-wrap items-center gap-4 border border-dashed border-white/25 p-5">
             {preview && <img src={preview} alt="Your search reference" className="h-24 w-24 object-contain bg-white" />}
             <div><button type="button" onClick={() => input.current?.click()} className="inline-flex items-center gap-2 bg-[#D4AF37] px-5 py-3 text-sm text-black"><Upload size={16} />{preview ? "Choose another photo" : "Choose a photo"}</button><p className="mt-2 text-xs text-white/55">Drag and drop, or choose a photo · JPG, PNG or WebP · Up to 10 MB</p><p className="mt-1 text-xs text-white/55">Tip: crop around one light for a more accurate result. Your photo is deleted automatically after the search.</p></div>
             <input ref={input} hidden type="file" accept="image/*,.jpg,.jpeg,.png,.webp" aria-label="Upload image for product search" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; search(file); }} />
@@ -190,7 +203,7 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen, onC
               const items = (result.matches || []).filter((match) => match.match_type === type);
               if (!items.length) return null;
               return <div key={type} className="mt-7"><h3 className="font-serif text-xl">{type === "exact" ? "Your catalogue match" : type === "closest" ? "The closest expression we found" : type === "related" ? "In the same design language" : type === "similar" ? "Further pieces to consider" : "Possibilities worth exploring"}</h3>{type === "closest" && <p className="mt-1 text-xs leading-relaxed text-white/55">The strongest visual relationship in form and detailing. Please confirm scale, light count and finish.</p>}{type === "related" && <p className="mt-1 text-xs leading-relaxed text-white/55">Curated around the leading design; proportions, glass, light count or finish may vary.</p>}{type === "similar" && <p className="mt-1 text-xs leading-relaxed text-white/55">Selected for a related silhouette or decorative character; individual details may differ.</p>}{type === "possible" && <p className="mt-1 text-sm leading-relaxed text-white/65">The photograph did not allow a confident match. Consider these as starting points, or let our team continue the search.</p>}<div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {items.map(({ product }) => <Link key={product.id} to={productPath(product)} onClick={close} className="group border border-white/10 p-3 hover:border-[#D4AF37]/60"><img src={api.resolveImage(product.images?.[0])} alt={productImageAlt({ name: product.name, category: product.category, sku: product.sku })} loading="lazy" className="h-36 sm:h-48 w-full object-contain" /><p className="mt-3 font-serif text-sm sm:text-base group-hover:text-[#D4AF37]">{product.name}</p><p className="mt-1 text-xs text-white/50">{product.sku}</p><p className="mt-3 text-xs text-[#D4AF37]">View product →</p></Link>)}
+                {items.map(({ product }) => <Link key={product.id} to={productPath(product)} onClick={close} className="image-search-result-card group border border-white/10 p-3 hover:border-[#D4AF37]/60"><img src={api.resolveImage(product.images?.[0])} alt={productImageAlt({ name: product.name, category: product.category, sku: product.sku })} loading="lazy" className="image-search-result-image h-36 sm:h-48 w-full object-contain" /><p className="mt-3 font-serif text-sm sm:text-base group-hover:text-[#D4AF37]">{product.name}</p><p className="mt-1 text-xs text-white/50">{product.sku}</p><p className="mt-3 text-xs text-[#D4AF37]">View product →</p></Link>)}
               </div></div>;
             })}
             <div className="relative mt-8 overflow-hidden border border-[#D4AF37]/35 bg-[#D4AF37]/[0.055] p-5 sm:p-6">
@@ -210,6 +223,7 @@ export default function CustomerImageSearch({ variant = "catalogue", onOpen, onC
               </div>
             </div>
           </div>}
+          </div>
         </section>
       </div>, document.body,
     )}

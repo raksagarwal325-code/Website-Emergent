@@ -33,9 +33,10 @@ test("renders a full-width landing-page call to action without catalogue positio
   const button = screen.getByRole("button", { name: "Upload a photo to find exact or similar products" });
   expect(button).toHaveTextContent("Upload a photo");
   expect(button).toHaveClass("w-full");
+  expect(button.querySelector(".photo-search-glyph--prominent")).toBeInTheDocument();
   expect(button).not.toHaveClass("absolute");
   fireEvent.click(button);
-  expect(screen.getByRole("dialog", { name: "Upload a photo. We’ll find the closest match." })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Upload a photo. We’ll find the closest match." })).toHaveClass("image-search-dialog");
 });
 
 test("renders a labelled photo action for the unified search menu", () => {

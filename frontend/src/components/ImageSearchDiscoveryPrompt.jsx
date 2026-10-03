@@ -96,7 +96,7 @@ export default function ImageSearchDiscoveryPrompt() {
       role="dialog"
       aria-label="Search for a product using a photo"
       data-testid="image-search-discovery-prompt"
-      className="fixed bottom-20 left-3 right-3 z-40 overflow-hidden border border-[#D4AF37]/35 bg-[#140910]/[0.98] p-5 text-white shadow-[0_24px_70px_rgba(0,0,0,0.62)] backdrop-blur-xl sm:bottom-6 sm:left-6 sm:right-auto sm:w-[410px] sm:p-6"
+      className="image-search-discovery-card fixed bottom-20 left-3 right-3 z-40 overflow-hidden border border-[#D4AF37]/35 bg-[#140910]/[0.98] p-5 text-white shadow-[0_24px_70px_rgba(0,0,0,0.62)] backdrop-blur-xl sm:bottom-6 sm:left-6 sm:right-auto sm:w-[410px] sm:p-6"
     >
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_4%_0%,rgba(212,175,55,0.18),transparent_42%)]" />
       <button

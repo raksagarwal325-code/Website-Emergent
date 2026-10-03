@@ -35,12 +35,13 @@ test("opens one clear search menu with text and photo choices", async () => {
     </MemoryRouter>
   );
 
+  expect(screen.getByRole("tooltip")).toHaveClass("premium-search-tooltip");
   expect(screen.getByRole("tooltip")).toHaveTextContent(/product name, SKU or category/i);
   expect(screen.getByRole("tooltip")).toHaveTextContent(/room photo or screenshot/i);
 
   fireEvent.click(screen.getByRole("button", { name: "Search products by text or photo" }));
 
-  expect(screen.getByRole("dialog", { name: "Search products" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Search products" })).toHaveClass("premium-search-menu");
   expect(await screen.findByRole("button", { name: "Upload a photo to find exact or similar products" })).toHaveTextContent("Search with a photo");
   expect(screen.getByText(/exact matches first, followed by similar options/i)).toBeInTheDocument();
 

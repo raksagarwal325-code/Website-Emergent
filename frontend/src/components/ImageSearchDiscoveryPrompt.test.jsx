@@ -29,7 +29,7 @@ test("appears near the bottom with premium photo-search guidance", () => {
 
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   fireEvent.scroll(window);
-  expect(screen.getByRole("dialog", { name: "Search for a product using a photo" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Search for a product using a photo" })).toHaveClass("image-search-discovery-card");
   expect(screen.getByText(/Seen a light you love/i)).toBeInTheDocument();
   expect(screen.getByText(/screenshot, room photo or saved image/i)).toBeInTheDocument();
 });
