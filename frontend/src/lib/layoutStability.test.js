@@ -46,6 +46,15 @@ describe("layout stability guards", () => {
     expect(source).not.toContain('style={!ready ? { minHeight } : undefined}');
   });
 
+  test("route suspense fallback keeps the footer below the initial viewport", () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, "..", "App.js"),
+      "utf8",
+    );
+    expect(source).toContain('className="min-h-[calc(100vh-5rem)]"');
+    expect(source).not.toContain('className="min-h-[40vh]"');
+  });
+
   test("Google fonts avoid late metric swaps", () => {
     const source = fs.readFileSync(
       path.join(__dirname, "..", "..", "public", "index.html"),
