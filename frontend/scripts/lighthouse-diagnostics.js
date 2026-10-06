@@ -3,9 +3,17 @@ const fs = require("fs");
 const path = require("path");
 
 const reportDir = path.resolve(__dirname, "..", ".lighthouseci");
-const files = fs.existsSync(reportDir)
-  ? fs.readdirSync(reportDir).filter((name) => /^lhr-.*\.json$/i.test(name))
-  : [];
+
+function findReports(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return findReports(full);
+    return /^lhr-.*\.json$/i.test(entry.name) ? [full] : [];
+  });
+}
+
+const files = findReports(reportDir);
 
 if (!files.length) {
   console.error("No Lighthouse JSON reports found in .lighthouseci");
@@ -22,9 +30,11 @@ const metricIds = [
 ];
 
 for (const file of files.sort()) {
-  const report = JSON.parse(fs.readFileSync(path.join(reportDir, file), "utf8"));
+  const report = JSON.parse(fs.readFileSync(file, "utf8"));
   const url = report.finalDisplayedUrl || report.finalUrl || report.requestedUrl || file;
-  console.log("\n=== Lighthouse performance diagnosis ===");
+  const relative = path.relative(reportDir, file);
+  const profile = relative.split(path.sep)[0] || "unknown";
+  console.log(`\n=== Lighthouse performance diagnosis [${profile}] ===`);
   console.log(url);
 
   const categories = report.categories || {};
