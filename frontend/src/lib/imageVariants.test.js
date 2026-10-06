@@ -1,4 +1,9 @@
-import { imageVariantSrcSet, imageVariantUrl } from "./imageVariants";
+import {
+  imageVariantSrcSet,
+  imageVariantUrl,
+  staticImageVariantSrcSet,
+  staticImageVariantUrl,
+} from "./imageVariants";
 
 describe("imageVariants", () => {
   test("maps internal product files to the WebP variant endpoint", () => {
@@ -20,5 +25,19 @@ describe("imageVariants", () => {
     const set = imageVariantSrcSet(src, [320, 640]);
     expect(set).toContain("/api/image-variant/320/lumiere-catalog/products/example.png 320w");
     expect(set).toContain("/api/image-variant/640/lumiere-catalog/products/example.png 640w");
+  });
+
+  test("maps approved static atelier images to responsive WebP variants", () => {
+    expect(staticImageVariantUrl("/atelier-1.png", 640)).toBe(
+      "/api/static-image-variant/640/atelier-1.png",
+    );
+    const set = staticImageVariantSrcSet("/atelier-5.png", [320, 640]);
+    expect(set).toContain("/api/static-image-variant/320/atelier-5.png 320w");
+    expect(set).toContain("/api/static-image-variant/640/atelier-5.png 640w");
+  });
+
+  test("leaves unrelated static assets unchanged", () => {
+    expect(staticImageVariantUrl("/logo.jpeg", 640)).toBe("/logo.jpeg");
+    expect(staticImageVariantSrcSet("/logo.jpeg", [320, 640])).toBeUndefined();
   });
 });
