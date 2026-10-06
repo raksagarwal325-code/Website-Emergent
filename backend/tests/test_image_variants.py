@@ -56,3 +56,17 @@ def test_social_preview_storage_path_is_separate_from_master_and_webp_variants()
     assert security_runtime._social_preview_storage_path(path) == (
         "lumiere-catalog/product-variants/jpeg/social-640/example.png.jpg"
     )
+
+
+def test_static_image_variant_allowlist_blocks_arbitrary_paths():
+    assert security_runtime._valid_static_image_name("atelier-1.png")
+    assert security_runtime._valid_static_image_name("atelier-hero.png")
+    assert not security_runtime._valid_static_image_name("../atelier-1.png")
+    assert not security_runtime._valid_static_image_name("logo.jpeg")
+
+
+def test_static_image_variant_renders_existing_atelier_asset():
+    rendered = security_runtime._render_static_webp_variant("atelier-2.png", 320)
+    with Image.open(io.BytesIO(rendered)) as result:
+        assert result.format == "WEBP"
+        assert result.width == 320
