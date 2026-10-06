@@ -91,6 +91,24 @@ function DeferredSeasonalSpotlight({ eyebrow, title, viewAllText, viewAllLink })
 export default function Home() {
   const { settings, hp } = useSettings();
   const prefersReducedMotion = useReducedMotion();
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 767px)").matches : false,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const onChange = (event) => setIsMobile(event.matches);
+    setIsMobile(mq.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+
+  // The welcome intro fully covers the hero on first visit. On mobile there is
+  // no visual benefit to animating the hidden hero underneath it, but that
+  // opacity animation can delay Lighthouse from considering the H1 painted.
+  // Render the mobile hero in its final state immediately; desktop keeps the
+  // existing editorial entrance.
+  const heroMotionDisabled = prefersReducedMotion || isMobile;
   const waLink = waGeneralLink(settings?.whatsapp_number) || "#";
   const H = hp.hero;
   const F = hp.featured;
@@ -105,9 +123,9 @@ export default function Home() {
       <section className="relative overflow-hidden grain min-h-[calc(100vh-5rem)] border-b border-white/10">
         <motion.div
           className="absolute inset-0 opacity-45"
-          initial={prefersReducedMotion ? false : { opacity: 0.34, scale: 1.015 }}
-          animate={{ opacity: 0.45, scale: prefersReducedMotion ? 1 : 1.035 }}
-          transition={prefersReducedMotion ? { duration: 0 } : { duration: 7, ease: LUXURY_EASE }}
+          initial={heroMotionDisabled ? false : { opacity: 0.34, scale: 1.015 }}
+          animate={{ opacity: 0.45, scale: heroMotionDisabled ? 1 : 1.035 }}
+          transition={heroMotionDisabled ? { duration: 0 } : { duration: 7, ease: LUXURY_EASE }}
         >
           <picture>
             <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
@@ -119,20 +137,20 @@ export default function Home() {
         </motion.div>
 
         <div className="relative max-w-7xl mx-auto px-6 min-h-[calc(100vh-5rem)] flex items-center py-10 md:py-12">
-          <motion.div className="max-w-2xl" initial={prefersReducedMotion ? false : "hidden"} animate="visible" variants={editorialGroup}>
-            <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft}>
+          <motion.div className="max-w-2xl" initial={heroMotionDisabled ? false : "hidden"} animate="visible" variants={heroMotionDisabled ? undefined : editorialGroup}>
+            <motion.div variants={heroMotionDisabled ? undefined : editorialItemSoft}>
               <Link to="/craft" aria-label="Made in India — explore our workshop and craftsmanship" className="mb-5 inline-flex items-center gap-3 border border-[#BF9972]/30 px-4 py-2 hover:border-[#D4AF37] focus-visible:outline focus-visible:outline-2"><span className="w-1.5 h-1.5 shrink-0 rounded-full bg-[#D4AF37]" /><span className="text-xs uppercase tracking-[0.18em] leading-relaxed text-[#BF9972]">{heritageEyebrow(H.eyebrow)}</span></Link>
               <h1 className="font-serif text-5xl sm:text-6xl lg:text-6xl xl:text-7xl leading-[1.02]">{H.headline_line1}<br /><span className="italic brand-gradient-text">{H.headline_line2}</span></h1>
-              <motion.div aria-hidden className="mt-6 h-px w-40 origin-left bg-gradient-to-r from-[#D4AF37]/90 to-transparent" initial={prefersReducedMotion ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.9, delay: 0.25, ease: LUXURY_EASE }} />
+              <motion.div aria-hidden className="mt-6 h-px w-40 origin-left bg-gradient-to-r from-[#D4AF37]/90 to-transparent" initial={heroMotionDisabled ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={heroMotionDisabled ? { duration: 0 } : { duration: 0.9, delay: 0.25, ease: LUXURY_EASE }} />
             </motion.div>
-            <motion.div variants={prefersReducedMotion ? undefined : editorialItem}>
+            <motion.div variants={heroMotionDisabled ? undefined : editorialItem}>
               <p className="mt-5 text-white/70 max-w-lg leading-relaxed">{H.description}</p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <Link to={H.primary_cta_link || "/catalog"} data-testid="hero-explore-btn" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#B5952F] transition-colors">{H.primary_cta_text} <ArrowUpRight size={14} /></Link>
                 {H.secondary_cta_text && (heroSecondaryExternal ? <a href={heroSecondaryHref} target="_blank" rel="noreferrer" data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors"><MessageCircle size={14} /> {H.secondary_cta_text}</a> : <Link to={heroSecondaryHref} data-testid="hero-wa-btn" className="inline-flex items-center gap-2 border border-[#D4AF37]/60 text-[#D4AF37] px-8 py-4 uppercase text-xs tracking-[0.24em] hover:bg-[#D4AF37]/10 transition-colors"><MessageCircle size={14} /> {H.secondary_cta_text}</Link>)}
               </div>
             </motion.div>
-            <motion.div variants={prefersReducedMotion ? undefined : editorialItemSoft} className="mt-8 pt-5 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
+            <motion.div variants={heroMotionDisabled ? undefined : editorialItemSoft} className="mt-8 pt-5 border-t border-[#BF9972]/20 grid grid-cols-3 gap-6 max-w-lg">
               {(H.trust || []).map((t, i) => <div key={i}><div className="font-serif text-xl md:text-2xl brand-gradient-text leading-none">{t.value}</div><div className="text-xs font-medium uppercase tracking-[0.18em] text-white/60 mt-2">{t.label}</div></div>)}
             </motion.div>
           </motion.div>
