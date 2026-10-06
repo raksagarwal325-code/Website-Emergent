@@ -15,6 +15,8 @@ import asyncio
 import inspect
 import io
 import ipaddress
+from functools import lru_cache
+from pathlib import Path
 import json
 import re
 import socket
@@ -47,6 +49,16 @@ _IMAGE_VARIANT_WIDTHS = {320, 640, 960, 1280}
 _SOCIAL_PREVIEW_WIDTH = 640
 _PRODUCT_PATH_RE = re.compile(r"^[^/]+/products/(?!.*(?:^|/)originals/)[A-Za-z0-9._/-]+$")
 _IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
+_STATIC_VARIANT_CACHE = "public, max-age=2592000"
+_STATIC_IMAGE_VARIANT_NAMES = {
+    "atelier-1.png",
+    "atelier-2.png",
+    "atelier-3.png",
+    "atelier-4.png",
+    "atelier-5.png",
+    "atelier-hero.png",
+}
+_STATIC_IMAGE_ROOT = Path(__file__).resolve().parents[1] / "frontend" / "public"
 
 # Referrers allowed to display product imagery. Missing Referer is deliberately
 # allowed so search crawlers, social preview bots, privacy browsers and direct
@@ -222,6 +234,20 @@ def _valid_product_path(path: str) -> bool:
     return bool(path) and ".." not in path and bool(_PRODUCT_PATH_RE.fullmatch(path))
 
 
+def _valid_static_image_name(name: str) -> bool:
+    return name in _STATIC_IMAGE_VARIANT_NAMES
+
+
+@lru_cache(maxsize=32)
+def _render_static_webp_variant(name: str, width: int) -> bytes:
+    if width not in _IMAGE_VARIANT_WIDTHS or not _valid_static_image_name(name):
+        raise FileNotFoundError(name)
+    source_path = (_STATIC_IMAGE_ROOT / name).resolve()
+    if source_path.parent != _STATIC_IMAGE_ROOT.resolve() or not source_path.is_file():
+        raise FileNotFoundError(name)
+    return _render_webp_variant(source_path.read_bytes(), width)
+
+
 def _variant_storage_path(path: str, width: int) -> str:
     app_prefix, _, product_tail = path.partition("/products/")
     return f"{app_prefix}/product-variants/webp/{width}/{product_tail}.webp"
@@ -315,6 +341,20 @@ def _install_image_delivery(server_module) -> None:
 
         return Response(content=rendered, media_type="image/webp", headers={"Cache-Control": _IMMUTABLE_CACHE})
 
+    @app.get("/api/static-image-variant/{width}/{name}")
+    async def _static_image_variant(width: int, name: str):
+        if width not in _IMAGE_VARIANT_WIDTHS or not _valid_static_image_name(name):
+            raise HTTPException(status_code=404, detail="Static image variant not found")
+        try:
+            rendered = await asyncio.to_thread(_render_static_webp_variant, name, width)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Static source image not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=415, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail="Static image variant generation failed") from exc
+        return Response(content=rendered, media_type="image/webp", headers={"Cache-Control": _STATIC_VARIANT_CACHE})
+
     @app.get("/api/social-preview/{path:path}")
     async def _social_preview(path: str):
         if not path.lower().endswith(".jpg"):
@@ -386,7 +426,7 @@ def _install_security_headers(server_module) -> None:
         if path.startswith("/api/files/"):
             storage_path = path.removeprefix("/api/files/")
             product_asset_request = _valid_product_path(storage_path)
-        elif path.startswith("/api/image-variant/"):
+        elif path.startswith("/api/image-variant/") or path.startswith("/api/static-image-variant/"):
             product_asset_request = True
 
         if product_asset_request and not _hotlink_referrer_allowed(request.headers.get("referer")):
