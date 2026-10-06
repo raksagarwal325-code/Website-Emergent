@@ -177,7 +177,7 @@ function App() {
           <RouteScopedEffects />
           <Header />
           <main className="flex-1">
-            <React.Suspense fallback={<div aria-hidden="true" className="min-h-[40vh]" />}>
+            <React.Suspense fallback={<div aria-hidden="true" className="min-h-[calc(100vh-5rem)]" />}>
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/catalog" element={<Catalog />} />
