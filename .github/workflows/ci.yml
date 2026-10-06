@@ -320,8 +320,37 @@ jobs:
           cat /tmp/samrat-quality-http.log || true
           exit 1
 
-      - name: Lighthouse CI — performance, accessibility, SEO
-        run: npx --yes @lhci/cli@0.15.x autorun --config=./lighthouserc.json
+      - name: Reset Lighthouse report directory
+        run: rm -rf .lighthouseci && mkdir -p .lighthouseci
+
+      - name: Lighthouse CI — mobile homepage (3 runs)
+        run: |
+          npx --yes @lhci/cli@0.15.x autorun --config=./lighthouserc.mobile.json
+          rm -rf /tmp/lhci-mobile
+          mkdir -p /tmp/lhci-mobile
+          find .lighthouseci -type f -name 'lhr-*.json' -exec cp {} /tmp/lhci-mobile/ \;
+          test "$(find /tmp/lhci-mobile -type f -name 'lhr-*.json' | wc -l)" -eq 3
+
+      - name: Reset Lighthouse reports before desktop profile
+        run: rm -rf .lighthouseci && mkdir -p .lighthouseci
+
+      - name: Lighthouse CI — desktop homepage (3 runs)
+        run: |
+          npx --yes @lhci/cli@0.15.x autorun --config=./lighthouserc.desktop.json
+          rm -rf /tmp/lhci-desktop
+          mkdir -p /tmp/lhci-desktop
+          find .lighthouseci -type f -name 'lhr-*.json' -exec cp {} /tmp/lhci-desktop/ \;
+          test "$(find /tmp/lhci-desktop -type f -name 'lhr-*.json' | wc -l)" -eq 3
+
+      - name: Restore mobile + desktop Lighthouse reports
+        run: |
+          rm -rf .lighthouseci
+          mkdir -p .lighthouseci/mobile .lighthouseci/desktop
+          cp /tmp/lhci-mobile/lhr-*.json .lighthouseci/mobile/
+          cp /tmp/lhci-desktop/lhr-*.json .lighthouseci/desktop/
+
+      - name: Gate median Lighthouse regressions
+        run: node scripts/lighthouse-regression-gate.js
 
       - name: Summarize Lighthouse performance bottlenecks
         if: always()

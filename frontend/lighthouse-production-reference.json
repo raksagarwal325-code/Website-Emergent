@@ -1,0 +1,17 @@
+{
+  "recordedAt": "2026-10-06",
+  "source": "verified production PageSpeed runs after PRs #494-#496",
+  "note": "Production reference is informational because CI runs against a local static build. Hard CI gates use separate environment-appropriate ceilings.",
+  "mobile": {
+    "performance": 0.74,
+    "lcpMs": 5300,
+    "tbtMs": 120,
+    "cls": 0
+  },
+  "desktop": {
+    "performance": 0.90,
+    "lcpMs": 1500,
+    "tbtMs": 50,
+    "cls": 0
+  }
+}
