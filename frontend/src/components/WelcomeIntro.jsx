@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { useSettings } from "../context/SettingsContext";
 import { api } from "../lib/api";
 import { BRAND_PLACEHOLDER_HERO } from "../lib/placeholders";
+import { imageVariantSrcSet, imageVariantUrl, staticImageVariantSrcSet, staticImageVariantUrl } from "../lib/imageVariants";
 
 const SESSION_KEY = "sge-welcome-intro-seen-v13";
 const PRELOAD_TIMEOUT_MS = 900;
@@ -26,6 +27,17 @@ function shuffleInPlace(items) {
     [items[i], items[j]] = [items[j], items[i]];
   }
   return items;
+}
+
+function introVariantUrl(src, width = 640) {
+  const staticVariant = staticImageVariantUrl(src, width);
+  if (staticVariant !== src) return staticVariant;
+  return imageVariantUrl(src, width);
+}
+
+function introVariantSrcSet(src) {
+  return staticImageVariantSrcSet(src, [320, 640, 960])
+    || imageVariantSrcSet(src, [320, 640, 960]);
 }
 
 export default function WelcomeIntro() {
@@ -52,8 +64,15 @@ export default function WelcomeIntro() {
       .map((src) => api.resolveImage(src)))]
       .filter(Boolean);
 
-    const shuffled = shuffleInPlace([...unique]);
-    const fallback = shuffled.length ? shuffled : [heroImage];
+    // Keep the two critical images deterministic so desktop does not randomly
+    // promote multi-megabyte masters to high priority. Remaining tiles still
+    // shuffle, preserving the varied luxury montage on each new session.
+    const first = unique.find((src) => src === heroImage) || unique[0];
+    const atelierCritical = unique.find((src) => /\/atelier-[1-5]\.png(?:[?#].*)?$/i.test(src));
+    const critical = [...new Set([first, atelierCritical].filter(Boolean))];
+    const rest = shuffleInPlace(unique.filter((src) => !critical.includes(src)));
+    const ordered = [...critical, ...rest];
+    const fallback = ordered.length ? ordered : [heroImage];
     const merged = [...fallback];
     while (merged.length < INTRO_IMAGE_COUNT) merged.push(...fallback);
     return merged.slice(0, INTRO_IMAGE_COUNT);
@@ -84,7 +103,9 @@ export default function WelcomeIntro() {
 
     let cancelled = false;
     const isMobile = window.matchMedia?.("(max-width: 767px)")?.matches;
-    const critical = isMobile ? [BRAND_PLACEHOLDER_HERO] : screenImages.slice(0, CRITICAL_IMAGE_COUNT);
+    const critical = isMobile
+      ? [BRAND_PLACEHOLDER_HERO]
+      : screenImages.slice(0, CRITICAL_IMAGE_COUNT).map((src) => introVariantUrl(src, 640));
     const preload = critical.map((src) => new Promise((resolve) => {
       const image = new Image();
       image.onload = resolve;
@@ -225,7 +246,7 @@ export default function WelcomeIntro() {
                       return (
                         <motion.div
                           key={`${rowIndex}-${index}-${src}`}
-                          className="relative h-full min-w-[34vw] overflow-hidden rounded-[2px] border border-white/[0.05] bg-black/20 md:min-w-[27vw]"
+                          className="relative h-full w-[34vw] shrink-0 overflow-hidden rounded-[2px] border border-white/[0.05] bg-black/20 md:w-[27vw]"
                           initial={{ opacity: 0, scale: 1.025 }}
                           animate={ready ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.025 }}
                           transition={{ duration: 0.6, delay: ready ? Math.min(index * 0.025, 0.12) : 0 }}
@@ -233,13 +254,22 @@ export default function WelcomeIntro() {
                           <picture>
                             <source media="(max-width: 767px)" srcSet={BRAND_PLACEHOLDER_HERO} />
                             <img
-                              src={critical || ready ? src : BRAND_PLACEHOLDER_HERO}
+                              src={critical || ready ? introVariantUrl(src, 640) : BRAND_PLACEHOLDER_HERO}
+                              srcSet={critical || ready ? introVariantSrcSet(src) : undefined}
+                              sizes="(max-width: 767px) 100vw, 27vw"
                               alt=""
-                              className="h-full w-full object-cover"
+                              className="absolute inset-0 h-full w-full object-cover"
                               draggable="false"
                               loading={critical ? "eager" : "lazy"}
                               decoding="async"
                               fetchPriority={critical ? "high" : "low"}
+                              onError={(event) => {
+                                const image = event.currentTarget;
+                                if (image.dataset.introFallback === "true") return;
+                                image.dataset.introFallback = "true";
+                                image.removeAttribute("srcset");
+                                image.src = src;
+                              }}
                             />
                           </picture>
                           <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/10" />
