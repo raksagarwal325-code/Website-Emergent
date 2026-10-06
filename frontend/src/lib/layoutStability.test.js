@@ -55,6 +55,17 @@ describe("layout stability guards", () => {
     expect(source).not.toContain('className="min-h-[40vh]"');
   });
 
+  test("mobile homepage hero skips hidden entrance motion under the welcome intro", () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, "..", "pages", "Home.jsx"),
+      "utf8",
+    );
+    expect(source).toContain('window.matchMedia("(max-width: 767px)")');
+    expect(source).toContain("const heroMotionDisabled = prefersReducedMotion || isMobile");
+    expect(source).toContain('initial={heroMotionDisabled ? false : "hidden"}');
+    expect(source).toContain("variants={heroMotionDisabled ? undefined : editorialGroup}");
+  });
+
   test("Google fonts avoid late metric swaps", () => {
     const source = fs.readFileSync(
       path.join(__dirname, "..", "..", "public", "index.html"),
