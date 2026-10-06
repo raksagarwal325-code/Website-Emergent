@@ -5,12 +5,10 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const profiles = {
   mobile: {
-    dir: path.join(root, ".lighthouseci", "mobile"),
     target: { performance: 0.70, lcpMs: 4000, tbtMs: 300, cls: 0.10 },
     hard: { performance: 0.50, lcpMs: 7500, tbtMs: 1200, cls: 0.15 },
   },
   desktop: {
-    dir: path.join(root, ".lighthouseci", "desktop"),
     target: { performance: 0.80, lcpMs: 2500, tbtMs: 300, cls: 0.10 },
     hard: { performance: 0.60, lcpMs: 4500, tbtMs: 800, cls: 0.15 },
   },
@@ -23,12 +21,24 @@ function median(values) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-function loadReports(dir) {
+function findReportFiles(dir) {
   if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter((name) => /^lhr-.*\.json$/i.test(name))
-    .map((name) => JSON.parse(fs.readFileSync(path.join(dir, name), "utf8")));
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return findReportFiles(full);
+    return /^lhr-.*\.json$/i.test(entry.name) ? [full] : [];
+  });
 }
+
+function reportProfile(report) {
+  const settings = report.configSettings || {};
+  if (settings.formFactor === "desktop") return "desktop";
+  if (settings.formFactor === "mobile") return "mobile";
+  return settings.screenEmulation?.mobile === false ? "desktop" : "mobile";
+}
+
+const allReports = findReportFiles(path.join(root, ".lighthouseci"))
+  .map((file) => JSON.parse(fs.readFileSync(file, "utf8")));
 
 function metrics(report) {
   return {
@@ -49,7 +59,7 @@ let failed = false;
 const summary = {};
 
 for (const [profile, config] of Object.entries(profiles)) {
-  const reports = loadReports(config.dir);
+  const reports = allReports.filter((report) => reportProfile(report) === profile);
   if (reports.length < 3) {
     console.error(`::error::${profile}: expected 3 Lighthouse reports, found ${reports.length}`);
     failed = true;
