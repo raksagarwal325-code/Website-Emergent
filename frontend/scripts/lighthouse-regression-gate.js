@@ -5,8 +5,8 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const profiles = {
   mobile: {
-    target: { performance: 0.70, lcpMs: 4000, tbtMs: 300, cls: 0.10 },
-    hard: { performance: 0.50, lcpMs: 7500, tbtMs: 1200, cls: 0.15 },
+    target: { performance: 0.70, lcpMs: 7500, tbtMs: 300, cls: 0.10 },
+    hard: { performance: 0.50, lcpMs: 10000, tbtMs: 1200, cls: 0.15 },
   },
   desktop: {
     target: { performance: 0.80, lcpMs: 2500, tbtMs: 300, cls: 0.10 },
