@@ -191,8 +191,14 @@ export default function VariantFamiliesAdmin() {
       {suggestions.length > 0 && (
         <details ref={suggestionsRef} className="border border-white/10 p-5" open={!families.length}>
           <summary className="cursor-pointer text-xs uppercase tracking-[0.22em] text-[#D4AF37]"><Sparkles size={14} className="inline mr-2" />Name-based suggestions ({suggestions.length})</summary>
-          <div className="mt-4 grid gap-3">
-            {suggestions.slice(0, 50).map((suggestion) => <div key={suggestion.slug} className="border border-white/10 p-4 flex flex-wrap items-center justify-between gap-3"><div><div className="font-serif text-lg">{suggestion.name}</div><div className="text-xs text-white/40 mt-1">{suggestion.products.length} possible variants · {suggestion.products.map((p) => p.sku).join(", ")}</div></div><button onClick={() => reviewSuggestion(suggestion)} className="border border-white/20 hover:border-[#D4AF37] px-4 py-2 text-[10px] uppercase tracking-[0.18em]">Review group</button></div>)}
+          <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {suggestions.slice(0, 50).map((suggestion) => <article key={suggestion.slug} data-testid={`variant-suggestion-${suggestion.slug}`} className="border border-white/10 p-4 space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="font-serif text-lg">{suggestion.name}</div><div className="text-xs text-white/40 mt-1">{suggestion.products.length} possible variants · {suggestion.products.map((p) => p.sku).join(", ")}</div></div><button onClick={() => reviewSuggestion(suggestion)} className="border border-white/20 hover:border-[#D4AF37] px-4 py-2 text-[10px] uppercase tracking-[0.18em]">Review group</button></div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{suggestion.products.slice(0, 4).map((product) => {
+                const image = product.images?.[0] ? api.resolveImage(product.images[0]) : "";
+                return <div key={product.id} className="min-w-0"><div className="aspect-square bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{image ? <img src={image} alt={product.name} loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <span className="text-[9px] uppercase tracking-wider text-white/25">No image</span>}</div><div className="text-[10px] text-[#D4AF37] truncate mt-2">{product.sku}</div><div className="text-[10px] text-white/45 truncate">{product.name}</div><div className="text-[9px] text-white/30 truncate">{product.category}</div></div>;
+              })}</div>
+            </article>)}
           </div>
         </details>
       )}
