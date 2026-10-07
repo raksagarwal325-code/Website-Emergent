@@ -24,6 +24,17 @@ beforeEach(() => {
   mockApi.resolveImage.mockImplementation((value) => `https://example.com${value}`);
 });
 
+test("shows product images and details in each variant suggestion before review", async () => {
+  render(<VariantFamiliesAdmin />);
+
+  const suggestion = await screen.findByTestId("variant-suggestion-neelpushp");
+  expect(within(suggestion).getByRole("img", { name: "Neelpushp Amber Chandelier" })).toHaveAttribute("src", "https://example.com/amber.jpg");
+  expect(within(suggestion).getByRole("img", { name: "Neelpushp Clear Chandelier" })).toHaveAttribute("src", "https://example.com/clear.jpg");
+  expect(within(suggestion).getByText("SGE-CH-101")).toBeInTheDocument();
+  expect(within(suggestion).getByText("SGE-CH-102")).toBeInTheDocument();
+  expect(within(suggestion).getAllByText("Chandelier")).toHaveLength(2);
+});
+
 test("review shows variant images and a visible private approval action", async () => {
   const scrollIntoView = jest.fn();
   window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
