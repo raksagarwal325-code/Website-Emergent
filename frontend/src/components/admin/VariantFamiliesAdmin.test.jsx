@@ -91,3 +91,22 @@ test("can select or clear every filtered product in one action", async () => {
   expect(screen.getByTestId("variant-product-SGE-CH-102")).toHaveAttribute("aria-pressed", "false");
   expect(screen.getByTestId("variant-selected-count")).toHaveTextContent("0 exact products selected");
 });
+
+test("shows saved memberships and updates labels immediately after saving", async () => {
+  const onSaved = jest.fn();
+  mockApi.listAllProducts.mockResolvedValue([
+    { id: "amber", sku: "SGE-CH-101", name: "Neelpushp Amber Chandelier", tags: ["collection:neelpushp"], specs: { "Glass Colour": "Amber" } },
+    { id: "clear", sku: "SGE-CH-102", name: "Neelpushp Clear Chandelier", specs: { "Glass Colour": "Clear" } },
+  ]);
+  mockApi.adminGetSettings.mockResolvedValue({ homepage_content: {
+    collections_registry_version: 2, collections: [{ slug: "neelpushp", name: "Neelpushp" }], variant_families: [],
+  } });
+  render(<VariantFamiliesAdmin onSaved={onSaved} />);
+  const row = await screen.findByTestId("variant-product-SGE-CH-101");
+  expect(row).toHaveTextContent("Collection: Neelpushp");
+  expect(row).toHaveTextContent("Variant family: Not assigned");
+  fireEvent.click(screen.getByRole("button", { name: "Review group" }));
+  fireEvent.click(screen.getAllByRole("button", { name: "Approve reviewed family" })[0]);
+  await waitFor(() => expect(row).toHaveTextContent("Variant family: Neelpushp"));
+  expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ homepage_content: expect.objectContaining({ variant_families: [expect.objectContaining({ name: "Neelpushp" })] }) }));
+});

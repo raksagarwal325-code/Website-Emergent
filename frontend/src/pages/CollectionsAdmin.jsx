@@ -22,6 +22,8 @@ import {
 } from "../constants/collectionsRegistry";
 import { suggestCollections } from "../constants/collectionSuggestions";
 import VariantFamiliesAdmin from "../components/admin/VariantFamiliesAdmin";
+import ProductMemberships from "../components/admin/ProductMemberships";
+import { productMemberships } from "../lib/productMemberships";
 
 const CATEGORY_ORDER = [
   "Chandelier", "Floor Chandelier", "Table Chandelier", "Hanging Light",
@@ -137,6 +139,7 @@ export default function CollectionsAdmin() {
     () => suggestCollections(products, collections),
     [products, collections],
   );
+  const memberships = useMemo(() => productMemberships(products, settings), [products, settings]);
 
   const toggleSku = (sku) => setSelectedSkus((current) => {
     const next = new Set(current);
@@ -275,7 +278,7 @@ export default function CollectionsAdmin() {
     <div data-testid="collections-admin" className="max-w-7xl mx-auto px-6 py-12 space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4"><div><Link to="/admin" className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-white/50 hover:text-white mb-5"><ArrowLeft size={14} /> Admin dashboard</Link><div className="eyebrow mb-3">Catalogue merchandising</div><h1 className="font-serif text-4xl">Collection Manager</h1></div></div>
       <div className="flex gap-3 border-b border-white/10"><button onClick={() => setManagerMode("collections")} className="px-5 py-3 text-xs uppercase tracking-[0.2em] text-white/50">Design collections</button><button className="px-5 py-3 text-xs uppercase tracking-[0.2em] text-[#D4AF37] border-b border-[#D4AF37]">Variant families</button></div>
-      <VariantFamiliesAdmin />
+      <VariantFamiliesAdmin onSaved={setSettings} />
     </div>
   );
 
@@ -309,7 +312,7 @@ export default function CollectionsAdmin() {
             {showSuggestions && <div className="border-t border-white/10 p-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
               {suggestions.map((suggestion) => <article key={suggestion.slug} data-testid={`collection-suggestion-${suggestion.slug}`} className="border border-white/10 p-4 space-y-4">
                 <div className="flex items-start justify-between gap-3"><div><div className="font-serif text-xl">{suggestion.name}</div><div className="text-[10px] uppercase tracking-[0.16em] text-white/40 mt-1">{suggestion.products.length} products · Not live</div></div><button onClick={() => reviewSuggestion(suggestion)} className="border border-[#D4AF37]/60 text-[#D4AF37] px-3 py-2 text-[10px] uppercase tracking-[0.16em] hover:bg-[#D4AF37] hover:text-black">Review</button></div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{suggestion.products.slice(0, 4).map((product) => <div key={product.id} className="min-w-0"><div className="aspect-square bg-black/40 border border-white/10 overflow-hidden"><img src={api.resolveImage(product.images[0])} alt={product.name} loading="lazy" decoding="async" className="w-full h-full object-contain" /></div><div className="text-[10px] text-[#D4AF37] truncate mt-2">{product.sku}</div><div className="text-[10px] text-white/45 truncate">{product.name}</div><div className="text-[9px] text-white/30 truncate">{product.category}</div></div>)}</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{suggestion.products.slice(0, 4).map((product) => <div key={product.id} className="min-w-0"><div className="aspect-square bg-black/40 border border-white/10 overflow-hidden"><img src={api.resolveImage(product.images[0])} alt={product.name} loading="lazy" decoding="async" className="w-full h-full object-contain" /></div><div className="text-[10px] text-[#D4AF37] truncate mt-2">{product.sku}</div><div className="text-[10px] text-white/45 truncate">{product.name}</div><div className="text-[9px] text-white/30 truncate">{product.category}</div><ProductMemberships productId={product.id} memberships={memberships} /></div>)}</div>
               </article>)}
               {suggestions.length === 0 && <div className="xl:col-span-2 text-sm text-white/45 py-3">No safe suggestions found. Only repeated names among published products with images are suggested.</div>}
             </div>}
@@ -331,7 +334,7 @@ export default function CollectionsAdmin() {
               {visibleProducts.map((product) => {
                 const selected = selectedSkus.has(product.sku);
                 const image = product.images?.[0] ? api.resolveImage(product.images[0]) : "";
-                return <div key={product.id} data-testid={`collection-product-${product.sku}`} className="py-4 grid grid-cols-[36px_64px_1fr] md:grid-cols-[36px_72px_1fr_110px] gap-3 items-center"><button aria-label={`${selected ? "Remove" : "Add"} ${product.sku}`} onClick={() => toggleSku(product.sku)} className={`w-7 h-7 border flex items-center justify-center ${selected ? "border-[#D4AF37] bg-[#D4AF37] text-black" : "border-white/20"}`}>{selected ? <Check size={15} /> : null}</button><div className="h-16 md:h-[72px] bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">{image ? <img src={image} alt="" className="w-full h-full object-contain" /> : <span className="text-[9px] uppercase tracking-wider text-white/25">No image</span>}</div><div className="min-w-0"><div className="text-xs uppercase tracking-[0.18em] text-[#D4AF37] font-medium">{product.sku}</div><div className="font-serif text-lg truncate mt-1">{product.name}</div><div className="text-[10px] uppercase tracking-[0.16em] text-white/40 mt-1">{product.category} · {product.status === "published" ? "Published" : "Draft / Needs review"}</div></div>{selected ? <button title="Prefer in 5-card preview" onClick={() => toggleFeatured(product.sku)} className={`col-start-3 md:col-start-auto inline-flex items-center justify-start md:justify-center gap-1 text-[10px] uppercase tracking-[0.14em] ${featuredSkus.has(product.sku) ? "text-[#D4AF37]" : "text-white/35"}`}><Star size={14} fill={featuredSkus.has(product.sku) ? "currentColor" : "none"} /> Featured</button> : <div />}</div>;
+                return <div key={product.id} data-testid={`collection-product-${product.sku}`} className="py-4 grid grid-cols-[36px_64px_1fr] md:grid-cols-[36px_72px_1fr_110px] gap-3 items-center"><button aria-label={`${selected ? "Remove" : "Add"} ${product.sku}`} onClick={() => toggleSku(product.sku)} className={`w-7 h-7 border flex items-center justify-center ${selected ? "border-[#D4AF37] bg-[#D4AF37] text-black" : "border-white/20"}`}>{selected ? <Check size={15} /> : null}</button><div className="h-16 md:h-[72px] bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">{image ? <img src={image} alt="" className="w-full h-full object-contain" /> : <span className="text-[9px] uppercase tracking-wider text-white/25">No image</span>}</div><div className="min-w-0"><div className="text-xs uppercase tracking-[0.18em] text-[#D4AF37] font-medium">{product.sku}</div><div className="font-serif text-lg truncate mt-1">{product.name}</div><div className="text-[10px] uppercase tracking-[0.16em] text-white/40 mt-1">{product.category} · {product.status === "published" ? "Published" : "Draft / Needs review"}</div><ProductMemberships productId={product.id} memberships={memberships} /></div>{selected ? <button title="Prefer in 5-card preview" onClick={() => toggleFeatured(product.sku)} className={`col-start-3 md:col-start-auto inline-flex items-center justify-start md:justify-center gap-1 text-[10px] uppercase tracking-[0.14em] ${featuredSkus.has(product.sku) ? "text-[#D4AF37]" : "text-white/35"}`}><Star size={14} fill={featuredSkus.has(product.sku) ? "currentColor" : "none"} /> Featured</button> : <div />}</div>;
               })}
             </div>
           </div>
