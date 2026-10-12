@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Search, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../lib/api";
+import { productMemberships } from "../../lib/productMemberships";
+import ProductMemberships from "./ProductMemberships";
 import {
   getVariantFamilies,
   normalizeVariantSlug,
@@ -17,7 +19,7 @@ const AXIS_OPTIONS = [
   { key: "use", label: "Form / use" },
 ];
 
-export default function VariantFamiliesAdmin() {
+export default function VariantFamiliesAdmin({ onSaved }) {
   const [products, setProducts] = useState([]);
   const [settings, setSettings] = useState(null);
   const [families, setFamilies] = useState([]);
@@ -66,6 +68,7 @@ export default function VariantFamiliesAdmin() {
   }, [selectedSlug, families, products]);
 
   const suggestions = useMemo(() => suggestVariantFamilies(products, families), [products, families]);
+  const memberships = useMemo(() => productMemberships(products, settings), [products, settings]);
   const categories = useMemo(() => Array.from(new Set(products.map((p) => p.category).filter(Boolean))).sort(), [products]);
   const visibleProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -147,6 +150,7 @@ export default function VariantFamiliesAdmin() {
       await api.updateSettings(nextSettings);
       setSettings(nextSettings);
       setFamilies(next);
+      onSaved?.(nextSettings);
       setSelectedSlug(slug);
       setReviewingSuggestion("");
       toast.success(`Variant family saved · ${selectedIds.size} products linked`);
@@ -167,6 +171,7 @@ export default function VariantFamiliesAdmin() {
       await api.updateSettings(nextSettings);
       setSettings(nextSettings);
       setFamilies(next);
+      onSaved?.(nextSettings);
       setSelectedSlug(next[0]?.slug || "");
       if (!next.length) startNew();
       toast.success("Variant family deleted; catalogue products were unchanged");
@@ -196,7 +201,7 @@ export default function VariantFamiliesAdmin() {
               <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="font-serif text-lg">{suggestion.name}</div><div className="text-xs text-white/40 mt-1">{suggestion.products.length} possible variants · {suggestion.products.map((p) => p.sku).join(", ")}</div></div><button onClick={() => reviewSuggestion(suggestion)} className="border border-white/20 hover:border-[#D4AF37] px-4 py-2 text-[10px] uppercase tracking-[0.18em]">Review group</button></div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{suggestion.products.slice(0, 4).map((product) => {
                 const image = product.images?.[0] ? api.resolveImage(product.images[0]) : "";
-                return <div key={product.id} className="min-w-0"><div className="aspect-square bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{image ? <img src={image} alt={product.name} loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <span className="text-[9px] uppercase tracking-wider text-white/25">No image</span>}</div><div className="text-[10px] text-[#D4AF37] truncate mt-2">{product.sku}</div><div className="text-[10px] text-white/45 truncate">{product.name}</div><div className="text-[9px] text-white/30 truncate">{product.category}</div></div>;
+                return <div key={product.id} className="min-w-0"><div className="aspect-square bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{image ? <img src={image} alt={product.name} loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <span className="text-[9px] uppercase tracking-wider text-white/25">No image</span>}</div><div className="text-[10px] text-[#D4AF37] truncate mt-2">{product.sku}</div><div className="text-[10px] text-white/45 truncate">{product.name}</div><div className="text-[9px] text-white/30 truncate">{product.category}</div><ProductMemberships productId={product.id} memberships={memberships} /></div>;
               })}</div>
             </article>)}
           </div>
@@ -228,7 +233,7 @@ export default function VariantFamiliesAdmin() {
                 <button type="button" onClick={clearVisibleProducts} disabled={!visibleProducts.some((product) => selectedIds.has(product.id))} className="border border-white/20 px-4 py-2 text-[10px] uppercase tracking-[0.16em] text-white/55 disabled:opacity-35">Clear shown</button>
               </div>
             </div>
-            <div data-testid="variant-product-list" className="max-h-[60vh] overflow-auto divide-y divide-white/10">{visibleProducts.map((product) => { const selected = selectedIds.has(product.id); const image = product.images?.[0] ? api.resolveImage(product.images[0]) : ""; return <button key={product.id} type="button" aria-pressed={selected} data-testid={`variant-product-${product.sku}`} onClick={() => toggle(product.id)} className="w-full text-left py-3 grid grid-cols-[30px_56px_1fr] gap-3 items-center"><span className={`w-6 h-6 border flex items-center justify-center ${selected ? "bg-[#D4AF37] border-[#D4AF37] text-black" : "border-white/20"}`}>{selected && <Check size={14} />}</span><span className="w-14 h-14 bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{image ? <img src={image} alt="" loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <span className="text-[8px] uppercase tracking-wider text-white/25">No image</span>}</span><span className="min-w-0"><span className="block text-[10px] uppercase tracking-[0.15em] text-[#D4AF37]">{product.sku}</span><span className="block font-serif text-base truncate mt-1">{product.name}</span><span className="block text-[10px] uppercase tracking-[0.15em] text-white/40">{product.category} · {product.status === "published" ? "Published" : "Draft / Needs review"}</span></span></button>; })}</div>
+            <div data-testid="variant-product-list" className="max-h-[60vh] overflow-auto divide-y divide-white/10">{visibleProducts.map((product) => { const selected = selectedIds.has(product.id); const image = product.images?.[0] ? api.resolveImage(product.images[0]) : ""; return <button key={product.id} type="button" aria-pressed={selected} data-testid={`variant-product-${product.sku}`} onClick={() => toggle(product.id)} className="w-full text-left py-3 grid grid-cols-[30px_56px_1fr] gap-3 items-center"><span className={`w-6 h-6 border flex items-center justify-center ${selected ? "bg-[#D4AF37] border-[#D4AF37] text-black" : "border-white/20"}`}>{selected && <Check size={14} />}</span><span className="w-14 h-14 bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">{image ? <img src={image} alt="" loading="lazy" decoding="async" className="w-full h-full object-contain" /> : <span className="text-[8px] uppercase tracking-wider text-white/25">No image</span>}</span><span className="min-w-0"><span className="block text-[10px] uppercase tracking-[0.15em] text-[#D4AF37]">{product.sku}</span><span className="block font-serif text-base truncate mt-1">{product.name}</span><span className="block text-[10px] uppercase tracking-[0.15em] text-white/40">{product.category} · {product.status === "published" ? "Published" : "Draft / Needs review"}</span><ProductMemberships productId={product.id} memberships={memberships} /></span></button>; })}</div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5"><div className="text-xs text-white/40">Saving links products only; it never merges, renames or deletes them.</div><div className="flex gap-3">{selectedSlug && <button disabled={saving} onClick={remove} className="border border-red-400/40 text-red-300 px-5 py-3 text-xs uppercase tracking-[0.18em]"><Trash2 size={14} className="inline mr-2" />Delete family</button>}<button disabled={saving || selectedIds.size < 2 || selectedAxes.size < 1} onClick={save} className="bg-[#D4AF37] text-black px-7 py-3 text-xs uppercase tracking-[0.2em] disabled:opacity-50">{saving ? "Saving…" : reviewingSuggestion ? "Approve reviewed family" : "Save family"}</button></div></div>

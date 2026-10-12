@@ -84,6 +84,19 @@ test("shows product thumbnail, prominent SKU and publication state", async () =>
   );
 });
 
+test("shows both approved assignments without promoting private collection tags", async () => {
+  mockApi.adminGetSettings.mockResolvedValue({ homepage_content: {
+    collections_registry_version: 2,
+    collections: [{ slug: "rajsri", name: "Rajsri" }],
+    variant_families: [{ slug: "rajsri-lamps", name: "Rajsri Lamps", product_ids: ["product-rajsri", "another-lamp"] }],
+  } });
+  render(<MemoryRouter><CollectionsAdmin /></MemoryRouter>);
+  const row = await screen.findByTestId("collection-product-SGE-TL-057");
+  expect(row).toHaveTextContent("Collection: Rajsri");
+  expect(row).toHaveTextContent("Variant family: Rajsri Lamps");
+  expect(mockApi.updateSettings).not.toHaveBeenCalled();
+});
+
 test("keeps suggested collections private while showing images and SKUs for review", async () => {
   mockApi.listAllProducts.mockResolvedValue([
     {

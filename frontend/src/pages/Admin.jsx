@@ -20,6 +20,8 @@ import ImageSearchLearningAdmin from "../components/admin/ImageSearchLearningAdm
 import BulkCatalogueManager from "../components/BulkCatalogueManager";
 import InquiryQuotationBuilder from "../components/InquiryQuotationBuilder";
 import { LEGAL_DEFAULT_UPDATED_AT, serializeLegalDefault } from "../lib/legalContent";
+import { productMemberships } from "../lib/productMemberships";
+import ProductMemberships from "../components/admin/ProductMemberships";
 
 const emptyProduct = {
   name: "", sku: "", category: "", price: 0, compare_at_price: null, currency: "INR",
@@ -137,7 +139,7 @@ export default function Admin() {
       {tab === "image-search" && <ImageSearchLearningAdmin products={products} />}
 
       {tab === "products" && (
-        <ProductsAdmin products={products} categories={categories} refresh={refresh} setEditing={setEditing} editing={editing} />
+        <ProductsAdmin products={products} settings={settings} categories={categories} refresh={refresh} setEditing={setEditing} editing={editing} />
       )}
 
       {tab === "inquiries" && <InquiriesAdmin />}
@@ -164,7 +166,8 @@ export default function Admin() {
   );
 }
 
-function ProductsAdmin({ products, categories = [], refresh, editing, setEditing }) {
+function ProductsAdmin({ products, settings, categories = [], refresh, editing, setEditing }) {
+  const memberships = useMemo(() => productMemberships(products, settings), [products, settings]);
   const [form, setForm] = useState(emptyProduct);
   const [uploading, setUploading] = useState(false);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -385,6 +388,7 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
             <button type="button" onClick={() => setEditing(null)} className="text-white/50 hover:text-white"><X size={16} /></button>
           )}
         </div>
+        {editing && <ProductMemberships productId={editing.id} memberships={memberships} />}
         {editing && (
           <ProductDraftConversation
             product={form}
@@ -818,6 +822,7 @@ function ProductsAdmin({ products, categories = [], refresh, editing, setEditing
                   SKU · {p.sku}
                 </div>
               )}
+              <ProductMemberships productId={p.id} memberships={memberships} />
               {/* Compact meta line — Category is now surfaced as its own column
                   above (visible on md+), so this only echoes stock. */}
               <div className="text-xs text-white/50 md:hidden mt-0.5">
