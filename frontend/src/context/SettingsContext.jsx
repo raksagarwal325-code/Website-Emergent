@@ -11,7 +11,19 @@ export function SettingsProvider({ children }) {
 
   const refresh = useCallback(async () => {
     try {
-      const s = await api.getSettings();
+      const bootstrap = typeof window !== "undefined"
+        ? window.__SGE_PUBLIC_SETTINGS_PROMISE__
+        : null;
+      let s = null;
+      if (bootstrap && typeof bootstrap.then === "function") {
+        try {
+          s = await bootstrap;
+        } catch (_) {
+          // The HTML bootstrap is only a performance hint; preserve the
+          // existing API fallback if that early request fails.
+        }
+      }
+      if (!s) s = await api.getSettings();
       setSettings(normalizePublicSettings(s));
     } catch (e) {
       /* ignore */
