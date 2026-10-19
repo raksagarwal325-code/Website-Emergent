@@ -6,6 +6,47 @@
         <meta name="theme-color" content="#2A1125" />
         <meta name="description" content="Samrat Glass Emporium — premium handcrafted chandeliers, crystal lighting and decorative glass lamps from Firozabad. Since 1981." />
 
+        <!-- Homepage critical-path bootstrap: start the public settings request
+             during HTML parsing so React can reuse it, and make the current
+             desktop hero image discoverable earlier without hard-coding an
+             Admin-managed asset. This is intentionally homepage-only. -->
+        <script>
+          (function () {
+            try {
+              if (!window.location || window.location.pathname !== '/') return;
+              if (window.__SGE_PUBLIC_SETTINGS_PROMISE__) return;
+
+              var settingsPromise = fetch('/api/settings', {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+              }).then(function (response) {
+                if (!response.ok) throw new Error('settings bootstrap HTTP ' + response.status);
+                return response.json();
+              });
+
+              window.__SGE_PUBLIC_SETTINGS_PROMISE__ = settingsPromise;
+
+              if (window.matchMedia && window.matchMedia('(min-width: 768px)').matches) {
+                settingsPromise.then(function (settings) {
+                  var hero = settings && settings.hero_image;
+                  if (!hero || document.querySelector('link[data-sge-hero-preload]')) return;
+                  var link = document.createElement('link');
+                  link.rel = 'preload';
+                  link.as = 'image';
+                  link.href = new URL(hero, window.location.origin).href;
+                  link.setAttribute('fetchpriority', 'high');
+                  link.setAttribute('data-sge-hero-preload', 'true');
+                  document.head.appendChild(link);
+                }).catch(function () {
+                  /* React keeps its normal settings fallback path. */
+                });
+              }
+            } catch (e) {
+              /* Critical-path hints must never block the app. */
+            }
+          })();
+        </script>
+
         <!-- Google tag (gtag.js) — loaded ONCE. SPA page_view tracking is
              done manually from src/lib/analytics.js, so send_page_view is off.
              Honors browser Do Not Track. Excluding /admin is handled by the
