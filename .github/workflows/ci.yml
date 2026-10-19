@@ -245,7 +245,10 @@ jobs:
       - name: Production build + postbuild prerender
         env:
           PRERENDER_API_URL: "https://samratglass.com"
-          REACT_APP_BACKEND_URL: "https://samratglass.com"
+          # Lighthouse runs against the local quality server, which proxies
+          # anonymous /api GETs to production. This keeps browser requests
+          # same-origin like the real site and avoids false hotlink 403s.
+          REACT_APP_BACKEND_URL: "http://127.0.0.1:4173"
           CI: "false"
           GENERATE_SOURCEMAP: "false"
         run: yarn build
@@ -307,7 +310,7 @@ jobs:
       - name: Start local production server for quality gates
         run: |
           set -euo pipefail
-          nohup python3 -m http.server 4173 --bind 127.0.0.1 --directory build             >/tmp/samrat-quality-http.log 2>&1 &
+          nohup python3 scripts/lighthouse-ci-server.py >/tmp/samrat-quality-http.log 2>&1 &
           echo $! >/tmp/samrat-quality-http.pid
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error http://127.0.0.1:4173/ >/dev/null; then
