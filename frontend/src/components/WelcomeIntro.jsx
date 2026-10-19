@@ -9,7 +9,7 @@ import { imageVariantSrcSet, imageVariantUrl, staticImageVariantSrcSet, staticIm
 const SESSION_KEY = "sge-welcome-intro-seen-v13";
 const PRELOAD_TIMEOUT_MS = 900;
 const INTRO_DURATION_DESKTOP_MS = 4800;
-const INTRO_DURATION_MOBILE_MS = 3600;
+const INTRO_DURATION_MOBILE_MS = 4200;
 const CRITICAL_IMAGE_COUNT = 2;
 const INTRO_IMAGE_COUNT = 6;
 const FOCUSABLE_SELECTOR = [
