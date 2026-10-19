@@ -60,7 +60,7 @@ function ProjectCard({ project, index, slug, linkedProducts }) {
         </Link>
 
         {primaryProduct && (
-          <div className="mt-3 text-[10px] uppercase tracking-[0.16em] text-white/45 line-clamp-2">
+          <div className="mt-3 text-[10px] uppercase tracking-[0.16em] text-white/50 line-clamp-2">
             {primaryProduct.name} · {primaryProduct.sku}
           </div>
         )}
