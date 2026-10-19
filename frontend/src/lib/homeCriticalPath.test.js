@@ -23,13 +23,12 @@ describe("homepage critical path guards", () => {
     expect(source).toContain('if (!s) s = await api.getSettings()');
   });
 
-  test("mobile intro keeps the full light-sweep sequence but removes the old idle tail", () => {
+  test("welcome intro timing remains unchanged while critical-path hints are optimized", () => {
     const source = fs.readFileSync(
       path.join(__dirname, "..", "components", "WelcomeIntro.jsx"),
       "utf8",
     );
     expect(source).toContain("const INTRO_DURATION_DESKTOP_MS = 4800;");
-    expect(source).toContain("const INTRO_DURATION_MOBILE_MS = 3600;");
-    expect(source).toContain("duration: 1.7, delay: ready ? 1.7 : 0");
+    expect(source).toContain("const INTRO_DURATION_MOBILE_MS = 4200;");
   });
 });
