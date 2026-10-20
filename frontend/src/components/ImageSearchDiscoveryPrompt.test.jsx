@@ -20,7 +20,7 @@ beforeEach(() => {
 
 afterEach(() => jest.restoreAllMocks());
 
-test("appears near the bottom with premium photo-search guidance", () => {
+test("appears near the bottom with premium photo-search guidance", async () => {
   render(
     <MemoryRouter initialEntries={["/catalog"]}>
       <ImageSearchDiscoveryPrompt />
@@ -29,12 +29,12 @@ test("appears near the bottom with premium photo-search guidance", () => {
 
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   fireEvent.scroll(window);
-  expect(screen.getByRole("dialog", { name: "Search for a product using a photo" })).toHaveClass("image-search-discovery-card");
+  expect(await screen.findByRole("dialog", { name: "Search for a product using a photo" })).toHaveClass("image-search-discovery-card");
   expect(screen.getByText(/Seen a light you love/i)).toBeInTheDocument();
   expect(screen.getByText(/screenshot, room photo or saved image/i)).toBeInTheDocument();
 });
 
-test("dismisses for the browsing session and stays out of admin", () => {
+test("dismisses for the browsing session and stays out of admin", async () => {
   const { unmount } = render(
     <MemoryRouter initialEntries={["/catalog"]}>
       <ImageSearchDiscoveryPrompt />
@@ -42,7 +42,7 @@ test("dismisses for the browsing session and stays out of admin", () => {
   );
 
   fireEvent.scroll(window);
-  fireEvent.click(screen.getByRole("button", { name: "Dismiss photo search suggestion" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Dismiss photo search suggestion" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(window.sessionStorage.getItem("sge-image-search-discovery-dismissed:/catalog")).toBe("1");
 
@@ -59,7 +59,7 @@ test("dismisses for the browsing session and stays out of admin", () => {
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
-test("hands off to photo search without leaving the discovery card behind", () => {
+test("hands off to photo search without leaving the discovery card behind", async () => {
   render(
     <MemoryRouter initialEntries={["/collections"]}>
       <ImageSearchDiscoveryPrompt />
@@ -67,13 +67,13 @@ test("hands off to photo search without leaving the discovery card behind", () =
   );
 
   fireEvent.scroll(window);
-  fireEvent.click(screen.getByRole("button", { name: "Upload a photo" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Upload a photo" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(window.sessionStorage.getItem("sge-image-search-discovery-dismissed:/collections")).toBe("1");
 });
 
 
-test("waits for the true bottom of a long catalogue instead of appearing at a fixed browse depth", () => {
+test("waits for the true bottom of a long catalogue instead of appearing at a fixed browse depth", async () => {
   Object.defineProperty(document.documentElement, "scrollHeight", { configurable: true, value: 10000 });
   Object.defineProperty(window, "scrollY", { configurable: true, value: 1800 });
 
@@ -88,5 +88,5 @@ test("waits for the true bottom of a long catalogue instead of appearing at a fi
 
   Object.defineProperty(window, "scrollY", { configurable: true, value: 8700 });
   fireEvent.scroll(window);
-  expect(screen.getByRole("dialog", { name: "Search for a product using a photo" })).toBeInTheDocument();
+  expect(await screen.findByRole("dialog", { name: "Search for a product using a photo" })).toBeInTheDocument();
 });
