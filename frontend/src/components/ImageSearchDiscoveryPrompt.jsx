@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Camera, Sparkles, X } from "lucide-react";
 import { useLocation } from "react-router-dom";
-import CustomerImageSearch from "./CustomerImageSearch";
+const CustomerImageSearch = lazy(() => import("./CustomerImageSearch"));
 
 const DISCOVERY_KEY = "sge-image-search-discovery-dismissed";
 
@@ -119,7 +119,7 @@ export default function ImageSearchDiscoveryPrompt() {
         </p>
 
         <div className="mt-5">
-          <CustomerImageSearch variant="landing" onClose={dismiss} />
+          <Suspense fallback={null}><CustomerImageSearch variant="landing" onClose={dismiss} /></Suspense>
         </div>
 
         <div className="mt-3 flex items-center gap-2 text-[10px] leading-relaxed text-white/42">
