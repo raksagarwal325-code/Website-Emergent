@@ -8,10 +8,10 @@ describe("homepage critical path guards", () => {
       "utf8",
     );
     expect(html).toContain("window.location.pathname !== '/'");
+    expect(html).toContain("window.matchMedia('(min-width: 768px)').matches");
     expect(html).toContain("window.__SGE_PUBLIC_SETTINGS_PROMISE__");
     expect(html).toContain("fetch('/api/settings'");
     expect(html).toContain("data-sge-hero-preload");
-    expect(html).toContain("window.matchMedia('(min-width: 768px)').matches");
   });
 
   test("SettingsProvider reuses the HTML bootstrap with an API fallback", () => {
