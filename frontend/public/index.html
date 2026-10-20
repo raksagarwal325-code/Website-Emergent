@@ -14,6 +14,7 @@
           (function () {
             try {
               if (!window.location || window.location.pathname !== '/') return;
+              if (!window.matchMedia || !window.matchMedia('(min-width: 768px)').matches) return;
               if (window.__SGE_PUBLIC_SETTINGS_PROMISE__) return;
 
               var settingsPromise = fetch('/api/settings', {
@@ -26,21 +27,19 @@
 
               window.__SGE_PUBLIC_SETTINGS_PROMISE__ = settingsPromise;
 
-              if (window.matchMedia && window.matchMedia('(min-width: 768px)').matches) {
-                settingsPromise.then(function (settings) {
-                  var hero = settings && settings.hero_image;
-                  if (!hero || document.querySelector('link[data-sge-hero-preload]')) return;
-                  var link = document.createElement('link');
-                  link.rel = 'preload';
-                  link.as = 'image';
-                  link.href = new URL(hero, window.location.origin).href;
-                  link.setAttribute('fetchpriority', 'high');
-                  link.setAttribute('data-sge-hero-preload', 'true');
-                  document.head.appendChild(link);
-                }).catch(function () {
-                  /* React keeps its normal settings fallback path. */
-                });
-              }
+              settingsPromise.then(function (settings) {
+                var hero = settings && settings.hero_image;
+                if (!hero || document.querySelector('link[data-sge-hero-preload]')) return;
+                var link = document.createElement('link');
+                link.rel = 'preload';
+                link.as = 'image';
+                link.href = new URL(hero, window.location.origin).href;
+                link.setAttribute('fetchpriority', 'high');
+                link.setAttribute('data-sge-hero-preload', 'true');
+                document.head.appendChild(link);
+              }).catch(function () {
+                /* React keeps its normal settings fallback path. */
+              });
             } catch (e) {
               /* Critical-path hints must never block the app. */
             }
