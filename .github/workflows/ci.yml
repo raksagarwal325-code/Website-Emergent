@@ -250,8 +250,36 @@ jobs:
           # same-origin like the real site and avoids false hotlink 403s.
           REACT_APP_BACKEND_URL: "http://127.0.0.1:4173"
           CI: "false"
-          GENERATE_SOURCEMAP: "false"
+          GENERATE_SOURCEMAP: "true"
         run: yarn build
+
+      - name: Diagnose JavaScript bundle composition
+        run: |
+          set -euo pipefail
+          npx --yes source-map-explorer@2.5.3 'build/static/js/*.js' --json /tmp/bundle-composition.json >/tmp/source-map-explorer.log 2>&1 || {
+            cat /tmp/source-map-explorer.log
+            exit 1
+          }
+          node - <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('/tmp/bundle-composition.json', 'utf8'));
+          const rows = [];
+          for (const [bundle, info] of Object.entries(report.results || {})) {
+            const total = Number(info.bundleBytes || 0);
+            const mapped = Object.entries(info.files || {}).map(([name, bytes]) => ({
+              name, bytes: Number(bytes || 0)
+            })).sort((a,b) => b.bytes-a.bytes);
+            rows.push({bundle, total, mapped});
+          }
+          rows.sort((a,b)=>b.total-a.total);
+          console.log('=== BUNDLE COMPOSITION: TOP 12 BUNDLES ===');
+          for (const row of rows.slice(0,12)) {
+            console.log('\n' + row.bundle + ' — ' + row.total + ' bytes');
+            for (const item of row.mapped.slice(0,20)) {
+              console.log(String(item.bytes).padStart(10), item.name);
+            }
+          }
+          NODE
 
       - name: Assert build/index.html exists and is non-empty
         run: |
