@@ -22,7 +22,8 @@ const mockPdfDocument = () => ({
   roundedRect: jest.fn(), addImage: jest.fn(), setLineWidth: jest.fn(),
   setFont: jest.fn(), setFontSize: jest.fn(), text: jest.fn(),
   splitTextToSize: (value) => [value], addPage: jest.fn(),
-  setDrawColor: jest.fn(), line: jest.fn(), save: mockPdfSave,
+  setDrawColor: jest.fn(), line: jest.fn(), circle: jest.fn(),
+  getNumberOfPages: jest.fn(() => 1), setPage: jest.fn(), save: mockPdfSave,
   output: jest.fn(() => new Blob(["pdf"], { type: "application/pdf" })),
 });
 
