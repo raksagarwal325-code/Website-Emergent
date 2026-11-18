@@ -164,7 +164,7 @@ test("moves only the smallest necessary commercial suffix to a continuation page
   })).toEqual([[0, 1, 2, 3, 4, 5, 6], [7]]);
 });
 
-test("balances eight custom items across two schedule pages without adding a reference-only page", async () => {
+test("keeps eight custom items together, then readable closing and two schedule pages", async () => {
   const denseItems = Array.from({ length: 8 }, (_, index) => ({
     line_id: `custom-${index + 1}`,
     name: `Custom Product ${index + 1} with Confirmed Construction and Finish`,
@@ -190,13 +190,20 @@ test("balances eight custom items across two schedule pages without adding a ref
     tax_rate: 18, tax_amount: 14400, total: 94400, valid_until: "2026-10-10", terms: "", notes: "",
   }, { signatureDataUrl: null, stampDataUrl: null });
 
-  expect(doc.getNumberOfPages()).toBe(3);
+  expect(doc.getNumberOfPages()).toBe(4);
+  const renderedPages = doc.internal.pages.slice(1).map(page => page.join("\n"));
+  expect(renderedPages[0]).toContain("Payable Amount");
+  expect(renderedPages[1]).toContain("TERMS & CONDITIONS");
+  expect(renderedPages[1]).toContain("50% payment");
+  expect(renderedPages[2]).toContain("Customisation Schedule");
+  expect(renderedPages[1]).not.toContain("Customisation Schedule");
+  expect(renderedPages[3]).toContain("Design Reference");
   const output = Buffer.from(doc.output("arraybuffer"));
   expect(output.length).toBeGreaterThan(10000);
   if (process.env.QUOTATION_DENSE_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_DENSE_PDF_OUTPUT, output);
 });
 
-test("fits the detailed eight-item quotation into one commercial page and two measured schedule pages", async () => {
+test("keeps detailed eight-item products together, then closing and two measured schedule pages", async () => {
   const names = [
     "Shahi Six-Light Crystal Chandelier with Frosted Starburst Globe Glass Shades",
     "Single Wall Light Matching Shahi Chandelier - Custom Frosted Starburst Globe Shade",
@@ -233,7 +240,14 @@ test("fits the detailed eight-item quotation into one commercial page and two me
     total: 574660, valid_until: "2026-10-10", terms: "", notes: "",
   }, { signatureDataUrl: null, stampDataUrl: null });
 
-  expect(doc.getNumberOfPages()).toBe(3);
+  expect(doc.getNumberOfPages()).toBe(4);
+  const renderedPages = doc.internal.pages.slice(1).map(page => page.join("\n"));
+  expect(renderedPages[0]).toContain("Payable Amount");
+  expect(renderedPages[1]).toContain("TERMS & CONDITIONS");
+  expect(renderedPages[1]).toContain("50% payment");
+  expect(renderedPages[2]).toContain("Customisation Schedule");
+  expect(renderedPages[1]).not.toContain("Customisation Schedule");
+  expect(renderedPages[3]).toContain("Design Reference");
   const output = Buffer.from(doc.output("arraybuffer"));
   expect(output.length).toBeGreaterThan(10000);
   if (process.env.QUOTATION_COMPACT_PDF_OUTPUT) fs.writeFileSync(process.env.QUOTATION_COMPACT_PDF_OUTPUT, output);
@@ -252,7 +266,7 @@ test("merges repeated copies of the same design-reference image", () => {
   }));
 });
 
-test("renders the complete commercial quotation as a single A4 page", async () => {
+test("renders seven commercial products together with readable closing terms", async () => {
   const logo = fs.readFileSync(path.join(process.cwd(), "public/logo.jpeg")).toString("base64");
   const { doc, filename } = await createQuotationPdf({
     quote_number: "SGE-2026-0041",
@@ -283,7 +297,12 @@ test("renders the complete commercial quotation as a single A4 page", async () =
   });
 
   expect(filename).toBe("SGE-2026-0041.pdf");
-  expect(doc.getNumberOfPages()).toBe(1);
+  expect(doc.getNumberOfPages()).toBe(2);
+  const renderedPages = doc.internal.pages.slice(1).map(page => page.join("\n"));
+  expect(renderedPages[0]).toContain("Payable Amount");
+  expect(renderedPages[1]).toContain("TERMS & CONDITIONS");
+  expect(renderedPages[1]).toContain("50% payment");
+  
   const output = Buffer.from(doc.output("arraybuffer"));
   expect(output.length).toBeGreaterThan(20000);
   if (process.env.QUOTATION_PDF_OUTPUT) {
