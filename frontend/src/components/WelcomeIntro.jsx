@@ -10,6 +10,12 @@ const SESSION_KEY = "sge-welcome-intro-seen-v13";
 const PRELOAD_TIMEOUT_MS = 900;
 const INTRO_DURATION_DESKTOP_MS = 4800;
 const INTRO_DURATION_MOBILE_MS = 4200;
+// Diagnostic-only override, restricted to the isolated CI server.
+function diagnosticMobileIntro() {
+  if (typeof window === "undefined" || window.location.origin !== "http://127.0.0.1:4173" || !window.matchMedia?.("(max-width: 767px)")?.matches) return null;
+  const variant = new URLSearchParams(window.location.search).get("intro_diag");
+  return variant === "short" ? 1500 : variant === "off" ? 0 : null;
+}
 const CRITICAL_IMAGE_COUNT = 2;
 const INTRO_IMAGE_COUNT = 6;
 const FOCUSABLE_SELECTOR = [
@@ -84,7 +90,7 @@ export default function WelcomeIntro() {
   };
 
   useEffect(() => {
-    if (prefersReducedMotion || typeof window === "undefined") return undefined;
+    if (prefersReducedMotion || typeof window === "undefined" || diagnosticMobileIntro() === 0) return undefined;
 
     let alreadySeen = false;
     try {
@@ -138,7 +144,7 @@ export default function WelcomeIntro() {
     const timer = window.setTimeout(() => {
       try { window.sessionStorage.setItem(SESSION_KEY, "1"); } catch (_) {}
       setVisible(false);
-    }, isMobile ? INTRO_DURATION_MOBILE_MS : INTRO_DURATION_DESKTOP_MS);
+    }, isMobile ? (diagnosticMobileIntro() ?? INTRO_DURATION_MOBILE_MS) : INTRO_DURATION_DESKTOP_MS);
 
     return () => window.clearTimeout(timer);
   }, [visible]);
