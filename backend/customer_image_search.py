@@ -135,9 +135,24 @@ class CustomerImageSearch:
         revisions = {"/api/files/" + r["storage_path"]: str(r.get("public_sha256") or r.get("sha256") or r.get("updated_at") or "") for r in files}
         return {url: hashlib.sha256((INDEX_VERSION + url + revisions.get(url, "")).encode()).hexdigest() for url in urls}
 
-    async def rows(self, manifest, details=False):
+    async def rows(self, manifest, details=False, index=False):
+        query = {"_id": {"$in": list(manifest.values())}}
+        if index:
+            slim = {
+                "_id": 0, "url": 1, "pixels": 1, "retry_after": 1, "design_version": 1,
+                "vectors": {"$gt": [{"$size": {"$cond": [{"$isArray": "$vectors"}, "$vectors", []]}}, 0]},
+                "design_vectors": {"$cond": [
+                    {"$eq": [{"$type": "$design_vectors"}, "binData"]},
+                    {"$gt": [{"$binarySize": "$design_vectors"}, 0]}, False
+                ]},
+            }
+            try:
+                return await self.db.customer_visual_images.find(query, slim).to_list(None)
+            except Exception:
+                logger.warning("Slim index projection unavailable; falling back to full rows", exc_info=True)
+                details = True
         projection = {"_id": 0} if details else {"_id": 0, "design_vectors": 0}
-        return await self.db.customer_visual_images.find({"_id": {"$in": list(manifest.values())}}, projection).to_list(None)
+        return await self.db.customer_visual_images.find(query, projection).to_list(None)
 
     async def detail_rows(self, manifest, urls, candidates):
         ids = {m["product"]["id"] for m in candidates}
@@ -162,7 +177,7 @@ class CustomerImageSearch:
         if not urls:
             return
         manifest = await self.manifest(urls)
-        existing = {r["url"]: r for r in await self.rows(manifest, details=True)}
+        existing = {r["url"]: r for r in await self.rows(manifest, index=True)}
         # Only the worker downloads/loads model weights. Requests never do so.
         try:
             await asyncio.to_thread(self.encoder.load)
@@ -188,8 +203,12 @@ class CustomerImageSearch:
                 # Exact searches are usable as soon as an image is decoded.
                 await self.db.customer_visual_images.update_one({"_id": key}, {"$set": {"url": url, **hashes}}, upsert=True)
                 if self.encoder.session is not None:
-                    vectors = row.get("vectors") or await asyncio.to_thread(self.encoder.encode, image)
-                    await self.db.customer_visual_images.update_one({"_id": key}, {"$set": {"vectors": vectors}, "$unset": {"retry_after": ""}})
+                    existing_vectors = row.get("vectors")
+                    if existing_vectors is True:
+                        await self.db.customer_visual_images.update_one({"_id": key}, {"$unset": {"retry_after": ""}})
+                    else:
+                        vectors = existing_vectors or await asyncio.to_thread(self.encoder.encode, image)
+                        await self.db.customer_visual_images.update_one({"_id": key}, {"$set": {"vectors": vectors}, "$unset": {"retry_after": ""}})
                     details = await asyncio.to_thread(encode_details, self.encoder, image)
                     await self.db.customer_visual_images.update_one({"_id": key}, {"$set": {"design_vectors": details, "design_version": DESIGN_VERSION}})
             except Exception:
@@ -233,7 +252,7 @@ class CustomerImageSearch:
 
     async def status(self):
         urls = await self.search_urls()
-        rows = await self.rows(await self.manifest(urls), details=True)
+        rows = await self.rows(await self.manifest(urls), index=True)
         return {
             "total_images": len(urls),
             "exact_indexed": sum(bool(r.get("pixels")) for r in rows),
