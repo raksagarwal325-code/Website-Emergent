@@ -132,7 +132,7 @@ export default function RelatedProducts({ productId }) {
       .then(async (product) => {
         if (!active || !product?.category) return null;
         setCategory(product.category);
-        const items = await api.listAllProducts({ category: product.category, limit: 48 });
+        const items = await api.listAllProducts({ category: product.category, limit: 48, cache: true });
         return { product, items };
       })
       .then((result) => {
