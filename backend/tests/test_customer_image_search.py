@@ -400,3 +400,48 @@ async def test_admin_status_exposes_region_version_and_no_uploaded_photo(monkeyp
     assert status['region_search_version'] == REGION_VERSION
     assert status['last_region_search'] == service.last_region_search
     assert set(status['last_region_search']) == {'outcome', 'elapsed_seconds', 'coarse_regions', 'refined_regions'}
+
+
+@pytest.mark.asyncio
+async def test_slim_refresh_preserves_stored_vectors(monkeypatch):
+    from unittest.mock import Mock
+    import customer_image_search as module
+    images = SimpleNamespace(update_one=AsyncMock(), delete_many=AsyncMock())
+    state = SimpleNamespace(update_one=AsyncMock(return_value=SimpleNamespace(matched_count=1)))
+    service = CustomerImageSearch(SimpleNamespace(customer_visual_images=images, customer_visual_state=state), AsyncMock(return_value=photo()))
+    service.catalogue = AsyncMock(return_value=[{"id": "p", "images": ["/a"]}])
+    service.manifest = AsyncMock(return_value={"/a": "key"})
+    service.rows = AsyncMock(return_value=[{"url": "/a", "vectors": True}])
+    service.encoder = SimpleNamespace(session=True, load=Mock(), encode=Mock(side_effect=AssertionError("must preserve vectors")))
+    monkeypatch.setattr(module, "encode_details", lambda encoder, image: b"details")
+    await service.refresh()
+    service.rows.assert_awaited_once_with({"/a": "key"}, index=True)
+    service.encoder.encode.assert_not_called()
+    assert all("vectors" not in call.args[1].get("$set", {}) for call in images.update_one.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_slim_projection_on_real_mongo():
+    # CI supplies an ephemeral MongoDB. Use a unique temporary collection.
+    import os
+    import uuid
+    from motor.motor_asyncio import AsyncIOMotorClient
+    if not os.environ.get("CI"):
+        pytest.skip("temporary integration DB test is CI-only")
+    client = AsyncIOMotorClient("mongodb://127.0.0.1:27017")
+    collection = client["test_database"]["test_slim_" + uuid.uuid4().hex]
+    try:
+        await collection.insert_many([
+            {"_id": "a", "url": "/a", "vectors": [[1.0]], "design_vectors": b"details"},
+            {"_id": "b", "url": "/b", "vectors": [], "design_vectors": b""},
+            {"_id": "c", "url": "/c"},
+        ])
+        service = CustomerImageSearch(SimpleNamespace(customer_visual_images=collection), AsyncMock())
+        rows = {r["url"]: r for r in await service.rows({"/a": "a", "/b": "b", "/c": "c"}, index=True)}
+        assert rows["/a"]["vectors"] is True and rows["/a"]["design_vectors"] is True
+        for url in ("/b", "/c"):
+            assert rows[url]["vectors"] is False and rows[url]["design_vectors"] is False
+        assert (await collection.find_one({"_id": "a"}))["vectors"] == [[1.0]]
+    finally:
+        await collection.drop()
+        client.close()

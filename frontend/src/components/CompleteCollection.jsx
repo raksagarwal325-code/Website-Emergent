@@ -12,7 +12,7 @@ export default function CompleteCollection({ productId }) {
     let active = true;
     setState({ collection: null, products: [] });
     if (!productId) return () => { active = false; };
-    Promise.all([api.getProduct(productId), api.listAllProducts({ limit: 48 }), api.getSettings()])
+    Promise.all([api.getProduct(productId), api.listAllProducts({ limit: 48, cache: true }), api.getSettings()])
       .then(([product, items, settings]) => {
         if (!active) return;
         const registry = getRegisteredCollections(settings);

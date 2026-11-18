@@ -93,6 +93,15 @@ export const sanitizePublicProduct = (product) => {
 export const prepareListedProduct = (product, { raw = false } = {}) =>
   raw ? product : sanitizePublicProduct(product);
 
+// Opt-in, browser-local public recommendations cache. Never used by raw/admin lists.
+const LIST_ALL_CACHE = new Map();
+const LIST_ALL_TTL_MS = 120000;
+const LIST_ALL_MAX_KEYS = 24;
+function invalidateListCache(response) {
+  LIST_ALL_CACHE.clear();
+  return response.data;
+}
+
 export const api = {
   searchByImage: async (file, signal) => {
     const form = new FormData();
@@ -123,7 +132,7 @@ export const api = {
   ).then(r => r.data),
   authMe: () => client.get("/auth/me").then(r => r.data),
   authSession: (session_id) => client.post("/auth/session", { session_id }).then(r => r.data),
-  authLogout: () => client.post("/auth/logout").then(r => r.data),
+  authLogout: () => client.post("/auth/logout").then(invalidateListCache),
   listProducts: (params = {}) => client.get("/products", { params }).then(r => r.data),
   /**
    * Fetch every page of /products so callers that need the full catalogue
@@ -151,7 +160,27 @@ export const api = {
     // Admin editors need the stored SOP fields exactly as persisted, including
     // explicit confirmation fallbacks. Public consumers still receive the
     // sanitized specification set by default.
-    const { raw = false, ...requestParams } = params;
+    const { raw = false, cache = false, ...requestParams } = params;
+    if (cache && !raw && !requestParams.include_drafts &&
+        Object.keys(requestParams).every(k => k === "category" || k === "limit")) {
+      const now = Date.now();
+      for (const [k, entry] of LIST_ALL_CACHE) {
+        if (now - entry.at >= LIST_ALL_TTL_MS) LIST_ALL_CACHE.delete(k);
+      }
+      const key = JSON.stringify([requestParams.category || "", requestParams.limit || 48]);
+      const hit = LIST_ALL_CACHE.get(key);
+      if (hit) return hit.promise.then(rows => rows.slice());
+      const promise = api.listAllProducts(requestParams);
+      while (LIST_ALL_CACHE.size >= LIST_ALL_MAX_KEYS) {
+        LIST_ALL_CACHE.delete(LIST_ALL_CACHE.keys().next().value);
+      }
+      const entry = { at: now, promise };
+      LIST_ALL_CACHE.set(key, entry);
+      promise.catch(() => {
+        if (LIST_ALL_CACHE.get(key) === entry) LIST_ALL_CACHE.delete(key);
+      });
+      return promise.then(rows => rows.slice());
+    }
     const per = requestParams.limit || 48;
     // Hard safety cap so a runaway loop can never happen.
     for (let i = 0; i < 200; i++) {
@@ -177,26 +206,26 @@ export const api = {
     items: (r.data?.items || []).map(sanitizePublicProduct),
   })),
   getVariantFamilyIndex: () => client.get("/variant-family-index").then(r => r.data?.items || {}),
-  createProduct: (data) => client.post("/products", data).then(r => r.data),
+  createProduct: (data) => client.post("/products", data).then(invalidateListCache),
   updateProduct: (id, data, { reason = "", source = "admin" } = {}) => client.put(
     `/products/${id}`,
     data,
     { params: { change_reason: reason || "Product edited in Admin", change_source: source } },
-  ).then(r => r.data),
-  deleteProduct: (id) => client.delete(`/products/${id}`).then(r => r.data),
+  ).then(invalidateListCache),
+  deleteProduct: (id) => client.delete(`/products/${id}`).then(invalidateListCache),
   listProductVersions: (id, limit = 50) => client.get(
     `/admin/products/${id}/versions`, { params: { limit } },
   ).then(r => r.data),
   restoreProductVersion: (id, versionId, reason = "") => client.post(
     `/admin/products/${id}/versions/${versionId}/restore`, { reason },
-  ).then(r => r.data),
+  ).then(invalidateListCache),
   previewBulkProductUpdate: (ids, changes) => client.post(
     "/admin/products/bulk/preview", { ids, changes },
   ).then(r => r.data),
   applyBulkProductUpdate: (ids, changes, previewToken, reason = "") => client.post(
     "/admin/products/bulk/apply",
     { ids, changes, preview_token: previewToken, reason },
-  ).then(r => r.data),
+  ).then(invalidateListCache),
   categories: () => client.get("/products/categories").then(r => r.data),
 
   listReviews: (product_id) => client.get(`/reviews`, { params: { product_id } }).then(r => r.data),
