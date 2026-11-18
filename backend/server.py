@@ -6078,19 +6078,33 @@ async def ai_generate_products_bulk(payload: AIBulkRequest, admin: _AdminUser = 
     return {"results": results, "total": len(payload.images), "created": sum(1 for r in results if r["success"])}
 
 
+# Bound concurrent blocking object reads per backend worker.
+_public_file_slots = asyncio.Semaphore(4)
+
+
 @api.get("/files/{path:path}")
-async def serve_file(path: str):
+async def serve_file(path: str, request: Request):
     # Private/admin originals shouldn't leak — block direct fetches.
     if "/originals/" in f"/{path}":
         raise HTTPException(404, "Not found")
     record = await db.files.find_one({"storage_path": path}, {"_id": 0})
+    revision = str((record or {}).get("public_sha256") or (record or {}).get("sha256") or "")
+    cache_headers = {}
+    # Only use a validated content hash as an ETag; preserve existing cache policy.
+    if re.fullmatch(r"[a-fA-F0-9]{64}", revision):
+        etag = f'"{revision}"'
+        cache_headers["ETag"] = etag
+        sent = {t.strip().removeprefix("W/") for t in request.headers.get("if-none-match", "").split(",")}
+        if etag in sent:
+            return Response(status_code=304, headers=cache_headers)
     try:
-        data, content_type = get_object(path)
+        async with _public_file_slots:
+            data, content_type = await asyncio.to_thread(get_object, path)
     except Exception as e:
         logger.error(f"Fetch failed: {e}")
         raise HTTPException(404, "File not found")
     ct = (record or {}).get("content_type") or content_type
-    return Response(content=data, media_type=ct)
+    return Response(content=data, media_type=ct, headers=cache_headers)
 
 
 # --- Watermark admin endpoints ---
