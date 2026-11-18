@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { CUSTOM_PRODUCT_NOTE, clientFacingItemCustomisationText, clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationCustomisationScheduleText, quotationDefaultTerms, quotationItemCustomParts, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows, quotationTermsForPdf, planQuotationRowPages } from "./quotationPdf";
+import { PAYMENT_TERM, quotationAmountInWords, CUSTOM_PRODUCT_NOTE, clientFacingItemCustomisationText, clientFacingQuotationText, createQuotationPdf, mergeDesignReferencesForPdf, quotationCustomisationScheduleText, quotationDefaultTerms, quotationItemCustomParts, quotationPdfText, quotationReferenceCodesForItem, quotationSummaryRows, quotationTermsForPdf, planQuotationRowPages } from "./quotationPdf";
 
 const items = [
   ["Noorjharokha Chain-Suspended Diamond-Cut Glass Wall Lantern", "SGE-WL-089", 1, 6000],
@@ -17,7 +17,7 @@ const items = [
 
 test("omits nil commercial rows while retaining non-zero taxes", () => {
   const rows = quotationSummaryRows({ subtotal: 10000, discount: 0, shipping: 0, tax_rate: 18, tax_amount: 1800 });
-  expect(rows.map((row) => row.label)).toEqual(["Taxable Amount", "Taxes (18.00%)"]);
+  expect(rows.map((row) => row.label)).toEqual(["Taxable Amount", "GST (18%)"]);
 });
 
 test("prints discount and freight only when they have a value", () => {
@@ -37,15 +37,15 @@ test("explains freight included in a taxable quotation without double counting i
     ["Products Subtotal", 28000],
     ["Freight / Other Charges", 2000],
     ["Taxable Amount", 30000],
-    ["Taxes (18.00%)", 5400],
+    ["GST (18%)", 5400],
   ]);
   expect(quotationDefaultTerms(quote)).toContain("Freight / other charges of INR 2,000.00 are included in the quotation total.");
 });
 
 test("describes the actual GST treatment in default terms", () => {
-  expect(quotationDefaultTerms({ tax_rate: 18, tax_amount: 1800 })[0])
-    .toBe("GST is charged separately at 18.00% as shown above.");
-  expect(quotationDefaultTerms({ tax_rate: 0, tax_amount: 0 })[0])
+  expect(quotationDefaultTerms({ tax_rate: 18, tax_amount: 1800 })[1])
+    .toBe("GST is charged separately at 18% as shown above.");
+  expect(quotationDefaultTerms({ tax_rate: 0, tax_amount: 0 })[1])
     .toBe("No GST has been added to this quotation.");
 });
 
@@ -56,7 +56,7 @@ test("uses freight wording that matches each commercial case", () => {
     .toContain("Freight is payable separately by the client directly to the transporter and is not included in the quotation total.");
   const billed = { freight_mode: "added_to_bill", shipping: 750, tax_mode: "gst", subtotal: 10000, discount: 0, tax_rate: 18, tax_amount: 1935 };
   expect(quotationDefaultTerms(billed)).toContain("Freight of INR 750.00 is added separately to this quotation and included in the taxable value for GST.");
-  expect(quotationSummaryRows(billed).map((row) => row.label)).toEqual(["Products Subtotal", "Freight (Taxable)", "Taxable Amount", "Taxes (18.00%)"]);
+  expect(quotationSummaryRows(billed).map((row) => row.label)).toEqual(["Products Subtotal", "Freight (Taxable)", "Taxable Amount", "GST (18%)"]);
 });
 
 test("without-tax quotations omit tax wording and use a neutral amount label", () => {
@@ -339,4 +339,40 @@ test("adds a deterministic design-reference schedule for linked custom products"
   if (process.env.QUOTATION_REFERENCE_PDF_OUTPUT) {
     fs.writeFileSync(process.env.QUOTATION_REFERENCE_PDF_OUTPUT, output);
   }
+});
+
+test("approved payment terms are included once and explicit negotiated terms remain intact", () => {
+  expect(quotationDefaultTerms({})[0]).toBe(PAYMENT_TERM);
+  expect(quotationTermsForPdf({terms: "Special delivery arrangement."})[0]).toBe(PAYMENT_TERM);
+  expect(quotationTermsForPdf({terms: "100% payment before dispatch."})).not.toContain(PAYMENT_TERM);
+});
+
+test("Indian amount words retain rupees and paise", () => {
+  expect(quotationAmountInWords(736560.72)).toBe("SEVEN LAKH THIRTY SIX THOUSAND FIVE HUNDRED SIXTY RUPEES AND SEVENTY TWO PAISE ONLY");
+  expect(quotationAmountInWords(59000)).toBe("FIFTY NINE THOUSAND RUPEES ONLY");
+  expect(quotationAmountInWords(0)).toBe("ZERO RUPEES ONLY");
+});
+
+test("all commercial rows fit before moving the closing sections", () => {
+  expect(planQuotationRowPages({rowHeights:Array(27).fill(13.5),firstPageStart:86.5,continuationStart:40.5,closingHeight:0,pageBottom:286})).toEqual([
+    Array.from({length:14},(_,i)=>i),Array.from({length:13},(_,i)=>i+14)
+  ]);
+});
+
+test.each([1,5,10,20,27])("generates an actual PDF for %i items", async count => {
+  const sampleItems=Array.from({length:count},(_,i)=>({...items[i%items.length],line_id:"sample-"+i}));
+  const subtotal=sampleItems.reduce((sum,item)=>sum+item.line_total,0);
+  const {doc}=await createQuotationPdf({
+    quote_number:"SGE-TEST-"+count,created_at:"2026-11-18",valid_until:"2026-12-03",
+    customer_name:"Layout test",customer_phone:"+910000000000",billing_address:"Sample address",
+    items:sampleItems,subtotal,discount:0,shipping:0,tax_rate:18,tax_amount:subtotal*.18,total:subtotal*1.18,
+    terms:"",notes:""
+  },{signatureDataUrl:null,stampDataUrl:null});
+  const bytes=Buffer.from(doc.output("arraybuffer"));
+  expect(bytes.subarray(0,4).toString()).toBe("%PDF");
+  const raw=doc.internal.pages.slice(1).map(page=>page.join("\n")).join("\n");
+  expect(raw).toContain("Payable Amount");
+  expect(raw).toContain("50% payment");
+  for(let i=1;i<=doc.getNumberOfPages();i++) expect(raw).toContain("Page "+i+" of "+doc.getNumberOfPages());
+  if(process.env.QUOTATION_SAMPLE_DIR) fs.writeFileSync(path.join(process.env.QUOTATION_SAMPLE_DIR,"sample-"+count+".pdf"),bytes);
 });
