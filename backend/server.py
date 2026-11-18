@@ -6854,6 +6854,11 @@ async def root():
     return {"ok": True, "service": "lumiere-catalog"}
 
 
+from public_health import install_public_health  # noqa: E402
+
+install_public_health(api, db)
+
+
 # Customer-facing image search has its own service, model and Mongo collections.
 from customer_image_search import CustomerImageSearch, search_router  # noqa: E402
 from customer_visual_features import MAX_BYTES  # noqa: E402
