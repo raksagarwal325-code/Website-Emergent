@@ -137,7 +137,28 @@ const imageFormat = (dataUrl) => {
     : match[1].toLowerCase() === "webp" ? "WEBP" : "JPEG";
 };
 
-const dateText = (value) => new Date(value).toLocaleDateString("en-IN");
+const dateText = (value) => new Date(value).toLocaleDateString("en-IN", {
+  day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Kolkata",
+});
+export const PAYMENT_TERM = "50% payment at the time of booking and the remaining 50% before dispatch.";
+const percentageText = value => Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 4 });
+export const quotationAmountInWords = value => {
+  const amount = Math.round(Number(value) * 100);
+  if (!Number.isSafeInteger(amount) || amount < 0) throw new Error("Invalid quotation amount");
+  const units = ["Zero","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"];
+  const tens = ["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
+  const words = n => {
+    if (n < 20) return units[n];
+    if (n < 100) return tens[Math.floor(n/10)] + (n%10 ? " " + units[n%10] : "");
+    for (const [size,label] of [[10000000,"Crore"],[100000,"Lakh"],[1000,"Thousand"],[100,"Hundred"]]) {
+      if (n >= size) return words(Math.floor(n/size)) + " " + label + (n%size ? " " + words(n%size) : "");
+    }
+    return "";
+  };
+  const rupees = Math.floor(amount/100), paise = amount%100;
+  return (words(rupees) + (rupees === 1 ? " Rupee" : " Rupees") +
+    (paise ? " and " + words(paise) + (paise === 1 ? " Paisa" : " Paise") : "") + " Only").toUpperCase();
+};
 export const quotationPdfText = (value) => String(value || "")
   .replace(/[\u2010-\u2015\u2212\u00ad]/g, "-")
   .replace(/\u00a0/g, " ")
@@ -243,7 +264,7 @@ export const quotationDefaultTerms = (quote) => {
   const taxTerms = quote.tax_mode === "no_tax"
     ? []
     : [hasTax
-      ? `GST is charged separately at ${quoteMoney(quote.tax_rate)}% as shown above.`
+      ? `GST is charged separately at ${percentageText(quote.tax_rate)}% as shown above.`
       : "No GST has been added to this quotation."];
   const freightMode = quote.freight_mode || "legacy";
   const freightTerm = freightMode === "included_in_price"
@@ -256,6 +277,7 @@ export const quotationDefaultTerms = (quote) => {
           ? `Freight / other charges of INR ${quoteMoney(quote.shipping)} are included in the quotation total.`
           : "Freight, if applicable, will be confirmed before order confirmation.";
   return [
+    PAYMENT_TERM,
     ...taxTerms,
     "Delivery timeline will be confirmed upon order confirmation.",
     freightTerm,
@@ -269,9 +291,13 @@ export const quotationTermsForPdf = (quote) => {
   if (!quote.terms) return quotationDefaultTerms(quote);
   const customTerms = quote.terms.split(/\n+/).map((term) => term.trim()).filter(Boolean);
   const hasUnboxingRule = customTerms.some((term) => /unboxing\s+video/i.test(term));
-  return hasUnboxingRule
-    ? customTerms
-    : ["Replacement for transit breakage is accepted only when a continuous unboxing video is provided within 48 hours of delivery.", ...customTerms];
+  // Preserve deliberately supplied payment terms instead of creating contradictory conditions.
+  const hasPaymentTerms = customTerms.some(term => /\b(advance|booking|payment|balance|deposit)\b/i.test(term));
+  return [
+    ...(!hasPaymentTerms ? [PAYMENT_TERM] : []),
+    ...(!hasUnboxingRule ? ["Replacement for transit breakage is accepted only when a continuous unboxing video is provided within 48 hours of delivery."] : []),
+    ...customTerms,
+  ];
 };
 
 export const quotationSummaryRows = (quote) => {
@@ -283,7 +309,7 @@ export const quotationSummaryRows = (quote) => {
   if (shipping > 0) rows.push({ label: quote.freight_mode === "added_to_bill" ? "Freight (Taxable)" : "Freight / Other Charges", value: shipping });
   rows.push({ label: quote.tax_mode === "no_tax" ? "Quotation Amount" : "Taxable Amount", value: quote.subtotal - discount + shipping, bold: true });
   if (Number(quote.tax_rate) > 0 && Number(quote.tax_amount) > 0) {
-    rows.push({ label: `Taxes (${quoteMoney(quote.tax_rate)}%)`, value: quote.tax_amount });
+    rows.push({ label: `GST (${percentageText(quote.tax_rate)}%)`, value: quote.tax_amount });
   }
   return rows;
 };
@@ -309,7 +335,7 @@ export const planQuotationRowPages = ({ rowHeights, firstPageStart, continuation
       rowIndex += 1;
     }
 
-    if (rowIndex === rowHeights.length && pageRows.length > 1) {
+    if (closingHeight > 0 && rowIndex === rowHeights.length && pageRows.length > 1) {
       rowIndex -= 1;
       pageRows.pop();
     }
@@ -429,9 +455,14 @@ export const createQuotationPdf = async (quote, options = {}) => {
     doc.text("Quotation", right, 19.5, { align: "right" });
     setText(7.2, "bold", GOLD);
     doc.text(quote.quote_number, right, 25, { align: "right" });
+    line(right - 38, 27, right, 27, GOLD, 0.15);
     setText(6.2, "normal", [226, 216, 207]);
-    doc.text(`Issued ${dateText(quote.created_at)}`, right, 30, { align: "right" });
-    if (quote.valid_until) doc.text(`Valid until ${dateText(quote.valid_until)}`, right, 34.5, { align: "right" });
+    doc.text("Issued on", right - 38, 31);
+    doc.text(dateText(quote.created_at), right, 31, { align: "right" });
+    if (quote.valid_until) {
+      doc.text("Valid until", right - 38, 35.5);
+      doc.text(dateText(quote.valid_until), right, 35.5, { align: "right" });
+    }
   };
   const drawContinuationHeader = () => {
     fillRect(margin, margin, pageWidth - margin * 2, 18, NIGHT);
@@ -471,9 +502,9 @@ export const createQuotationPdf = async (quote, options = {}) => {
     fillRect(inner, y, usable, 8.5, WINE);
     setText(6.6, "bold", [255, 255, 255]);
     doc.text("No.", cols.serial, y + 5.5, { align: "center" });
-    doc.text("Product", cols.image, y + 5.5);
+    doc.text("Product", cols.image + 5.25, y + 5.5, { align: "center" });
     doc.text("Particulars", cols.item, y + 5.5);
-    doc.text("Qty", cols.qty, y + 5.5, { align: "right" });
+    doc.text("Qty", cols.qty, y + 5.5, { align: "center" });
     doc.text("Rate (INR)", cols.rate, y + 5.5, { align: "right" });
     doc.text("Amount (INR)", cols.amount, y + 5.5, { align: "right" });
     y += 8.5;
@@ -489,137 +520,144 @@ export const createQuotationPdf = async (quote, options = {}) => {
   drawTableHeader();
 
   const summaryRows = quotationSummaryRows(quote);
-  const totalsHeight = summaryRows.length * 6.2 + 9;
-  const footerHeight = 40;
-  const customItems = quote.items
-    .map((item, itemIndex) => ({ item, itemIndex }))
-    .filter(({ item }) => item.is_custom);
-  const closingHeight = quote.notes ? 17 : 11;
-  const closingBlockHeight = 3 + totalsHeight + 3 + footerHeight + closingHeight;
-  const rowData = quote.items.map((item) => {
-    const nameLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 82).slice(0, 3);
+  const customItems = quote.items.map((item, itemIndex) => ({ item, itemIndex })).filter(({ item }) => item.is_custom);
+  const pageBottom = pageHeight - 11;
+  const rowData = quote.items.map(item => {
+    setText(7.1, "bold", INK, "times");
+    const nameLines = doc.splitTextToSize(clientFacingQuotationText(quote, item.name), 82);
     const customParts = quotationItemCustomParts(quote, item, designReferences);
+    setText(6.1, "bold", MAROON);
     const customLines = customParts.length ? doc.splitTextToSize(customParts.join(" | "), 82) : [];
-    const rowHeight = Math.max(13.5, nameLines.length * 3.1 + (item.sku ? 4 : 1) + customLines.length * 3.35 + 3);
-    return { item, nameLines, customLines, rowHeight };
+    const textHeight = nameLines.length * 3.1 + (item.sku ? 3.1 : 0) + customLines.length * 3.1;
+    const rowHeight = Math.max(13.5, textHeight + 3);
+    return { item, nameLines, customLines, rowHeight, textHeight };
   });
   const commercialPages = planQuotationRowPages({
-    rowHeights: rowData.map(({ rowHeight }) => rowHeight),
-    firstPageStart: y,
-    continuationStart: 40.5,
-    closingHeight: closingBlockHeight,
-    pageBottom: pageHeight - 11,
+    rowHeights: rowData.map(({ rowHeight }) => rowHeight), firstPageStart: y,
+    continuationStart: 40.5, closingHeight: 0, pageBottom,
   });
   const commercialPageStarts = new Set(commercialPages.slice(1).map(([firstRow]) => firstRow));
-
-  rowData.forEach(({ item, nameLines, customLines, rowHeight }, index) => {
+  rowData.forEach(({ item, nameLines, customLines, rowHeight, textHeight }, index) => {
     if (commercialPageStarts.has(index)) startContinuationPage();
-    const linkedIndex = quote.items.findIndex((candidate) => candidate.line_id === item.body_reference_line_id);
+    const mid = y + rowHeight / 2;
+    const linkedIndex = quote.items.findIndex(candidate => candidate.line_id === item.body_reference_line_id);
     setText(6.8, "normal", MUTED);
-    doc.text(String(index + 1), cols.serial, y + 6.8, { align: "center" });
-    const placeholder = item.is_custom && linkedIndex >= 0
-      ? ["MATCHING", `ITEM ${linkedIndex + 1}`]
-      : item.is_custom ? ["CUSTOM", "DESIGN"] : ["IMAGE", "PENDING"];
-    addContainedImage(productImageData[index], cols.image, y + 1.3, 10.5, 10.5, placeholder);
+    doc.text(String(index + 1), cols.serial, mid + 0.85, { align: "center" });
+    const placeholder = item.is_custom && linkedIndex >= 0 ? ["MATCHING", `ITEM ${linkedIndex + 1}`] : item.is_custom ? ["CUSTOM","DESIGN"] : ["IMAGE","PENDING"];
+    addContainedImage(productImageData[index], cols.image, mid - 5.25, 10.5, 10.5, placeholder);
+    let textY = mid - textHeight / 2 + 2.35;
     setText(7.1, "bold", INK, "times");
-    doc.text(nameLines, cols.item, y + 4.8, { lineHeightFactor: 1.03 });
+    nameLines.forEach(name => { doc.text(name, cols.item, textY); textY += 3.1; });
     if (item.sku) {
       setText(5.5, "normal", MUTED);
-      doc.text(`SKU ${item.sku}`, cols.item, y + 5 + nameLines.length * 3.1);
+      doc.text(`SKU ${item.sku}`, cols.item, textY); textY += 3.1;
     }
     if (customLines.length) {
       setText(6.1, "bold", MAROON);
-      doc.text(customLines, cols.item, y + 5 + nameLines.length * 3.1 + (item.sku ? 3.3 : 0), { lineHeightFactor: 1.02 });
+      customLines.forEach(part => { doc.text(part, cols.item, textY); textY += 3.1; });
     }
     setText(7, "normal", INK);
-    doc.text(String(item.quantity), cols.qty, y + 6.8, { align: "right" });
-    doc.text(quoteMoney(item.unit_price), cols.rate, y + 6.8, { align: "right" });
+    doc.text(String(item.quantity), cols.qty, mid + 0.85, { align: "center" });
+    doc.text(quoteMoney(item.unit_price), cols.rate, mid + 0.85, { align: "right" });
     setText(7, "bold", INK);
-    doc.text(quoteMoney(item.line_total), cols.amount, y + 6.8, { align: "right" });
+    doc.text(quoteMoney(item.line_total), cols.amount, mid + 0.85, { align: "right" });
     y += rowHeight;
     line(inner, y, inner + usable, y, LINE, 0.16);
   });
+  const ensureRoom = height => {
+    if (y + height > pageBottom) startContinuationPage(false);
+  };
 
-  if (y + 3 + totalsHeight + 3 + footerHeight + closingHeight > pageHeight - 11) startContinuationPage(false);
-
+  // Extra financial rows retain their existing values and appear above the approved three-column bar.
+  const extras = summaryRows.filter(row => !row.bold && !row.label.startsWith("GST ("));
+  const taxable = summaryRows.find(row => row.bold);
+  const gst = summaryRows.find(row => row.label.startsWith("GST ("));
+  setText(7, "bold", INK);
+  const words = doc.splitTextToSize("AMOUNT IN WORDS: " + quotationAmountInWords(quote.total), usable - 4);
+  const totalsHeight = 3 + extras.length * 5 + 17 + 3 + words.length * 3.2;
+  ensureRoom(totalsHeight + 2);
   y += 3;
-  const totalsX = 112;
-  const totalsWidth = pageWidth - inner - totalsX;
-  fillRect(totalsX, y, totalsWidth, totalsHeight, CREAM, 1);
-  doc.setDrawColor(...LINE);
-  doc.setLineWidth(0.2);
-  doc.roundedRect(totalsX, y, totalsWidth, totalsHeight, 1, 1, "S");
-  let totalY = y + 5.2;
-  summaryRows.forEach((row) => {
-    setText(6.7, row.bold ? "bold" : "normal", row.bold ? INK : MUTED);
-    doc.text(row.label, totalsX + 4, totalY);
-    doc.text(quoteMoney(row.value), totalsX + totalsWidth - 4, totalY, { align: "right" });
-    totalY += 6.2;
+  extras.forEach(row => {
+    setText(6.7, "normal", MUTED);
+    doc.text(row.label, inner + 3, y + 3.5);
+    doc.text(quoteMoney(row.value), inner + usable - 3, y + 3.5, { align: "right" });
+    y += 5;
   });
-  const payableY = y + totalsHeight - 9;
-  fillRect(totalsX, payableY, totalsWidth, 9, WINE);
-  setText(7.2, "bold", [255, 255, 255]);
-  doc.text("Quotation Total", totalsX + 4, payableY + 5.8);
-  setText(8.2, "bold", GOLD, "times");
-  doc.text(`INR ${quoteMoney(quote.total)}`, totalsX + totalsWidth - 4, payableY + 5.8, { align: "right" });
+  const cells = [taxable, ...(gst ? [gst] : []), { label: "Payable Amount", value: quote.total }];
+  const cellWidth = usable / cells.length;
+  cells.forEach((cell,index) => {
+    const last = index === cells.length - 1, x = inner + index * cellWidth;
+    fillRect(x,y,cellWidth,17,last ? WINE : CREAM);
+    setText(7,"bold",last ? GOLD : MAROON);
+    doc.text(cell.label,x+cellWidth/2,y+5.5,{align:"center"});
+    setText(12,"bold",last ? [255,255,255] : INK,"times");
+    doc.text(quoteMoney(cell.value),x+cellWidth/2,y+12.5,{align:"center"});
+    if (index && !last) line(x,y+3,x,y+14,LINE,0.2);
+  });
+  y += 20;
+  setText(7,"bold",INK);
+  words.forEach(wordLine => { doc.text(wordLine,inner+2,y+2.5); y += 3.2; });
+  y += 4;
 
-  const footerTop = y + totalsHeight + 3;
-  fillRect(inner, footerTop, usable, footerHeight, CREAM, 1.5);
-  const footerGap = 3;
-  const bankWidth = 57;
-  const termsWidth = 68;
-  const signWidth = usable - bankWidth - termsWidth - footerGap * 2;
-  const bankX = inner + 4;
-  const termsX = inner + bankWidth + footerGap + 4;
-  const signX = inner + bankWidth + termsWidth + footerGap * 2;
-  line(inner + bankWidth + footerGap / 2, footerTop + 5, inner + bankWidth + footerGap / 2, footerTop + footerHeight - 5, LINE, 0.25);
-  line(signX - footerGap / 2, footerTop + 5, signX - footerGap / 2, footerTop + footerHeight - 5, LINE, 0.25);
-
-  setText(6.4, "bold", MAROON);
-  doc.text("BANK DETAILS", bankX, footerTop + 6);
+  // The bank and signature panel remains together; terms flow independently at readable size.
   const bankRows = [
-    ["Account", company.name],
-    ["Bank", `${company.bank}, ${company.branch} - ${company.accountType}`],
-    ["A/C No.", company.accountNumber],
-    ["IFSC", company.ifsc],
+    ["Account",company.name],["Bank",`${company.bank}, ${company.branch} - ${company.accountType}`],
+    ["A/C No.",company.accountNumber],["IFSC",company.ifsc],
   ];
-  let bankY = footerTop + 12;
-  bankRows.forEach(([label, value]) => {
-    setText(5.4, "bold", MUTED);
-    doc.text(label, bankX, bankY);
-    setText(5.7, "normal", INK);
-    doc.text(doc.splitTextToSize(value, bankWidth - 19).slice(0, 2), bankX + 14, bankY, { lineHeightFactor: 1.05 });
-    bankY += 6.5;
-  });
-
-  setText(6.4, "bold", MAROON);
-  doc.text("TERMS & CONDITIONS", termsX, footerTop + 6);
+  const half = usable / 2, bankX = inner + 4, signX = inner + half, signCenter = signX + half/2;
+  setText(7,"normal",INK);
+  const measuredBank = bankRows.map(([label,value]) => ({label,lines:doc.splitTextToSize(String(value || ""),half-27)}));
+  const bankHeight = Math.max(37, 12 + measuredBank.reduce((sum,row)=>sum+row.lines.length*3.5+1.5,0)+3);
   const terms = quotationTermsForPdf(quote);
-  setText(4.7, "normal", INK);
-  let termsY = footerTop + 11.5;
-  terms.slice(0, 6).forEach((term) => {
-    const lines = doc.splitTextToSize(`- ${term}`, termsWidth - 8);
-    doc.text(lines, termsX, termsY, { lineHeightFactor: 1.02 });
-    termsY += lines.length * 2.2 + 1;
+  setText(7,"normal",INK);
+  const termLines = terms.map(term=>doc.splitTextToSize(quotationPdfText(term).replace(/^[-•]\s*/,""),usable-12));
+  // Move the panel and terms together when they fit a fresh page, but never squeeze text.
+  const termsHeight = 10 + termLines.reduce((sum,lines)=>sum+lines.length*3.5+2,0);
+  ensureRoom(bankHeight + 5 + Math.min(termsHeight, 25));
+  if (bankHeight + 5 + termsHeight <= pageBottom - 32 && y + bankHeight + 5 + termsHeight > pageBottom) startContinuationPage(false);
+  const footerTop = y;
+  fillRect(inner,footerTop,usable,bankHeight,CREAM,1.5);
+  line(signX,footerTop+4,signX,footerTop+bankHeight-4,LINE,0.2);
+  setText(7.2,"bold",MAROON);
+  doc.text("BANK DETAILS",bankX,footerTop+6);
+  doc.text("AUTHORISED BY",signCenter,footerTop+6,{align:"center"});
+  let bankY = footerTop+12;
+  measuredBank.forEach(({label,lines})=>{
+    setText(6.5,"bold",MUTED); doc.text(label,bankX,bankY);
+    setText(7,"normal",INK);
+    lines.forEach((value,i)=>doc.text(value,bankX+19,bankY+i*3.5));
+    bankY += lines.length*3.5+1.5;
   });
-
-  const signCenter = signX + signWidth / 2;
-  setText(6.4, "bold", MAROON);
-  doc.text("AUTHORISED BY", signX + 3, footerTop + 6);
-  addFreeContainedImage(stampData, signX + 3, footerTop + 11, 16, 16);
-  addFreeContainedImage(signatureData, signX + 19, footerTop + 13, signWidth - 22, 12);
-  line(signX + 5, footerTop + 29, signX + signWidth - 5, footerTop + 29, MAROON, 0.25);
-  setText(7, "bold", INK, "times");
-  doc.text(company.signatory, signCenter, footerTop + 35, { align: "center" });
-  setText(5.6, "normal", MUTED);
-  doc.text("Authorised Signatory", signCenter, footerTop + 39.5, { align: "center" });
-
-  const closingY = footerTop + footerHeight + 6;
-  setText(9.5, "italic", MAROON, "times");
-  doc.text("Made in India. Handcrafted in Firozabad.", pageWidth / 2, closingY, { align: "center" });
-  if (quote.notes) {
-    setText(5.8, "normal", MUTED);
-    doc.text(doc.splitTextToSize(`Notes: ${quote.notes}`, usable - 15).slice(0, 2), pageWidth / 2, closingY + 5, { align: "center" });
+  if (stampData) addFreeContainedImage(stampData,signCenter-30,footerTop+9,15,13);
+  addFreeContainedImage(signatureData,signCenter-18,footerTop+9,36,13);
+  setText(7,"bold",INK,"times");
+  doc.text(company.signatory,signCenter,footerTop+27,{align:"center"});
+  setText(6.5,"normal",MUTED);
+  doc.text("Authorised Signatory",signCenter,footerTop+31.5,{align:"center"});
+  y += bankHeight+5;
+  const termsHeader = (continued=false)=>{
+    ensureRoom(12);
+    setText(7.2,"bold",MAROON); doc.text(continued ? "TERMS & CONDITIONS - CONTINUED" : "TERMS & CONDITIONS",inner+2,y+4);
+    y+=9;
+  };
+  termsHeader();
+  termLines.forEach(lines=>{
+    lines.forEach((value,i)=>{
+      if(y+4>pageBottom){startContinuationPage(false);termsHeader(true);}
+      setText(7,"normal",INK);
+      if(i===0){doc.setFillColor(...MAROON);doc.circle(inner+3,y+1.6,0.55,"F");}
+      doc.text(value,inner+6,y+2.5);y+=3.5;
+    });
+    y+=2;
+  });
+  ensureRoom(12);
+  setText(9.5,"italic",MAROON,"times");
+  doc.text("Made in India. Handcrafted in Firozabad.",pageWidth/2,y+6,{align:"center"});
+  y+=11;
+  if(quote.notes){
+    setText(6.5,"normal",MUTED);
+    const notes=doc.splitTextToSize(`Notes: ${quotationPdfText(quote.notes)}`,usable-10);
+    notes.forEach(note=>{ensureRoom(4);setText(6.5,"normal",MUTED);doc.text(note,inner+5,y+2.5);y+=3.5;});
   }
   pageFooter();
 
@@ -757,5 +795,11 @@ export const createQuotationPdf = async (quote, options = {}) => {
     pageFooter();
   }
 
+  const pageCount = doc.getNumberOfPages();
+  for (let page=1; page<=pageCount; page++) {
+    doc.setPage(page);
+    setText(5.5,"normal",MUTED);
+    doc.text(`Page ${page} of ${pageCount}`,pageWidth-inner,pageHeight-5,{align:"right"});
+  }
   return { doc, filename: `${quote.quote_number}.pdf` };
 };
