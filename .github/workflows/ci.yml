@@ -217,7 +217,24 @@ jobs:
       - name: Run Jest suite
         env:
           CI: "true"
-        run: yarn test --watchAll=false
+          QUOTATION_SAMPLE_DIR: ${{ runner.temp }}/quotation-samples
+          QUOTATION_CUSTOM_PDF_OUTPUT: ${{ runner.temp }}/quotation-samples/custom.pdf
+          QUOTATION_DENSE_PDF_OUTPUT: ${{ runner.temp }}/quotation-samples/dense.pdf
+          QUOTATION_COMPACT_PDF_OUTPUT: ${{ runner.temp }}/quotation-samples/compact.pdf
+          QUOTATION_PDF_OUTPUT: ${{ runner.temp }}/quotation-samples/commercial.pdf
+          QUOTATION_REFERENCE_PDF_OUTPUT: ${{ runner.temp }}/quotation-samples/references.pdf
+        run: |
+          mkdir -p "$QUOTATION_SAMPLE_DIR"
+          yarn test --watchAll=false
+
+      - name: Upload synthetic quotation PDF samples for visual approval
+        uses: actions/upload-artifact@v7
+        if: success()
+        with:
+          name: quotation-pdf-samples
+          path: ${{ runner.temp }}/quotation-samples/*.pdf
+          retention-days: 7
+          if-no-files-found: error
 
   frontend-build:
     name: Frontend production build + prerender
