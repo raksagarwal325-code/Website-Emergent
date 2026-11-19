@@ -611,10 +611,10 @@ export const createQuotationPdf = async (quote, options = {}) => {
   const terms = quotationTermsForPdf(quote);
   setText(7,"normal",INK);
   const termLines = terms.map(term=>doc.splitTextToSize(quotationPdfText(term).replace(/^[-•]\s*/,""),usable-12));
-  // Move the panel and terms together when they fit a fresh page, but never squeeze text.
-  const termsHeight = 10 + termLines.reduce((sum,lines)=>sum+lines.length*3.5+2,0);
-  ensureRoom(bankHeight + 5 + Math.min(termsHeight, 25));
-  if (bankHeight + 5 + termsHeight <= pageBottom - 32 && y + bankHeight + 5 + termsHeight > pageBottom) startContinuationPage(false);
+  // Fit the bank/signature panel wherever it fits, independently of the terms.
+  // The complete terms block stays together when a fresh page can hold it.
+  const termsHeight = 9 + termLines.reduce((sum,lines)=>sum+lines.length*3.5+2,0);
+  ensureRoom(bankHeight + 5);
   const footerTop = y;
   fillRect(inner,footerTop,usable,bankHeight,CREAM,1.5);
   line(signX,footerTop+4,signX,footerTop+bankHeight-4,LINE,0.2);
@@ -640,10 +640,13 @@ export const createQuotationPdf = async (quote, options = {}) => {
     setText(7.2,"bold",MAROON); doc.text(continued ? "TERMS & CONDITIONS - CONTINUED" : "TERMS & CONDITIONS",inner+2,y+4);
     y+=9;
   };
+  const termsAndTaglineHeight = termsHeight + 12;
+  if (termsAndTaglineHeight <= pageBottom - 32) ensureRoom(termsAndTaglineHeight);
   termsHeader();
-  termLines.forEach(lines=>{
+  termLines.forEach((lines, termIndex)=>{
     lines.forEach((value,i)=>{
-      if(y+4>pageBottom){startContinuationPage(false);termsHeader(true);}
+      const finalLine = termIndex === termLines.length - 1 && i === lines.length - 1;
+      if(y+(finalLine ? 17.5 : 4)>pageBottom){startContinuationPage(false);termsHeader(true);}
       setText(7,"normal",INK);
       if(i===0){doc.setFillColor(...MAROON);doc.circle(inner+3,y+1.6,0.55,"F");}
       doc.text(value,inner+6,y+2.5);y+=3.5;
