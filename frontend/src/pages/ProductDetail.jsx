@@ -14,6 +14,7 @@ import { trackViewItem } from "../lib/analytics";
 import { waActualProductLink, waProductLink } from "../lib/whatsapp";
 import { imgGuardProps, imgGuardStyle, containerGuardProps, containerGuardStyle } from "../lib/imageGuard";
 import { productPath } from "../lib/productUrl";
+import { productMetaDescription } from "../lib/productMetaDescription";
 import { productImageAlt } from "../lib/imageSeo";
 import { fallbackSlugFor, getCategoryByDbName } from "../lib/categories";
 import ProductVariants from "../components/ProductVariants";
@@ -285,7 +286,7 @@ export default function ProductDetail() {
         <>
           <SEO
             title={`${product.name} · Samrat Glass Emporium`}
-            description={(product.short_description || product.description || "").slice(0, 155) || `${product.name} — handcrafted in Firozabad by Samrat Glass Emporium.`}
+            description={productMetaDescription(product)}
             image={api.resolveImage(product.images?.[0])}
             path={productPath(product)}
             type="product"
