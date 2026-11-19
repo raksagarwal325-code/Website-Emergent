@@ -11,6 +11,7 @@ const mockApi = {
   searchByImage: jest.fn(),
   getImageSearchJob: jest.fn(),
   listStandaloneQuotations: jest.fn().mockResolvedValue([]),
+  searchQuotationCustomers: jest.fn(),
   createStandaloneQuotation: jest.fn(),
   createInquiryQuotation: jest.fn(),
   aiQuotationCustomisation: jest.fn(),
@@ -454,4 +455,39 @@ test("opens quotation history from the sticky header and deletes a saved quotati
   expect(await screen.findByText("No saved quotations yet.")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Saved quotations (0)" })).toBeInTheDocument();
   confirm.mockRestore();
+});
+
+test("returning customer search copies only contact fields into a new draft", async () => {
+  mockApi.searchQuotationCustomers.mockResolvedValueOnce([{ ...savedQuote, billing_address: "Test billing address", shipping_address: "Test shipping address", customer_gstin: "TESTGSTIN" }]);
+  render(<InquiryQuotationBuilder inquiry={{}} onClose={jest.fn()} />);
+  fireEvent.change(screen.getByLabelText("Search previous customers"), { target: { value: "Kishor" } });
+  fireEvent.click(screen.getByRole("button", { name: "Search customers" }));
+  fireEvent.click(await screen.findByRole("button", { name: /Kishor A Lalwani/ }));
+  expect(mockApi.searchQuotationCustomers).toHaveBeenCalledWith("Kishor");
+  expect(screen.getByLabelText("Customer name")).toHaveValue(savedQuote.customer_name);
+  expect(screen.getByLabelText("WhatsApp number")).toHaveValue(savedQuote.customer_phone);
+  expect(screen.getByLabelText("Billing address")).toHaveValue("Test billing address");
+  expect(screen.getByLabelText("Shipping address")).toHaveValue("Test shipping address");
+  expect(screen.queryByLabelText("Product 1")).not.toBeInTheDocument();
+  expect(mockApi.updateQuotation).not.toHaveBeenCalled();
+});
+
+test("duplicate is a separate draft and does not carry quotation identity", async () => {
+  mockApi.listStandaloneQuotations.mockResolvedValueOnce([savedQuote]);
+  const confirm = jest.spyOn(window, "confirm").mockReturnValue(true);
+  try {
+    render(<InquiryQuotationBuilder inquiry={{}} onClose={jest.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Saved quotations (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    expect(screen.getByLabelText("Customer name")).toHaveValue(savedQuote.customer_name);
+    expect(screen.getByLabelText("Product 1")).toHaveValue(savedQuote.items[0].name);
+    await waitFor(() => {
+      const draft = JSON.parse(sessionStorage.getItem("quotation-draft:standalone"));
+      expect(draft.editingId).toBeNull();
+      expect(draft.form.id).toBeUndefined();
+      expect(draft.form.quote_number).toBeUndefined();
+      expect(draft.form.created_at).toBeUndefined();
+    });
+    expect(mockApi.updateQuotation).not.toHaveBeenCalled();
+  } finally { confirm.mockRestore(); }
 });
