@@ -97,3 +97,20 @@ test("logout expires the Netlify cookie", async t => {
   const result = await gateway(request("/auth/logout", "POST", { origin, "x-requested-with": "fetch" }));
   assert.equal(result.headers.get("set-cookie"), "session_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
 });
+
+test("customer search is POST-only and requires same-origin CSRF protection", async t => {
+  for (const method of ["GET", "PUT", "DELETE"]) {
+    assert.equal((await gateway(request("/admin/quotations/customer-search", method))).status, 404);
+  }
+  assert.equal((await gateway(request("/admin/quotations/customer-search", "POST", { origin }))).status, 403);
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async (url, init) => {
+    assert.equal(url, "https://samratglass.com/api/admin/quotations/customer-search");
+    assert.equal(init.method, "POST");
+    return new Response("[]", { headers: { "content-type": "application/json" } });
+  };
+  const result = await gateway(request("/admin/quotations/customer-search", "POST", { origin, "x-requested-with": "fetch", "content-type": "application/json" }, '{"query":"Test"}'));
+  assert.equal(result.status, 200);
+  assert.equal(result.headers.get("cache-control"), "no-store");
+});
