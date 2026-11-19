@@ -108,6 +108,9 @@ const initialForm = (inquiry) => ({
   terms: "",
   notes: "",
 });
+const CUSTOMER_FIELDS = ["customer_name", "customer_email", "customer_phone", "billing_address", "shipping_address", "customer_gstin"];
+const customerDetails = (source) => Object.fromEntries(CUSTOMER_FIELDS.map(key => [key, source[key] || ""]));
+
 const quotationForm = (source = {}) => {
   const base = initialForm(source);
   const savedQuotation = Boolean(source.quote_number);
@@ -134,6 +137,9 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     try { sessionStorage.setItem(draftKey, JSON.stringify({ form, editingId })); } catch { /* Storage may be unavailable. */ }
   }, [draftKey, form, editingId]);
   const [savedQuotes, setSavedQuotes] = useState([]);
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [customerResults, setCustomerResults] = useState(null);
+  const [customerSearching, setCustomerSearching] = useState(false);
   const [savedQuote, setSavedQuote] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -414,6 +420,48 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
     }
   };
 
+  const searchCustomers = async () => {
+    if (customerQuery.trim().length < 2 || customerSearching) return;
+    setCustomerSearching(true);
+    setCustomerResults(null);
+    try {
+      const rows = await api.searchQuotationCustomers(customerQuery.trim());
+      setCustomerResults(Array.isArray(rows) ? rows : []);
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not search previous customers"));
+    } finally {
+      setCustomerSearching(false);
+    }
+  };
+
+  const applyCustomer = (customer) => {
+    if (editingId || inquiry.id) return;
+    change(customerDetails(customer));
+    setCustomerQuery("");
+    setCustomerResults(null);
+    toast.success("Customer details copied to the new quotation");
+  };
+
+  const startFromQuote = (quote, copyItems = false) => {
+    if (!window.confirm(copyItems
+      ? "Create a separate quotation from this copy? Unsaved draft changes will be replaced. Review all prices and terms before saving."
+      : "Start a separate quotation for this customer? Unsaved draft changes will be replaced.")) return;
+    const base = initialForm({});
+    const source = quotationForm(quote);
+    // Copy only recognised draft fields, never quote ID, number, status, dates or bank/signature snapshots.
+    const copied = copyItems ? Object.fromEntries(Object.keys(base).map(key => [key, source[key]])) : customerDetails(quote);
+    const next = { ...base, ...copied };
+    if (copyItems && next.tax_mode === "legacy") next.tax_mode = numberValue(next.tax_rate) > 0 ? "gst" : "no_tax";
+    if (copyItems && next.freight_mode === "legacy") { next.freight_mode = ""; next.shipping = 0; }
+    setForm(next);
+    setEditingId(null);
+    setSavedQuote(null);
+    setHistoryOpen(false);
+    setCustomerQuery("");
+    setCustomerResults(null);
+    toast.success(copyItems ? "Quotation copied — review before saving" : "New quotation for existing customer");
+  };
+
   const editQuote = (quote) => {
     setForm(quotationForm(quote));
     setEditingId(quote.id);
@@ -589,7 +637,7 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
               <div><div className="eyebrow">Quotation history</div><h3 id="quotation-history-title" className="font-serif text-2xl">Saved quotations</h3></div>
               <button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close quotation history" className="p-2 text-white/60 hover:text-white"><X size={20} /></button>
             </div>
-            <p className="mb-4 text-xs text-white/50">Edit, download, share or delete any saved quotation.</p>
+            <p className="mb-4 text-xs text-white/50">Edit, download, share or delete any saved quotation. For a returning customer, start a new quotation or duplicate an existing one.</p>
             {loadingHistory && <div className="text-xs text-white/40">Loading…</div>}
             {!loadingHistory && !savedQuotes.length && <div className="text-xs text-white/40">No saved quotations yet.</div>}
             <div className="space-y-3">{savedQuotes.map((quote) => <article key={quote.id} className="border border-white/10 p-4">
@@ -599,6 +647,8 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
                 <button type="button" onClick={() => download(quote)} className="text-[10px] uppercase tracking-wider text-white/65 hover:text-white">PDF</button>
                 <button type="button" disabled={saving || uploading} onClick={() => editQuote(quote)} className="text-[10px] uppercase tracking-wider text-[#D4AF37] disabled:opacity-40">Edit</button>
+                {!inquiry.id && <button type="button" disabled={saving || uploading} onClick={() => startFromQuote(quote)} className="text-[10px] uppercase tracking-wider text-[#D4AF37] disabled:opacity-40">New for customer</button>}
+                {!inquiry.id && <button type="button" disabled={saving || uploading} onClick={() => startFromQuote(quote, true)} className="text-[10px] uppercase tracking-wider text-[#D4AF37] disabled:opacity-40">Duplicate</button>}
                 <button type="button" onClick={() => shareOnWhatsApp(quote)} className="text-[10px] uppercase tracking-wider text-[#25D366]">WhatsApp</button>
                 <button type="button" disabled={deletingId === quote.id} onClick={() => deleteQuote(quote)} aria-label={`Delete quotation ${quote.quote_number}`} className="text-[10px] uppercase tracking-wider text-red-300 disabled:opacity-40">{deletingId === quote.id ? "Deleting…" : "Delete"}</button>
               </div>
@@ -608,6 +658,25 @@ export default function InquiryQuotationBuilder({ inquiry = {}, onClose, onSaved
 
         <div className="grid gap-6 p-5 lg:grid-cols-[1fr_300px]">
           <div className="space-y-6">
+            {!inquiry.id && !editingId && <section className="border border-[#D4AF37]/35 p-4">
+              <div className="eyebrow">Returning customer</div>
+              <p className="mt-2 text-xs text-white/60">Search saved customer details or enter a new customer below. Review the address and GSTIN for this quotation.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <input aria-label="Search previous customers" value={customerQuery} disabled={customerSearching} onChange={e => { setCustomerQuery(e.target.value); setCustomerResults(null); }} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); searchCustomers(); } }} placeholder="Name, company, phone, email or GSTIN" maxLength={120} className="min-w-0 flex-1 border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white" />
+                <button type="button" disabled={customerSearching || customerQuery.trim().length < 2} onClick={searchCustomers} className="border border-[#D4AF37]/40 px-3 py-2 text-xs text-[#D4AF37] disabled:opacity-40">{customerSearching ? "Searching…" : "Search customers"}</button>
+              </div>
+              {customerResults && <div className="mt-3 max-h-64 space-y-2 overflow-y-auto" aria-live="polite">
+                {!customerResults.length && <p className="text-xs text-white/55">No matching saved customer. Try another search or enter the details below.</p>}
+                {customerResults.map((customer, index) => <button type="button" key={index} onClick={() => applyCustomer(customer)} className="block w-full break-words border border-white/15 p-3 text-left hover:border-[#D4AF37]/60">
+                  <span className="block text-sm text-[#D4AF37]">{customer.customer_name || "Unnamed customer"}</span>
+                  <span className="block text-xs text-white/65">{[customer.customer_phone, customer.customer_email, customer.customer_gstin].filter(Boolean).join(" · ")}</span>
+                  <span className="block text-xs text-white/55">{customer.billing_address}</span>
+                  {customer.shipping_address && <span className="block text-xs text-white/55">Shipping: {customer.shipping_address}</span>}
+                  <span className="mt-1 block text-[10px] text-white/45">From {customer.quote_number}</span>
+                </button>)}
+                {customerResults.length === 30 && <p className="text-xs text-white/55">Showing the latest 30 matching details. Refine your search for more.</p>}
+              </div>}
+            </section>}
             <section className="grid gap-3 md:grid-cols-3">
               <label className="text-xs text-white/55">Customer name<input aria-label="Customer name" value={form.customer_name} onChange={(e) => change({ customer_name: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
               <label className="text-xs text-white/55">WhatsApp number<input aria-label="WhatsApp number" value={form.customer_phone} onChange={(e) => change({ customer_phone: e.target.value })} className="mt-1 w-full border border-white/15 bg-black/40 px-3 py-2.5 text-white" /></label>
