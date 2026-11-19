@@ -2916,6 +2916,47 @@ async def list_inquiry_quotations(inquiry_id: str, admin: _AdminUser = Depends(r
     return await _list_quotations(inquiry_id)
 
 
+class QuotationCustomerSearch(BaseModel):
+    query: str = Field(min_length=2, max_length=120)
+
+
+@api.post("/admin/quotations/customer-search")
+async def search_quotation_customers(
+    payload: QuotationCustomerSearch, response: Response,
+    admin: _AdminUser = Depends(require_admin),
+):
+    """Search historical customer snapshots without exposing quotation items or prices."""
+    response.headers["Cache-Control"] = "private, no-store"
+    query = payload.query.strip()
+    if len(query) < 2:
+        return []
+    fields = ("customer_name", "customer_email", "customer_phone", "billing_address",
+              "shipping_address", "customer_gstin")
+    literal = {"$regex": re.escape(query), "$options": "i"}
+    matches = [{field: literal} for field in fields]
+    digits = re.sub(r"\D", "", query)
+    if len(digits) >= 3 and re.fullmatch(r"[\d+() .-]+", query):
+        matches.append({"customer_phone": {"$regex": r"\D*".join(digits)}})
+    # Deduplicate identical snapshots, never merge people by name or phone alone.
+    # Search every saved quotation, not just the 100-row history screen.
+    pipeline = [
+        {"$match": {"$or": matches}},
+        {"$sort": {"created_at": -1, "id": -1}},
+        {"$group": {
+            "_id": {field: {"$ifNull": ["$" + field, ""]} for field in fields},
+            "quote_number": {"$first": "$quote_number"},
+            "created_at": {"$first": "$created_at"},
+        }},
+        {"$sort": {"created_at": -1, "quote_number": -1}},
+        {"$limit": 30},
+        {"$project": {
+            "_id": 0, "quote_number": 1, "created_at": 1,
+            **{field: "$_id." + field for field in fields},
+        }},
+    ]
+    return await db.quotations.aggregate(pipeline).to_list(30)
+
+
 @api.get("/admin/quotations")
 async def list_standalone_quotations(admin: _AdminUser = Depends(require_admin)):
     return await _list_quotations(None, all_quotes=True)

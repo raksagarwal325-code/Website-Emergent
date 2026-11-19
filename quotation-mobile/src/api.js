@@ -19,6 +19,7 @@ export const api = {
   authLogout: () => data(client.post("/auth/logout")),
   adminProductsExport: () => data(client.get("/admin/products/export")),
   listInquiryQuotations: (id) => data(client.get(`/admin/inquiries/${encodeURIComponent(id)}/quotations`)),
+  searchQuotationCustomers: (query) => data(client.post("/admin/quotations/customer-search", { query })),
   listStandaloneQuotations: () => data(client.get("/admin/quotations")),
   updateQuotation: (id, body) => data(client.put(`/admin/quotations/${encodeURIComponent(id)}`, body)),
   deleteQuotation: (id) => data(client.delete(`/admin/quotations/${encodeURIComponent(id)}`)),
