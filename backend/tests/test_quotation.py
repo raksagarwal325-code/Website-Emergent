@@ -426,3 +426,42 @@ def test_delete_quotation_repairs_latest_inquiry_reference():
             "latest_quotation_number": "SGE-2026-0001",
         }},
     )
+
+
+def test_customer_lookup_searches_historical_snapshots_without_mutating_quotes():
+    import ast
+    import asyncio
+    import re
+    from pathlib import Path
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+    from fastapi import Response
+
+    source = ast.parse((Path(__file__).resolve().parents[1] / "server.py").read_text())
+    node = next(n for n in source.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "search_quotation_customers")
+    # Check the registered route remains guarded by the same admin dependency.
+    assert "Depends(require_admin)" in ast.unparse(node.args)
+    node.decorator_list = []
+    results = [{"customer_name": "Test Client", "quote_number": "SGE-2026-0001"}]
+    cursor = SimpleNamespace(to_list=AsyncMock(return_value=results))
+    aggregate = Mock(return_value=cursor)
+    namespace = {
+        "re": re, "Response": Response, "QuotationCustomerSearch": SimpleNamespace,
+        "_AdminUser": object, "Depends": lambda guard: None,
+        "require_admin": lambda: None,
+        "db": SimpleNamespace(quotations=SimpleNamespace(aggregate=aggregate)),
+    }
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "server.py", "exec"), namespace)
+    search = namespace["search_quotation_customers"]
+    response = Response()
+    assert asyncio.run(search(SimpleNamespace(query="  Test.*  "), response, None)) == results
+    pipeline = aggregate.call_args.args[0]
+    assert pipeline[0]["$match"]["$or"][0]["customer_name"]["$regex"] == re.escape("Test.*")
+    assert "$group" in pipeline[2]
+    assert pipeline[4] == {"$limit": 30}
+    assert "items" not in pipeline[-1]["$project"]
+    assert "business" not in pipeline[-1]["$project"]
+    assert response.headers["cache-control"] == "private, no-store"
+    aggregate.reset_mock()
+    assert asyncio.run(search(SimpleNamespace(query="  "), Response(), None)) == []
+    aggregate.assert_not_called()
