@@ -17,6 +17,8 @@ const {
   resolveApiBase,
 } = require("./prerender-categories");
 
+const { productMetaDescription: metaDescription } = require("../src/lib/productMetaDescription");
+
 const ROOT = path.resolve(__dirname, "..");
 const BUILD_DIR = path.join(ROOT, "build");
 const DEFAULT_SHARE_IMAGE = `${SITE_ORIGIN}/logo.jpeg`;
@@ -90,7 +92,7 @@ function productDiscoveryImages(product, apiBase) {
   )];
 }
 
-function metaDescription(product) {
+function originalProductDescription(product) {
   const source = product.short_description || product.description ||
     `${product.name} by Samrat Glass Emporium, handcrafted in Firozabad, India.`;
   return String(source).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 240);
@@ -166,7 +168,8 @@ function injectProduct(template, product, apiBase) {
   const shareImage = socialPreviewUrl((product.images || [])[0], apiBase);
   const originalImages = productDiscoveryImages(product, apiBase);
   const primaryOriginalImage = originalImages[0] || DEFAULT_SHARE_IMAGE;
-  const schema = productSchema(product, canonical, originalImages, description);
+  const contentDescription = originalProductDescription(product);
+  const schema = productSchema(product, canonical, originalImages, contentDescription);
 
   let html = template
     .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
@@ -203,7 +206,7 @@ function injectProduct(template, product, apiBase) {
     `${shareMetadata}${schema ? `\n<script type="application/ld+json" data-schema="prerender-product">${safeJson(schema)}</script>` : ""}\n</head>`,
   );
 
-  const body = `<main class="prerender-shell"><article><p class="prerender-eyebrow">${escapeHtml(product.category || "Handcrafted lighting")}</p><h1>${escapeHtml(product.name)}</h1><img src="${escapeHtml(primaryOriginalImage)}" alt="${escapeHtml(product.name)}"/><p>${escapeHtml(description)}</p>${product.sku ? `<p>Reference Code: ${escapeHtml(product.sku)}</p>` : ""}</article></main>`;
+  const body = `<main class="prerender-shell"><article><p class="prerender-eyebrow">${escapeHtml(product.category || "Handcrafted lighting")}</p><h1>${escapeHtml(product.name)}</h1><img src="${escapeHtml(primaryOriginalImage)}" alt="${escapeHtml(product.name)}"/><p>${escapeHtml(contentDescription)}</p>${product.sku ? `<p>Reference Code: ${escapeHtml(product.sku)}</p>` : ""}</article></main>`;
   return html.replace(/<div id="root">[\s\S]*?<\/div>/i, `<div id="root">${body}</div>`);
 }
 
@@ -267,11 +270,16 @@ async function runPrerenderProducts(options = {}) {
   const products = await fetchPublishedProducts(apiBase, fetcher);
   const writtenRoutes = new Set();
   const redirects = [];
+  const descriptionRoutes = new Map();
 
   for (const product of products) {
     const route = productPath(product);
     if (writtenRoutes.has(route)) throw new Error(`duplicate product route: ${route}`);
     writtenRoutes.add(route);
+    const description = metaDescription(product);
+    const matches = descriptionRoutes.get(description) || [];
+    matches.push(route);
+    descriptionRoutes.set(description, matches);
     const outDir = path.join(buildDir, route.replace(/^\//, ""));
     fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(path.join(outDir, "index.html"), injectProduct(template, product, apiBase), "utf8");
@@ -298,6 +306,9 @@ async function runPrerenderProducts(options = {}) {
     "utf8",
   );
 
+  const duplicates = [...descriptionRoutes.values()].filter(routes => routes.length > 1);
+  logger.log(`[prerender-products] Metadata audit: ${products.length} canonical pages, ${descriptionRoutes.size} unique descriptions, ${duplicates.length} duplicate groups.`);
+  for (const routes of duplicates) logger.log(`[prerender-products] Duplicate meta description: ${routes.join(", ")}`);
   logger.log(`[prerender-products] Done. ${products.length} product pages and ${redirects.length} legacy redirects written.`);
   return { count: products.length, routes: [...writtenRoutes], redirectCount: redirects.length };
 }
