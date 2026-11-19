@@ -10,6 +10,7 @@ const {
   runPrerenderProducts,
 } = require("../../scripts/prerender-products");
 const { productPath } = require("../../scripts/prerender-categories");
+const { productMetaDescription } = require("./productMetaDescription");
 
 const PRODUCT = {
   id: "product-1",
@@ -173,5 +174,61 @@ describe("product social prerender", () => {
       total: 2,
       total_pages: 1,
     }))).rejects.toThrow(/expected 2 published products but fetched 1/);
+  });
+});
+
+
+describe("shared product metadata", () => {
+  test("identical catalogue descriptions do not collapse distinct product metadata", () => {
+    const products = [
+      { ...PRODUCT, sku: "SGE-HL-040", name: "Kashika Etched Glass Hanging Light Floral Veil" },
+      { ...PRODUCT, sku: "SGE-HL-036", name: "Cherub Motif Diamond-Cut Glass Hanging Light Twin Side Lights" },
+      { ...PRODUCT, sku: "SGE-TA-010" },
+    ];
+    const descriptions = products.map(productMetaDescription);
+    expect(new Set(descriptions).size).toBe(products.length);
+    products.forEach((product, index) => {
+      expect(descriptions[index]).toContain(product.name);
+      expect(descriptions[index]).toContain(product.sku);
+      expect(descriptions[index].length).toBeLessThanOrEqual(155);
+      expect(descriptions[index]).toContain("Firozabad");
+    });
+  });
+
+  test("uses the shared description in canonical and legacy metadata, not in catalogue copy or schema", () => {
+    const description = productMetaDescription(PRODUCT);
+    const html = injectProduct(TEMPLATE, PRODUCT, "https://samratglass.com");
+    const legacy = injectLegacyRedirect(TEMPLATE, PRODUCT);
+    for (const page of [html, legacy]) {
+      expect(page).toContain('<meta name="description" content="' + description + '" />');
+      expect(page).toContain('<link rel="canonical" href="https://samratglass.com' + productPath(PRODUCT) + '" />');
+    }
+    expect(html).toContain('<meta property="og:description" content="' + description + '" />');
+    expect(html).toContain('<meta name="twitter:description" content="' + description + '" />');
+    const data = JSON.parse(html.split('data-schema="prerender-product">')[1].split("</script>")[0]);
+    expect(data.description).toBe(PRODUCT.short_description);
+    expect(html).toContain('<p>' + PRODUCT.short_description + '</p>');
+  });
+
+  test("preserves reference even when name is long and uses ID when SKU is absent", () => {
+    const long = productMetaDescription({ ...PRODUCT, name: "Handcrafted ".repeat(40) });
+    expect(long.length).toBeLessThanOrEqual(155);
+    expect(long).toContain(PRODUCT.sku);
+    expect(productMetaDescription({ name: "Test lamp", id: "id-001", sku: "TBD" })).toContain("id-001");
+    expect(productMetaDescription({ name: "Test lamp", id: "id-002" })).not.toBe(productMetaDescription({ name: "Test lamp", id: "id-001" }));
+  });
+
+  test("audits unique descriptions across every fetched canonical page", async () => {
+    const buildDir = fs.mkdtempSync(path.join(os.tmpdir(), "product-meta-audit-"));
+    fs.writeFileSync(path.join(buildDir, "index.html"), TEMPLATE, "utf8");
+    const log = jest.fn();
+    try {
+      await runPrerenderProducts({
+        apiBase: "https://samratglass.com", buildDir,
+        fetcher: async () => ({ items: [PRODUCT, { ...PRODUCT, id: "product-2", sku: "SGE-TA-010" }], total: 2, total_pages: 1 }),
+        logger: { log },
+      });
+      expect(log).toHaveBeenCalledWith(expect.stringContaining("2 canonical pages, 2 unique descriptions, 0 duplicate groups"));
+    } finally { fs.rmSync(buildDir, { recursive: true, force: true }); }
   });
 });
