@@ -8,6 +8,7 @@ const allowed = (path, method) => {
   if (/^\/search\/image\/jobs\/[a-zA-Z0-9_-]+$/.test(path)) return method === "GET";
   if (path === "/auth/session" || path === "/auth/logout" || path === "/ai/quotation-customisation" || path === "/search/image" || path === "/upload") return method === "POST";
   if (/^\/admin\/inquiries\/[a-zA-Z0-9_-]+\/quotations$/.test(path)) return ["GET", "POST"].includes(method);
+  if (path === "/admin/quotations/customer-search") return method === "POST";
   if (path === "/admin/quotations") return ["GET", "POST"].includes(method);
   if (/^\/admin\/quotations\/[a-zA-Z0-9_-]+$/.test(path)) return ["PUT", "DELETE"].includes(method);
   return false;
