@@ -244,6 +244,7 @@ export const api = {
   listInquiryQuotations: (id) => client.get(
     `/admin/inquiries/${encodeURIComponent(id)}/quotations`,
   ).then(r => r.data),
+  searchQuotationCustomers: (query) => client.post("/admin/quotations/customer-search", { query }).then(r => r.data),
   listStandaloneQuotations: () => client.get("/admin/quotations").then(r => r.data),
   updateQuotation: (id, data) => client.put(`/admin/quotations/${encodeURIComponent(id)}`, data).then(r => r.data),
   deleteQuotation: (id) => client.delete(`/admin/quotations/${encodeURIComponent(id)}`).then(r => r.data),
