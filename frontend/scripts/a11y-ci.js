@@ -59,6 +59,42 @@ const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
   }
 
   console.log("\naxe accessibility gate passed.");
+
+  // Diagnostic-only: compare two alternate intro timings against this run's
+  // existing three baseline reports, using the same Lighthouse mobile config.
+  const fs = require("fs");
+  const os = require("os");
+  const path = require("path");
+  const { execFileSync } = require("child_process");
+  const mobileConfig = JSON.parse(fs.readFileSync("lighthouserc.mobile.json","utf8"));
+  const summarize = (dir, label) => {
+    const reports = fs.readdirSync(dir).filter(n => /^lhr-.*\.json$/.test(n)).map(n => JSON.parse(fs.readFileSync(path.join(dir,n),"utf8")));
+    if (reports.length !== 3) throw new Error(label + ": expected exactly 3 Lighthouse reports");
+    const runs = reports.map(r => {
+      if (r.runtimeError || !r.categories?.performance || !r.requestedUrl) throw new Error(label + ": invalid Lighthouse report");
+      const expected = label === "baseline" ? "" : "?intro_diag=" + label;
+      if (new URL(r.requestedUrl).search !== expected) throw new Error("Unexpected requested URL " + r.requestedUrl);
+      return { score:r.categories.performance.score * 100,
+        lcp:r.audits["largest-contentful-paint"].numericValue,
+        tbt:r.audits["total-blocking-time"].numericValue,
+        cls:r.audits["cumulative-layout-shift"].numericValue };
+    });
+    const median = Object.fromEntries(Object.keys(runs[0]).map(k => [k,runs.map(r=>r[k]).sort((a,b)=>a-b)[1]]));
+    console.log("INTRO_DIAGNOSTIC " + JSON.stringify({label,runs,median}));
+  };
+  summarize(".lighthouseci/mobile","baseline");
+  for (const label of ["short","off"]) {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(),"sge-intro-lh-"));
+    try {
+      const config = structuredClone(mobileConfig);
+      config.ci.collect.url = ["http://127.0.0.1:4173/?intro_diag=" + label];
+      const file = path.join(temp,"lighthouserc.json");
+      fs.writeFileSync(file,JSON.stringify(config));
+      execFileSync("npx",["--yes","@lhci/cli@0.15.x","collect","--config="+file],{cwd:temp,stdio:"inherit",timeout:240000});
+      summarize(path.join(temp,".lighthouseci"),label);
+    } finally { fs.rmSync(temp,{recursive:true,force:true}); }
+  }
+
 })().catch((error) => {
   console.error(error);
   process.exit(1);
